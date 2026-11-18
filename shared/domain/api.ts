@@ -154,6 +154,9 @@ export interface SessionDTO extends SessionSummaryDTO {
   scenario: SessionScenarioView;
   turns: TurnDTO[];
   state: PublicStateDTO;
+  // Set when the last trainee message was saved but the customer has not replied (for example after
+  // a provider failure). Resending it with this id resumes the exchange without duplicating it.
+  awaitingReply: { clientMessageId: string; turnIndex: number } | null;
   evaluationPhase: EvaluationPhase | null;
   evaluationError: { message: string; retryable: boolean } | null;
   report: CoachingReport | null;

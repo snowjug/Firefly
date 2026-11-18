@@ -6,7 +6,16 @@ import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist', 'data', 'coverage', 'playwright-report', 'test-results', 'node_modules']),
+  globalIgnores([
+    'dist',
+    'data',
+    'coverage',
+    'playwright-report',
+    'test-results',
+    'node_modules',
+    'scripts/_tmp',
+    'scripts/scratch-serve.ts',
+  ]),
   js.configs.recommended,
   tseslint.configs.recommended,
   {
@@ -35,6 +44,14 @@ export default defineConfig([
     rules: {
       ...reactHooks.configs.flat.recommended.rules,
       ...jsxA11y.flatConfigs.recommended.rules,
+      // Keep explicit list semantics: Safari removes them from lists styled with list-style: none.
+      'jsx-a11y/no-redundant-roles': ['error', { ul: ['list'], ol: ['list'], nav: ['navigation'] }],
+      // Scrollable regions must be focusable so keyboard users can scroll them.
+      'jsx-a11y/no-noninteractive-tabindex': ['error', { roles: ['tabpanel', 'region'] }],
     },
+  },
+  {
+    files: ['web/public/**/*.js'],
+    languageOptions: { globals: globals.browser, sourceType: 'script' },
   },
 ]);

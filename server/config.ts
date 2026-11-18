@@ -20,10 +20,12 @@ const flag = (value: string | undefined) => value === '1' || value?.toLowerCase(
 
 export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const port = Number(env.FIREFLY_PORT ?? 8787);
+  const dbSetting = env.FIREFLY_DB_PATH?.trim() || './data/firefly.db';
   return {
     port: Number.isInteger(port) && port >= 0 && port < 65536 ? port : 8787,
     host: env.FIREFLY_HOST?.trim() || '127.0.0.1',
-    dbPath: resolve(root, env.FIREFLY_DB_PATH?.trim() || './data/firefly.db'),
+    // ":memory:" keeps everything in RAM and is used by automated browser tests.
+    dbPath: dbSetting === ':memory:' ? dbSetting : resolve(root, dbSetting),
     webDir: resolve(root, 'dist/web'),
     version: pkg.version,
     devDiagnostics: flag(env.FIREFLY_DEV_DIAGNOSTICS),

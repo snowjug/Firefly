@@ -41,6 +41,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { toPublicScenario, toSessionDTO, toSummary } from './dto.ts';
 
 export const LIMITS = { maxMessageChars: MAX_MESSAGE_CHARS, maxTraineeTurns: 60 };
+const SHORT_CALL_TURNS = 6;
 
 export interface EvaluatorFns {
   rules: { name: string; version: string; evaluate(input: EvaluationInput): CoachingReport };
@@ -114,6 +115,10 @@ export function toAppError(error: unknown): AppError {
     return new AppError(PROVIDER_STATUS[error.code] ?? 502, error.code, error.message, {
       retryable: error.retryable,
     });
+  }
+  // A coaching draft that could not be verified against the transcript. Its message is user-safe.
+  if (error instanceof Error && error.name === 'EvaluationDraftError') {
+    return new AppError(502, 'provider_bad_output', error.message, { retryable: true });
   }
   return new AppError(500, 'internal', 'Something went wrong on our side. Please try again.', {
     retryable: true,
@@ -606,7 +611,9 @@ export class SessionService {
         impact: cfg.impact,
       }),
       finalState: session.runtime.customer,
-      endedEarly: !closed,
+      // "Ended early" means a short call that stopped before any wrap-up. A long call without a
+      // wrap-up is not early; its missing close simply shows up in the Closing score.
+      endedEarly: !closed && traineeTurns.length < SHORT_CALL_TURNS,
       durationSeconds: Math.max(
         0,
         Math.round((Date.parse(endedAt) - Date.parse(session.startedAt)) / 1000),

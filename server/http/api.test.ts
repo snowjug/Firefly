@@ -111,12 +111,10 @@ describe('sessions and messages', () => {
       startingTemperature: 'angry',
       style: 'terse',
     });
-    const bad = await app
-      .client()
-      .post('/api/sessions', {
-        scenarioId: 'locked-out-after-password-reset',
-        overrides: { difficulty: 'impossible' },
-      });
+    const bad = await app.client().post('/api/sessions', {
+      scenarioId: 'locked-out-after-password-reset',
+      overrides: { difficulty: 'impossible' },
+    });
     expect(bad.status).toBe(400);
     expect(bad.body.error.code).toBe('validation_failed');
   });
@@ -275,6 +273,7 @@ describe('failure recovery', () => {
     const mid = await client.get(`/api/sessions/${session.id}`);
     const last = mid.body.session.turns.at(-1);
     expect(last).toMatchObject({ role: 'trainee', text: 'When did it start?' });
+    expect(mid.body.session.awaitingReply).toEqual({ clientMessageId: id, turnIndex: last.index });
 
     const blocked = await say(client, session.id, 'A different message');
     expect(blocked.status).toBe(409);
@@ -282,6 +281,7 @@ describe('failure recovery', () => {
     const retried = await say(client, session.id, 'When did it start?', id);
     expect(retried.status).toBe(200);
     const after = await client.get(`/api/sessions/${session.id}`);
+    expect(after.body.session.awaitingReply).toBeNull();
     expect(
       after.body.session.turns.filter((t: { role: string }) => t.role === 'trainee'),
     ).toHaveLength(2);
@@ -327,6 +327,30 @@ describe('ending a call', () => {
     expect(late.body.error.code).toBe('session_not_active');
     const report = await client.get(`/api/sessions/${session.id}/report`);
     expect(report.body.report.version).toBe(1);
+  });
+
+  it('calls a short call without a wrap-up "ended early", but not a long one', async () => {
+    const finish = async (lines: string[]) => {
+      const { client, session } = await newSession();
+      for (const line of lines) await say(client, session.id, line);
+      await client.post(`/api/sessions/${session.id}/end`, {});
+      await app.service.settle(session.id);
+      return (await client.get(`/api/sessions/${session.id}`)).body.session;
+    };
+    const questions = [
+      'What is happening?',
+      'When did it start?',
+      'Who is affected?',
+      'What changed recently?',
+      'What have you tried so far?',
+      'What does the screen say?',
+    ];
+    const short = await finish(questions.slice(0, 2));
+    expect(short.completion).toBe('ended-early');
+    expect(short.report.completion.status).toBe('ended-early');
+    const long = await finish(questions);
+    expect(long.completion).toBe('completed');
+    expect(long.report.completion.status).toBe('completed');
   });
 
   it('adds transcript markers only after the call ends', async () => {

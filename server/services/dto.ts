@@ -129,6 +129,12 @@ export function parseStoredReport(raw: unknown): CoachingReport | null {
   return parsed.success ? parsed.data : null;
 }
 
+function awaitingReplyFor(row: SessionRow, turns: TurnRow[]): SessionDTO['awaitingReply'] {
+  const last = turns[turns.length - 1];
+  if (row.status !== 'active' || last?.role !== 'trainee' || !last.clientMessageId) return null;
+  return { clientMessageId: last.clientMessageId, turnIndex: last.idx };
+}
+
 export function toSessionDTO(
   row: SessionRow,
   turns: TurnRow[],
@@ -168,6 +174,7 @@ export function toSessionDTO(
     },
     turns: toTurnDTOs(row, turns, events),
     state: publicState(row.runtime),
+    awaitingReply: awaitingReplyFor(row, turns),
     evaluationPhase: row.evaluationPhase,
     evaluationError: row.evaluationError,
     report: row.status === 'completed' ? parseStoredReport(storedReport) : null,
