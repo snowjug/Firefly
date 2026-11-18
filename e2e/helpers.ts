@@ -65,8 +65,27 @@ export async function endViaApi(page: Page, id: string) {
     .toBe('completed');
 }
 
+/**
+ * Waits for animations that end (the page fade-in, for example) before a check that reads colours.
+ * Text that is still fading in has a lower contrast than it will have, and slower machines sample
+ * it for longer. Animations that loop for ever are ignored.
+ */
+export async function settleAnimations(page: Page) {
+  for (let pass = 0; pass < 5; pass++) {
+    const waited = await page.evaluate(async () => {
+      const finite = document
+        .getAnimations()
+        .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime));
+      await Promise.all(finite.map((animation) => animation.finished.catch(() => undefined)));
+      return finite.length;
+    });
+    if (waited === 0) return;
+  }
+}
+
 /** Serious or critical automated accessibility violations on the current page, as readable lines. */
 export async function seriousA11yViolations(page: Page): Promise<string[]> {
+  await settleAnimations(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
