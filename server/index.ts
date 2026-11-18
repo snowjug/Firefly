@@ -15,7 +15,7 @@ try {
 }
 
 const config = loadAppConfig();
-const log = createLogger();
+const log = createLogger(undefined, config.logLevel);
 const runtime = createRuntime({ config, log });
 
 const server = createServer((req, res) => {

@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pkg from '../package.json' with { type: 'json' };
+import { parseLogLevel, type LogLevel } from './log.ts';
 import { loadProviderConfig, type LoadedProviderConfig } from './providers/types.ts';
 
 export interface AppConfig {
@@ -9,6 +10,7 @@ export interface AppConfig {
   dbPath: string;
   webDir: string;
   version: string;
+  logLevel: LogLevel;
   devDiagnostics: boolean;
   testHooks: boolean;
   provider: LoadedProviderConfig;
@@ -28,6 +30,7 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dbPath: dbSetting === ':memory:' ? dbSetting : resolve(root, dbSetting),
     webDir: resolve(root, 'dist/web'),
     version: pkg.version,
+    logLevel: parseLogLevel(env.FIREFLY_LOG_LEVEL),
     devDiagnostics: flag(env.FIREFLY_DEV_DIAGNOSTICS),
     testHooks: flag(env.FIREFLY_TEST_HOOKS),
     provider: loadProviderConfig(env),

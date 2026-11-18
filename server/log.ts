@@ -21,11 +21,26 @@ function scrub(fields: Record<string, unknown> | undefined): Record<string, unkn
   return out;
 }
 
+export type LogLevel = 'info' | 'warn' | 'error' | 'silent';
+const LEVEL_ORDER: Record<LogLevel, number> = { info: 0, warn: 1, error: 2, silent: 3 };
+
+export function parseLogLevel(value: string | undefined): LogLevel {
+  const level = value?.trim().toLowerCase();
+  return level === 'warn' || level === 'error' || level === 'silent' ? level : 'info';
+}
+
 export function createLogger(
   sink: (line: string) => void = (line) => process.stdout.write(`${line}\n`),
+  minimum: LogLevel = 'info',
 ): Logger {
-  const write = (level: string, event: string, fields?: Record<string, unknown>) =>
+  const write = (
+    level: Exclude<LogLevel, 'silent'>,
+    event: string,
+    fields?: Record<string, unknown>,
+  ) => {
+    if (LEVEL_ORDER[level] < LEVEL_ORDER[minimum]) return;
     sink(JSON.stringify({ time: new Date().toISOString(), level, event, ...scrub(fields) }));
+  };
   return {
     info: (event, fields) => write('info', event, fields),
     warn: (event, fields) => write('warn', event, fields),

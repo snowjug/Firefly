@@ -19,10 +19,9 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "validate:scenarios": "node --disable-warning=ExperimentalWarning scripts/validate-scenarios.ts",
     "calibrate": "node --disable-warning=ExperimentalWarning scripts/calibrate.ts",
-    "seed:demo": "node --disable-warning=ExperimentalWarning scripts/seed-demo.ts",
     "check:secrets": "node scripts/scan-secrets.mjs",
     "check:lockfile": "node scripts/normalize-lockfile.mjs --check",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run validate:scenarios && npm test && npm run build && npm run check:secrets && npm run check:lockfile"

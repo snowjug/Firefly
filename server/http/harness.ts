@@ -187,6 +187,7 @@ export async function createTestApp(
     dbPath: ':memory:',
     webDir: '/nonexistent-web-dir',
     version: 'test',
+    logLevel: 'silent',
     devDiagnostics: options.devDiagnostics ?? false,
     testHooks: options.testHooks ?? true,
     provider: { config: { kind: 'mock', mockDelayMs: 0 }, problem: null },

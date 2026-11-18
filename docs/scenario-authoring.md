@@ -106,4 +106,34 @@ intent names, partial-fact consistency and per-difficulty viability. After the f
 it once more as a customer would: is every hidden fact only reachable through a sensible question,
 and does each line sound human?
 
-Register new files in `server/scenarios/index.ts` (the maintainers do this when integrating).
+## Practical notes from authoring the library
+
+- **Curveballs are keyed by type.** Author at most one curveball per `type`. When a call does not choose
+  curveballs, the default set for its difficulty is the first authored ones (in file order) that are
+  allowed at that difficulty, so put the most representative curveball first.
+- **Cues are substrings.** A cue matches anywhere in the question, case-insensitively, after the text is
+  trimmed. Short stems cause false matches (`load` matches "upload", `test` matches "latest", `who`
+  matches "whole", `history` matches "order-history"). Prefer whole words and short phrases, and do not
+  rely on leading or trailing spaces.
+- **Keep time out of `openingCore`.** The call stage is configurable, so a first-contact story that says "this
+  morning" will contradict a follow-up opening. Put time-specific details in hidden or known facts, and keep the
+  opening statement of the problem timeless.
+- **Do not repeat the problem statement in the impact summaries.** The opening is `openingCore` followed by the
+  impact `summary`. The summary should add stakes ("customers are starting to notice"), not restate the
+  problem. Firefly drops a sentence that mostly repeats an earlier one, but good authoring avoids it.
+- **`priorHistory` can be seen by trainees.** Write it as a case record would read, never as hidden-fact content.
+- **Persona names must be unique across the library.** Validation fails if two scenarios share a name.
+- **Scenarios are tested as a set.** `server/scenarios/library.test.ts` checks that the library covers every
+  difficulty, temperature, style, stage, impact and proficiency; that no scenario contains real-looking
+  contact details or links; that no hidden fact leaks into an opening under any combination of settings; that
+  every hidden fact can be discovered by a considerate conversation (by cue, or by topic when it has no
+  cues) at every difficulty; and that irrelevant messages reveal nothing.
+
+## Adding a scenario to the library
+
+1. Create `server/scenarios/library/<id>.ts` and make `npm run validate:scenarios -- server/scenarios/library/<id>.ts` pass.
+2. Import it in `server/scenarios/index.ts` and add it to `LIBRARY_INPUT`. The list is ordered easiest first,
+   which is the order the library page shows by default.
+3. Run `npm test`. The library tests above will tell you if a hidden fact cannot be found, leaks, or collides
+   with another scenario's persona name.
+4. Play it once in the app in demo mode, as a trainee would.
