@@ -38,28 +38,28 @@ The intended loop is **Configure → Simulate → Evaluate → Improve**:
 
 Values listed are the examples named in the brief.
 
-| Parameter | Intended purpose |
-|---|---|
-| Issue type | Defines the customer's underlying problem |
-| Business impact | Controls urgency |
-| Customer temperature | Establishes starting behaviour: Calm, Anxious, Frustrated, Angry / escalating |
-| Technical proficiency | Controls vocabulary and technical depth |
-| Communication style | Changes how information is communicated: Talkative, Terse, Demanding, Vague, Non-native English speaker |
-| Call stage | Establishes the customer's expectations |
-| Hidden facts | Information the customer reveals only when asked appropriately, which tests scoping and discovery |
-| Curveballs | Unexpected events, such as requesting a manager, threatening to cancel, changing the issue mid-conversation, imposing a deadline or going silent |
-| Difficulty | Presets that bundle scenario complexity: Starter, Standard, Challenge |
+| Parameter             | Intended purpose                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Issue type            | Defines the customer's underlying problem                                                                                                        |
+| Business impact       | Controls urgency                                                                                                                                 |
+| Customer temperature  | Establishes starting behaviour: Calm, Anxious, Frustrated, Angry / escalating                                                                    |
+| Technical proficiency | Controls vocabulary and technical depth                                                                                                          |
+| Communication style   | Changes how information is communicated: Talkative, Terse, Demanding, Vague, Non-native English speaker                                          |
+| Call stage            | Establishes the customer's expectations                                                                                                          |
+| Hidden facts          | Information the customer reveals only when asked appropriately, which tests scoping and discovery                                                |
+| Curveballs            | Unexpected events, such as requesting a manager, threatening to cancel, changing the issue mid-conversation, imposing a deadline or going silent |
+| Difficulty            | Presets that bundle scenario complexity: Starter, Standard, Challenge                                                                            |
 
 ### Coaching dimensions
 
-| # | Dimension | Intended focus |
-|---|---|---|
-| 1 | Opening & Rapport | How the call starts and how the trainee builds a connection with the customer |
-| 2 | Scoping & Discovery | Whether the trainee asks the questions needed to understand the problem, its business impact and the hidden facts |
-| 3 | Empathy & De-escalation | How the trainee responds to the customer's emotional state, including frustration or anger |
-| 4 | Clarity | How clearly the trainee explains and communicates |
-| 5 | Ownership & Next Steps | Whether the trainee takes ownership, sets expectations and gives clear next steps |
-| 6 | Closing | How the call is wrapped up |
+| #   | Dimension               | Intended focus                                                                                                    |
+| --- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1   | Opening & Rapport       | How the call starts and how the trainee builds a connection with the customer                                     |
+| 2   | Scoping & Discovery     | Whether the trainee asks the questions needed to understand the problem, its business impact and the hidden facts |
+| 3   | Empathy & De-escalation | How the trainee responds to the customer's emotional state, including frustration or anger                        |
+| 4   | Clarity                 | How clearly the trainee explains and communicates                                                                 |
+| 5   | Ownership & Next Steps  | Whether the trainee takes ownership, sets expectations and gives clear next steps                                 |
+| 6   | Closing                 | How the call is wrapped up                                                                                        |
 
 The dimensions are intended to support CARE-style behaviours: Communicate effectively, Be accountable, Be resourceful, Be empathetic. No scoring scale, weighting, rubric or mapping from dimensions to CARE behaviours exists in this repository yet.
 
@@ -67,13 +67,13 @@ The dimensions are intended to support CARE-style behaviours: Communicate effect
 
 A hypothetical, fully synthetic scenario of the kind the brief describes. It is a walk-through of the intended experience, not a recording of a working session.
 
-| Parameter | Value |
-|---|---|
-| Issue type | Service unavailable |
-| Business impact | High |
-| Customer temperature | Frustrated |
-| Technical proficiency | Intermediate |
-| Communication style | Demanding |
+| Parameter             | Value               |
+| --------------------- | ------------------- |
+| Issue type            | Service unavailable |
+| Business impact       | High                |
+| Customer temperature  | Frustrated          |
+| Technical proficiency | Intermediate        |
+| Communication style   | Demanding           |
 
 How the session is intended to unfold:
 
@@ -103,12 +103,12 @@ The intent is that AI scoring is compared with mentor scoring of the same conver
 
 ## Roadmap
 
-| Status | Items |
-|---|---|
-| ✅ Available | Nothing yet. This README is the only content in the repository. |
-| 🚧 In progress | Nothing is recorded in the repository (no issues, pull requests, branches or TODOs). |
+| Status                                 | Items                                                                                                                                                                                              |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ✅ Available                           | Nothing yet. This README is the only content in the repository.                                                                                                                                    |
+| 🚧 In progress                         | Nothing is recorded in the repository (no issues, pull requests, branches or TODOs).                                                                                                               |
 | 📋 Planned (core scope from the brief) | Configurable scenarios; an AI customer; hidden facts and curveballs; difficulty presets; coaching feedback on the six dimensions, grounded in the conversation; calibration against mentor scoring |
-| 🔭 Future ideas (not committed) | Voice simulation; richer progress analytics; trainer-managed scenario libraries; expanded scenario coverage |
+| 🔭 Future ideas (not committed)        | Voice simulation; richer progress analytics; trainer-managed scenario libraries; expanded scenario coverage                                                                                        |
 
 ## Getting Started
 

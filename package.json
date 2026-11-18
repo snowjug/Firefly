@@ -1,0 +1,58 @@
+{
+  "name": "firefly",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Firefly: a practice environment for customer-facing support conversations.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "node --watch --disable-warning=ExperimentalWarning server/index.ts",
+    "dev:web": "vite --config vite.config.ts",
+    "build": "vite build --config vite.config.ts",
+    "start": "node --disable-warning=ExperimentalWarning server/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "validate:scenarios": "node --disable-warning=ExperimentalWarning scripts/validate-scenarios.ts",
+    "calibrate": "node --disable-warning=ExperimentalWarning scripts/calibrate.ts",
+    "seed:demo": "node --disable-warning=ExperimentalWarning scripts/seed-demo.ts",
+    "check:secrets": "node scripts/scan-secrets.mjs",
+    "check:lockfile": "node scripts/normalize-lockfile.mjs --check",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run validate:scenarios && npm test && npm run build && npm run check:secrets && npm run check:lockfile"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^7.18.5",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14",
+    "@eslint/js": "^9.39.5",
+    "@playwright/test": "1.65",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.9",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "jsdom": "^31.0.0",
+    "prettier": "3.10",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}
