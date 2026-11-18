@@ -242,11 +242,17 @@ export interface CalibrationRecordDTO {
   createdAt: string;
 }
 
+/**
+ * A completed session that is waiting for a mentor. It leaves out the AI's scores, so the queue
+ * (and the response that carries it) cannot reveal them before a mentor has scored the call.
+ */
+export type ReviewableSessionDTO = Omit<SessionSummaryDTO, 'overallScore' | 'dimensionScores'>;
+
 export interface CalibrationDTO {
   metrics: CalibrationMetrics;
   records: CalibrationRecordDTO[];
   includesSamples: boolean;
-  reviewable: SessionSummaryDTO[]; // completed sessions without a mentor review yet
+  reviewable: ReviewableSessionDTO[]; // completed sessions without a mentor review yet
 }
 
 export interface DemoStatusDTO {

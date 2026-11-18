@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import type { SessionSummaryDTO } from '#shared/domain/api.ts';
+import type { ReviewableSessionDTO } from '#shared/domain/api.ts';
 import {
   DIMENSION_IDS,
   DIMENSIONS,
@@ -25,11 +25,11 @@ const REVIEWER_PATTERN = /^[\p{L}\p{N} .,'@_-]+$/u;
 
 /** The facts about a session that the review screen needs. The AI's scores are not among them. */
 export type ReviewSession = Pick<
-  SessionSummaryDTO,
+  ReviewableSessionDTO,
   'id' | 'scenarioTitle' | 'startedAt' | 'difficulty' | 'traineeTurns' | 'completion' | 'isSample'
 >;
 
-export function toReviewSession(session: SessionSummaryDTO): ReviewSession {
+export function toReviewSession(session: ReviewableSessionDTO): ReviewSession {
   return {
     id: session.id,
     scenarioTitle: session.scenarioTitle,

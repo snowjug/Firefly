@@ -174,7 +174,15 @@ export class InsightsService {
       includesSamples: includeSamples,
       reviewable: sessions.rows
         .filter((s) => !reviewed.has(s.id))
-        .map((s) => toSummary(s, counts.get(s.id) ?? 0, false)),
+        .map((s) => {
+          // The queue never carries the AI's scores, so a review starts from the transcript alone.
+          const {
+            overallScore: _overall,
+            dimensionScores: _scores,
+            ...summary
+          } = toSummary(s, counts.get(s.id) ?? 0, false);
+          return summary;
+        }),
     };
   }
 

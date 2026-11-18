@@ -1,4 +1,4 @@
-import type { SessionSummaryDTO } from '#shared/domain/api.ts';
+import type { ReviewableSessionDTO } from '#shared/domain/api.ts';
 import { formatDate, plural } from '../../lib/format.ts';
 import { DifficultyChip } from '../Chips.tsx';
 import { ENDED_EARLY_NOTE, EndedEarlyChip } from './EndedEarly.tsx';
@@ -14,8 +14,8 @@ export function ReviewQueue({
   sessions,
   onScore,
 }: {
-  sessions: SessionSummaryDTO[];
-  onScore(session: SessionSummaryDTO): void;
+  sessions: ReviewableSessionDTO[];
+  onScore(session: ReviewableSessionDTO): void;
 }) {
   return (
     <ul role="list" className="cal-queue">

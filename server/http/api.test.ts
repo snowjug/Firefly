@@ -441,6 +441,12 @@ describe('history, progress and calibration', () => {
     expect(early.status).toBe(400);
     await client.post(`/api/sessions/${session.id}/end`, {});
     await app.service.settle(session.id);
+    // The review queue lists the call but carries nothing of the AI's scoring.
+    const queue = await client.get('/api/calibration');
+    expect(queue.body.reviewable).toHaveLength(1);
+    expect(queue.body.reviewable[0].id).toBe(session.id);
+    expect(queue.body.reviewable[0]).not.toHaveProperty('overallScore');
+    expect(queue.body.reviewable[0]).not.toHaveProperty('dimensionScores');
     const scores = {
       'opening-rapport': 4,
       'scoping-discovery': 3,
