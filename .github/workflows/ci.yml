@@ -80,4 +80,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Production dependencies (high severity and above)
+        run: npm audit --omit=dev --audit-level=high
+      - name: All dependencies, for information
+        if: always()
+        run: npm audit || true

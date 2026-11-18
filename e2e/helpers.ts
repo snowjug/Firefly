@@ -65,16 +65,17 @@ export async function endViaApi(page: Page, id: string) {
     .toBe('completed');
 }
 
-/** Fails the test on any serious or critical automated accessibility violation. */
-export async function expectNoSeriousA11yViolations(page: Page, context?: string) {
+/** Serious or critical automated accessibility violations on the current page, as readable lines. */
+export async function seriousA11yViolations(page: Page): Promise<string[]> {
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
     .analyze();
-  const serious = results.violations.filter(
-    (v) => v.impact === 'serious' || v.impact === 'critical',
-  );
-  expect(
-    serious.map((v) => `${v.id}: ${v.help} (${v.nodes.length} nodes, e.g. ${v.nodes[0]?.target})`),
-    context,
-  ).toEqual([]);
+  return results.violations
+    .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+    .map((v) => `${v.id}: ${v.help} (${v.nodes.length} nodes, e.g. ${v.nodes[0]?.target})`);
+}
+
+/** Fails the test on any serious or critical automated accessibility violation. */
+export async function expectNoSeriousA11yViolations(page: Page, context?: string) {
+  expect(await seriousA11yViolations(page), context).toEqual([]);
 }
