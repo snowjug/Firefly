@@ -54,6 +54,26 @@ describe('rules classifier: discovery and fact targeting', () => {
     }
   });
 
+  it('recognises yes/no questions about who is affected and how far a problem reaches', () => {
+    const expectations: [string, string][] = [
+      ['Can anyone at all still open it?', 'affected_scope'],
+      ['Does anyone on the team still have access?', 'affected_scope'],
+      ['Is the whole team locked out?', 'affected_scope'],
+      ['Which of your team members can still get in?', 'affected_scope'],
+      ['Is it only this workspace?', 'affected_scope'],
+      ['Are other tools working for you?', 'affected_scope'],
+      ['When did you last open it successfully?', 'timing_onset'],
+      ['Was this working on Monday?', 'timing_onset'],
+      ['Does it say anything about permissions?', 'error_message'],
+      ['Is the client expecting something today?', 'business_impact'],
+      ['Have you asked your manager about it?', 'already_tried'],
+      ['Who is the workspace owner?', 'account_details'],
+    ];
+    for (const [question, intent] of expectations) {
+      expect(classify(question).discoveryIntents, question).toContain(intent);
+    }
+  });
+
   it('reads a question with a filler adverb the same as without it', () => {
     for (const question of [
       'What exactly happens when you try to open the workspace?',
@@ -124,6 +144,19 @@ describe('rules classifier: ownership, next steps and promises', () => {
     const c = classify('Someone will look into it and we will get back to you soon.');
     expect(c.ownership).toBe('vague');
     expect(c.nextSteps).toBe('vague');
+  });
+
+  it('counts a callback at a stated time as a specific next step, however it is phrased', () => {
+    for (const text of [
+      "I'll take this on and call you back at 2pm with an update.",
+      "I'll own this and email you by 3pm.",
+      'I will call you back in 20 minutes.',
+    ]) {
+      const c = classify(text);
+      expect(c.nextSteps, text).toBe('specific');
+      expect(c.confirmsNextContact, text).toBe(true);
+    }
+    expect(classify('We will call you back soon.').nextSteps).toBe('vague');
   });
 
   it('reads staying with the customer as clear ownership', () => {

@@ -67,6 +67,7 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\b(?:error|message|code|warning|prompt|alert|notification|wording)\b/,
     /\bwhat (?:does|did|do) (?:it|the (?:screen|page|app|portal|system|site)|that) (?:say|show|display|read|look like)\b/,
     /\bread (?:me|it|that|out)\b/,
+    /\b(?:does|did|do) (?:it|the (?:message|error|screen|page|app|portal|system|site)|that) (?:say|show|mention|display|read|give|tell)\b/,
     /\bexact(?:ly)? (?:what|wording|message|text)\b/,
     /\bscreenshot\b/,
     /\bwhat (?:do|did) you (?:see|get)\b/,
@@ -85,6 +86,8 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bhow long\b/,
     /\bwhen (?:was|did) (?:the )?(?:last|first)\b/,
     /\bwas (?:it|this|that) (?:working|fine|ok|okay|normal) (?:yesterday|before|earlier|last|this)\b/,
+    /\bwhen did you (?:last|first)\b/,
+    /\b(?:was|did|had) (?:it|this|that|everything) (?:work|working|worked|open|opened|fine|ok|okay|normal)\b/,
   ],
   recent_changes: [
     /\b(?:chang(?:e|ed|es|ing)|updat(?:e|ed|es|ing)|upgrad(?:e|ed|es|ing)|install(?:ed)?|deploy(?:ed|ment)?|migrat(?:e|ed|ion)|reset|reconfigur\w+|modif(?:y|ied)|rolled out|patch(?:ed)?|new (?:setting|policy|config\w*|version|release|process|rule|system))\b/,
@@ -105,6 +108,15 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\b(?:affected|impacted)\b/,
     /\bis (?:it|this) (?:happening|affecting) (?:to|for) (?:anyone|others|everyone|your team)\b/,
     /\bsame (?:problem|issue)\b/,
+    // Yes/no questions about who else is affected: "Can anyone still open it?", "Is the whole team locked out?"
+    /\b(?:can|could|does|do|is|are|was|were) (?:anyone|anybody|someone|somebody|everyone|everybody|others|other (?:people|colleagues|members|users)|any of (?:you|your|them|the)|all of (?:you|your|them)|the (?:whole|entire|rest of the) (?:team|office|company|department|group))\b/,
+    /\bwhich of (?:you|your|the|them)\b/,
+    /\bwho (?:can|could|has|have|is able|are able|still)\b/,
+    /\b(?:for|to) (?:anyone|anybody|everyone|everybody|others)\b/,
+    // How far the problem reaches beyond the one thing: "Is it only this workspace?", "Is email working?"
+    /\b(?:only|just) (?:this|that|the|one) (?:workspace|app|application|site|system|service|tool|page|file|folder|portal|account|project)\b/,
+    /\bother (?:tools|apps|applications|sites|systems|services|features|files|folders|workspaces|projects)\b/,
+    /\b(?:is|are) (?:your )?(?:email|e-mail|internet|everything else|the rest) (?:working|fine|okay|ok)\b/,
   ],
   business_impact: [
     /\b(?:impacts?|impacting|effects?|consequences?|knock-on)\b/,
@@ -114,6 +126,8 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bhow is (?:this|it) (?:affecting|impacting|hurting)\b/,
     /\bwhat (?:can't|cannot|can not) you (?:do|do now)\b/,
     /\b(?:business|operations|revenue|customers|patients|bookings|orders) (?:impact|affected|are|is|can)\b/,
+    /\b(?:depends?|depending|rel(?:y|ies|ying)) (?:on|upon)\b/,
+    /\b(?:client|customer|stakeholder|boss|manager|board|investor)s? (?:is|are|expect\w*|waiting|need\w*|want\w*|chasing)\b/,
   ],
   workaround: [
     /\bwork ?around\b/,
@@ -131,6 +145,7 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bdid you (?:try|already|attempt)\b/,
     /\banything (?:you've|you have|else you've) (?:tried|done|attempted)\b/,
     /\bwhat (?:steps|things|else) (?:have|did) you\b/,
+    /\bhave you (?:asked|checked with|spoken|talked|contacted|told|reached out|messaged|emailed|called)\b/,
     /\b(?:tried|attempted) (?:to|any|anything|so far)\b/,
     /\bso far\b/,
   ],
@@ -186,6 +201,7 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
   account_details: [
     /\b(?:account|licen[cs]e|plan|subscription|role|permission|access level|username|user ?name|user id|admin|assigned|seat|tier|billing|invoice|contract|group|membership)\b/,
     /\bwho (?:manages|owns|administers|set up|created)\b/,
+    /\b(?:owner|owners|administrator|administrators)\b/,
   ],
 };
 
@@ -223,12 +239,18 @@ const TIME_PHRASE =
   /\b(?:(?:by|before|within|in|at|after|until|around) (?:the )?(?:end of (?:the )?(?:day|today|business|week)|eod|tomorrow|today|tonight|noon|midday|\d{1,2}(?::\d{2})?\s?(?:am|pm)?|\d+ ?(?:minutes?|mins?|hours?|hrs?|days?)|the next (?:hour|day|few hours|\d+)|(?:mon|tues|wednes|thurs|fri|satur|sun)day|this (?:morning|afternoon|evening))|next update|(?:call|email|update|contact|ring|message|check in with|get back to) you (?:back )?(?:at|by|in|within|before|tomorrow|today|this)|tomorrow (?:morning|afternoon)|\d{1,2}(?::\d{2})? ?(?:am|pm))\b/;
 const ACTION_COMMIT =
   /\b(?:i(?:'ll| will| am going to|'m going to)|we(?:'ll| will)) (?:call|email|update|contact|ring|message|check|review|investigate|send|escalate|raise|look|follow|arrange|schedule|get|come back|speak|have|let|confirm|test|restore|unlock|reset)\b/;
+// A callback at a stated time is itself a committed next step, even in "I'll take this on and call you back at 2pm".
+const CALLBACK_WITH_TIME =
+  /\b(?:call|email|update|contact|ring|message|check in with) you (?:back )?(?:at|by|in|within|before|tomorrow|today|this|on)\b/;
 export const NEXT_STEPS_VAGUE =
   /\b(?:get back to you|follow up|be in touch|let you know|update you|keep you (?:posted|updated|in the loop)|shortly|soon|as soon as (?:possible|i can)|asap|in due course|sometime)\b/;
 
 export function hasSpecificNextSteps(sentence: string): boolean {
   return (
-    TIME_PHRASE.test(sentence) && (ACTION_COMMIT.test(sentence) || /\bnext update\b/.test(sentence))
+    TIME_PHRASE.test(sentence) &&
+    (ACTION_COMMIT.test(sentence) ||
+      CALLBACK_WITH_TIME.test(sentence) ||
+      /\bnext update\b/.test(sentence))
   );
 }
 export const NEXT_CONTACT =
