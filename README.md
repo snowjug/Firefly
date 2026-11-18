@@ -1,4 +1,4 @@
-# Firefly
+# Firefly - A advanced simulator
 
 **Practice difficult customer conversations before they become real ones.**
 
