@@ -1,0 +1,254 @@
+/* Transcript review: a chat-style but semantic ordered list, with cited turns and analysis markers. */
+
+.tx-subbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-5);
+  margin-bottom: var(--sp-5);
+}
+.tx-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-4);
+  padding: 0;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.tx-meta li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tx-toolbar {
+  display: grid;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
+  border-radius: var(--r-card);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+.tx-toolbar > p {
+  padding-top: var(--sp-2);
+}
+.tx-toolbar-hint {
+  max-width: 62ch;
+  padding-top: 0 !important;
+}
+
+/* ------------------------------------------------------------------ Turns */
+.tx-list {
+  display: grid;
+  gap: var(--sp-3);
+  padding: 0;
+  margin: 0;
+}
+.tx-turn {
+  position: relative;
+  width: min(100%, 44rem);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-card);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  scroll-margin-top: calc(var(--nav-height) + var(--sp-6));
+}
+.tx-turn:focus {
+  outline: none;
+}
+.tx-turn[data-role='customer'] {
+  justify-self: start;
+  border-bottom-left-radius: 6px;
+}
+.tx-turn[data-role='trainee'] {
+  justify-self: end;
+  border-bottom-right-radius: 6px;
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.tx-turn[data-cited='true'] {
+  border-color: color-mix(in srgb, var(--accent-2) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent-2) 8%, var(--surface));
+}
+.tx-turn[data-cited='true']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent-2);
+}
+.tx-turn[data-linked='true'] {
+  box-shadow:
+    0 0 0 2px var(--focus),
+    0 0 0 7px color-mix(in srgb, var(--focus) 22%, transparent);
+  animation: tx-flash 1.8s var(--ease-out) 1;
+}
+@keyframes tx-flash {
+  from {
+    background-color: color-mix(in srgb, var(--focus) 24%, var(--surface));
+  }
+}
+
+.tx-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.tx-speaker {
+  font-size: var(--fs-small);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.tx-where {
+  color: var(--text-3);
+  font-size: var(--fs-meta);
+}
+.tx-tag {
+  margin-left: auto;
+}
+.tx-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.tx-cites,
+.tx-markers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: 0;
+  margin: var(--sp-3) 0 0;
+}
+.tx-cite {
+  padding: 0.15rem 0.65rem;
+  border-radius: var(--r-pill);
+  border: 1px solid color-mix(in srgb, var(--accent-2) 35%, transparent);
+  background: var(--info-bg);
+  color: var(--text);
+  font-size: var(--fs-label);
+  font-weight: 620;
+  overflow-wrap: anywhere;
+}
+.tx-marker {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--marker-border, var(--border));
+  background: var(--marker-bg, color-mix(in srgb, var(--surface-2) 80%, transparent));
+  color: var(--text);
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.tx-marker svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--marker-icon, var(--text-2));
+}
+.tx-marker[data-tone='eased'] {
+  --marker-bg: var(--positive-bg);
+  --marker-border: color-mix(in srgb, var(--positive) 32%, transparent);
+  --marker-icon: var(--positive);
+}
+.tx-marker[data-tone='rose'],
+.tx-marker[data-tone='curveball'] {
+  --marker-bg: var(--caution-bg);
+  --marker-border: color-mix(in srgb, var(--caution) 34%, transparent);
+  --marker-icon: var(--caution);
+}
+.tx-marker[data-tone='discovery'] {
+  --marker-bg: var(--info-bg);
+  --marker-border: color-mix(in srgb, var(--info) 34%, transparent);
+  --marker-icon: var(--info);
+}
+.tx-end {
+  margin-top: var(--sp-5);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .tx-turn {
+    width: 100%;
+    padding: var(--sp-3) var(--sp-4);
+  }
+  .tx-tag {
+    margin-left: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ Print */
+@media print {
+  :root:has(.tx-root),
+  :root[data-theme='dark']:has(.tx-root),
+  :root[data-theme='light']:has(.tx-root) {
+    color-scheme: light;
+    --bg: #fff;
+    --surface: #fff;
+    --surface-2: #f5f6fa;
+    --surface-3: #eceef6;
+    --glass-bg: #fff;
+    --glass-bg-strong: #fff;
+    --glass-fallback: #fff;
+    --glass-border: rgba(16, 24, 48, 0.25);
+    --border: rgba(16, 24, 48, 0.22);
+    --border-strong: rgba(16, 24, 48, 0.4);
+    --text: #0b1630;
+    --text-2: #2b3553;
+    --text-3: #4b5675;
+    --accent: #0f766e;
+    --accent-2: #3556d6;
+    --positive: #15803d;
+    --positive-bg: rgba(21, 128, 61, 0.12);
+    --caution: #a16207;
+    --caution-bg: rgba(202, 138, 4, 0.16);
+    --info: #3556d6;
+    --info-bg: rgba(53, 86, 214, 0.1);
+    --shadow-1: none;
+    --shadow-2: none;
+  }
+  :root:has(.tx-root) .nav,
+  :root:has(.tx-root) .footer,
+  :root:has(.tx-root) .skip-link,
+  :root:has(.tx-root) .toast-region {
+    display: none !important;
+  }
+  .tx-root,
+  .tx-root * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .tx-root {
+    padding: 0;
+    max-width: none;
+    animation: none;
+  }
+  .tx-actions,
+  .tx-toolbar {
+    display: none !important;
+  }
+  .tx-turn {
+    break-inside: avoid;
+    animation: none;
+    box-shadow: none !important;
+  }
+  .tx-turn[data-role='trainee'],
+  .tx-turn[data-role='customer'] {
+    justify-self: stretch;
+    width: 100%;
+  }
+  .tx-root a {
+    color: inherit;
+    text-decoration: none;
+  }
+}

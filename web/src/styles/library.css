@@ -1,0 +1,328 @@
+/* Library: header, filters, scenario cards and the preview dialog. */
+
+.lib-header {
+  display: grid;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-5);
+}
+.lib-header .t-lead {
+  max-width: 62ch;
+}
+.lib-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.lib-note svg {
+  flex: none;
+  margin-top: 0.2em;
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ Toolbar */
+.lib-toolbar {
+  display: grid;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+.lib-search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.lib-search-field {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.lib-search-field > svg {
+  position: absolute;
+  inset-block: 0;
+  left: 0.95rem;
+  margin-block: auto;
+  color: var(--text-3);
+  pointer-events: none;
+}
+.lib-search-input {
+  padding-left: 2.75rem;
+  padding-right: 0.9rem;
+}
+.lib-search-input:not(:placeholder-shown) {
+  padding-right: 3.1rem;
+}
+.lib-search-input::-webkit-search-cancel-button,
+.lib-search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.lib-search-clear {
+  position: absolute;
+  inset-block: 0;
+  right: 4px;
+  margin-block: auto;
+}
+.lib-filters-toggle {
+  display: none;
+}
+.lib-filter-count {
+  padding-block: 0.1rem;
+}
+
+.lib-facets {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+.lib-facets .label {
+  font-size: var(--fs-meta);
+  color: var(--text-2);
+}
+.lib-facets .select[data-active='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+@media (max-width: 1100px) {
+  .lib-facets {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .lib-search-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .lib-filters-toggle {
+    display: inline-flex;
+    justify-content: flex-start;
+  }
+  .lib-filters-toggle > svg:last-child {
+    margin-left: auto;
+  }
+  .lib-facets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lib-facets[data-open='false'] {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  .lib-facets {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------------ Results */
+.lib-results {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-5);
+  margin-bottom: var(--sp-3);
+}
+.lib-count {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  font-weight: 620;
+}
+.lib-sort {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.lib-sort .select {
+  width: auto;
+  min-width: 11.5rem;
+}
+.lib-sort .label {
+  white-space: nowrap;
+}
+.lib-active {
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.lib-chip {
+  min-height: 36px;
+  padding-inline: 0.85rem;
+  color: var(--text);
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    background var(--dur-2) var(--ease-out);
+}
+.lib-chip:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.lib-chip strong {
+  font-weight: 650;
+}
+.lib-chip svg {
+  color: var(--text-2);
+}
+.lib-grid > li {
+  display: grid;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ Scenario card */
+.scn-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.scn-card[data-spotlight='true'] {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--glass-border));
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.scn-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.scn-minutes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+.scn-card-title {
+  font-size: 1.15rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
+}
+.scn-card-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.scn-persona {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.scn-persona svg {
+  flex: none;
+  margin-top: 0.15em;
+  color: var(--text-3);
+}
+.scn-persona strong {
+  font-weight: 620;
+  color: var(--text);
+}
+.scn-chips {
+  gap: 0.4rem;
+}
+.scn-chip {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.scn-focus {
+  font-size: var(--fs-meta);
+  color: var(--text-2);
+}
+.scn-focus-label {
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+.scn-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: auto;
+  padding-top: var(--sp-2);
+}
+.scn-card-actions .btn-primary {
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------------------ Preview dialog */
+.dialog:has(.scn-preview) {
+  --scn-pad: var(--sp-6);
+  width: min(720px, 100%);
+  padding-bottom: 0;
+  overflow-wrap: anywhere;
+}
+.sheet:has(.scn-preview) {
+  --scn-pad: var(--sp-5);
+  padding-bottom: 0;
+  overflow-wrap: anywhere;
+}
+/* Long reading text sits on a solid surface, as the design system advises, not on blurred glass. */
+.dialog:has(.scn-preview),
+.sheet:has(.scn-preview) {
+  background: var(--glass-fallback);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.scn-preview {
+  display: grid;
+  gap: var(--sp-5);
+}
+.scn-preview h3 {
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.scn-preview p,
+.scn-list {
+  color: var(--text-2);
+}
+.scn-preview p strong,
+.scn-list strong {
+  color: var(--text);
+  font-weight: 620;
+}
+.scn-list {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.scn-list li::marker {
+  color: var(--accent);
+}
+.scn-preview-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  margin: var(--sp-5) calc(var(--scn-pad) * -1) 0;
+  padding: var(--sp-4) var(--scn-pad);
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.scn-preview-actions .btn {
+  flex: 1 1 11rem;
+}
+@media (min-width: 641px) {
+  .scn-preview-actions .btn {
+    flex: 0 1 auto;
+  }
+}

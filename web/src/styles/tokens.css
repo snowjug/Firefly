@@ -1,0 +1,233 @@
+/* Firefly design tokens. Everything visual is built from these variables so both themes stay
+   consistent. Dark is tuned for low light (a calm "midnight" with a warm firefly glow); light is a
+   separate, intentional palette with darker accents so text keeps WCAG AA contrast. */
+
+:root {
+  color-scheme: dark light;
+
+  /* Typography */
+  --font-sans:
+    'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-display:
+    'Segoe UI Variable Display', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system,
+    sans-serif;
+  --font-mono:
+    'Cascadia Code', 'Cascadia Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-display: clamp(2.1rem, 1.35rem + 2.7vw, 3.5rem);
+  --fs-title: clamp(1.65rem, 1.3rem + 1.4vw, 2.35rem);
+  --fs-section: clamp(1.2rem, 1.1rem + 0.45vw, 1.4rem);
+  --fs-body: 1rem;
+  --fs-small: 0.875rem;
+  --fs-meta: 0.8125rem;
+  --fs-label: 0.75rem;
+  --lh-tight: 1.12;
+  --lh-snug: 1.3;
+  --lh-body: 1.55;
+
+  /* Spacing (4px scale) */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+  --sp-7: 3rem;
+  --sp-8: 4rem;
+  --sp-9: 6rem;
+
+  /* Radius */
+  --r-control: 10px;
+  --r-card: 18px;
+  --r-modal: 24px;
+  --r-panel: 28px;
+  --r-pill: 999px;
+
+  /* Motion */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --dur-4: 450ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.25, 0.64, 1);
+
+  /* Blur (used sparingly; every glass surface has a solid fallback) */
+  --blur-1: 14px;
+  --blur-2: 26px;
+
+  /* Layers */
+  --z-nav: 40;
+  --z-sheet: 60;
+  --z-dialog: 70;
+  --z-toast: 80;
+
+  --content-width: 1180px;
+  --nav-height: 64px;
+  --tap: 44px;
+}
+
+/* ---------------------------------------------------------------- Dark (default) */
+:root,
+:root[data-theme='dark'] {
+  --bg: #070b16;
+  --bg-glow-1: rgba(99, 102, 241, 0.22);
+  --bg-glow-2: rgba(45, 212, 191, 0.14);
+  --bg-glow-3: rgba(251, 191, 36, 0.1);
+
+  --surface: #0d1425;
+  --surface-2: #121b31;
+  --surface-3: #19243f;
+  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035));
+  --glass-bg-strong: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-highlight: rgba(255, 255, 255, 0.2);
+  --glass-fallback: #121b31;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.2);
+
+  --text: #eef2ff;
+  --text-2: #b8c1da;
+  --text-3: #919bba;
+
+  --accent: #5eead4;
+  --accent-strong: #2dd4bf;
+  --accent-contrast: #04141a;
+  --accent-2: #8aa4ff;
+  --glow: #fbbf24;
+  --cta-bg: linear-gradient(135deg, #7ef0dc 0%, #7ba4ff 100%);
+  --cta-bg-hover: linear-gradient(135deg, #93f5e4 0%, #93b3ff 100%);
+  --cta-text: #04141a;
+
+  --positive: #4ade80;
+  --positive-bg: rgba(74, 222, 128, 0.14);
+  --caution: #fbbf24;
+  --caution-bg: rgba(251, 191, 36, 0.14);
+  --negative: #fb7185;
+  --negative-bg: rgba(251, 113, 133, 0.14);
+  --info: #8aa4ff;
+  --info-bg: rgba(138, 164, 255, 0.14);
+
+  --temp-calm: #5eead4;
+  --temp-concerned: #7dd3fc;
+  --temp-frustrated: #fbbf24;
+  --temp-angry: #fb923c;
+  --temp-escalating: #fb7185;
+
+  --focus: #a9b8ff;
+  --scrim: rgba(3, 6, 14, 0.66);
+  --chart-grid: rgba(255, 255, 255, 0.08);
+
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 14px 36px -14px rgba(0, 0, 0, 0.65);
+  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 28px 70px -20px rgba(0, 0, 0, 0.75);
+  --shadow-lift: 0 18px 44px -16px rgba(94, 234, 212, 0.3);
+}
+
+/* ---------------------------------------------------------------- Light */
+:root[data-theme='light'] {
+  --bg: #eef2fa;
+  --bg-glow-1: rgba(99, 102, 241, 0.16);
+  --bg-glow-2: rgba(20, 184, 166, 0.14);
+  --bg-glow-3: rgba(251, 191, 36, 0.14);
+
+  --surface: #ffffff;
+  --surface-2: #f6f8fd;
+  --surface-3: #ebeff9;
+  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.64));
+  --glass-bg-strong: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.78));
+  --glass-border: rgba(16, 24, 48, 0.11);
+  --glass-highlight: rgba(255, 255, 255, 0.95);
+  --glass-fallback: #ffffff;
+  --border: rgba(16, 24, 48, 0.12);
+  --border-strong: rgba(16, 24, 48, 0.24);
+
+  --text: #0b1630;
+  --text-2: #3f4b6a;
+  --text-3: #556182;
+
+  --accent: #0d6b63;
+  --accent-strong: #0b5f58;
+  --accent-contrast: #ffffff;
+  --accent-2: #3556d6;
+  --glow: #b45309;
+  --cta-bg: linear-gradient(135deg, #0f766e 0%, #3556d6 100%);
+  --cta-bg-hover: linear-gradient(135deg, #0d6a63 0%, #2c49bd 100%);
+  --cta-text: #ffffff;
+
+  --positive: #14703a;
+  --positive-bg: rgba(21, 128, 61, 0.1);
+  --caution: #8a4b08;
+  --caution-bg: rgba(202, 138, 4, 0.14);
+  --negative: #be123c;
+  --negative-bg: rgba(190, 18, 60, 0.09);
+  --info: #3556d6;
+  --info-bg: rgba(53, 86, 214, 0.1);
+
+  --temp-calm: #0f766e;
+  --temp-concerned: #0369a1;
+  --temp-frustrated: #a16207;
+  --temp-angry: #c2410c;
+  --temp-escalating: #be123c;
+
+  --focus: #3556d6;
+  --scrim: rgba(12, 18, 40, 0.45);
+  --chart-grid: rgba(16, 24, 48, 0.1);
+
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 12px 30px -14px rgba(20, 30, 70, 0.28);
+  --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 26px 60px -22px rgba(20, 30, 70, 0.35);
+  --shadow-lift: 0 16px 38px -16px rgba(15, 118, 110, 0.4);
+}
+
+/* Follow the system when the user has not chosen a theme. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #eef2fa;
+    --bg-glow-1: rgba(99, 102, 241, 0.16);
+    --bg-glow-2: rgba(20, 184, 166, 0.14);
+    --bg-glow-3: rgba(251, 191, 36, 0.14);
+    --surface: #ffffff;
+    --surface-2: #f6f8fd;
+    --surface-3: #ebeff9;
+    --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.64));
+    --glass-bg-strong: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(255, 255, 255, 0.78)
+    );
+    --glass-border: rgba(16, 24, 48, 0.11);
+    --glass-highlight: rgba(255, 255, 255, 0.95);
+    --glass-fallback: #ffffff;
+    --border: rgba(16, 24, 48, 0.12);
+    --border-strong: rgba(16, 24, 48, 0.24);
+    --text: #0b1630;
+    --text-2: #3f4b6a;
+    --text-3: #556182;
+    --accent: #0d6b63;
+    --accent-strong: #0b5f58;
+    --accent-contrast: #ffffff;
+    --accent-2: #3556d6;
+    --glow: #b45309;
+    --cta-bg: linear-gradient(135deg, #0f766e 0%, #3556d6 100%);
+    --cta-bg-hover: linear-gradient(135deg, #0d6a63 0%, #2c49bd 100%);
+    --cta-text: #ffffff;
+    --positive: #14703a;
+    --positive-bg: rgba(21, 128, 61, 0.1);
+    --caution: #8a4b08;
+    --caution-bg: rgba(202, 138, 4, 0.14);
+    --negative: #be123c;
+    --negative-bg: rgba(190, 18, 60, 0.09);
+    --info: #3556d6;
+    --info-bg: rgba(53, 86, 214, 0.1);
+    --temp-calm: #0f766e;
+    --temp-concerned: #0369a1;
+    --temp-frustrated: #a16207;
+    --temp-angry: #c2410c;
+    --temp-escalating: #be123c;
+    --focus: #3556d6;
+    --scrim: rgba(12, 18, 40, 0.45);
+    --chart-grid: rgba(16, 24, 48, 0.1);
+    --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 12px 30px -14px rgba(20, 30, 70, 0.28);
+    --shadow-2: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 26px 60px -22px rgba(20, 30, 70, 0.35);
+    --shadow-lift: 0 16px 38px -16px rgba(15, 118, 110, 0.4);
+  }
+}

@@ -1,0 +1,566 @@
+/* Setup: the guided flow, its choice cards, the live preview and the review. Also holds the
+   settings list that the brief page shares. */
+
+.stp-header {
+  display: grid;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.stp-header h1 {
+  max-width: 46ch;
+  font-size: clamp(1.55rem, 1.25rem + 1.2vw, 2.1rem);
+  overflow-wrap: anywhere;
+}
+
+.stp-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: var(--sp-6);
+  align-items: start;
+}
+.stp-main {
+  display: grid;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.stp-aside {
+  position: sticky;
+  top: calc(var(--nav-height) + var(--sp-4));
+}
+@media (max-width: 999px) {
+  .stp-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------------ Step indicator */
+.stp-steps {
+  display: grid;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-4);
+}
+.stp-step-count {
+  font-size: var(--fs-small);
+  font-weight: 650;
+  color: var(--text);
+}
+.stp-stepper {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin: 0;
+}
+.stp-stepper-link {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  padding-top: var(--sp-3);
+  color: var(--text-3);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  text-decoration: none;
+}
+.stp-stepper-bar {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  transition:
+    background var(--dur-3) var(--ease-out),
+    box-shadow var(--dur-3) var(--ease-out);
+}
+.stp-stepper-link:hover {
+  color: var(--text);
+}
+.stp-stepper-link[data-state='done'] .stp-stepper-bar {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.stp-stepper-link[data-state='current'] {
+  color: var(--text);
+}
+.stp-stepper-link[data-state='current'] .stp-stepper-bar {
+  background: var(--accent);
+  box-shadow: 0 0 12px -1px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+@media (forced-colors: active) {
+  .stp-stepper-bar {
+    forced-color-adjust: none;
+    background: GrayText;
+  }
+  .stp-stepper-link[data-state='done'] .stp-stepper-bar {
+    background: LinkText;
+  }
+  .stp-stepper-link[data-state='current'] .stp-stepper-bar {
+    background: Highlight;
+  }
+}
+.stp-stepper-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .stp-stepper {
+    gap: var(--sp-1);
+  }
+  /* Names stay available to screen readers; the bars carry the position visually. */
+  .stp-stepper-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+}
+
+/* ------------------------------------------------------------------ The step panel */
+.stp-step {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-5);
+  animation: stp-in var(--dur-3) var(--ease-out);
+}
+@keyframes stp-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (max-width: 720px) {
+  .stp-step.panel {
+    padding: var(--sp-5) var(--sp-4);
+  }
+}
+.stp-intro {
+  display: grid;
+  gap: var(--sp-2);
+}
+.stp-heading {
+  font-size: clamp(1.4rem, 1.2rem + 0.9vw, 1.9rem);
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  scroll-margin-top: calc(var(--nav-height) + var(--sp-4));
+}
+.stp-lead {
+  max-width: 62ch;
+  color: var(--text-2);
+}
+.stp-stack {
+  display: grid;
+  gap: var(--sp-6);
+}
+.stp-hint {
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+
+.stp-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
+/* ------------------------------------------------------------------ Choice cards */
+.stp-choices {
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.stp-legend {
+  padding: 0;
+  margin-bottom: var(--sp-1);
+  font-family: var(--font-display);
+  font-size: var(--fs-section);
+  font-weight: 620;
+}
+.stp-choice-grid {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: minmax(0, 1fr);
+}
+.stp-choice-grid[data-columns='2'] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+.stp-choice-grid[data-columns='3'] {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12.5rem), 1fr));
+}
+.stp-choice {
+  min-width: 0;
+  padding: var(--sp-4);
+}
+.stp-choice-body {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.stp-choice-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.stp-choice .option-title {
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+.stp-choice-desc {
+  font-size: var(--fs-small);
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.stp-choice-detail {
+  font-size: var(--fs-meta);
+  color: var(--text-3);
+}
+.stp-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.08rem 0.55rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-strong);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.stp-choice:has(input:checked) .stp-tag {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
+}
+.stp-choice:has(input[type='checkbox']) .option-check::after {
+  content: none;
+}
+.stp-choice .option-check svg {
+  color: var(--accent-contrast);
+}
+.stp-choice[data-blocked='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.stp-choice[data-blocked='true']:hover {
+  transform: none;
+  border-color: var(--border);
+}
+.stp-choice[data-blocked='true'] input {
+  cursor: not-allowed;
+}
+.stp-cap[data-full] {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ Step 1: the issue */
+.stp-issue {
+  display: grid;
+  gap: var(--sp-4);
+}
+.stp-issue-type {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-small);
+  font-weight: 620;
+  color: var(--accent);
+}
+.stp-issue-summary {
+  max-width: 54ch;
+  font-size: 1.15rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.stp-issue .chip {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.stp-facts {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.stp-facts > div {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: var(--sp-3);
+}
+.stp-facts dt {
+  padding-top: 0.2em;
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.stp-facts dd {
+  margin: 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.stp-facts strong {
+  color: var(--text);
+  font-weight: 620;
+}
+.stp-switch {
+  font-weight: 600;
+}
+@media (max-width: 560px) {
+  .stp-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-1);
+  }
+}
+
+/* ------------------------------------------------------------------ "Your call so far" */
+.stp-preview {
+  display: grid;
+  gap: var(--sp-4);
+  max-height: calc(100vh - var(--nav-height) - var(--sp-6));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--sp-5);
+}
+.stp-preview-title {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.stp-preview-body {
+  display: grid;
+  gap: var(--sp-4);
+  overflow-wrap: anywhere;
+}
+.stp-sentence {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+.stp-preview-difficulty {
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.stp-preview-difficulty .chip-positive {
+  color: color-mix(in srgb, var(--positive) 72%, var(--text));
+}
+.stp-preview-difficulty .chip-info {
+  color: color-mix(in srgb, var(--info) 72%, var(--text));
+}
+.stp-preview-difficulty .chip-caution {
+  color: color-mix(in srgb, var(--caution) 72%, var(--text));
+}
+.stp-notes {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+}
+.stp-note dt {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.stp-note dt .temp-orb {
+  margin-top: 0.3em;
+}
+.stp-note-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.stp-note dt strong {
+  font-weight: 650;
+  color: var(--text);
+}
+.stp-note dt .stp-changed {
+  flex: none;
+  margin-top: 0.1em;
+}
+.stp-note dd {
+  margin: 2px 0 0;
+  font-size: var(--fs-meta);
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.stp-preview-foot {
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-meta);
+  color: var(--text-3);
+}
+.stp-changed {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.55rem;
+  border-radius: var(--r-pill);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
+}
+
+/* ------------------------------------------------------------------ Narrow screens: the docked bar */
+.stp-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: grid;
+  gap: var(--sp-3);
+  margin-inline: calc(var(--sp-4) * -1);
+  padding: var(--sp-3) var(--sp-4) max(var(--sp-3), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: 0 -14px 30px -18px rgba(0, 0, 0, 0.55);
+}
+.stp-dock .stp-actions {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.stp-dock .stp-actions .btn-primary {
+  flex: 1 1 auto;
+}
+.stp-bar {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.stp-bar-body {
+  max-height: min(48vh, 26rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.stp-bar-body:focus-visible {
+  outline-offset: -3px;
+}
+.stp-bar-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0.55rem var(--sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+}
+.stp-bar-text {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+.stp-bar-label {
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.stp-bar-peek {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-small);
+}
+
+/* ------------------------------------------------------------------ Settings list (review and brief) */
+.stp-settings {
+  display: grid;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+.stp-setting {
+  display: grid;
+  grid-template-columns: 10.5rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.stp-setting:last-child {
+  border-bottom: 0;
+}
+.stp-setting[data-changed='true'] {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.stp-setting-term {
+  padding-top: 0.25em;
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.stp-setting-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.stp-setting-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.stp-setting-note {
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.stp-setting-was {
+  font-size: var(--fs-meta);
+  color: var(--text-3);
+}
+.stp-setting-edit {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .stp-setting {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: var(--sp-3) var(--sp-4);
+  }
+  .stp-setting-term {
+    grid-column: 1 / -1;
+    padding-top: 0;
+  }
+}
