@@ -1,10 +1,36 @@
 import { ScenarioDefinitionSchema, type ScenarioDefinition } from '#shared/domain/scenario.ts';
 import { DIFFICULTY_RANK, DISCOVERY_INTENTS, type Difficulty } from '#shared/domain/vocab.ts';
+import cannotFindExport from './library/cannot-find-export-feature.ts';
+import checkoutOutage from './library/checkout-outage-before-investor-event.ts';
+import closureCallReport from './library/closure-call-report-fix-unconfirmed.ts';
+import confidentButIncorrect from './library/confident-but-incorrect-diagnosis.ts';
+import escalatedIntegration from './library/escalated-integration-failures.ts';
+import followUpNoUpdate from './library/follow-up-no-recent-update.ts';
+import invoiceShock from './library/invoice-shock-and-cancellation-threat.ts';
+import licenceSeat from './library/licence-seat-not-assigned.ts';
 import lockedOut from './library/locked-out-after-password-reset.ts';
+import missingOrders from './library/missing-orders-after-settings-change.ts';
+import recurringSlowdowns from './library/recurring-midday-slowdowns.ts';
+import slowDashboard from './library/slow-dashboard-with-workaround.ts';
+import sharedWorkspace from './library/team-cannot-open-shared-workspace.ts';
 
-// Registry of the built-in synthetic scenarios. Add a scenario by creating a file in
-// ./library and listing it here; `npm run validate:scenarios` checks everything.
-const LIBRARY_INPUT: unknown[] = [lockedOut];
+// Registry of the built-in synthetic scenarios, easiest first. Add a scenario by creating a file
+// in ./library and listing it here; `npm run validate:scenarios` checks everything.
+const LIBRARY_INPUT: unknown[] = [
+  lockedOut,
+  cannotFindExport,
+  slowDashboard,
+  licenceSeat,
+  closureCallReport,
+  sharedWorkspace,
+  missingOrders,
+  recurringSlowdowns,
+  followUpNoUpdate,
+  checkoutOutage,
+  escalatedIntegration,
+  invoiceShock,
+  confidentButIncorrect,
+];
 
 export interface LoadedScenarios {
   scenarios: ScenarioDefinition[];
@@ -15,6 +41,7 @@ export function loadScenarios(input: unknown[] = LIBRARY_INPUT): LoadedScenarios
   const scenarios: ScenarioDefinition[] = [];
   const errors: string[] = [];
   const seen = new Set<string>();
+  const personas = new Map<string, string>();
   for (const raw of input) {
     const parsed = ScenarioDefinitionSchema.safeParse(raw);
     if (!parsed.success) {
@@ -30,6 +57,16 @@ export function loadScenarios(input: unknown[] = LIBRARY_INPUT): LoadedScenarios
       continue;
     }
     seen.add(parsed.data.id);
+    // Distinct customer names keep scenarios recognisable in history, reports and demos.
+    const personaKey = parsed.data.persona.name.trim().toLowerCase();
+    const sameName = personas.get(personaKey);
+    if (sameName) {
+      errors.push(
+        `${parsed.data.id}: persona name "${parsed.data.persona.name}" is already used by ${sameName}`,
+      );
+    } else {
+      personas.set(personaKey, parsed.data.id);
+    }
     errors.push(...semanticIssues(parsed.data));
     scenarios.push(parsed.data);
   }
@@ -38,7 +75,7 @@ export function loadScenarios(input: unknown[] = LIBRARY_INPUT): LoadedScenarios
 
 // Distinctive tokens (numbers, codes, product error ids) of a hidden fact must not appear in text
 // that the customer shares before the fact is discovered.
-function distinctiveTokens(text: string): string[] {
+export function distinctiveTokens(text: string): string[] {
   const tokens = new Set<string>();
   for (const m of text.matchAll(
     /\b[A-Z]{2,}[A-Z0-9_-]*\d+[A-Z0-9_-]*\b|\b\d[\d,.:%]*\d\b|\b0x[0-9A-Fa-f]+\b/g,

@@ -18,3 +18,7 @@ data/*
 *.log
 .DS_Store
 Thumbs.db
+
+# Throwaway local scripts and captures
+scripts/_tmp/
+screenshots/

@@ -215,7 +215,13 @@ export function composeCustomerReply(input: ComposeInput): ComposeResult {
     traineeTurnNumber - runtime.asksForTimelineAtTurn >= 3 &&
     !curveball.fired;
   if (closing) {
-    segments.push({ text: say(P.CLOSING_CUSTOMER, P.CLOSING_CUSTOMER_SIMPLE) });
+    // Do not thank the engineer twice in one reply.
+    const thanked = segments.some((s) => /\bthank/i.test(s.text));
+    segments.push({
+      text: thanked
+        ? say(P.CLOSING_CUSTOMER_NO_THANKS, P.CLOSING_CUSTOMER_NO_THANKS_SIMPLE)
+        : say(P.CLOSING_CUSTOMER, P.CLOSING_CUSTOMER_SIMPLE),
+    });
   } else if (wantsTimeline) {
     segments.push({ text: say(P.TIMELINE, P.TIMELINE_SIMPLE) });
     timelineAsked = true;

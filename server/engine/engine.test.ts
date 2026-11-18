@@ -6,8 +6,27 @@ import { createRng, rngFor } from './rng.ts';
 import { simulate } from './simulate.ts';
 import { createInitialRuntime, openingMessage, publicState } from './session.ts';
 import { makeScenario } from './testing.ts';
+import { dropRedundantSentences } from './textutil.ts';
 
 const base = ScenarioDefinitionSchema.parse(exemplar);
+
+describe('text helpers', () => {
+  it('drops a sentence that mostly repeats an earlier one, and keeps distinct ones', () => {
+    const parts = [
+      'Right.',
+      'Your service tier is under-provisioned for our load, and I need it upgraded now.',
+      'Response times on our orders service have slowed badly.',
+      'Your service tier is under-provisioned for our load, and that is why we are slow.',
+      'I need this sorted.',
+    ];
+    expect(dropRedundantSentences(parts)).toEqual([
+      'Right.',
+      'Your service tier is under-provisioned for our load, and I need it upgraded now.',
+      'Response times on our orders service have slowed badly.',
+      'I need this sorted.',
+    ]);
+  });
+});
 
 describe('opening', () => {
   it('never reveals hidden facts', () => {
@@ -332,6 +351,25 @@ describe('communication style, proficiency and determinism', () => {
   it('seeds are independent per turn', () => {
     expect(rngFor(1, 1)()).not.toBe(rngFor(1, 2)());
     expect(rngFor(1, 1)()).toBe(rngFor(1, 1)());
+  });
+
+  it('never thanks the engineer twice in one reply when the call is wrapping up', async () => {
+    const lines = [
+      "I'm sorry this has been so frustrating. I'll take this on and call you back by 3pm with an update. To recap, you cannot sign in on your laptop. Is there anything else I can help with?",
+    ];
+    for (const style of ['talkative', 'terse', 'demanding', 'non-native'] as const) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const sim = await simulate(
+          makeScenario({ style, startingTemperature: 'calm', difficulty: 'standard' }, seed),
+          lines,
+        );
+        const reply = sim.turns[0]?.customer ?? '';
+        expect(
+          (reply.match(/thank/gi) ?? []).length,
+          `${style}/${seed}: ${reply}`,
+        ).toBeLessThanOrEqual(1);
+      }
+    }
   });
 });
 

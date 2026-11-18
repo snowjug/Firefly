@@ -199,7 +199,7 @@ export const IMPACT_ACK: RegExp[] = [
 ];
 
 export const OWNERSHIP_CLEAR =
-  /\b(?:i(?:'ll| will| am going to|'m going to|'m gonna) (?:take (?:ownership|this on|care of this|charge)|own this|own it|look after this|see this through|stay (?:on|with) this|be (?:your|the) (?:point of contact|owner|contact)|personally (?:look|handle|follow|take|make sure|check)|follow (?:this|it) (?:up|through)|make sure (?:this|it|that)|work on this|get (?:this|it) (?:sorted|resolved|fixed|moving|escalated)|escalate (?:this|it)|chase|drive this|raise (?:this|it))|i'?ve got (?:this|it)|this is (?:my|mine)|(?:my|mine) (?:case|priority|responsibility)|(?:i|we)(?:'ll| will) (?:make sure|ensure|see this through)|i'?m (?:responsible|on it|taking)|leave (?:it|this) with me|i can take (?:that|this|it)|i'?ll (?:take|handle) (?:that|this|it))\b/;
+  /\b(?:i(?:'ll| will| am going to|'m going to|'m gonna) (?:take (?:ownership|this on|care of this|charge)|own this|own it|look after this|see this through|stay (?:on|with) (?:this|it|you)|stick with (?:this|it|you)|be (?:your|the) (?:point of contact|owner|contact)|personally (?:look|handle|follow|take|make sure|check)|follow (?:this|it) (?:up|through)|make sure (?:this|it|that)|work on this|get (?:this|it) (?:sorted|resolved|fixed|moving|escalated)|escalate (?:this|it)|chase|drive this|raise (?:this|it))|(?:and|then) (?:i(?:'ll| will) )?(?:stay|stick) (?:on|with) (?:this|it|you|the case)|until (?:it(?:'s| is)|this is) (?:fixed|resolved|sorted|done)|i'?ve got (?:this|it)|this is (?:my|mine)|(?:my|mine) (?:case|priority|responsibility)|(?:i|we)(?:'ll| will) (?:make sure|ensure|see this through)|i'?m (?:responsible|on it|taking)|leave (?:it|this) with me|i can take (?:that|this|it)|i'?ll (?:take|handle) (?:that|this|it))\b/;
 export const OWNERSHIP_VAGUE =
   /\b(?:(?:we|i)(?:'ll| will| can| might| could) (?:look|see|try|check|have a look|take a look|investigate|get back)|someone (?:will|should|can|might)|let me (?:see|check|look|try)|i'?ll (?:try|see)|hopefully|we should be able|i think we can|bear with me|(?:the|our) team (?:will|should))\b/;
 
@@ -247,16 +247,18 @@ export const SUMMARISES =
 
 export const WRAPS_UP =
   /\b(?:to (?:summaris|summariz|recap|wrap up)\w*|in summary|before (?:we|you) (?:go|finish|end|hang up)|let me (?:just )?(?:confirm|recap|summarise|summarize) (?:what|the|where)|(?:we'?ve|i'?ve) (?:covered|agreed|decided)|what we'?ve agreed|here'?s (?:what|where) (?:we|i)|that'?s (?:everything|all) (?:i|we)|we'?re (?:all )?(?:set|done|good))\b/;
+// Asking whether the customer needs anything else. Agreement check-ins such as "does that work?"
+// are not closing behaviour on their own, so they are deliberately not matched here.
 export const ANYTHING_ELSE =
-  /\b(?:anything else|is there anything|any (?:other|further) (?:questions|issues|concerns|problems)|does that (?:work|help|sound)|are you (?:happy|comfortable|ok(?:ay)?|satisfied)|is that (?:ok|okay|alright|fine|all right|clear)|have i (?:answered|covered)|how does that sound|any questions)\b/;
+  /\b(?:anything else|is there anything (?:else|more|further|other|i can|we can|you(?:'d| would) like)|any (?:other|further) (?:questions|issues|concerns|problems)|have i (?:answered|covered)|any questions)\b/;
 export const THANKS_CLOSE =
-  /\b(?:thank(?:s| you)(?: (?:so much|very much|for (?:your time|calling|your patience|bearing)))?|have a (?:good|great|nice|lovely)|take care|goodbye|bye for now|speak (?:to you )?soon)\b/;
+  /\b(?:thank(?:s| you)(?: (?:so much|very much|for (?:your time|calling|your patience|bearing)))?|have a (?:good|great|nice|lovely)|take care|good ?bye|bye(?: for now)?|speak (?:to you )?soon)\b/;
 
 export const CORRECTS_ASSUMPTION =
   /\b(?:actually|in fact|just to (?:clarify|correct)|i (?:don'?t|do not) (?:think|know) (?:that'?s|it'?s|that is|it is|that)|that (?:might|may|could) not be|it (?:might|may|could) (?:not be|be something else)|rather than|not (?:necessarily|quite)|let'?s (?:verify|check|confirm|test) (?:that|whether)|what makes you (?:think|say|believe)|what (?:leads|led) you|how do you know|what (?:evidence|data|metrics|monitoring|information) (?:do you have|shows|supports)|could (?:it|this) (?:also )?be)\b/;
 
 export const INJECTION =
-  /\b(?:ignore (?:all |any |your )?(?:previous|prior|above|earlier) (?:instructions|prompts|rules)|disregard (?:your|the|all)|system prompt|your (?:instructions|prompt|rules|programming)|as an ai|you are (?:an? |the )?(?:ai|language model|assistant|chatbot|bot)\b|pretend (?:to be|you)|reveal (?:your|the|all) (?:hidden|secret|facts|instructions)|(?:hidden|secret) (?:facts?|information)|what (?:are|were) you told|break character|developer mode|jailbreak|act as)\b/;
+  /\b(?:ignore (?:all |any |your )?(?:previous|prior|above|earlier) (?:instructions|prompts|rules)|disregard (?:your|the|all) (?:previous |prior |earlier )?(?:instructions|prompts|rules)|system prompt|your (?:initial |original )?(?:prompt|programming)|(?:show|tell|reveal|repeat|print|share) (?:me )?your (?:hidden |secret |initial |original )?instructions|as an ai|you are (?:an? |the )?(?:ai|language model|assistant|chatbot|bot)\b|pretend (?:to be|you)|reveal (?:your|the|all) (?:hidden|secret|facts|instructions)|(?:hidden|secret) (?:facts?|information)|break character|developer mode|jailbreak|act as)\b/;
 
 export const LOW_EFFORT =
   /^(?:ok(?:ay)?|yes|yeah|yep|no|nope|sure|right|hmm+|uh+|um+|mhm|alright|fine|cool|got it|i see)[.!?\s]*$/;

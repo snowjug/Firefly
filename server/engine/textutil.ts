@@ -65,3 +65,48 @@ export function firstSentenceOf(s: string): string {
 export function capFirst(s: string): string {
   return s ? s[0]?.toUpperCase() + s.slice(1) : s;
 }
+
+const STOP_WORDS = new Set(
+  'the and but for with that this our your you are was were have has had not can cannot will would just now its from they them then than into out all any too very'.split(
+    ' ',
+  ),
+);
+
+function contentWords(sentence: string): Set<string> {
+  const words = sentence.toLowerCase().match(/[a-z0-9][a-z0-9'-]*/g) ?? [];
+  return new Set(
+    words
+      .filter((w) => w.length > 2 && !STOP_WORDS.has(w))
+      .map((w) => (w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w)),
+  );
+}
+
+/**
+ * Drops a sentence that mostly repeats an earlier one. Customer openings are assembled from several
+ * authored pieces (the problem, its impact, a belief the customer holds), and pieces written
+ * separately can say nearly the same thing twice. Short sentences are never compared.
+ */
+export function dropRedundantSentences(parts: string[]): string[] {
+  const kept: { text: string; words: Set<string> }[] = [];
+  const out: string[] = [];
+  for (const part of parts) {
+    const sentences = part.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length > 0);
+    const keptHere: string[] = [];
+    for (const sentence of sentences) {
+      const words = contentWords(sentence);
+      const repeats =
+        words.size >= 4 &&
+        kept.some((earlier) => {
+          if (earlier.words.size < 4) return false;
+          let shared = 0;
+          for (const w of words) if (earlier.words.has(w)) shared++;
+          return shared / (words.size + earlier.words.size - shared) >= 0.5;
+        });
+      if (repeats) continue;
+      kept.push({ text: sentence, words });
+      keptHere.push(sentence);
+    }
+    if (keptHere.length > 0) out.push(keptHere.join(' '));
+  }
+  return out;
+}

@@ -3,7 +3,7 @@ import { difficultyProfile } from '#shared/domain/state.ts';
 import { START_TEMPERATURE_LABELS } from '#shared/domain/vocab.ts';
 import { OPENERS, OPENERS_SIMPLE, TANGENTS, toneOf } from './mock/phrasebank.ts';
 import { pick, type Rng } from './rng.ts';
-import { expandContractions, joinSentences } from './textutil.ts';
+import { dropRedundantSentences, expandContractions, joinSentences } from './textutil.ts';
 
 // The customer's first message. It is composed deterministically (from the scenario's neutral
 // problem statement plus the configured temperature, style, call stage and impact) in both demo and
@@ -50,6 +50,6 @@ export function composeOpening(scenario: EffectiveScenario, rng: Rng): string {
   if (cfg.style === 'demanding') parts.push(pick(rng, DEMANDING_TAILS));
   if (cfg.style === 'talkative') parts.push(pick(rng, TANGENTS[tone]));
 
-  const text = joinSentences(parts);
+  const text = joinSentences(dropRedundantSentences(parts));
   return simple ? expandContractions(text) : text;
 }

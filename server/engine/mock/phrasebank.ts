@@ -275,6 +275,19 @@ export const CLOSING_CUSTOMER_SIMPLE: Bank = {
   firm: ['That is everything. Thank you.'],
   hot: ['That is everything for now. I will wait.'],
 };
+// Used when the reply already thanked the engineer, so the customer does not do it twice.
+export const CLOSING_CUSTOMER_NO_THANKS: Bank = {
+  calm: ["No, I think that's everything.", "That's all from me."],
+  worried: ["I think that's everything, and I feel better about it."],
+  firm: ["No, that's everything.", "That's all. I'll wait to hear from you."],
+  hot: ["That's everything for now. I'll expect to hear from you."],
+};
+export const CLOSING_CUSTOMER_NO_THANKS_SIMPLE: Bank = {
+  calm: ['No, that is everything.'],
+  worried: ['That is everything. I feel better.'],
+  firm: ['That is everything.'],
+  hot: ['That is everything for now. I will wait.'],
+};
 
 export const TANGENTS: Bank = {
   calm: [
