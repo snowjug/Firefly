@@ -6,8 +6,10 @@ import {
 import { truncate } from '#shared/domain/text.ts';
 import { DIMENSION_IDS, DIMENSIONS, scoreLabel } from '#shared/domain/vocab.ts';
 import type { EvaluationInput } from '#server/engine/types.ts';
-import { buildImprovements, buildStrengths, buildSummary } from './coaching.ts';
-import { scoreDimensions } from './dimensions.ts';
+import { buildImprovements } from './improvements.ts';
+import { scoreDimensions, type Outcome } from './dimensions.ts';
+import { buildStrengths } from './strengths.ts';
+import { buildSummary } from './summary.ts';
 import {
   buildCallView,
   buildCompletion,
@@ -32,9 +34,9 @@ import { dimensionGuidance } from './phrasing.ts';
 export const EVALUATOR_NAME = 'Firefly rules evaluator';
 export const EVALUATOR_VERSION = 'rules-1.0.0';
 
-function judge(call: CallView, discovery: CoachingReport['discovery']): DimensionResult[] {
+function judge(call: CallView, outcomes: Outcome[]): DimensionResult[] {
   const context = phraseContext(call);
-  return scoreDimensions(call, discovery).map((outcome): DimensionResult => {
+  return outcomes.map((outcome): DimensionResult => {
     const score = capScore(outcome.score, outcome.support);
     const note =
       score < outcome.score
@@ -75,13 +77,16 @@ export function evaluateWithRules(
   const completion = buildCompletion(call);
   const discovery = buildDiscovery(call);
 
-  const dimensions = call.turns.length === 0 ? emptyCall() : judge(call, discovery);
+  const nothingSaid = call.turns.length === 0;
+  const outcomes = nothingSaid ? [] : scoreDimensions(call, discovery);
+  const dimensions = nothingSaid ? emptyCall() : judge(call, outcomes);
   const scores = Object.fromEntries(dimensions.map((d) => [d.id, d.score])) as Scores;
   const overall = overallScore(scores, completion.evidence);
 
-  const strengths = call.turns.length === 0 ? [] : buildStrengths(call, discovery, scores);
-  const improvements =
-    call.turns.length === 0 ? [] : buildImprovements(call, discovery, scores, completion.evidence);
+  const strengths = nothingSaid ? [] : buildStrengths(call, discovery, scores);
+  const improvements = nothingSaid
+    ? []
+    : buildImprovements(call, discovery, scores, completion.evidence, outcomes);
 
   return CoachingReportSchema.parse({
     version: 1,
@@ -94,7 +99,7 @@ export function evaluateWithRules(
     },
     completion,
     summary: {
-      overall: buildSummary({ completion, discovery, strengths, improvements }),
+      overall: buildSummary({ call, completion, discovery, strengths, improvements }),
       overallScore: overall,
       coachingFocus: [...new Set(input.scenario.coachingFocus)],
     },

@@ -15,6 +15,13 @@ import { truncate } from '#shared/domain/text.ts';
 // next-practice recommendations. Templates never state what the customer did or felt; the report
 // adds that from recorded state events.
 
+export type StretchKind =
+  | 'stretch-scoping'
+  | 'stretch-empathy'
+  | 'stretch-clarity'
+  | 'stretch-ownership'
+  | 'stretch-closing';
+
 export type ImprovementKind =
   | 'no-introduction'
   | 'blame'
@@ -31,7 +38,13 @@ export type ImprovementKind =
   | 'no-empathy'
   | 'missed-fact'
   | 'no-summary'
-  | 'no-closing';
+  | 'no-closing'
+  | 'no-open-question'
+  | 'few-topics'
+  | 'unclear'
+  | 'no-next-contact'
+  | 'no-anything-else'
+  | StretchKind;
 
 export const IMPROVEMENT_DIMENSION: Record<ImprovementKind, DimensionId> = {
   'no-introduction': 'opening-rapport',
@@ -50,7 +63,21 @@ export const IMPROVEMENT_DIMENSION: Record<ImprovementKind, DimensionId> = {
   'missed-fact': 'scoping-discovery',
   'no-summary': 'closing',
   'no-closing': 'closing',
+  'no-open-question': 'opening-rapport',
+  'few-topics': 'scoping-discovery',
+  unclear: 'clarity',
+  'no-next-contact': 'ownership-next-steps',
+  'no-anything-else': 'closing',
+  'stretch-scoping': 'scoping-discovery',
+  'stretch-empathy': 'empathy-deescalation',
+  'stretch-clarity': 'clarity',
+  'stretch-ownership': 'ownership-next-steps',
+  'stretch-closing': 'closing',
 };
+
+/** A stretch builds on something that went well; it is not a fault. */
+export const isStretch = (kind: ImprovementKind): kind is StretchKind =>
+  kind.startsWith('stretch-');
 
 export type StrengthKind =
   | 'discovery'
@@ -93,8 +120,10 @@ export interface PhraseContext {
   // transcript, so a suggested line never claims the customer said something they did not.
   impactQuote: string | null;
   deadlineQuote: string | null;
-  // A good question the trainee had not asked yet (from the scenario's hidden facts).
+  // A good question the trainee had not yet found an answer to (from the scenario's hidden facts).
   nextQuestion: string | null;
+  // Something the customer said that the scenario knows to be mistaken (only if they really said it).
+  assumption: string | null;
 }
 
 export interface FactSlots {
@@ -109,6 +138,7 @@ export interface FactSlots {
 export interface ImprovementSlots {
   quote: string | null;
   fact?: FactSlots;
+  upset?: boolean; // for "no empathy": the customer was already upset when the trainee replied
 }
 
 export interface ImprovementText {
@@ -116,6 +146,7 @@ export interface ImprovementText {
   risk: string; // the standing reason; the report adds recorded state changes
   betterPhrasing: string;
   whyItWorks: string;
+  advice: string; // the opportunity as behaviour, finishing "The biggest opportunity is to ..."
 }
 
 // ---------------------------------------------------------------------------------------
@@ -129,6 +160,19 @@ export function lcfirst(text: string): string {
   if (/^I(?:['\u2019](?:m|d|ll|ve))?$/.test(word) || /^[A-Z]{2,}/.test(word)) return text;
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
+
+const ALWAYS_CAPITAL =
+  /^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|june|july|august|september|october|november|december)$/i;
+
+/** A hidden fact's label as it reads inside a sentence: lower-cased, except names and days. */
+export function lowerLabel(label: string, names: string[] = []): string {
+  const word = (label.split(/\s/)[0] ?? '').replace(/[^A-Za-z]/g, '');
+  if (ALWAYS_CAPITAL.test(word) || names.includes(word)) return label;
+  return lcfirst(label);
+}
+
+/** A label after the colon of a title: a colon inside the label would read as "found: the new hire: who". */
+const inTitle = (label: string): string => label.replace(/:\s+/g, ' \u2013 ');
 
 const stripEnd = (text: string): string => text.trim().replace(/[.!?]+$/, '');
 
@@ -275,6 +319,7 @@ function jargonText(ctx: PhraseContext, slots: ImprovementSlots): ImprovementTex
     risk: audience,
     betterPhrasing,
     whyItWorks: `Everyday words let ${name} follow and act on the point, and the check question tells you whether it landed.`,
+    advice: `put technical terms into everyday words the first time you use them, then check that ${name} followed`,
   };
 }
 
@@ -288,6 +333,7 @@ function blameText(ctx: PhraseContext, slots: ImprovementSlots): ImprovementText
       betterPhrasing: `Thanks for explaining that, ${name}. Let's work out what happened together: what did you see when it stopped working?`,
       whyItWorks:
         'It moves the conversation from who caused the problem to what happened, so the customer keeps helping you find the cause.',
+      advice: `keep blame out of the call: describe what you see and ask ${name} what happened instead`,
     };
   }
   return {
@@ -296,6 +342,7 @@ function blameText(ctx: PhraseContext, slots: ImprovementSlots): ImprovementText
     betterPhrasing: `I can see why that's frustrating, ${name}. I'll find out what happened and tell you what I learn.`,
     whyItWorks:
       'It takes responsibility for finding the answer instead of pointing elsewhere, which the customer cannot do anything about.',
+    advice: 'own the next step instead of pointing at another team',
   };
 }
 
@@ -312,6 +359,7 @@ function dismissiveText(ctx: PhraseContext): ImprovementText {
     ]),
     whyItWorks:
       "Repeating the customer's own words shows the concern registered, and moving straight to a question shows you will act on it.",
+    advice: `take ${name}'s concern seriously instead of playing it down: say that it matters, then ask what ${name} sees`,
   };
 }
 
@@ -327,6 +375,8 @@ function promiseText(ctx: PhraseContext): ImprovementText {
     ]),
     whyItWorks:
       'It commits to what you control, the action and the time of the next update, so the promise can be kept.',
+    advice:
+      'promise what you control, an action and a time for the next update, instead of an outcome you cannot verify yet',
   };
 }
 
@@ -340,6 +390,7 @@ function troubleshootingText(ctx: PhraseContext): ImprovementText {
       : `Before we try anything, ${name}, can you tell me what you see on screen and what changed just before this started?`,
     whyItWorks:
       'Asking first shows you are working from facts, and the answer tells you which fix is worth trying.',
+    advice: 'ask what is happening and when it started before you suggest any fix',
   };
 }
 
@@ -353,6 +404,7 @@ function repeatedText(ctx: PhraseContext): ImprovementText {
       : `Thanks ${name}, I have that already. Let me ask about something new: what changed just before this started?`,
     whyItWorks:
       'Showing you kept the answer and moving to a new topic keeps the call moving and shows you were listening.',
+    advice: `check what ${name} has already told you before you ask again`,
   };
 }
 
@@ -367,6 +419,7 @@ function ownershipText(ctx: PhraseContext, vague: boolean): ImprovementText {
     risk: `Without a clear "I will", ${name} cannot tell who is responsible for what happens next.${history}`,
     betterPhrasing: `I'm going to take this on, ${name}. I'll look into it now and call you back ${NEXT_UPDATE} with what I've found, even if I don't have the answer yet.`,
     whyItWorks: `"I'll" plus an action and a time tells ${name} exactly who owns the problem and when to expect to hear back.`,
+    advice: `${vague ? 'make ownership explicit' : 'say who owns the problem'}, with an "I will" and one concrete action`,
   };
 }
 
@@ -380,6 +433,9 @@ function nextStepsText(ctx: PhraseContext, vague: boolean): ImprovementText {
     betterPhrasing: `Here's what happens next, ${name}: I'll check the problem with ${product} now and call you back ${NEXT_UPDATE} with what I find. If anything changes before then, tell me and I'll add it.`,
     whyItWorks:
       'A named action and a time give the customer something to hold you to, so they do not have to chase.',
+    advice: vague
+      ? 'swap "soon" and "get back to you" for one specific next step with a time'
+      : 'agree one specific next step with a time',
   };
 }
 
@@ -397,14 +453,15 @@ function impactText(ctx: PhraseContext): ImprovementText {
     ]),
     whyItWorks:
       "Using the customer's own words shows the impact registered, and saying what you will do about it turns sympathy into action.",
+    advice: `acknowledge what the problem means for ${name} before you move on`,
   };
 }
 
-function empathyText(ctx: PhraseContext): ImprovementText {
+function empathyText(ctx: PhraseContext, upset: boolean): ImprovementText {
   const { name, impactQuote } = ctx;
   return {
-    title: `No empathy while ${name} was upset`,
-    risk: `None of your replies acknowledged how ${name} was feeling while the temperature was high.`,
+    title: upset ? `No empathy while ${name} was upset` : 'No empathy shown during the call',
+    risk: `None of your replies acknowledged how ${name} was feeling.`,
     betterPhrasing: firstFitting(500, [
       impactQuote
         ? `I'm sorry this is happening, ${name}. ${quoted(impactQuote)} I can see why that's stressful. Let me see what I can do to put it right.`
@@ -413,20 +470,44 @@ function empathyText(ctx: PhraseContext): ImprovementText {
     ]),
     whyItWorks:
       'Naming the feeling and tying it to what the customer said shows you understood their situation, not only their words.',
+    advice: `show early that you understand how ${name} feels, in a sentence tied to what ${name} said`,
   };
 }
 
+/**
+ * What an "Asks ..." trigger describes, without the leading verb. A second alternative ("or asks her
+ * to send the logs again") is dropped, because it can make poor advice.
+ */
+function firstAsk(revealWhen: string): string | null {
+  if (!/^asks?\s/i.test(revealWhen)) return null;
+  const first = stripEnd(revealWhen)
+    .replace(/^asks?\s+/i, '')
+    .split(/,?\s+or\s+asks?\b/i)[0];
+  return first ? first.trim() : null;
+}
+
+/** What to ask, as advice ("ask whether every customer is affected"), from the scenario's own trigger. */
+export function askAdvice(fact: Pick<FactSlots, 'revealWhen' | 'betterQuestion'>): string {
+  const first = firstAsk(fact.revealWhen);
+  return first ? `ask ${first}` : `ask a question like ${quoted(fact.betterQuestion)}`;
+}
+
 function missedFactText(fact: FactSlots): ImprovementText {
-  const reveals = /^asks?\s/i.test(fact.revealWhen)
-    ? `It works because it asks ${stripEnd(fact.revealWhen.replace(/^asks?\s+/i, ''))}.`
+  const first = firstAsk(fact.revealWhen);
+  const reveals = first
+    ? `It works because it asks ${first}.`
     : `It works because it goes straight to the missing detail: ${lcfirst(fact.label)}.`;
+  const ask = askAdvice(fact);
   return {
-    title: fact.partial ? `Only part found: ${fact.label}` : `Did not find out: ${fact.label}`,
+    title: fact.partial
+      ? `Only part found: ${inTitle(fact.label)}`
+      : `Did not find out: ${inTitle(fact.label)}`,
     risk: fact.partial
       ? `Only part of this came out. ${fact.missedConsequence}`
       : fact.missedConsequence,
     betterPhrasing: fact.betterQuestion,
     whyItWorks: reveals,
+    advice: fact.partial ? `follow up on the part you did not get: ${ask}` : ask,
   };
 }
 
@@ -439,6 +520,8 @@ function summaryText(ctx: PhraseContext, wholeClose: boolean): ImprovementText {
       betterPhrasing: `Let me recap, ${name}: I'll look into this now and call you back ${NEXT_UPDATE} with an update. Is there anything else I can help with before we finish?`,
       whyItWorks:
         'A short recap, a time for the next contact and a check for anything else leave no doubt about what was agreed, and they end the call on a clear, polite note.',
+      advice:
+        'close the call with a recap, the time of the next contact and a check for anything else',
     };
   }
   return {
@@ -447,6 +530,7 @@ function summaryText(ctx: PhraseContext, wholeClose: boolean): ImprovementText {
     betterPhrasing: `Just to make sure we're agreed, ${name}: I'll look into this now and call you back ${NEXT_UPDATE}, and if anything changes before then, tell me. Does that work for you?`,
     whyItWorks:
       'Saying the agreement out loud lets the customer correct anything you got wrong while there is still time.',
+    advice: 'recap what was agreed before the call ends',
   };
 }
 
@@ -457,7 +541,129 @@ function introductionText(ctx: PhraseContext): ImprovementText {
     risk: `${STAGE_CLAUSE[stage](name)}, and with no greeting or introduction there was no sign of who was on the call.`,
     betterPhrasing: `Hello ${name}, this is [your name] from the support team. I'm here to help with ${product}. What's been happening?`,
     whyItWorks: `A greeting, your name and an open question tell ${name} who is on the call and invite the whole story before you ask anything specific.`,
+    advice: 'open with a greeting and your name before anything else',
   };
+}
+
+function openQuestionText(ctx: PhraseContext): ImprovementText {
+  const { name } = ctx;
+  return {
+    title: 'Did not invite the story at the start',
+    risk: `Without an open invitation in your first turns, ${name} is never asked to explain the problem in their own words, and you start from your own guess about what is wrong.`,
+    betterPhrasing: `Thanks for calling, ${name}. Could you walk me through what's been happening, from the start?`,
+    whyItWorks:
+      'An open invitation lets the customer tell the whole story first, and it often brings out details you would not have known to ask about.',
+    advice: 'invite the customer to tell the story in their own words early on',
+  };
+}
+
+function fewTopicsText(ctx: PhraseContext): ImprovementText {
+  const { name, nextQuestion } = ctx;
+  return {
+    title: 'Asked about only a few areas before moving on',
+    risk: 'Covering what happened, when it started, what changed and who is affected is what turns up the facts behind a problem. With fewer areas covered, the details that explain it stay hidden.',
+    betterPhrasing: nextQuestion
+      ? `Let me make sure I have the full picture, ${name}. ${nextQuestion}`
+      : `Let me make sure I have the full picture, ${name}: when did it start, what changed just before, and who else is affected?`,
+    whyItWorks:
+      'Asking across several areas shows a pattern sooner than digging into one, and it stops an early guess from steering the call.',
+    advice:
+      'cover what happens, when it started, what changed and who is affected before you suggest anything',
+  };
+}
+
+function unclearText(ctx: PhraseContext): ImprovementText {
+  const { name } = ctx;
+  return {
+    title: 'A reply that was hard to follow',
+    risk: `Long or tangled replies make ${name} work to find the point, and the next step can get lost along the way.`,
+    betterPhrasing: `Let me put that in two steps, ${name}. First, [the main point in one sentence]. Second, [what you will do next]. Does that make sense?`,
+    whyItWorks:
+      'One idea per sentence, with a check at the end, lets the customer follow and tells you at once if they did not.',
+    advice: 'keep each reply to one idea and one question',
+  };
+}
+
+function nextContactText(ctx: PhraseContext): ImprovementText {
+  const { name } = ctx;
+  return {
+    title: `Did not say when ${name} would hear from you next`,
+    risk: `Without a time for the next contact, ${name} has to chase or guess, and an update that never comes costs trust.`,
+    betterPhrasing: `I'll call you back ${NEXT_UPDATE}, ${name}, even if I don't have an answer yet, so you're not left waiting.`,
+    whyItWorks:
+      'A named time for the next contact means the customer does not have to chase, and it gives you a deadline to keep.',
+    advice: `say when ${name} will next hear from you`,
+  };
+}
+
+function anythingElseText(ctx: PhraseContext): ImprovementText {
+  const { name } = ctx;
+  return {
+    title: 'Did not check whether anything else was needed',
+    risk: `Ending without asking leaves ${name} no last chance to raise something, and it can come back as a second call.`,
+    betterPhrasing: `Is there anything else I can help with before we finish, ${name}?`,
+    whyItWorks:
+      'It gives the customer a last, easy chance to mention what they forgot, and it ends the call on a service note.',
+    advice: 'ask whether there is anything else before you end the call',
+  };
+}
+
+// A stretch builds on something that went well. Nothing was wrong, so the risk says so.
+function stretchText(kind: StretchKind, ctx: PhraseContext): ImprovementText {
+  const { name, impactQuote } = ctx;
+  switch (kind) {
+    case 'stretch-empathy':
+      return {
+        title: 'Stretch: keep the empathy going',
+        risk: `Nothing went wrong here. You showed specific empathy once, and a customer's feelings can come back several times in a call, so each time is another chance to show you noticed.`,
+        betterPhrasing: firstFitting(500, [
+          impactQuote
+            ? `I know ${quoted(impactQuote)} is weighing on you, ${name}, and I'm still treating it as a priority. Here's what I'm doing about it next: [action].`
+            : null,
+          `I know this has been stressful, ${name}, and I'm still treating it as a priority. Here's what I'm doing about it next: [action].`,
+        ]),
+        whyItWorks:
+          'Repeating the acknowledgement, and tying it to an action, shows it was not a one-off line.',
+        advice: `keep the empathy going: name how ${name} feels again whenever the concern comes back, and follow it with an action`,
+      };
+    case 'stretch-clarity':
+      return {
+        title: 'Stretch: check understanding as you go',
+        risk: 'Nothing went wrong here. You played the situation back once; checking after each key point catches a misunderstanding while it is still small.',
+        betterPhrasing: `So far I understand [the point you just covered]. Have I got that right, ${name}?`,
+        whyItWorks:
+          'A short check after each point lets the customer correct you early, instead of at the end.',
+        advice: 'check understanding after each key point, not only once',
+      };
+    case 'stretch-ownership':
+      return {
+        title: 'Stretch: say what happens if the next step slips',
+        risk: 'Nothing went wrong here. You named an action and a time; a customer under pressure also wants to know what happens if that time passes without news.',
+        betterPhrasing: `I'll update you ${NEXT_UPDATE}. If I'm delayed, I'll tell you before then, and you can reach me on [how to reach you], ${name}.`,
+        whyItWorks:
+          'A fallback shows the commitment is firm, and it keeps the customer from having to chase.',
+        advice:
+          'say what happens if the next step slips, so the commitment holds even when plans change',
+      };
+    case 'stretch-closing':
+      return {
+        title: `Stretch: ask ${name} to say back what was agreed`,
+        risk: 'Nothing went wrong here. A recap you give can still be misheard; hearing it back confirms that it landed.',
+        betterPhrasing: `So we're on the same page, ${name}, could you tell me what you expect to happen next?`,
+        whyItWorks:
+          "Hearing the plan in the customer's own words shows whether it landed while there is still time to fix it.",
+        advice: `ask ${name} to say back what happens next before you end the call`,
+      };
+    case 'stretch-scoping':
+      return {
+        title: `Stretch: test what ${name} assumed`,
+        risk: `Nothing went wrong here. ${name} said ${quoted(ctx.assumption ?? 'something the facts do not support')} and the call moved on without testing it, so it stayed a belief rather than a fact.`,
+        betterPhrasing: `That's useful to know, ${name}. What makes you think so? Let's check that before we change anything.`,
+        whyItWorks:
+          'Asking what leads to a belief tests it without arguing, and the answer often points at the real cause.',
+        advice: `test what ${name} assumed by asking what makes ${name} think so, without arguing`,
+      };
+  }
 }
 
 /** The title, standing risk and suggested line for one improvement type. */
@@ -492,13 +698,29 @@ export function improvementText(
     case 'no-impact-ack':
       return impactText(ctx);
     case 'no-empathy':
-      return empathyText(ctx);
+      return empathyText(ctx, slots.upset ?? true);
     case 'missed-fact':
       return missedFactText(slots.fact as FactSlots);
     case 'no-summary':
       return summaryText(ctx, false);
     case 'no-closing':
       return summaryText(ctx, true);
+    case 'no-open-question':
+      return openQuestionText(ctx);
+    case 'few-topics':
+      return fewTopicsText(ctx);
+    case 'unclear':
+      return unclearText(ctx);
+    case 'no-next-contact':
+      return nextContactText(ctx);
+    case 'no-anything-else':
+      return anythingElseText(ctx);
+    case 'stretch-scoping':
+    case 'stretch-empathy':
+    case 'stretch-clarity':
+    case 'stretch-ownership':
+    case 'stretch-closing':
+      return stretchText(kind, ctx);
   }
 }
 
@@ -515,16 +737,16 @@ export function strengthText(
   ctx: { name: string; factLabel?: string; importance?: string },
 ): StrengthText {
   const { name } = ctx;
-  const factLabel = ctx.factLabel ?? 'a hidden fact';
   const importance = ctx.importance ?? 'important';
   switch (kind) {
     case 'discovery':
       return {
-        title: `Uncovered ${article(importance)} ${importance} fact: ${factLabel}`,
+        title: `Uncovered ${article(importance)} ${importance} fact${ctx.factLabel ? `: ${inTitle(ctx.factLabel)}` : ''}`,
+        // The title already names the fact, so this says why finding it matters instead.
         because:
           importance === 'critical'
-            ? `This question brought out the fact that mattered most in this case: ${lcfirst(factLabel)}.`
-            : `This question brought out ${article(importance)} ${importance} detail of the case: ${lcfirst(factLabel)}.`,
+            ? `Asking about this directly brought out the detail that mattered most in this case, so the rest of the call could work from facts instead of guesses.`
+            : `Asking about this directly gave the call a clearer picture of what was happening, so the next questions could be better aimed.`,
       };
     case 'ownership-clear':
       return {
@@ -534,7 +756,8 @@ export function strengthText(
     case 'impact-acknowledged':
       return {
         title: `Acknowledged what this meant for ${name}`,
-        because: `Naming what the problem meant for ${name} showed that the impact had registered.`,
+        because:
+          'Putting the impact into words shows the customer that it registered before you move on to solving it.',
       };
     case 'empathy-specific':
       return {

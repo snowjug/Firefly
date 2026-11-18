@@ -56,7 +56,7 @@ describe('prompt versions and sampling', () => {
   it('versions each prompt and sets sampling to suit the task', async () => {
     expect(CUSTOMER_PROMPT_VERSION).toBe('customer-1');
     expect(CLASSIFIER_PROMPT_VERSION).toBe('classifier-1');
-    expect(EVALUATOR_PROMPT_VERSION).toBe('evaluator-1');
+    expect(EVALUATOR_PROMPT_VERSION).toBe('evaluator-2');
 
     const ctx = await lastContext(['Hello, I am Sam. What is going on?']);
     const customer = buildCustomerPrompt(ctx).request;
@@ -1006,6 +1006,7 @@ describe('the evaluator prompt', () => {
     expect(system).toMatch(/at most three sentences/);
     expect(system).toMatch(/The customer's own style .* never changes a score/);
     expect(system).toMatch(/Never praise a turn that also blamed or dismissed the customer/);
+    expect(system).toMatch(/Never write a number for the customer's temperature, trust/);
   });
 
   it('describes every field of the draft schema', async () => {

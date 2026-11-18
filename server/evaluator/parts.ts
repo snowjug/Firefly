@@ -31,9 +31,12 @@ import {
   type DimensionId,
 } from '#shared/domain/vocab.ts';
 import type { EvaluationInput } from '#server/engine/types.ts';
+import { describeTemperatureChange, isMoodKey, withoutRawMoodNumbers } from './mood.ts';
 import {
   CURVEBALL_PHRASES,
+  article,
   hasJargon,
+  lowerLabel,
   practiceRecommendation,
   quoted,
   type PhraseContext,
@@ -264,22 +267,6 @@ export const eventsOfCategory = (
       categories.includes(e.category) && (turnIndex === undefined || e.turnIndex === turnIndex),
   );
 
-type MeasureKey = 'temperature' | 'trust' | 'patience' | 'confidence' | 'ownershipConfidence';
-const MEASURE_PHRASE: Record<MeasureKey, (name: string) => string> = {
-  temperature: (name) => `${name}'s temperature`,
-  trust: (name) => `${name}'s trust`,
-  patience: (name) => `${name}'s patience`,
-  confidence: (name) => `${name}'s confidence that support can help`,
-  ownershipConfidence: (name) => `${name}'s confidence that someone owns the problem`,
-};
-
-const isMeasure = (key: string): key is MeasureKey => key in MEASURE_PHRASE;
-
-function moved(name: string, e: StateEvent): string {
-  const subject = MEASURE_PHRASE[e.key as MeasureKey](name);
-  return `${subject} ${e.delta > 0 ? 'rose' : 'fell'} from ${e.previous} to ${e.next}`;
-}
-
 function biggest(events: StateEvent[]): StateEvent | undefined {
   return events.reduce<StateEvent | undefined>(
     (best, e) => (!best || Math.abs(e.delta) > Math.abs(best.delta) ? e : best),
@@ -287,30 +274,12 @@ function biggest(events: StateEvent[]): StateEvent | undefined {
   );
 }
 
-/** What went wrong for the customer in these events, in words ("Maya's temperature rose from 52 to 62"). */
-export function describeHarm(name: string, events: StateEvent[]): string[] {
-  const hotter = biggest(events.filter((e) => e.key === 'temperature' && e.delta > 0));
-  const lower = biggest(
-    events.filter((e) => e.key !== 'temperature' && isMeasure(e.key) && e.delta < 0),
-  );
-  return [hotter, lower].filter((e): e is StateEvent => Boolean(e)).map((e) => moved(name, e));
-}
-
-/** What went right for the customer in these events. A one-point wobble is not worth mentioning. */
-export function describeHelp(name: string, events: StateEvent[], minDrop = 2): string[] {
-  const cooler = biggest(events.filter((e) => e.key === 'temperature' && e.delta <= -minDrop));
-  const higher = biggest(
-    events.filter((e) => e.key !== 'temperature' && isMeasure(e.key) && e.delta > 0),
-  );
-  return [cooler, higher].filter((e): e is StateEvent => Boolean(e)).map((e) => moved(name, e));
-}
-
 /** A rough size for how much harm these events did, used only to rank coaching points. */
 export function damageOf(events: StateEvent[]): number {
   let damage = 0;
   for (const e of events) {
     if (e.key === 'temperature' && e.delta > 0) damage += e.delta;
-    else if (e.key !== 'temperature' && isMeasure(e.key) && e.delta < 0) damage += -e.delta / 2;
+    else if (e.key !== 'temperature' && isMoodKey(e.key) && e.delta < 0) damage += -e.delta / 2;
   }
   return damage;
 }
@@ -541,14 +510,54 @@ export function weightedShare(results: DiscoveryResult[]): number {
   return total === 0 ? 0 : got / total;
 }
 
-/** "You found 2 of 4 hidden facts and 1 partly; missed: ..." (no closing full stop). */
-export function discoverySentence(discovery: CoachingReport['discovery']): string {
-  const missed = discovery.results.filter(
-    (r) => r.status === 'missed' && r.importance !== 'helpful',
-  );
-  return `You found ${discovery.found} of ${discovery.total} hidden facts${
-    discovery.partial > 0 ? ` and ${discovery.partial} partly` : ''
-  }${missed.length > 0 ? `; missed: ${joinPhrases(missed.map((r) => `${r.label} (${r.importance})`))}` : ''}`;
+/** The most important fact the trainee did not fully uncover: a missed one before a partly found one. */
+export function biggestGap(discovery: CoachingReport['discovery']): DiscoveryResult | undefined {
+  return discovery.results
+    .filter((r) => r.status !== 'discovered' && r.importance !== 'helpful')
+    .sort(
+      (a, b) =>
+        FACT_WEIGHT[b.importance] - FACT_WEIGHT[a.importance] ||
+        Number(a.status === 'partial') - Number(b.status === 'partial'),
+    )[0];
+}
+
+/** Capitalised words from the persona, organisation and product: they keep their capital mid-sentence. */
+export const properNouns = (scenario: EffectiveScenario): string[] => {
+  const text = `${scenario.persona.name} ${scenario.persona.organisation} ${scenario.environment.product}`;
+  return text.match(/\b[A-Z][a-z]+\b/g) ?? [];
+};
+
+/**
+ * The discovery result in plain words, without a closing full stop: "You uncovered 2 of the 6
+ * hidden facts and one more in part; the biggest gap was an important fact (a rollback exists ...)".
+ * The gap is left out when nothing critical or important was missed.
+ */
+export function discoverySentence(
+  discovery: CoachingReport['discovery'],
+  scenario?: EffectiveScenario,
+  options: { gap?: boolean } = {},
+): string {
+  const { found, partial, total } = discovery;
+  const more = partial === 1 ? 'one more' : `${partial} more`;
+  const counts =
+    total === 0
+      ? 'There were no hidden facts to find in this call'
+      : found === total
+        ? total === 1
+          ? 'You uncovered the hidden fact'
+          : `You uncovered all ${total} hidden facts`
+        : found === 0 && partial === 0
+          ? total === 1
+            ? 'You did not uncover the hidden fact'
+            : `You did not uncover any of the ${total} hidden facts`
+          : found === 0
+            ? `You uncovered none of the ${total} hidden facts in full and ${partial === 1 ? 'one' : partial} in part`
+            : `You uncovered ${found} of the ${total} hidden facts${partial > 0 ? ` and ${more} in part` : ''}`;
+  const gap = options.gap === false ? undefined : biggestGap(discovery);
+  if (!gap) return counts;
+  const label = lowerLabel(gap.label, scenario ? properNouns(scenario) : []);
+  const what = `${article(gap.importance)} ${gap.importance} fact (${label})`;
+  return `${counts}; the biggest gap was ${gap.status === 'partial' ? `only part of ${what}` : what}`;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -583,12 +592,33 @@ function pointQuote(turn: TraineeTurn, event: StateEvent): string | null {
     : verifiedQuote(turn.text, firstSentence(turn.text));
 }
 
+const SMALL_NUMBERS = [
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+];
+
+/** "after 3 replies" reads as prose when the number is a word. */
+const spellOutSmallNumbers = (text: string): string =>
+  text.replace(/\b(\d{1,2})\b/g, (digits) => SMALL_NUMBERS[Number(digits)] ?? digits);
+
 function pointReason(row: TempRow, curveball: boolean): Pick<JourneyPoint, 'reason' | 'quote'> {
   const pool = curveball ? row.events.filter((e) => e.category === 'curveball') : row.events;
   const temperature = pool.filter((e) => e.key === 'temperature');
   const top = biggest(temperature.length > 0 ? temperature : pool);
   if (!top) return { reason: null, quote: null };
-  return { reason: truncate(top.reason, 200), quote: pointQuote(row.turn, top) };
+  // The engine's reasons are plain sentences. One that prints a raw state value is dropped, and a
+  // small count ("after 3 replies") is written out, so no reason carries a bare number.
+  const reason = spellOutSmallNumbers(withoutRawMoodNumbers(truncate(top.reason, 200)));
+  return { reason: reason || null, quote: pointQuote(row.turn, top) };
 }
 
 export function buildJourney(call: CallView): CoachingReport['journey'] {
@@ -693,11 +723,8 @@ export function buildCurveball(call: CallView): CoachingReport['curveball'] {
     if (turn) {
       const { did, quote } = describeResponse(turn);
       const row = rowOf(turn);
-      const moveText =
-        row && row.before !== row.after
-          ? `; ${name}'s temperature went from ${row.before} to ${row.after} on that turn`
-          : '';
-      assessment = `After turn ${firedAt}, ${what}. At turn ${turn.index} you ${did}${quote ? ` (${quoted(quote)})` : ''}, and it was resolved${moveText}.${tail}`;
+      const shift = row ? describeTemperatureChange(name, row.before, row.after) : null;
+      assessment = `After turn ${firedAt}, ${what}. At turn ${turn.index} you ${did}${quote ? ` (${quoted(quote)})` : ''}, and it was resolved${shift ? `; ${shift}` : ''}.${tail}`;
     } else {
       assessment = `After turn ${firedAt}, ${what}, and it was resolved.${tail}`;
     }
@@ -714,9 +741,8 @@ export function buildCurveball(call: CallView): CoachingReport['curveball'] {
     const reply = turn
       ? ` Your reply at turn ${turn.index}${said ? ` (${quoted(said)})` : ''} did not address it.`
       : '';
-    const heat = failure
-      ? ` ${name}'s temperature rose from ${failure.previous} to ${failure.next}.`
-      : '';
+    const shift = failure ? describeTemperatureChange(name, failure.previous, failure.next) : null;
+    const heat = shift ? ` ${shift}.` : '';
     assessment = `After turn ${firedAt}, ${what}, and it was not resolved.${reply}${heat} A stronger response: ${expected}${tail}`;
   } else {
     assessment =
@@ -746,6 +772,7 @@ export function phraseContext(call: CallView, turnIndex = Number.MAX_SAFE_INTEGE
   const { scenario } = call;
   const saidByCustomer = (text: string | undefined): string | null =>
     text && call.customerText.includes(fold(text)) ? text : null;
+  const assumption = scenario.incorrectAssumptions.find((a) => saidByCustomer(a.statement));
   return {
     name: call.name,
     product: scenario.environment.product,
@@ -755,6 +782,7 @@ export function phraseContext(call: CallView, turnIndex = Number.MAX_SAFE_INTEGE
     impactQuote: saidByCustomer(scenario.impactVariant.summary),
     deadlineQuote: saidByCustomer(scenario.impactVariant.deadline),
     nextQuestion: unfoundQuestion(call, turnIndex),
+    assumption: assumption?.statement ?? null,
   };
 }
 

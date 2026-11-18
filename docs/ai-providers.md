@@ -126,7 +126,7 @@ Models differ in the parameters they accept. If a 400 response says so, Firefly 
 
 ## Prompt versions
 
-Prompts are plain functions in `server/prompts/` with exported version constants: `CUSTOMER_PROMPT_VERSION` (`customer-1`), `CLASSIFIER_PROMPT_VERSION` (`classifier-1`) and `EVALUATOR_PROMPT_VERSION` (`evaluator-1`). The versions are stored with every session. Change the version whenever you change a prompt's wording or sampling. The evaluator prompt's guidance for each dimension follows [the scoring rubric](evaluation-rubric.md); update both together. A model-written coaching draft is verified and merged by `server/evaluator/merge.ts`, as described in that page.
+Prompts are plain functions in `server/prompts/` with exported version constants: `CUSTOMER_PROMPT_VERSION` (`customer-1`), `CLASSIFIER_PROMPT_VERSION` (`classifier-1`) and `EVALUATOR_PROMPT_VERSION` (`evaluator-2`). The versions are stored with every session. Change the version whenever you change a prompt's wording or sampling. The evaluator prompt's guidance for each dimension follows [the scoring rubric](evaluation-rubric.md); update both together. A model-written coaching draft is verified and merged by `server/evaluator/merge.ts`, as described in that page.
 
 ## Optional manual smoke test
 

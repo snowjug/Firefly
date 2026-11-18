@@ -14,6 +14,7 @@ import {
   closingSignals,
   closingWindow,
   curveballState,
+  discoverySentence,
   harmfulTurns,
   hasRecorded,
   joinPhrases,
@@ -29,6 +30,7 @@ import {
   type ClosingSignals,
   type TraineeTurn,
 } from './parts.ts';
+import { describeCall } from './mood.ts';
 
 // The six dimension scorers of the rules evaluator. Each returns a score computed from the
 // classifications and recorded state events by explicit, documented rules (docs/evaluation-rubric.md),
@@ -281,8 +283,10 @@ function scoreScoping(call: CallView, discovery: CoachingReport['discovery']): O
   if (manyRepeats) deductions.push(`${repeats.size} repeated questions`);
   if (premature) deductions.push('fixes offered before the problem was scoped');
   const topicNames = topics.map((t) => DISCOVERY_INTENT_LABELS[t].toLowerCase());
+  const weighted =
+    share > 0 && share < 1 ? `, a weighted ${Math.round(share * 100)}% of what mattered` : '';
   const rationale = [
-    `You found ${discovery.found} of ${discovery.total} hidden facts${discovery.partial > 0 ? ` and ${discovery.partial} partly` : ''}, a weighted ${Math.round(share * 100)}% of what mattered.`,
+    `${discoverySentence(discovery, undefined, { gap: false })}${weighted}.`,
     topics.length > 0 ? `Core topics you asked about: ${joinPhrases(topicNames)}.` : '',
     deductions.length === 1
       ? `One point off: ${deductions[0]}.`
@@ -319,6 +323,16 @@ function scoreScoping(call: CallView, discovery: CoachingReport['discovery']): O
 
 // ---------------------------------------------------------------------------------------
 // 3. Empathy & De-escalation
+
+function specificGeneric(specific: TraineeTurn[], generic: TraineeTurn[]): string {
+  const shown = [
+    specific.length > 0 ? `specific empathy at ${turnList(specific)}` : '',
+    generic.length > 0 ? `general empathy at ${turnList(generic)}` : '',
+  ].filter(Boolean);
+  return shown.length > 0
+    ? `You showed ${joinPhrases(shown)}.`
+    : 'None of your turns showed empathy.';
+}
 
 function scoreEmpathy(call: CallView): Outcome {
   const { name } = call;
@@ -366,14 +380,18 @@ function scoreEmpathy(call: CallView): Outcome {
   }
 
   const rationale = [
-    specific.length + generic.length > 0
-      ? `You showed empathy in ${plural(specific.length + generic.length, 'turn')} (${specific.length} specific, ${generic.length} general).`
-      : 'None of your turns showed empathy.',
+    specificGeneric(specific, generic),
     impact.length > 0
       ? `You acknowledged the impact at ${turnList(impact)}.`
       : 'You did not acknowledge the impact.',
     harmful.length > 0 ? `Blame or dismissive language at ${turnList(harmful)}.` : '',
-    `${name}'s temperature went from ${start} to ${end}.`,
+    `${describeCall(name, start, end)}.${
+      end <= start - 8
+        ? ' That counts as calming the customer.'
+        : calmed
+          ? ' The call ended calm with nothing harmful said, which also counts.'
+          : ''
+    }`,
     curveball === 'resolved'
       ? 'A curveball was handled well.'
       : curveball === 'unresolved'
@@ -464,16 +482,24 @@ function scoreClarity(call: CallView): Outcome {
     );
   }
 
+  // Only observed behaviour is described. A count such as "1 of 5 turns was clear" would wrongly
+  // imply that the other turns were unclear, which the classification cannot say.
   const rationale = [
-    `${clear.length} of your ${plural(call.turns.length, 'turn')} ${clear.length === 1 ? 'was' : 'were'} clear${summaries.length > 0 ? `, and you summarised in ${turnList(summaries)}` : ''}.`,
-    jargonCounts.length > 0
-      ? `Unexplained technical terms came up in ${turnList(jargonCounts)}${proficiency === 'novice' ? `, which a novice customer cannot follow` : ''}.`
-      : jargon.length > 0
-        ? `Technical terms went unexplained in ${turnList(jargon)}; for this ${proficiency} customer that is not penalised.`
-        : 'No technical term went unexplained.',
-    unclear.length >= 2
-      ? `${plural(unclear.length, 'message')} were hard to follow (${turnList(unclear)}).`
+    summaries.length > 0
+      ? `You played the situation back to check understanding at ${turnList(summaries)}.`
+      : 'There was no recap of what you had understood before the call ended.',
+    explained.length > 0
+      ? `You put a technical term into plain words at ${turnList(explained)}.`
       : '',
+    summaries.length === 0 && clear.length >= 2
+      ? `Your replies at ${turnList(clear)} were easy to follow.`
+      : '',
+    jargonCounts.length > 0
+      ? `Unexplained technical terms came up at ${turnList(jargonCounts)}${proficiency === 'novice' ? `, which a novice customer cannot follow` : ''}.`
+      : jargon.length > 0
+        ? `Technical terms went unexplained at ${turnList(jargon)}; for this ${proficiency} customer that is not penalised.`
+        : 'No unexplained technical terms came up.',
+    unclear.length >= 2 ? `Your replies at ${turnList(unclear)} were hard to follow.` : '',
     score <= 3 ? 'Length, grammar and phrasing are not part of this score.' : '',
   ]
     .filter(Boolean)
@@ -552,7 +578,7 @@ function scoreOwnership(call: CallView): Outcome {
         : 'No next steps were given.',
     contact.length > 0 ? `You confirmed the next contact at ${turnList(contact)}.` : '',
     promises.length > 0
-      ? `${plural(promises.length, 'promise')} could not be verified (${turnList(promises)}).`
+      ? `${promises.length === 1 ? 'A promise' : `${promises.length} promises`} could not be verified (${turnList(promises)}).`
       : '',
   ]
     .filter(Boolean)

@@ -106,6 +106,10 @@ Starts at 2.
 A **5** also needs two or more specific-empathy turns, nothing harmful, and a final temperature no
 higher than the start. Otherwise the score is held at 4.
 
+The rationale lists the turns with specific and general empathy, the turns that acknowledged the
+impact, and how the temperature moved over the whole call in words ("eased a lot, from Angry at the
+start to Concerned at the end"), and says so when that counts as calming the customer.
+
 ### 4. Clarity
 
 Starts at 3.
@@ -120,6 +124,11 @@ Starts at 3.
 
 Jargon is not penalised for an **expert** customer. A one-word reply such as "ok" is never counted as
 unclear.
+
+The written rationale describes only what was seen: a recap, a technical term put into plain words,
+unexplained terms, replies that were hard to follow. It never counts "clear" turns ("1 of your 5 turns
+was clear" would wrongly suggest the other four were unclear), and when no recap happened it says that
+there was no recap before the call ended.
 
 ### 5. Ownership & Next Steps
 
@@ -166,8 +175,33 @@ confirmation of next steps.
   from the turn instead, or leaves the point out.
 - **No high score without evidence.** A 4 needs at least one quoted example and a 5 needs at least two.
   If the quotes are missing, the score is held down and the report says so.
-- **No invented facts.** Statements such as "Maya's temperature fell from 52 to 44" use only numbers
-  that were recorded for that turn. If nothing was recorded, the report does not describe a reaction.
+- **No invented facts.** What the report says about the customer's reaction comes only from the
+  changes that were recorded for that turn. If nothing was recorded, the report does not describe a
+  reaction.
+
+### How the report describes the customer
+
+The simulation keeps the customer's temperature, trust, patience and confidence on a scale from 0 to 100. Those numbers are internal and mean nothing to a trainee, so **no number of that kind appears in
+any report text** (summary, rationales, guidance, strengths, improvements, journey reasons, curveball
+assessment). The timeline chart still draws them as bands. The text uses the five band names and the
+size and direction of the change:
+
+| Change in temperature (points) | Wording                                                    |
+| ------------------------------ | ---------------------------------------------------------- |
+| 4 or fewer, up or down         | Not mentioned at all in a strength, risk or curveball note |
+| Down by 5 to 9                 | "eased a little"                                           |
+| Down by 10 to 19               | "eased noticeably"                                         |
+| Down by 20 or more             | "eased a lot"                                              |
+| Up by 5 to 9                   | "rose a little"                                            |
+| Up by 10 or more               | "rose sharply"                                             |
+
+Trust, patience and confidence use "rose a little", "rose noticeably" (10 or more), "rose a lot" (20 or
+more), "fell a little" and "fell sharply" (10 or more), and nothing for a change of 4 or fewer. When the
+band changed, it is named in brackets: "Declan's temperature eased a little (Angry to Frustrated)". For
+the whole call, Empathy says how far the temperature moved between the start and the end ("eased a lot,
+from Angry at the start to Concerned at the end") or that it "held steady". Only the size and direction
+of what a behaviour caused are described, never a number. A reason on the journey chart that would print
+a raw value is left out, and a small count in it is written as a word ("after three replies").
 
 ### How firm each score is
 
@@ -197,15 +231,39 @@ a specific next step, honest limits on a promise, a confirmed next contact, a ch
 a gentle test of a belief the customer holds, a technical term explained, a good opening. They are
 chosen from different dimensions where possible, and ranked by how much they helped, using the recorded
 change in the customer. A turn that also blamed or dismissed the customer is never praised. If there
-is nothing to praise, there are no strengths and the summary says so.
+is nothing to praise, there are no strengths and the summary says so. The title names the fact when a
+question uncovered one; the explanation says why that kind of behaviour helps without repeating it. The
+customer's reaction is added in words only when it was big enough to mention (see above).
 
-**Improvements (up to three).** Chosen from: blame, dismissal, unexplained jargon (novice, or
-intermediate with two or more turns), an unverified promise, fixes before understanding the problem,
-a repeated question, vague or missing ownership, vague or missing next steps, no acknowledgement of a
-high impact, no empathy while the customer's temperature was 50 or higher, a missed critical or
-important fact, no recap, no closing, and an opening with no greeting. They are ranked by harm
-(the recorded damage to the customer and how low the dimension scored), one per dimension where
-possible. Each has a quote when something was said (or no quote when something never happened), the
+**Improvements (two or three when the transcript supports them).** Real findings come first, ranked
+by harm (the recorded damage to the customer and how low the dimension scored), one per dimension where
+possible:
+
+1. Things the trainee said: blame, dismissal, unexplained jargon (novice, or intermediate with two or
+   more turns), an unverified promise, fixes before understanding the problem, a repeated question,
+   vague ownership or next steps, replies that were hard to follow.
+2. Missed or partly found **critical or important facts**. Each has its own better question and what
+   missing it cost. Two such facts in one dimension are both shown, because each brings its own question.
+   A second point in a dimension already covered is also shown when it is serious (blame after a
+   dismissal, say).
+3. Gaps the dimension scorers found: no opening greeting, no open question in the first two turns,
+   fewer than three areas covered, no ownership or next step, no next contact, no acknowledgement of the
+   impact, no empathy (while the customer was upset, when that is the case), no recap, no check for
+   anything else, no closing at all.
+
+The list is short only when the transcript supports no more. With five or more trainee turns, a call
+with fewer than two real findings gets a **stretch**: a suggestion to build on something it really did,
+with a quote of that behaviour (or, for a belief the customer voiced and nobody tested, no quote because
+it never happened). A stretch says plainly "Nothing went wrong here". The stretches are: keep the
+empathy going (specific empathy came once), check understanding as you go (a recap was given but
+clarity was not a 5), say what happens if the next step slips (clear ownership and a confirmed next
+contact), ask the customer to say back what was agreed (a recap was given), and test what the
+customer assumed (they said something the scenario knows to be mistaken and it was never tested). The
+weakest dimension's stretch comes first. Calls with limited or insufficient evidence never get a
+stretch. A transcript with only one real finding gets one
+improvement.
+
+Each improvement has a quote when something was said (or no quote when something never happened), the
 risk for this customer, a suggested line and why it works. The suggested lines come from a template
 library filled with the customer's first name, the customer's own words about the impact or deadline
 (only if they really said them), the product name and, for a missed fact, the scenario's own better
@@ -217,10 +275,13 @@ was hidden (shown only after the call), the better question and the consequence 
 **Customer journey.** The temperature after every trainee turn, from the recorded events (carried
 forward when nothing changed). A point is a turning point when the temperature moved by 6 or more or
 changed band. A point where a curveball was raised or answered is marked as a curveball, and the last
-point as the end. Each point shows the reason and the quote for the biggest change that turn.
+point as the end. Each point shows the quote and the reason for the biggest change that turn. The
+reason is a plain sentence from the engine and never prints a raw value. The chart shows the values as
+bands.
 
-**Curveball.** If one fired: what the trainee did in response and whether it was resolved. If it was not,
-what a stronger response looks like, taken from the scenario.
+**Curveball.** If one fired: what the trainee did in response and whether it was resolved, with the
+customer's reaction in words when it was big enough to mention. If it was not resolved, what a
+stronger response looks like, taken from the scenario.
 
 **Next practice.** The lowest-scoring dimension (ties go to the scenario's coaching focus, then the usual
 order), one concrete action, and a suggested difficulty: one step harder when the overall score is 4 or
@@ -228,9 +289,20 @@ more, one step easier when it is 2.5 or less, otherwise the same (no change when
 score). A scenario from the library that practises that dimension is suggested, preferably a different
 one at the suggested difficulty. If every dimension scored 5, the recommendation is a stretch.
 
-**Summary and note.** The summary is at most three sentences: what stood out (with a quote), the biggest
-opportunity, and the discovery result. A closing note states that this is automatic practice coaching,
-names the evaluator and recommends a mentor's review.
+**Summary and note.** The summary is two or three natural sentences. The first says what stood out,
+with a short quote and, when it was big enough to mention, how the customer reacted ("At turn 2, you
+acknowledged what this meant for Declan (“...”), and Declan's temperature eased a little"). With
+nothing to praise it says that no single moment stood out as a clear strength. The second gives the single
+biggest opportunity as advice about behaviour ("The biggest opportunity is to ask whether every
+customer, region or storefront is affected, or whether anything is still working"), with the moment and
+the reaction when the behaviour happened at a turn, or "To stretch further, ..." for a stretch. The third
+gives the discovery result in plain words and names the most important gap, with its label in lower
+case: "You uncovered 2 of the 6 hidden facts and one more in part; the biggest gap was an important fact
+(one regional storefront still works)". With limited evidence, the third sentence also says so
+plainly ("and with only 4 trainee turns this rests on limited evidence"). With insufficient evidence
+the summary says the call was too short to score, gives the discovery count "so far" and names no gap in
+what was found. A closing note states that this is automatic practice coaching, names the evaluator and
+recommends a mentor's review.
 
 ## What is never penalised
 
@@ -258,7 +330,8 @@ practice focus. The server then:
    certainty than the number of turns allows.
 5. Builds discovery, the journey, the curveball assessment, completion, the overall score and the
    difficulty suggestion itself, from the same code as the rules evaluator.
-6. Cleans model text of markup before saving it.
+6. Cleans model text of markup before saving it, and drops any sentence that prints a raw customer-state
+   value ("trust rose from 40 to 70"), with a warning. A field left empty by that falls back to safe text.
 
 A model can write the words. It cannot change a number the engine recorded.
 

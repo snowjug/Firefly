@@ -3,10 +3,13 @@ import { DIMENSION_IDS } from '#shared/domain/vocab.ts';
 import {
   IMPROVEMENT_DIMENSION,
   STRENGTH_DIMENSION,
+  askAdvice,
   dimensionGuidance,
   firstFitting,
   improvementText,
+  isStretch,
   lcfirst,
+  lowerLabel,
   plainVersion,
   practiceRecommendation,
   quoted,
@@ -26,6 +29,7 @@ const ctx: PhraseContext = {
   impactQuote: 'The whole front desk can\u2019t sign in and patients are already waiting.',
   deadlineQuote: 'We needed this fixed ten minutes ago.',
   nextQuestion: 'Can you read me exactly what the sign-in screen says when it stops you?',
+  assumption: "I think the system just didn't save my new password properly.",
 };
 
 const fact: FactSlots = {
@@ -208,17 +212,115 @@ describe('strength templates', () => {
 
   it('writes "an important" for an important fact', () => {
     expect(
-      strengthText('discovery', { name: 'Maya', factLabel: 'X', importance: 'important' }).title,
-    ).toBe('Uncovered an important fact: X');
+      strengthText('discovery', { name: 'Maya', factLabel: 'x', importance: 'important' }).title,
+    ).toBe('Uncovered an important fact: x');
   });
 
-  it('keeps acronyms in a fact label intact', () => {
-    const out = strengthText('discovery', {
-      name: 'Maya',
-      factLabel: 'Already sent back and forth between IT and the vendor',
+  it('does not repeat the fact in the explanation that its title already names', () => {
+    const label = 'the exact error shown at checkout';
+    for (const importance of ['critical', 'important']) {
+      const out = strengthText('discovery', { name: 'Declan', factLabel: label, importance });
+      expect(out.title).toContain(label);
+      expect(out.because.toLowerCase()).not.toContain(label);
+    }
+  });
+
+  it('keeps a colon inside a fact label from doubling up in a title', () => {
+    const title = strengthText('discovery', {
+      name: 'Tomasz',
+      factLabel: 'the new hire: who and since when',
       importance: 'important',
+    }).title;
+    expect(title).toBe('Uncovered an important fact: the new hire \u2013 who and since when');
+  });
+});
+
+describe('fact labels inside a sentence', () => {
+  it('lower-cases the first word but keeps acronyms, names and days', () => {
+    expect(lowerLabel('Already sent back and forth between IT and the vendor')).toBe(
+      'already sent back and forth between IT and the vendor',
+    );
+    expect(lowerLabel('IT already knew about it')).toBe('IT already knew about it');
+    expect(lowerLabel('Friday report needs the whole month')).toBe(
+      'Friday report needs the whole month',
+    );
+    expect(lowerLabel('Lena has an offline copy', ['Lena'])).toBe('Lena has an offline copy');
+    expect(lowerLabel('Lena has an offline copy')).toBe('lena has an offline copy');
+    expect(lowerLabel('A rollback exists but he fears what it would cost')).toBe(
+      'a rollback exists but he fears what it would cost',
+    );
+  });
+});
+
+describe('advice for the summary', () => {
+  it('turns "Asks ..." into the same idea as advice', () => {
+    expect(askAdvice({ revealWhen: fact.revealWhen, betterQuestion: fact.betterQuestion })).toBe(
+      'ask whether any other device or app is signed in with the account',
+    );
+  });
+
+  it('keeps only the first alternative, since a second one can be the opposite of good advice', () => {
+    const followUp = {
+      revealWhen:
+        'Asks what information the customer has already provided, or asks her to send or repeat screenshots, logs, phone details or other information.',
+      betterQuestion: 'Is there anything else you have sent that I should know about?',
+    };
+    expect(askAdvice(followUp)).toBe('ask what information the customer has already provided');
+    const out = improvementText('missed-fact', ctx, {
+      quote: null,
+      fact: { ...fact, ...followUp },
     });
-    expect(out.because).toContain('already sent back and forth between IT and the vendor');
+    expect(out.whyItWorks).toBe(
+      'It works because it asks what information the customer has already provided.',
+    );
+    // alternatives that are not a second "asks" stay together
+    expect(
+      askAdvice({
+        revealWhen:
+          'Asks whether the report has been shared with anyone, or what was done with it.',
+        betterQuestion: 'x',
+      }),
+    ).toBe('ask whether the report has been shared with anyone, or what was done with it');
+  });
+
+  it('falls back to the scenario\u2019s own question when the scenario does not start with "Asks"', () => {
+    expect(
+      askAdvice({
+        revealWhen: 'When the customer is asked about phones.',
+        betterQuestion: 'Any phone?',
+      }),
+    ).toBe('ask a question like \u201cAny phone?\u201d');
+  });
+
+  it.each(KINDS)(
+    '%s: finishes "The biggest opportunity is to ..." without placeholders',
+    (kind) => {
+      const { advice } = improvementText(kind, ctx, { quote: 'Clear your cache.', fact });
+      noBrokenText(advice);
+      expect(advice).toMatch(/^[a-z]/);
+      expect(advice).not.toMatch(/\[|\.$/);
+    },
+  );
+});
+
+describe('stretches', () => {
+  const stretches = KINDS.filter(isStretch);
+
+  it.each(stretches)(
+    '%s: says plainly that nothing went wrong, and still gives a line to say',
+    (kind) => {
+      const out = improvementText(kind, ctx, { quote: 'I will unlock it now.' });
+      expect(out.title).toMatch(/^Stretch: /);
+      expect(out.risk).toMatch(/^Nothing went wrong here\./);
+      expect(out.betterPhrasing).toMatch(/Maya/);
+    },
+  );
+
+  it('quotes the customer\u2019s mistaken belief only in the scoping stretch, and only if it was said', () => {
+    expect(improvementText('stretch-scoping', ctx, { quote: null }).risk).toContain(
+      "I think the system just didn't save my new password properly.",
+    );
+    expect(isStretch('missed-fact')).toBe(false);
   });
 });
 

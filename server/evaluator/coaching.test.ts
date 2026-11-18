@@ -6,9 +6,12 @@ import {
   IMPACTS,
   PROFICIENCIES,
   DIFFICULTIES,
+  DIMENSION_IDS,
   type DimensionId,
 } from '#shared/domain/vocab.ts';
 import type { EvaluationInput } from '#server/engine/types.ts';
+import { stretchCandidates } from './improvements.ts';
+import { buildCallView } from './parts.ts';
 import { evaluateWithRules } from './rules.ts';
 import {
   STRONG_OPTIONS,
@@ -54,7 +57,9 @@ describe('strengths', () => {
   it('are never invented: a call with nothing to praise has none, and says so', () => {
     const weak = run(weakCall());
     expect(weak.strengths).toEqual([]);
-    expect(weak.summary.overall).toMatch(/^There was no clear strength to point to in this call\./);
+    expect(weak.summary.overall).toMatch(
+      /^No single moment stood out as a clear strength this time\./,
+    );
   });
 
   it('come from real evidence: each cites a trainee turn and a verbatim quote', () => {
@@ -72,20 +77,21 @@ describe('strengths', () => {
     expect(new Set(strong.strengths.map((s) => s.dimension)).size).toBe(3);
   });
 
-  it('explain why they helped using only what the state events recorded', () => {
+  it('explain why they helped in words, using only what the state events recorded', () => {
     const ownership = strong.strengths.find((s) => s.dimension === 'ownership-next-steps');
     expect(ownership?.title).toBe('Took clear ownership');
-    expect(ownership?.whyItHelped).toContain("Maya's temperature fell from 27 to 21");
-    expect(ownership?.whyItHelped).toContain(
-      "Maya's confidence that someone owns the problem rose from 40 to 65",
-    );
+    expect(ownership?.whyItHelped).toContain("Maya's temperature eased a little");
+    expect(ownership?.whyItHelped).toContain('confidence that someone owns the problem rose a lot');
+    expect(ownership?.whyItHelped).not.toMatch(/\d/);
   });
 
-  it('name the fact a discovery question uncovered, and the customer reaction that followed', () => {
+  it('name the fact a discovery question uncovered without repeating it in the explanation', () => {
     const found = strong.strengths.find((s) => s.dimension === 'scoping-discovery');
-    expect(found?.title).toBe('Uncovered a critical fact: Phone still using the old password');
+    expect(found?.title).toBe('Uncovered a critical fact: phone still using the old password');
     expect(found?.turnIndex).toBe(6);
-    expect(found?.whyItHelped).toContain("Maya's temperature fell from 33 to 31");
+    expect(found?.whyItHelped.toLowerCase()).not.toContain('old password');
+    // the temperature moved by two points after this question: not worth saying
+    expect(found?.whyItHelped).not.toMatch(/temperature/);
   });
 
   it('mention a curveball that the same reply resolved', () => {
@@ -152,29 +158,39 @@ describe('strengths', () => {
     ).toBe(1);
   });
 
-  it('does not boast about a one-point change in the customer', () => {
-    const small = run(
-      simpleCall([
-        turn(
-          "I'll take this on myself and stay with it until you're back in.",
-          { ownership: 'clear' },
-          [['ownership-clear', "I'll take this on myself and stay with it until you're back in."]],
-          { events: [['ownership', 'temperature', 52, 51, 'Took clear ownership']] },
-        ),
-      ]),
+  it('do not boast about a trivial change in the customer, and say a real one in words', () => {
+    const owner = (events: Step['events']) =>
+      run(
+        simpleCall([
+          turn(
+            "I'll take this on myself and stay with it until you're back in.",
+            { ownership: 'clear' },
+            [
+              [
+                'ownership-clear',
+                "I'll take this on myself and stay with it until you're back in.",
+              ],
+            ],
+            { events },
+          ),
+        ]),
+      ).strengths[0]?.whyItHelped;
+    expect(owner([['ownership', 'temperature', 52, 51, 'Took clear ownership']])).not.toMatch(
+      /temperature/,
     );
-    expect(small.strengths[0]?.whyItHelped).not.toMatch(/temperature/);
-    const real = run(
-      simpleCall([
-        turn(
-          "I'll take this on myself and stay with it until you're back in.",
-          { ownership: 'clear' },
-          [['ownership-clear', "I'll take this on myself and stay with it until you're back in."]],
-          { events: [['ownership', 'temperature', 52, 46, 'Took clear ownership']] },
-        ),
-      ]),
+    // four points or fewer is noise, five or more is worth a mention
+    expect(owner([['ownership', 'temperature', 52, 48, 'Took clear ownership']])).not.toMatch(
+      /temperature/,
     );
-    expect(real.strengths[0]?.whyItHelped).toContain("Maya's temperature fell from 52 to 46");
+    expect(owner([['ownership', 'temperature', 52, 47, 'Took clear ownership']])).toContain(
+      "After this, Maya's temperature eased a little.",
+    );
+    expect(owner([['ownership', 'temperature', 52, 40, 'Took clear ownership']])).toContain(
+      "Maya's temperature eased noticeably (Frustrated to Concerned).",
+    );
+    expect(owner([['ownership', 'temperature', 72, 40, 'Took clear ownership']])).toContain(
+      "Maya's temperature eased a lot (Angry to Concerned).",
+    );
   });
 
   it('does not praise a first turn that went straight into fixes, since the opening is scored down for it', () => {
@@ -267,8 +283,23 @@ describe('improvements', () => {
     ]);
   });
 
-  it('are none for a call with nothing to improve', () => {
-    expect(run(strongCall()).improvements).toEqual([]);
+  it('give a perfect call stretches, never faults: each says nothing went wrong and builds on a real quote', () => {
+    const input = strongCall();
+    const report = run(input);
+    expect(report.dimensions.every((d) => d.score === 5)).toBe(true);
+    expect(report.improvements.length).toBeGreaterThanOrEqual(2);
+    for (const item of report.improvements) {
+      expect(item.title).toMatch(/^Stretch: /);
+      expect(item.risk).toMatch(/^Nothing went wrong here\./);
+      expect(item.quote).not.toBeNull();
+    }
+    expectQuotesVerified(report, input);
+    expect(report.summary.overall).toMatch(/To stretch further, /);
+  });
+
+  it('give a call with several real findings no stretch at all', () => {
+    const report = run(weakCall());
+    expect(report.improvements.some((i) => i.title.startsWith('Stretch'))).toBe(false);
   });
 
   it('quote what was said, with the turn, when the gap is something the trainee did', () => {
@@ -311,13 +342,14 @@ describe('improvements', () => {
     const report = run(strongWith({ 2: blaming }));
     const item = report.improvements.find((i) => i.dimension === 'empathy-deescalation');
 
-    it('quotes the blame and cites the customer reaction that was recorded', () => {
+    it('quotes the blame and cites the customer reaction that was recorded, in words', () => {
       expect(item?.title).toBe('Blamed the customer for what happened');
       expect(item?.turnIndex).toBe(4);
       expect(item?.quote).toBe('You should have read the reminder email.');
       expect(item?.risk).toContain(
-        "After this, Maya's temperature rose from 34 to 44 and Maya's trust fell from 46 to 36.",
+        "After this, Maya's temperature rose sharply (Concerned to Frustrated) and trust fell sharply.",
       );
+      expect(item?.risk).not.toMatch(/\d/);
     });
 
     it('suggests a line that names the customer and moves from who to what happened', () => {
@@ -378,19 +410,22 @@ describe('improvements', () => {
     });
 
     it('is not raised for an expert, and needs two unexplained turns for an intermediate customer', () => {
-      const clarityItems = (
+      const jargonItems = (
         overrides: Parameters<typeof makeScenario>[0],
         steps: Record<number, Step>,
-      ) => byDimension(run(strongWith(steps, STRONG_OPTIONS, overrides)), 'clarity');
-      expect(clarityItems({ proficiency: 'expert' }, { 5: jargonTurn })).toEqual([]);
-      expect(clarityItems({ proficiency: 'intermediate' }, { 5: jargonTurn })).toEqual([]);
+      ) =>
+        run(strongWith(steps, STRONG_OPTIONS, overrides)).improvements.filter(
+          (i) => i.title === 'Used a technical term without explaining it',
+        );
+      expect(jargonItems({ proficiency: 'expert' }, { 5: jargonTurn })).toEqual([]);
+      expect(jargonItems({ proficiency: 'intermediate' }, { 5: jargonTurn })).toEqual([]);
       const second = {
         ...jargonTurn,
         say: 'The token went stale in the cache.',
         evidence: [['jargon-unexplained', 'The token went stale in the cache.']],
       } as Step;
       expect(
-        clarityItems({ proficiency: 'intermediate' }, { 5: jargonTurn, 6: second }),
+        jargonItems({ proficiency: 'intermediate' }, { 5: jargonTurn, 6: second }),
       ).toHaveLength(1);
     });
   });
@@ -437,9 +472,9 @@ describe('improvements', () => {
       expect(item?.betterPhrasing).toBe(
         "I can't promise a fix time until I know the cause, Maya. What I can promise is that I'll look into it now and update you in 20 minutes, even if I don't have an answer yet.",
       );
-      expect(item?.risk).toContain(
-        "Maya's temperature rose from 27 to 29 and Maya's trust fell from 50 to 44",
-      );
+      expect(item?.risk).toContain("After this, Maya's trust fell a little.");
+      // the temperature moved by two points: not worth mentioning
+      expect(item?.risk).not.toMatch(/temperature/);
     });
 
     it('quotes the customer\u2019s deadline only when the customer actually said it', () => {
@@ -483,7 +518,7 @@ describe('improvements', () => {
       expect(item?.betterPhrasing).toBe(
         'Before we try anything, Maya, is your work email or the portal signed in on any other device, like a phone or tablet, that might still have your old password?',
       );
-      expect(item?.risk).toContain("Maya's temperature rose from 54 to 59");
+      expect(item?.risk).toContain("After this, Maya's temperature rose a little.");
     });
   });
 
@@ -574,7 +609,7 @@ describe('improvements', () => {
       expect(item?.betterPhrasing).toContain('patients are already waiting');
     });
 
-    it('notes no empathy while the customer was upset, with the temperature and turn from the record', () => {
+    it('notes no empathy while the customer was upset, with the band and turn from the record', () => {
       const report = run(
         simpleCall([turn('Let me check.'), turn('Still checking.'), turn('One more minute.')], {
           startingTemperature: 'angry',
@@ -583,9 +618,8 @@ describe('improvements', () => {
       const item = report.improvements.find((i) => i.dimension === 'empathy-deescalation');
       expect(item?.title).toBe('No empathy while Maya was upset');
       expect(item?.quote).toBeNull();
-      expect(item?.risk).toMatch(
-        /^Maya's temperature was 72 \(angry\) when you replied at turn 2\./,
-      );
+      expect(item?.risk).toMatch(/^Maya was Angry when you replied at turn 2\./);
+      expect(item?.risk).not.toMatch(/\d\d/);
     });
 
     it('does not raise it when empathy was shown while the customer was upset', () => {
@@ -613,7 +647,7 @@ describe('improvements', () => {
       delete input.discovery['hf-phone-old-password'];
       const item = run(input).improvements.find((i) => i.dimension === 'scoping-discovery');
       const hidden = input.scenario.hiddenFacts.find((f) => f.id === 'hf-phone-old-password');
-      expect(item?.title).toBe('Did not find out: Phone still using the old password');
+      expect(item?.title).toBe('Did not find out: phone still using the old password');
       expect(item?.betterPhrasing).toBe(hidden?.betterQuestion);
       expect(item?.risk).toBe(hidden?.missedConsequence);
       expect(item?.quote).toBeNull();
@@ -625,14 +659,17 @@ describe('improvements', () => {
       const record = input.discovery['hf-phone-old-password'];
       if (record) record.status = 'partial';
       const item = run(input).improvements.find((i) => i.dimension === 'scoping-discovery');
-      expect(item?.title).toBe('Only part found: Phone still using the old password');
+      expect(item?.title).toBe('Only part found: phone still using the old password');
     });
 
-    it('ignores a missed helpful fact', () => {
+    it('does not raise a missed helpful fact', () => {
       const input = strongCall();
       delete input.discovery['hf-reset-timing'];
       delete input.discovery['hf-tried-colleague'];
-      expect(run(input).improvements).toEqual([]);
+      const missed = run(input).improvements.filter((i) =>
+        /^(Did not find out|Only part found)/.test(i.title),
+      );
+      expect(missed).toEqual([]);
     });
   });
 
@@ -729,6 +766,209 @@ describe('improvements', () => {
       ]);
     });
   });
+
+  describe('how many', () => {
+    const withoutFacts = (...ids: string[]) => {
+      const input = strongCall();
+      for (const id of ids) delete input.discovery[id];
+      return input;
+    };
+    const twoFacts = ['hf-phone-old-password', 'hf-lockout-message'];
+
+    it('gives two when two important facts were missed, although they share a dimension', () => {
+      const input = withoutFacts(...twoFacts);
+      const report = run(input);
+      const missed = report.improvements.filter((i) => i.title.startsWith('Did not find out'));
+      expect(missed.map((i) => i.title)).toEqual([
+        'Did not find out: phone still using the old password',
+        'Did not find out: the message says the account is locked',
+      ]);
+      // each carries the scenario's own better question
+      for (const item of missed) {
+        const hidden = input.scenario.hiddenFacts.find((f) =>
+          item.title.includes(f.label.toLowerCase()),
+        );
+        expect(item.betterPhrasing).toBe(hidden?.betterQuestion);
+      }
+    });
+
+    it('adds a third from another dimension when the call has one', () => {
+      const flat = turn('Okay, that is all from me. Thanks, take care.', {}, [
+        ['thanks', 'Thanks, take care.'],
+      ]);
+      const input = strongWith({ 7: flat });
+      for (const id of twoFacts) delete input.discovery[id];
+      const report = run(input);
+      expect(report.improvements).toHaveLength(3);
+      expect(report.improvements.map((i) => i.dimension).sort()).toEqual([
+        'closing',
+        'scoping-discovery',
+        'scoping-discovery',
+      ]);
+    });
+
+    it('returns one when the transcript genuinely supports only one', () => {
+      const blame = turn('You should have read the email.', { blame: true }, [
+        ['blame', 'You should have read the email.'],
+      ]);
+      // one short turn: too little to call out anything that did not happen, and no stretch
+      const report = run(simpleCall([blame]));
+      expect(report.improvements).toHaveLength(1);
+      expect(report.improvements[0]?.title).toBe('Blamed the customer for what happened');
+    });
+
+    it('never adds a stretch to a call with limited evidence', () => {
+      const allFound = Object.fromEntries(
+        [
+          'hf-phone-old-password',
+          'hf-lockout-message',
+          'hf-reset-timing',
+          'hf-tried-colleague',
+        ].map((id) => [id, 'discovered' as const]),
+      );
+      const steps = [
+        { ...(STRONG_STEPS[0] as Step), finds: allFound },
+        ...STRONG_STEPS.slice(1, 4),
+      ];
+      const report = run(buildInput(makeScenario(), steps));
+      expect(report.completion.evidence).toBe('limited');
+      expect(titles(report).some((t) => t.startsWith('Stretch'))).toBe(false);
+    });
+  });
+
+  describe('gaps the dimension scorers found', () => {
+    const changed = (change: (cls: TurnClassification, index: number) => TurnClassification) => {
+      const input = strongCall();
+      for (const [index, cls] of Object.entries(input.classifications)) {
+        input.classifications[Number(index)] = change(cls, Number(index));
+      }
+      return run(input);
+    };
+    const without = (cls: TurnClassification, ...behaviours: string[]) =>
+      cls.evidence.filter((e) => !behaviours.includes(e.behaviour));
+
+    it('asks to say when the customer will hear next if no next contact was confirmed', () => {
+      const report = changed((cls) => ({
+        ...cls,
+        confirmsNextContact: false,
+        evidence: without(cls, 'next-contact'),
+      }));
+      const item = report.improvements.find((i) => i.title.startsWith('Did not say when Maya'));
+      expect(item?.dimension).toBe('ownership-next-steps');
+      expect(item?.quote).toBeNull();
+      expect(item?.betterPhrasing).toContain('call you back in 20 minutes');
+    });
+
+    it('asks to check for anything else if that never happened', () => {
+      const report = changed((cls) => ({
+        ...cls,
+        asksAnythingElse: false,
+        evidence: without(cls, 'anything-else'),
+      }));
+      const item = report.improvements.find((i) => i.dimension === 'closing');
+      expect(item?.title).toBe('Did not check whether anything else was needed');
+      expect(item?.betterPhrasing).toBe(
+        'Is there anything else I can help with before we finish, Maya?',
+      );
+    });
+
+    it('quotes a reply that was hard to follow', () => {
+      const report = changed((cls, index) =>
+        index === 6 || index === 8 ? { ...cls, clarity: 'unclear' } : cls,
+      );
+      const item = report.improvements.find((i) => i.title === 'A reply that was hard to follow');
+      expect(item?.dimension).toBe('clarity');
+      expect(item?.turnIndex).toBe(6);
+      expect(item?.quote).toBeTruthy();
+    });
+
+    it('asks to cover more areas when fewer than three core topics were asked about', () => {
+      const report = changed((cls) => ({ ...cls, discoveryIntents: [] }));
+      const item = report.improvements.find((i) => i.dimension === 'scoping-discovery');
+      expect(item?.title).toBe('Asked about only a few areas before moving on');
+      expect(item?.quote).toBeNull();
+    });
+
+    it('asks for an open invitation when the first two turns only asked closed questions', () => {
+      const closed = (say: string, quote: string) =>
+        turn(say, { askedQuestion: true, discoveryIntents: ['environment'] }, [
+          ['discovery-question', quote],
+        ]);
+      const opening = {
+        ...closed(
+          "Hello Maya, this is Sam from the Northwind support team. I'm sorry you're stuck, especially with the front desk waiting on bookings. Is the laptop plugged in?",
+          'Is the laptop plugged in?',
+        ),
+        cls: {
+          introduces: true,
+          empathy: 'specific',
+          acknowledgesImpact: true,
+          askedQuestion: true,
+          discoveryIntents: ['environment'],
+        },
+        evidence: [
+          ['greeting', 'Hello Maya, this is Sam from the Northwind support team.'],
+          ['introduction', 'Hello Maya, this is Sam from the Northwind support team.'],
+          [
+            'empathy-specific',
+            "I'm sorry you're stuck, especially with the front desk waiting on bookings.",
+          ],
+        ],
+      } as Step;
+      const second = closed('Okay. Is the browser up to date?', 'Is the browser up to date?');
+      const report = run(strongWith({ 1: opening, 2: second }));
+      const item = report.improvements.find((i) => i.dimension === 'opening-rapport');
+      expect(item?.title).toBe('Did not invite the story at the start');
+      expect(item?.betterPhrasing).toMatch(/walk me through what's been happening/);
+    });
+  });
+
+  describe('stretches', () => {
+    const scoresOf = (value: number) =>
+      Object.fromEntries(DIMENSION_IDS.map((id) => [id, value])) as Record<DimensionId, number>;
+    const kinds = (input: EvaluationInput, scores = scoresOf(5)) =>
+      stretchCandidates(buildCallView(input), scores).map((c) => c.kind);
+
+    it('build on what a perfect call really did: its ownership and its recap', () => {
+      expect(kinds(strongCall())).toEqual(['stretch-ownership', 'stretch-closing']);
+      const owner = stretchCandidates(buildCallView(strongCall()), scoresOf(5))[0];
+      expect(owner?.quote).toBe(
+        "I'll unlock the account now and stay with this until you're back in.",
+      );
+    });
+
+    it('offer a second moment of empathy only when specific empathy came once', () => {
+      const input = strongCall();
+      const second = input.classifications[12];
+      if (second) input.classifications[12] = { ...second, empathy: 'generic' };
+      const found = stretchCandidates(buildCallView(input), scoresOf(5)).find(
+        (c) => c.kind === 'stretch-empathy',
+      );
+      expect(found?.turn?.index).toBe(2);
+      expect(found?.quote).toBeTruthy();
+      expect(kinds(strongCall())).not.toContain('stretch-empathy');
+    });
+
+    it('offer to check understanding as you go when clarity was not a 5', () => {
+      const scores = { ...scoresOf(5), clarity: 4 };
+      expect(kinds(strongCall(), scores)).toContain('stretch-clarity');
+    });
+
+    it('offer to test a mistaken belief only if the customer said it and it was never tested', () => {
+      const assumption = makeScenario().incorrectAssumptions[0]?.statement as string;
+      const said = strongWith({ 2: { ...(STRONG_STEPS[1] as Step), reply: assumption } });
+      for (const [index, cls] of Object.entries(said.classifications)) {
+        said.classifications[Number(index)] = { ...cls, correctsAssumption: false };
+      }
+      const found = stretchCandidates(buildCallView(said), scoresOf(5)).find(
+        (c) => c.kind === 'stretch-scoping',
+      );
+      expect(found).toBeDefined();
+      expect(found?.quote).toBeNull();
+      // not said by the customer: nothing to test
+      expect(kinds(strongCall())).not.toContain('stretch-scoping');
+    });
+  });
 });
 
 describe('the overall summary', () => {
@@ -738,22 +978,45 @@ describe('the overall summary', () => {
       .split(/(?<=[.!?])\s+(?=[A-Z])/)
       .filter(Boolean);
 
-  it('is at most three sentences and uses specific evidence', () => {
+  it('is two or three natural sentences with specific evidence', () => {
     for (const input of [strongCall(), weakCall()]) {
       const { overall } = run(input).summary;
+      expect(sentences(overall).length).toBeGreaterThanOrEqual(2);
       expect(sentences(overall).length).toBeLessThanOrEqual(3);
     }
     expect(run(weakCall()).summary.overall).toContain(
       '\u201cYou should have read the reminder email before changing it.\u201d',
     );
-    expect(run(strongCall()).summary.overall).toContain("Maya's temperature fell from 34 to 28");
+    expect(run(strongCall()).summary.overall).toContain(
+      "you acknowledged what this meant for Maya (\u201cI can see the first patients arrive at nine, so let's move quickly.\u201d), and Maya's temperature eased a little.",
+    );
   });
 
-  it('reports the discovery result, naming what an important fact was missed', () => {
-    expect(run(strongCall()).summary.overall).toMatch(/You found 4 of 4 hidden facts\.$/);
-    expect(run(weakCall()).summary.overall).toMatch(
-      /You found 0 of 4 hidden facts; missed: Phone still using the old password \(critical\) and The message says the account is locked \(important\)\.$/,
+  it('puts the biggest opportunity as advice about behaviour, with the moment and the reaction', () => {
+    expect(run(weakCall()).summary.overall).toContain(
+      "The biggest opportunity is to keep blame out of the call: describe what you see and ask Maya what happened instead (turn 4, \u201cYou should have read the reminder email before changing it.\u201d), after which Maya's temperature rose sharply.",
     );
+  });
+
+  it('reports the discovery result in plain words, naming the biggest gap in lower case', () => {
+    expect(run(strongCall()).summary.overall).toMatch(/You uncovered all 4 hidden facts\.$/);
+    expect(run(weakCall()).summary.overall).toMatch(
+      /You did not uncover any of the 4 hidden facts; the biggest gap was a critical fact \(phone still using the old password\)\.$/,
+    );
+    const input = strongCall();
+    const record = input.discovery['hf-phone-old-password'];
+    if (record) record.status = 'partial';
+    expect(run(input).summary.overall).toMatch(
+      /You uncovered 3 of the 4 hidden facts and one more in part; the biggest gap was only part of a critical fact \(phone still using the old password\)\./,
+    );
+  });
+
+  it('reads as prose: no capitalised fragment after a colon or semicolon, no wrong article', () => {
+    for (const input of [strongCall(), weakCall()]) {
+      const text = run(input).summary.overall.replace(/\u201c[^\u201d]*\u201d/g, 'QUOTE');
+      expect(text).not.toMatch(/[:;]\s+[A-Z]/);
+      expect(text).not.toMatch(/\b[Aa] (?=[aei])|\b[Aa]n (?=[^aeiouAEIOU\s])/);
+    }
   });
 
   it('contains no generic praise', () => {
@@ -764,11 +1027,19 @@ describe('the overall summary', () => {
     }
   });
 
-  it('says plainly when the evidence is limited', () => {
+  it('says plainly when the evidence is limited, without adding a fourth sentence', () => {
     const input = buildInput(makeScenario(), WEAK_STEPS.slice(0, 4), { endedEarly: true });
-    expect(run(input).summary.overall).toMatch(
-      /with only 4 trainee turns, this rests on limited evidence\.$/,
-    );
+    const { overall } = run(input).summary;
+    expect(overall).toMatch(/and with only 4 trainee turns this rests on limited evidence\.$/);
+    expect(sentences(overall).length).toBeLessThanOrEqual(3);
+  });
+
+  it('says so, and names no gap in what was found, when the call was too short to score', () => {
+    const input = buildInput(makeScenario(), WEAK_STEPS.slice(0, 2), { endedEarly: true });
+    const { overall } = run(input).summary;
+    expect(overall).toMatch(/^The call ended after 2 trainee turns, which is too few to score/);
+    expect(overall).toMatch(/You did not uncover any of the 4 hidden facts so far\.$/);
+    expect(overall).not.toMatch(/biggest gap/);
   });
 
   it('reminds the reader that this is automatic practice coaching and names the evaluator', () => {
@@ -781,25 +1052,38 @@ describe('the overall summary', () => {
   });
 });
 
-describe('every number in the coaching text comes from the data', () => {
+describe('numbers in the coaching text', () => {
   const numbers = (text: string) => (text.match(/\d+/g) ?? []).map(Number);
 
-  it('holds for strengths, risks, the summary and the curveball assessment', () => {
+  it('never print a raw temperature, trust, confidence, patience or urgency value', () => {
+    for (const input of [strongCall(), weakCall()]) {
+      const report = run(input);
+      const texts = [
+        report.summary.overall,
+        report.curveball?.assessment ?? '',
+        ...report.strengths.map((s) => s.whyItHelped),
+        ...report.improvements.map((i) => i.risk),
+        ...report.dimensions.map((d) => d.rationale),
+        ...report.journey.points.map((p) => p.reason ?? ''),
+      ];
+      for (const text of texts) {
+        expect(text).not.toMatch(
+          /\b(?:temperature|trust|confidence|patience|urgency)\b[^.]*\b\d{2,3}\b/i,
+        );
+      }
+    }
+  });
+
+  it('that remain (turn numbers, counts, shares) come from the data', () => {
     for (const input of [strongCall(), weakCall()]) {
       const report = run(input);
       const allowed = new Set<number>();
-      for (const e of input.stateEvents) {
-        allowed.add(e.previous);
-        allowed.add(e.next);
-      }
       for (const t of input.turns) allowed.add(t.index);
       for (const n of [
         report.discovery.found,
         report.discovery.partial,
         report.discovery.total,
         report.completion.traineeTurns,
-        input.startState.temperature,
-        input.finalState.temperature,
       ]) {
         allowed.add(n);
       }
@@ -812,7 +1096,7 @@ describe('every number in the coaching text comes from the data', () => {
       ];
       for (const text of texts) {
         for (const n of numbers(text)) {
-          // percentages and counts of turns/messages are computed, everything else must be recorded
+          // a weighted share of the facts found is computed; everything else must be recorded
           if (/weighted \d+%/.test(text) && n <= 100) continue;
           expect(allowed.has(n) || n <= 7, `${n} in "${text}"`).toBe(true);
         }

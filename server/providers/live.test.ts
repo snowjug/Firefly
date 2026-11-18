@@ -94,7 +94,7 @@ describe('the live provider', () => {
       kind: 'azure-openai',
       label: 'Azure OpenAI (deployment "support-gpt")',
       demo: false,
-      prompts: { customer: 'customer-1', classifier: 'classifier-1', evaluator: 'evaluator-1' },
+      prompts: { customer: 'customer-1', classifier: 'classifier-1', evaluator: 'evaluator-2' },
     });
     const compatible = provider();
     expect(compatible).toMatchObject({
@@ -519,7 +519,7 @@ describe('evaluateDraft', () => {
     const draft = (await provider().evaluateDraft?.(input)) as EvaluationDraft;
     const merged = mergeModelDraft(draft, input, {
       name: 'Firefly model evaluator',
-      version: 'evaluator-1',
+      version: 'evaluator-2',
       providerLabel: 'test',
     });
     expect(merged.warnings).toEqual([]);

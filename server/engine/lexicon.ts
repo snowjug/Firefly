@@ -43,15 +43,22 @@ export const REQUEST_PHRASE =
 // ---------------------------------------------------------------------------------------
 // Discovery intent topics
 
+/** Adverbs that add emphasis but not meaning ("what exactly happens" is "what happens"). */
+export const FILLER_ADVERBS =
+  /\b(?:exactly|actually|specifically|precisely|really|currently|basically|typically|usually|generally|normally|just)\s+/g;
+
 export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
   problem_description: [
     /\bwhat(?:'s| is| are| has| have)?(?: been)? (?:happening|going on|the (?:issue|problem|trouble|situation)|wrong)\b/,
-    /\b(?:tell|walk|talk|take) me (?:through|about|more)\b/,
+    /\b(?:tell|walk|talk|take) me (?:a (?:bit|little) )?(?:through|about|more)\b/,
     /\bcan you (?:describe|explain|tell me|walk me|give me)\b/,
     /\bwhat (?:are|were) you (?:trying|doing|hoping|attempting)\b/,
+    /\bwhat you (?:are|were) (?:trying|doing|hoping|attempting)\b/,
     /\bwhat (?:seems|appears) to be\b/,
     /\b(?:describe|explain) (?:the|what|how)\b/,
-    /\bwhat (?:happens|happened) when\b/,
+    /\bwhat (?:happens|happened) (?:when|if|after|as)\b/,
+    /\bwhat (?:is|'s) (?:it|that|this) doing\b/,
+    /\bhow (?:does|did) (?:it|this|that) (?:fail|break|go wrong|show up)\b/,
     /\bhow (?:is|does) it (?:behaving|look|work|feel)\b/,
     /\bwhat('?s)? (?:not working|broken|failing)\b/,
     /\bmore (?:detail|details|information|context)\b/,
@@ -63,10 +70,12 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bexact(?:ly)? (?:what|wording|message|text)\b/,
     /\bscreenshot\b/,
     /\bwhat (?:do|did) you (?:see|get)\b/,
+    /\bwhat (?:are|were) you (?:seeing|getting)\b/,
     /\bwhat (?:comes|shows) up\b/,
   ],
   timing_onset: [
     /\bwhen (?:did|was|has|does|do|is|were) (?:it|this|that|the (?:issue|problem)|you)?\s?(?:first |last |actually )?(?:start|begin|began|happen|occur|work|stop|notice|see|appear|change)/,
+    /\bwhen (?:it|this|that|the (?:issue|problem)) (?:started|began|first|stopped|happened|broke|last)\b/,
     /\bsince when\b/,
     /\bhow long (?:has|have|ago|is|was|did)\b/,
     /\bwhat time\b/,
@@ -75,6 +84,7 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bwhen did you (?:first )?(?:notice|see|start|try)\b/,
     /\bhow long\b/,
     /\bwhen (?:was|did) (?:the )?(?:last|first)\b/,
+    /\bwas (?:it|this|that) (?:working|fine|ok|okay|normal) (?:yesterday|before|earlier|last|this)\b/,
   ],
   recent_changes: [
     /\b(?:chang(?:e|ed|es|ing)|updat(?:e|ed|es|ing)|upgrad(?:e|ed|es|ing)|install(?:ed)?|deploy(?:ed|ment)?|migrat(?:e|ed|ion)|reset|reconfigur\w+|modif(?:y|ied)|rolled out|patch(?:ed)?|new (?:setting|policy|config\w*|version|release|process|rule|system))\b/,
@@ -88,17 +98,19 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bwho (?:else|is|are) (?:affected|impacted|seeing|having|experiencing|able|unable)\b/,
     /\b(?:just|only) (?:you|your (?:account|laptop|computer|device|machine))\b/,
     /\beveryone\b/,
+    /\b(?:anyone|anybody|someone|somebody) else\b/,
     /\b(?:other|another) (?:users|people|colleagues|team ?members|staff|accounts)\b/,
     /\bwhich (?:users|people|teams|locations|sites|offices|regions|accounts)\b/,
     /\bhow (?:widespread|many)\b/,
     /\b(?:affected|impacted)\b/,
     /\bis (?:it|this) (?:happening|affecting) (?:to|for) (?:anyone|others|everyone|your team)\b/,
+    /\bsame (?:problem|issue)\b/,
   ],
   business_impact: [
-    /\b(?:impact|impacting|effect|consequence|knock-on)\b/,
+    /\b(?:impacts?|impacting|effects?|consequences?|knock-on)\b/,
     /\bhow (?:urgent|critical|serious|bad|important|much of a)\b/,
     /\bwhat does (?:this|that|it) mean for\b/,
-    /\b(?:blocking|stopping|preventing|holding up|disrupting) (?:you|your|the)\b/,
+    /\b(?:blocking|stopping|preventing|holding up|disrupting) (?:you|your|the|anything|anyone|work)\b/,
     /\bhow is (?:this|it) (?:affecting|impacting|hurting)\b/,
     /\bwhat (?:can't|cannot|can not) you (?:do|do now)\b/,
     /\b(?:business|operations|revenue|customers|patients|bookings|orders) (?:impact|affected|are|is|can)\b/,
@@ -123,13 +135,14 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bso far\b/,
   ],
   environment: [
-    /\b(?:browser|device|computer|laptop|desktop|phone|mobile|tablet|operating system|windows|mac(?:book)?|linux|android|ios|iphone|version|network|wi-?fi|vpn|office|remote|location|environment)\b/,
-    /\bwhich (?:app|platform|browser|device|version|system|environment|region|site|computer)\b/,
+    /\b(?:browser|device|computer|laptop|desktop|phone|mobile|tablet|operating system|windows|mac(?:book)?|linux|android|ios|iphone|version|network|wi-?fi|vpn|office|remote|location|environment|application|software|program)\b/,
+    /\bwhich (?:app|application|platform|browser|device|version|system|environment|region|site|computer|software|program|tool|service)\b/,
     /\bwhat (?:are you|do you|kind of|type of|sort of) (?:using|use|running|working on)\b/,
     /\bwhere are you (?:working|calling|located|connecting)\b/,
     /\b(?:signed|logged) in (?:on|to|anywhere|elsewhere|from)\b/,
     /\b(?:other|another) devices?\b/,
     /\bmail app|email app\b/,
+    /\byour (?:setup|set-up|configuration|machine|equipment)\b/,
   ],
   reproducibility: [
     /\b(?:every time|each time|always|sometimes|intermittent(?:ly)?|how often|how frequently|reproduce|repeatable|consistent(?:ly)?|pattern)\b/,
@@ -139,11 +152,14 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bcan you (?:make it|get it to) (?:happen|fail)\b/,
     /\bwhat (?:are|were) you doing when\b/,
     /\bsame (?:thing|result|error|behaviour|behavior)\b/,
+    /\b(?:has|have) (?:this|it|that) (?:happened|occurred|been happening) before\b/,
+    /\b(?:happened|occurred) before\b/,
   ],
   previous_contact: [
     /\b(?:previous(?:ly)?|earlier|last time|prior|before) (?:call|contact|case|ticket|time|conversation|advice|support)\b/,
     /\b(?:case|ticket|reference) (?:number|id|history|notes)\b/,
     /\b(?:contacted|called|spoke to|raised|logged|reported|emailed) (?:support|us|anyone|someone|it)\b/,
+    /\b(?:spoken|talked|spoke|talk) to (?:anyone|someone|anybody|somebody|support|it)\b/,
     /\bwhat (?:were|was) you told\b/,
     /\bwho did you (?:speak|talk)\b/,
     /\b(?:been told|already (?:raised|logged|reported|contacted|spoken))\b/,

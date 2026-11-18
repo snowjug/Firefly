@@ -25,6 +25,7 @@ import {
   overallScore,
   phraseContext,
   plural,
+  properNouns,
   trainingNote,
   verifiedQuote,
   worseOf,
@@ -33,8 +34,10 @@ import {
   type Sufficiency,
   type TraineeTurn,
 } from './parts.ts';
+import { withoutRawMoodNumbers } from './mood.ts';
 import {
   improvementText,
+  lowerLabel,
   modelImprovementTitle,
   modelStrengthTitle,
   strengthText,
@@ -106,9 +109,11 @@ function checkCitation(call: CallView, turnIndex: unknown, quote: unknown): Evid
 }
 
 /** Model text, cleaned of markup and cut to the report's limit; `fallback` when nothing is left. */
-function clean(text: unknown, max: number, fallback = ''): string {
+function cleanText(text: unknown, max: number, fallback = ''): { text: string; scrubbed: boolean } {
   const cleaned = typeof text === 'string' ? sanitizeModelText(text, max) : '';
-  return cleaned.length > 0 ? cleaned : fallback;
+  // Raw 0-100 values of the customer's state mean nothing to a trainee: such a sentence is dropped.
+  const scrubbed = withoutRawMoodNumbers(cleaned);
+  return { text: scrubbed.length > 0 ? scrubbed : fallback, scrubbed: scrubbed !== cleaned };
 }
 
 function strengthKindFor(dimension: DimensionId, c: TurnClassification): StrengthKind | null {
@@ -185,7 +190,7 @@ function strengthTitle(
     if (found) {
       return strengthText('discovery', {
         name: call.name,
-        factLabel: found.label,
+        factLabel: lowerLabel(found.label, properNouns(call.scenario)),
         importance: found.importance,
       }).title;
     }
@@ -216,6 +221,13 @@ export function mergeModelDraft(
   const drafted = pickDimensions(draft);
   const completion = buildCompletion(call);
   const discovery = buildDiscovery(call);
+
+  const clean = (text: unknown, max: number, what: string, fallback = ''): string => {
+    const result = cleanText(text, max, fallback);
+    if (result.scrubbed)
+      warnings.push(`${what}: dropped a sentence that gave a raw score for the customer's mood.`);
+    return result.text;
+  };
 
   const dimensions = DIMENSION_IDS.map((id): DimensionResult => {
     const d = drafted.get(id) as DraftDimension;
@@ -249,10 +261,15 @@ export function mergeModelDraft(
       id,
       score: capped,
       label: scoreLabel(capped),
-      rationale: clean(d.rationale, 600, `Scored ${capped} of 5 from the transcript.`),
+      rationale: clean(
+        d.rationale,
+        600,
+        `${label} rationale`,
+        `Scored ${capped} of 5 from the transcript.`,
+      ),
       evidence: kept,
       sufficiency,
-      guidance: clean(d.guidance, 500, DIMENSIONS[id].description),
+      guidance: clean(d.guidance, 500, `${label} guidance`, DIMENSIONS[id].description),
     };
   });
   const scores = Object.fromEntries(dimensions.map((d) => [d.id, d.score])) as Scores;
@@ -271,7 +288,7 @@ export function mergeModelDraft(
     }
     if (strengths.some((x) => x.turnIndex === checked.turnIndex && x.quote === checked.quote))
       continue;
-    const why = clean(s.whyItHelped, 400);
+    const why = clean(s.whyItHelped, 400, `A ${DIMENSIONS[s.dimension].label} strength`);
     if (!why) {
       warnings.push(`A ${DIMENSIONS[s.dimension].label} strength was dropped (no explanation).`);
       continue;
@@ -307,8 +324,9 @@ export function mergeModelDraft(
       }
       cited = checked;
     }
-    const risk = clean(i.risk, 400);
-    const betterPhrasing = clean(i.betterPhrasing, 500);
+    const what = `A ${label} improvement`;
+    const risk = clean(i.risk, 400, what);
+    const betterPhrasing = clean(i.betterPhrasing, 500, what);
     if (!risk || !betterPhrasing) {
       warnings.push(
         `A ${label} improvement was dropped (it had no risk or no suggested phrasing).`,
@@ -327,7 +345,12 @@ export function mergeModelDraft(
       quote: cited?.quote ?? null,
       risk,
       betterPhrasing,
-      whyItWorks: clean(i.whyItWorks, 400, 'It gives the customer a clearer, more useful reply.'),
+      whyItWorks: clean(
+        i.whyItWorks,
+        400,
+        what,
+        'It gives the customer a clearer, more useful reply.',
+      ),
     });
   }
 
@@ -336,13 +359,18 @@ export function mergeModelDraft(
   // Keep the model's chosen focus only if it is a genuinely weak area.
   const lowest = Math.min(...DIMENSION_IDS.map((id) => scores[id]));
   const wanted = draft.nextPractice?.dimension;
-  const recommendation = clean(draft.nextPractice?.recommendation, 500);
+  const recommendation = clean(draft.nextPractice?.recommendation, 500, 'The practice suggestion');
   const keep = isDimension(wanted) && scores[wanted] <= lowest + 1 && recommendation !== '';
   if (!keep)
     warnings.push('The suggested practice focus was replaced by one computed from the scores.');
 
   const n = completion.traineeTurns;
-  let summary = clean(draft.summary, 1200, `${discoverySentence(discovery)}.`);
+  let summary = clean(
+    draft.summary,
+    1200,
+    'The summary',
+    `${discoverySentence(discovery, call.scenario)}.`,
+  );
   if (
     completion.evidence !== 'sufficient' &&
     !/\b(limited|too short|too few|ended early)\b/i.test(summary)

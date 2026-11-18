@@ -44,7 +44,8 @@ function goodDraft(
   patches: Partial<Record<DimensionId, Partial<DraftDimension>>> = {},
 ): EvaluationDraft {
   return {
-    summary: "Maya's temperature fell from 52 to 10, and you found every hidden fact.",
+    summary:
+      "Maya's temperature eased a lot, and you found every hidden fact. Opening the call well helped.",
     dimensions: DIMENSION_IDS.map((id) => draftDimension(id, patches[id])),
     strengths: [
       {
@@ -101,7 +102,7 @@ describe('mergeModelDraft: a good draft', () => {
     expect(dim(report, 'clarity').guidance).toBe('Guidance for clarity.');
     expect(dim(report, 'clarity').label).toBe('Strong');
     expect(report.summary.overall).toBe(
-      "Maya's temperature fell from 52 to 10, and you found every hidden fact.",
+      "Maya's temperature eased a lot, and you found every hidden fact. Opening the call well helped.",
     );
     expect(report.summary.overallScore).toBe(4);
   });
@@ -470,11 +471,53 @@ describe('mergeModelDraft: cleans model text', () => {
     dimensionRef.rationale = '<br>';
     dimensionRef.guidance = '   ';
     const { report } = merge(draft);
-    expect(report.summary.overall).toMatch(/^You found 4 of 4 hidden facts\./);
+    expect(report.summary.overall).toBe('You uncovered all 4 hidden facts.');
     expect(dim(report, 'empathy-deescalation').rationale).toBe(
       'Scored 4 of 5 from the transcript.',
     );
     expect(dim(report, 'empathy-deescalation').guidance.length).toBeGreaterThan(10);
+  });
+
+  describe('a sentence that prints a raw customer-state number', () => {
+    const numbers = "Maya's temperature fell from 52 to 10.";
+
+    it('is dropped from the summary, rationales, guidance and every coaching text, with a warning', () => {
+      const draft = goodDraft();
+      draft.summary = `${numbers} You opened the call well.`;
+      const first = draft.dimensions[0] as DraftDimension;
+      first.rationale = `A clear opening. Trust rose from 40 to 70 after it.`;
+      first.guidance = `Keep the greeting. Her confidence reached 85 by turn 4.`;
+      (draft.strengths[0] as { whyItHelped: string }).whyItHelped =
+        `It named the owner. ${numbers}`;
+      const improvement = draft.improvements[0] as { risk: string; whyItWorks: string };
+      improvement.risk = `No time was agreed. Patience was 30 by then.`;
+      improvement.whyItWorks = `${numbers} A named time stops the chasing.`;
+      const { report, warnings } = merge(draft);
+      expect(report.summary.overall).toBe('You opened the call well.');
+      expect(dim(report, 'opening-rapport').rationale).toBe('A clear opening.');
+      expect(dim(report, 'opening-rapport').guidance).toBe('Keep the greeting.');
+      expect(report.strengths[0]?.whyItHelped).toBe('It named the owner.');
+      expect(report.improvements[0]?.risk).toBe('No time was agreed.');
+      expect(report.improvements[0]?.whyItWorks).toBe('A named time stops the chasing.');
+      expect(warnings.filter((w) => /raw score for the customer's mood/.test(w))).toHaveLength(6);
+    });
+
+    it('does not touch ordinary numbers that are not about the customer\u2019s state', () => {
+      const draft = goodDraft();
+      draft.summary = 'You promised an update in 20 minutes. Trust the process.';
+      const { report, warnings } = merge(draft);
+      expect(report.summary.overall).toBe(
+        'You promised an update in 20 minutes. Trust the process.',
+      );
+      expect(warnings).toEqual([]);
+    });
+
+    it('falls back when nothing but the number was said', () => {
+      const draft = goodDraft();
+      draft.summary = numbers;
+      const { report } = merge(draft);
+      expect(report.summary.overall).toBe('You uncovered all 4 hidden facts.');
+    });
   });
 
   it('keeps every text field within the report limits', () => {

@@ -369,6 +369,34 @@ describe('temperature journey', () => {
     expect(journey).toMatchObject({ start: 52, end: 44, peak: 52, lowest: 39 });
   });
 
+  it('never puts a raw number in a reason: a count is written out and a raw state value is dropped', () => {
+    const odd = buildJourney(
+      buildCallView(
+        simpleCall([
+          turn('Checking.', {}, [], {
+            events: [
+              [
+                'impact',
+                'temperature',
+                52,
+                55,
+                'The impact still had not been acknowledged after 3 replies',
+              ],
+            ],
+          }),
+          turn('Still checking.', {}, [], {
+            events: [['impact', 'temperature', 55, 58, "Maya's temperature went from 55 to 58"]],
+          }),
+        ]),
+      ),
+    );
+    expect(odd.points[1]?.reason).toBe(
+      'The impact still had not been acknowledged after three replies',
+    );
+    expect(odd.points[2]?.reason).toBeNull();
+    for (const p of journey.points) expect(p.reason ?? '').not.toMatch(/\d/);
+  });
+
   it('reads the weak call as a steady rise', () => {
     const rising = buildJourney(buildCallView(weakCall()));
     expect(rising.points.map((p) => p.temperature)).toEqual([52, 64, 84, 89, 91, 91, 91]);
@@ -432,7 +460,8 @@ describe('curveball assessment', () => {
     expect(result?.assessment).toContain(
       '\u201cI can see the first patients arrive at nine.\u201d',
     );
-    expect(result?.assessment).toContain("Maya's temperature went from 55 to 49 on that turn");
+    expect(result?.assessment).toContain("it was resolved; Maya's temperature eased a little.");
+    expect(result?.assessment).not.toMatch(/\d\d/);
   });
 
   it('says what a stronger response looks like when the curveball was not resolved', () => {
@@ -442,7 +471,7 @@ describe('curveball assessment', () => {
           'curveball',
           'temperature',
           55,
-          59,
+          63,
           'The curveball was not addressed (customer imposes a deadline)',
         ],
       ],
@@ -455,9 +484,17 @@ describe('curveball assessment', () => {
     expect(result?.assessment).toContain(
       'Your reply at turn 8 (\u201cPlease restart your laptop.\u201d) did not address it.',
     );
-    expect(result?.assessment).toContain("Maya's temperature rose from 55 to 59.");
+    expect(result?.assessment).toContain("Maya's temperature rose a little (Frustrated to Angry).");
     expect(expected).toBeTruthy();
     expect(result?.assessment).toContain(`A stronger response: ${expected}`);
+  });
+
+  it('says nothing about the customer\u2019s mood when it barely moved', () => {
+    const miss = turn('Please restart your laptop.', { troubleshooting: true }, [], {
+      events: [['curveball', 'temperature', 55, 58, 'The curveball was not addressed']],
+    });
+    const input = buildInput(makeScenario(), [...base(), miss], { curveball: fired('unresolved') });
+    expect(buildCurveball(buildCallView(input))?.assessment).not.toMatch(/temperature/);
   });
 
   it('uses the generic expected response for a curveball type the scenario did not author', () => {

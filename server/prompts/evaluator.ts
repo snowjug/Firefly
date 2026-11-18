@@ -17,7 +17,7 @@ import type { PromptRequest } from './types.ts';
 // trusted on its own. The dimension guidance follows docs/evaluation-rubric.md: update it with the
 // rubric (RUBRIC_VERSION in engine/types.ts) and bump EVALUATOR_PROMPT_VERSION when either changes.
 
-export const EVALUATOR_PROMPT_VERSION = 'evaluator-1';
+export const EVALUATOR_PROMPT_VERSION = 'evaluator-2';
 export const EVALUATOR_TEMPERATURE = 0.2;
 export const EVALUATOR_MAX_TOKENS = 4500;
 
@@ -83,6 +83,7 @@ EVIDENCE RULES
 - A score of 1 means the behaviour was absent or counterproductive. If the call never gave the trainee a chance to show it, mark the dimension "insufficient" and score conservatively.
 - For Scoping & Discovery, consider which facts were found and missed and the questions that found them. A betterPhrasing for a missed fact can build on its betterQuestion.
 - Never praise a turn that also blamed or dismissed the customer.
+- Describe the customer's mood in words: the band names (Calm, Concerned, Frustrated, Angry, Escalating) and phrases such as "eased a little" or "rose sharply". Never write a number for the customer's temperature, trust, confidence, patience or urgency: those values are internal and the application removes any sentence that contains one.
 
 FAIRNESS RULES
 - Never lower a score because of concise communication, accent, non-native English phrasing, harmless grammar or spelling slips, or a communication style that differs from the one you would prefer.

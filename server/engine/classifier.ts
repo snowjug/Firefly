@@ -23,6 +23,7 @@ import {
   isUnverifiedPromise,
   JARGON_EXPLAINED,
   JARGON_TERMS,
+  FILLER_ADVERBS,
   LOW_EFFORT,
   NEXT_CONTACT,
   NEXT_STEPS_VAGUE,
@@ -103,8 +104,13 @@ function isQuestionSentence(sentence: string): boolean {
 }
 
 export function detectIntents(sentenceLower: string): DiscoveryIntent[] {
+  // "What exactly happens when..." is the same question as "What happens when...", so each pattern
+  // is tried on the sentence as written and with filler adverbs removed.
+  const stripped = sentenceLower.replace(FILLER_ADVERBS, '');
   return DISCOVERY_INTENTS.filter((intent) =>
-    INTENT_PATTERNS[intent].some((pattern) => pattern.test(sentenceLower)),
+    INTENT_PATTERNS[intent].some(
+      (pattern) => pattern.test(sentenceLower) || pattern.test(stripped),
+    ),
   );
 }
 

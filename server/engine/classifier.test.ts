@@ -36,6 +36,42 @@ describe('rules classifier: opening and empathy', () => {
 });
 
 describe('rules classifier: discovery and fact targeting', () => {
+  it('recognises the topic of everyday questions a trainee would naturally ask', () => {
+    const expectations: [string, string][] = [
+      ['Has this happened before?', 'reproducibility'],
+      ['Do you know when it started?', 'timing_onset'],
+      ['Was it working yesterday?', 'timing_onset'],
+      ['Is anyone else having the same problem?', 'affected_scope'],
+      ['Which application are you using?', 'environment'],
+      ['Have you spoken to anyone else about this?', 'previous_contact'],
+      ['Can I ask what you were trying to do?', 'problem_description'],
+      ['Is it blocking anything important?', 'business_impact'],
+      ['What are the consequences if it is not fixed today?', 'business_impact'],
+      ['Tell me a bit about your setup.', 'problem_description'],
+    ];
+    for (const [question, intent] of expectations) {
+      expect(classify(question).discoveryIntents, question).toContain(intent);
+    }
+  });
+
+  it('reads a question with a filler adverb the same as without it', () => {
+    for (const question of [
+      'What exactly happens when you try to open the workspace?',
+      'What actually happens when you try to sign in?',
+      'What are you seeing when it fails?',
+    ]) {
+      const c = classify(question);
+      expect(c.askedQuestion, question).toBe(true);
+      expect(c.discoveryIntents.length, question).toBeGreaterThan(0);
+    }
+    expect(classify('What exactly happens when you try to sign in?').discoveryIntents).toContain(
+      'problem_description',
+    );
+    expect(classify('What are you seeing on the screen?').discoveryIntents).toContain(
+      'error_message',
+    );
+  });
+
   it('detects topics and targets facts with a specific question', () => {
     const msg = classify('Can you read me exactly what the sign-in screen says?');
     expect(msg.discoveryIntents).toContain('error_message');
