@@ -1,6 +1,39 @@
 import { z } from 'zod';
 import { DISCOVERY_INTENTS } from './vocab.ts';
 
+/**
+ * Behaviour names used in `TurnClassification.evidence`. Each evidence item pairs one of these with a
+ * short quote taken verbatim from the trainee's turn. Coaching reports build their quotes from them.
+ */
+export const EVIDENCE_BEHAVIOURS = [
+  'greeting',
+  'introduction',
+  'offers-help',
+  'discovery-question',
+  'empathy-generic',
+  'empathy-specific',
+  'impact-acknowledged',
+  'ownership-clear',
+  'ownership-vague',
+  'next-steps-specific',
+  'next-steps-vague',
+  'promise-realistic',
+  'promise-unverified',
+  'blame',
+  'dismissive',
+  'jargon-unexplained',
+  'jargon-explained',
+  'summary',
+  'troubleshooting',
+  'wrap-up',
+  'next-contact',
+  'anything-else',
+  'thanks',
+  'corrects-assumption',
+  'low-effort',
+] as const;
+export type EvidenceBehaviour = (typeof EVIDENCE_BEHAVIOURS)[number];
+
 // What the trainee did in one turn. Produced either by the rules classifier (demo mode) or by a
 // model that must answer in exactly this shape. The state engine and discovery engine consume
 // it; neither ever trusts raw model output.
@@ -33,7 +66,7 @@ export const TurnClassificationSchema = z.object({
   lowEffort: z.boolean(), // for example "ok" or "yes" with no content
   confidence: z.number().min(0).max(1),
   evidence: z
-    .array(z.object({ behaviour: z.string().max(40), quote: z.string().max(240) }))
+    .array(z.object({ behaviour: z.enum(EVIDENCE_BEHAVIOURS), quote: z.string().max(240) }))
     .max(12),
 });
 
