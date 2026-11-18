@@ -23,6 +23,7 @@ export default function Call() {
           <Page title="Call not found" width="narrow">
             <EmptyState
               icon="phone"
+              level={1}
               title="We cannot find that call"
               action={
                 <Link className="btn btn-primary" to="/scenarios">
@@ -40,6 +41,7 @@ export default function Call() {
           <ErrorState
             error={loaded.error}
             onRetry={loaded.reload}
+            level={1}
             title="We could not open this call"
           />
         </Page>

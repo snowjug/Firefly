@@ -59,18 +59,22 @@ export function EmptyState({
   title,
   children,
   action,
+  level = 2,
 }: {
   icon?: IconName;
   title: string;
   children?: ReactNode;
   action?: ReactNode;
+  /** Use 1 when this is the whole page, so the page still has a top-level heading. */
+  level?: 1 | 2;
 }) {
+  const Heading = level === 1 ? 'h1' : 'h2';
   return (
     <div className="state glass card">
       <span className="state-icon">
         <Icon name={icon} size={26} />
       </span>
-      <h2 className="t-section">{title}</h2>
+      <Heading className="t-section">{title}</Heading>
       {children ? <p>{children}</p> : null}
       {action}
     </div>
@@ -81,18 +85,22 @@ export function ErrorState({
   error,
   onRetry,
   title = "We couldn't load this",
+  level = 2,
 }: {
   error: unknown;
   onRetry?: () => void;
   title?: string;
+  /** Use 1 when this is the whole page, so the page still has a top-level heading. */
+  level?: 1 | 2;
 }) {
   const retryable = !isApiError(error) || error.retryable;
+  const Heading = level === 1 ? 'h1' : 'h2';
   return (
     <div className="state state-negative glass card" role="alert">
       <span className="state-icon">
         <Icon name="alert" size={26} />
       </span>
-      <h2 className="t-section">{title}</h2>
+      <Heading className="t-section">{title}</Heading>
       <p>{errorMessage(error)}</p>
       {onRetry && retryable ? (
         <button type="button" className="btn btn-secondary" onClick={onRetry}>
@@ -145,6 +153,7 @@ export function NotFound() {
     <Page title="Page not found" width="narrow">
       <EmptyState
         icon="search"
+        level={1}
         title="That page does not exist"
         action={
           <Link className="btn btn-primary" to="/">
