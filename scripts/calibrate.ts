@@ -10,11 +10,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import {
   computeCalibration,
-  pairsFromFile,
-  parseCalibrationFile,
   type CalibrationMetrics,
   type CalibrationPair,
 } from '#shared/domain/calibration.ts';
+import { pairsFromFile, parseCalibrationFile } from '#shared/domain/calibration-file.ts';
 import { DIMENSIONS } from '#shared/domain/vocab.ts';
 
 const BIAS_NOTICEABLE = 0.25;

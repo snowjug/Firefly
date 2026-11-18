@@ -9,6 +9,7 @@ import type {
   SendMessageResponse,
   SessionDTO,
   SessionListDTO,
+  TranscriptDTO,
 } from '#shared/domain/api.ts';
 import { applyConfig } from '#shared/domain/config.ts';
 import {
@@ -217,6 +218,26 @@ export class SessionService {
     const row = this.deps.repo.getSession(id, profileId);
     if (!row) throw notFound('That session');
     return this.loadDTO(row);
+  }
+
+  /** Only the conversation: no report, scores, markers or state, so a mentor can review it blind. */
+  getTranscript(profileId: string, id: string): TranscriptDTO {
+    const { repo } = this.deps;
+    const row = repo.getSession(id, profileId);
+    if (!row) throw notFound('That session');
+    const persona = row.scenario.persona;
+    return {
+      sessionId: row.id,
+      scenarioTitle: row.scenarioTitle,
+      persona: { name: persona.name, role: persona.role, organisation: persona.organisation },
+      status: row.status,
+      turns: repo.getTurns(id).map((t) => ({
+        index: t.idx,
+        role: t.role,
+        text: t.text,
+        createdAt: t.createdAt,
+      })),
+    };
   }
 
   listSessions(

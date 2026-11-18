@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  computeCalibration,
-  pairsFromFile,
-  parseCalibrationFile,
-  sampleSizeBand,
-  type CalibrationPair,
-} from './calibration.ts';
+import { pairsFromFile, parseCalibrationFile } from './calibration-file.ts';
+import { computeCalibration, sampleSizeBand, type CalibrationPair } from './calibration.ts';
 import { DIMENSION_IDS, type DimensionId } from './vocab.ts';
 
 const scores = (values: number[]) =>

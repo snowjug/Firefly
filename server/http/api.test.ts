@@ -353,6 +353,28 @@ describe('ending a call', () => {
     expect(long.report.completion.status).toBe('completed');
   });
 
+  it('serves a transcript-only copy with nothing that reveals the scores', async () => {
+    const { client, session } = await newSession();
+    await say(client, session.id, 'Hello, I am Sam. What is happening?');
+    await client.post(`/api/sessions/${session.id}/end`, {});
+    await app.service.settle(session.id);
+    const res = await client.get(`/api/sessions/${session.id}/transcript`);
+    expect(res.status).toBe(200);
+    const { transcript } = res.body;
+    expect(Object.keys(transcript).sort()).toEqual([
+      'persona',
+      'scenarioTitle',
+      'sessionId',
+      'status',
+      'turns',
+    ]);
+    expect(transcript.turns).toHaveLength(3);
+    expect(Object.keys(transcript.turns[0]).sort()).toEqual(['createdAt', 'index', 'role', 'text']);
+    expect(JSON.stringify(transcript)).not.toMatch(/markers|dimension|overallScore|report/i);
+    // Another browser profile cannot read it.
+    expect((await app.client().get(`/api/sessions/${session.id}/transcript`)).status).toBe(404);
+  });
+
   it('adds transcript markers only after the call ends', async () => {
     const { client, session } = await newSession(app.client(), {
       overrides: { difficulty: 'standard' },

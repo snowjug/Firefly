@@ -169,6 +169,15 @@ export interface CreateSessionRequest {
   clientRequestId?: string; // makes creation idempotent when the client retries
 }
 
+// A review copy of a call: the conversation only, with nothing that reveals how it was scored.
+export interface TranscriptDTO {
+  sessionId: string;
+  scenarioTitle: string;
+  persona: { name: string; role: string; organisation: string };
+  status: SessionStatus;
+  turns: { index: number; role: 'customer' | 'trainee'; text: string; createdAt: string }[];
+}
+
 export interface SendMessageRequest {
   text: string;
   clientMessageId: string; // client-generated unique id; resending the same id never duplicates

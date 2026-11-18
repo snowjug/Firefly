@@ -157,6 +157,11 @@ export function createApp(deps: AppDeps) {
     route('GET', '/api/sessions/:id', (c) => ({
       session: service.getSession(c.profileId, c.params.id as string),
     })),
+    // The conversation and nothing else: no report, scores or analysis markers. Mentor reviews use it
+    // so a review is blind by construction.
+    route('GET', '/api/sessions/:id/transcript', (c) => ({
+      transcript: service.getTranscript(c.profileId, c.params.id as string),
+    })),
     route('DELETE', '/api/sessions/:id', (c) => {
       service.deleteSession(c.profileId, c.params.id as string);
       return { deleted: true };
