@@ -42,7 +42,7 @@ Scores are practice signals from a handful of simulated calls. The Progress page
 
 **Human review**
 
-- Calibration is part of the product: mentors score the same calls blind and Firefly compares the two sets of scores. It reports only what the stored records show, warns when there are too few, and tracks evaluator and rubric versions. See [calibration.md](calibration.md).
+- Calibration is part of the product: mentors score the same calls from the transcript alone and Firefly compares the two sets of scores. The review screen never loads the AI's scores, though anyone using the app can still open a report from History, so mentors should score first. It reports only what the stored records show, warns when there are too few, and tracks evaluator and rubric versions. See [calibration.md](calibration.md).
 
 ## Limits you should know about
 

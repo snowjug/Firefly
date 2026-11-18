@@ -118,8 +118,9 @@ All routes are under `/api`. Writes accept JSON only, up to 64 KB.
 | `POST /sessions/:id/messages`                           | Send a trainee message                                              |
 | `POST /sessions/:id/end`, `POST /sessions/:id/evaluate` | End the call; run or retry evaluation                               |
 | `GET /sessions/:id/report`                              | The coaching report                                                 |
+| `GET /sessions/:id/transcript`                          | The conversation only, with no report, scores or customer state     |
 | `POST /sessions/:id/mentor-score`                       | Record a mentor review for calibration                              |
-| `GET /progress`, `GET /calibration`                     | Progress and calibration computed from stored sessions              |
+| `GET /progress`, `GET /calibration`                     | Progress and calibration; the review queue carries no AI scores     |
 | `GET /demo`, `POST /demo/samples`, `POST /demo/reset`   | Trainer tools: labelled sample sessions and safe resets             |
 
 Errors are always JSON with a stable `code`, a message that is safe to show, and a `retryable` flag. Two groups of extra routes exist only when an environment flag is set: `/api/test/*` (failure injection for automated tests) and `/api/dev/*` (diagnostics that expose internal state). Both are off by default and must never be enabled on a shared host.

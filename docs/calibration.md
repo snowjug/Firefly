@@ -14,7 +14,9 @@ Firefly does not claim any level of agreement. Every number it shows is computed
 
 ### In the app
 
-The Calibration page lists completed sessions that have not been reviewed. Choosing one opens a review form that shows the transcript and the rubric but not the AI scores. Saving the review records it, and the page then shows the metrics computed from every stored review. The page can also include the bundled sample records, which are always labelled as samples.
+The Calibration page lists completed sessions that no mentor has reviewed yet. Choosing one opens a blind review: the transcript, the rubric's 1-to-5 scale, and a form for the reviewer's initials, six scores and optional notes. The review loads only the transcript, never the session or its report, and the queue it came from carries no AI scores. Saving records the review and shows the AI's scores beside the mentor's for that session, and the page then shows the metrics computed from every stored review. A toggle includes the bundled sample records, which are always labelled as samples.
+
+The blindness is a process aid, not an access control. Anyone using the app can open a report from History, so mentors should score a call before they read its report.
 
 ### From files
 
