@@ -48,7 +48,7 @@ export interface ApiErrorBody {
 
 export interface AppConfigDTO {
   app: { name: string; version: string };
-  provider: { kind: ProviderKind; label: string; demo: boolean };
+  provider: { kind: ProviderKind; label: string; demo: boolean; notice: string | null };
   limits: { maxMessageChars: number; maxTraineeTurns: number };
   features: { devDiagnostics: boolean; testHooks: boolean };
 }

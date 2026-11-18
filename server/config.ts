@@ -1,0 +1,33 @@
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import pkg from '../package.json' with { type: 'json' };
+import { loadProviderConfig, type LoadedProviderConfig } from './providers/types.ts';
+
+export interface AppConfig {
+  port: number;
+  host: string;
+  dbPath: string;
+  webDir: string;
+  version: string;
+  devDiagnostics: boolean;
+  testHooks: boolean;
+  provider: LoadedProviderConfig;
+}
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+
+const flag = (value: string | undefined) => value === '1' || value?.toLowerCase() === 'true';
+
+export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const port = Number(env.FIREFLY_PORT ?? 8787);
+  return {
+    port: Number.isInteger(port) && port >= 0 && port < 65536 ? port : 8787,
+    host: env.FIREFLY_HOST?.trim() || '127.0.0.1',
+    dbPath: resolve(root, env.FIREFLY_DB_PATH?.trim() || './data/firefly.db'),
+    webDir: resolve(root, 'dist/web'),
+    version: pkg.version,
+    devDiagnostics: flag(env.FIREFLY_DEV_DIAGNOSTICS),
+    testHooks: flag(env.FIREFLY_TEST_HOOKS),
+    provider: loadProviderConfig(env),
+  };
+}
