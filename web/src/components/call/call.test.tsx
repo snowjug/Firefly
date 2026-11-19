@@ -277,6 +277,29 @@ describe('MessageList', () => {
     const typing = container.querySelector('.msg-typing');
     expect(typing).toHaveAttribute('aria-hidden', 'true');
   });
+
+  it('opens at the latest message at once, then scrolls smoothly for a new one', () => {
+    const scrollTo = vi.fn();
+    Element.prototype.scrollTo = scrollTo;
+    const many = Array.from({ length: 30 }, (_, i) =>
+      turn({ key: `t${i}`, index: i + 1, role: i % 2 === 0 ? 'customer' : 'trainee' }),
+    );
+    const { rerender } = render(
+      <MessageList persona={persona} typing={false} onRetry={vi.fn()} turns={many} />,
+    );
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'auto' }));
+    scrollTo.mockClear();
+
+    rerender(
+      <MessageList
+        persona={persona}
+        typing={false}
+        onRetry={vi.fn()}
+        turns={[...many, turn({ key: 'new', index: 31, role: 'trainee' })]}
+      />,
+    );
+    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+  });
 });
 
 describe('EndCallDialog', () => {

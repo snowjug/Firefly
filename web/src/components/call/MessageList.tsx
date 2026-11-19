@@ -84,6 +84,7 @@ export function MessageList({
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
+  const hasOpened = useRef(false);
   const [atBottom, setAtBottom] = useState(true);
   const [seen, setSeen] = useState(turns.length);
   const count = turns.length + (typing ? 1 : 0);
@@ -99,7 +100,11 @@ export function MessageList({
   }, []);
 
   useEffect(() => {
-    if (atBottomRef.current || lastRole === 'trainee') scrollToEnd(true);
+    // Opening a call (or coming back to it) lands on the latest message at once instead of
+    // animating through the whole conversation; later messages scroll into view smoothly.
+    const opening = !hasOpened.current;
+    hasOpened.current = true;
+    if (atBottomRef.current || lastRole === 'trainee') scrollToEnd(!opening);
   }, [count, lastRole, scrollToEnd]);
 
   const onScroll = () => {
