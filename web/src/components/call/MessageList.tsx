@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../Icon.tsx';
+import { ListenButton } from '../voice/ListenButton.tsx';
 import { formatTime } from '../../lib/format.ts';
 import type { ChatShift, ChatTurn } from './useCall.ts';
 
@@ -28,6 +29,7 @@ function Message({
   turn,
   persona,
   onRetry,
+  onListen,
   fresh,
   signal,
   shifts,
@@ -35,6 +37,8 @@ function Message({
   turn: ChatTurn;
   persona: Persona;
   onRetry(key: string): void;
+  /** Reads a customer message aloud. Left out when the browser cannot speak. */
+  onListen?: (text: string) => void;
   /** Arrived after the call was opened, so it gets the short entrance. */
   fresh: boolean;
   /** A signal came to light in this reply (guided practice only). */
@@ -52,7 +56,7 @@ function Message({
         data-signal={signal || undefined}
       >
         {mine ? null : (
-          <span className="avatar" aria-hidden="true">
+          <span className="msg-avatar" aria-hidden="true">
             {initials(persona.name)}
           </span>
         )}
@@ -62,12 +66,20 @@ function Message({
             <time dateTime={turn.createdAt}>{formatTime(turn.createdAt)}</time>
             {signal ? (
               <span className="msg-signal">
-                <span className="msg-signal-dot" aria-hidden="true" />
+                <Icon name="spark" size={12} />
                 Signal found in this reply
               </span>
             ) : null}
           </p>
           <p className="bubble">{turn.text}</p>
+          {!mine && onListen ? (
+            <ListenButton
+              text={turn.text}
+              who={persona.name}
+              time={formatTime(turn.createdAt)}
+              onListen={onListen}
+            />
+          ) : null}
           {turn.status === 'sending' ? <p className="msg-status">Sending…</p> : null}
           {turn.status === 'failed' ? (
             <div className="msg-status msg-failed" role="alert">
@@ -111,23 +123,30 @@ function Shift({ shift, name }: { shift: ChatShift; name: string }) {
   );
 }
 
+const NO_KEYS: string[] = [];
+const NO_SHIFTS: ChatShift[] = [];
+
 /**
  * The conversation. It follows new messages while the reader is at the bottom, and offers a
- * "Jump to latest" control when they have scrolled up to re-read something.
+ * "Jump to latest" control when they have scrolled up to re-read something. It does not redraw
+ * while the person types, so a long call stays quick to type in.
  */
-export function MessageList({
+export const MessageList = memo(function MessageList({
   turns,
   persona,
   typing,
   onRetry,
+  onListen,
   guided = false,
-  signalKeys = [],
-  shifts = [],
+  signalKeys = NO_KEYS,
+  shifts = NO_SHIFTS,
 }: {
   turns: ChatTurn[];
   persona: Persona;
   typing: boolean;
   onRetry(key: string): void;
+  /** Adds a "Listen" button to each customer message. */
+  onListen?: (text: string) => void;
   /** Guided practice shows mood shifts and signal markers; immersive practice shows neither. */
   guided?: boolean;
   signalKeys?: string[];
@@ -140,7 +159,10 @@ export function MessageList({
   const [seen, setSeen] = useState(turns.length);
   const [openingKeys] = useState(() => new Set(turns.map((turn) => turn.key)));
   const count = turns.length + (typing ? 1 : 0) + (guided ? shifts.length : 0);
-  const lastRole = turns[turns.length - 1]?.role;
+  const last = turns[turns.length - 1];
+  const lastRole = last?.role;
+  // A message that did not get through grows a retry banner under it: keep that in view too.
+  const lastStatus = last?.status;
 
   const scrollToEnd = useCallback((smooth: boolean) => {
     const el = scroller.current;
@@ -157,7 +179,7 @@ export function MessageList({
     const opening = !hasOpened.current;
     hasOpened.current = true;
     if (atBottomRef.current || lastRole === 'trainee') scrollToEnd(!opening);
-  }, [count, lastRole, scrollToEnd]);
+  }, [count, lastRole, lastStatus, scrollToEnd]);
 
   const onScroll = () => {
     const el = scroller.current;
@@ -191,6 +213,7 @@ export function MessageList({
                 turn={turn}
                 persona={persona}
                 onRetry={onRetry}
+                onListen={onListen}
                 fresh={!openingKeys.has(turn.key)}
                 signal={guided && signalKeys.includes(turn.key)}
                 shifts={guided ? shifts.filter((shift) => shift.afterKey === turn.key) : []}
@@ -198,12 +221,13 @@ export function MessageList({
             ))}
             {typing ? (
               <li className="msg msg-customer msg-typing" aria-hidden="true">
-                <span className="avatar">{initials(persona.name)}</span>
+                <span className="msg-avatar">{initials(persona.name)}</span>
                 <div className="msg-body">
                   <p className="bubble typing-dots">
-                    <span />
-                    <span />
-                    <span />
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                    <span className="typing-text">{persona.name} is typing…</span>
                   </p>
                 </div>
               </li>
@@ -223,4 +247,4 @@ export function MessageList({
       )}
     </div>
   );
-}
+});

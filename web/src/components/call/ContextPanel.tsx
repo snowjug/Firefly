@@ -1,13 +1,8 @@
 import type { PublicStateDTO, SessionDTO } from '#shared/domain/api.ts';
-import { CALL_STAGE_LABELS, IMPACT_LABELS } from '#shared/domain/vocab.ts';
+import { CALL_STAGE_LABELS, IMPACT_LABELS, PRACTICE_MODE_LABELS } from '#shared/domain/vocab.ts';
+import { DifficultyChip } from '../Chips.tsx';
 import { ProviderBadge } from '../ProviderBadge.tsx';
-import { TemperatureOrb } from '../TemperatureOrb.tsx';
-
-const TREND_TEXT: Record<PublicStateDTO['trend'], string> = {
-  rising: 'getting more tense',
-  steady: 'holding steady',
-  falling: 'easing',
-};
+import { MoodMeter } from './MoodMeter.tsx';
 
 /** Everything the trainee is allowed to know during the call. Hidden facts are never in this data. */
 export function ContextPanel({
@@ -35,6 +30,8 @@ export function ContextPanel({
           <span className="chip">Simulated and fictional</span>
           <span className="chip">{CALL_STAGE_LABELS[config.callStage].label}</span>
           <span className="chip">{IMPACT_LABELS[config.impact].label} impact</span>
+          <DifficultyChip difficulty={config.difficulty} />
+          <span className="chip">{PRACTICE_MODE_LABELS[config.mode].label}</span>
         </p>
       </section>
 
@@ -58,13 +55,7 @@ export function ContextPanel({
       {guided ? (
         <section className="ctx-section">
           <h3 className="t-label">Guided practice</h3>
-          <p className="row ctx-mood">
-            <TemperatureOrb band={state.band.id} />
-            <span>
-              <strong>{state.band.label}</strong>{' '}
-              <span className="t-meta">{TREND_TEXT[state.trend]}</span>
-            </span>
-          </p>
+          <MoodMeter state={state} />
           <p className="t-small">
             <strong>{state.discoveredCount}</strong>{' '}
             {state.discoveredCount === 1 ? 'fact' : 'facts'} uncovered so far

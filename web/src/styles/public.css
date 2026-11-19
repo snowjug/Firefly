@@ -361,7 +361,7 @@
   }
   .lp-orb {
     order: -1;
-    max-width: 380px;
+    width: min(100%, 380px);
     margin: 0 auto;
   }
   .lp-strip ul {

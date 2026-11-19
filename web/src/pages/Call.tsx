@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { ActiveCall } from '../components/call/ActiveCall.tsx';
+import { CallSkeleton } from '../components/call/CallSkeleton.tsx';
 import { EndingView } from '../components/call/EndingView.tsx';
-import { EmptyState, ErrorState, LoadingCards, Page } from '../components/Page.tsx';
+import { EmptyState, ErrorState, Page } from '../components/Page.tsx';
 import { api, isApiError } from '../lib/api.ts';
 import { useApi } from '../lib/hooks.ts';
 import '../styles/call.css';
@@ -20,15 +21,20 @@ export default function Call() {
     if (loaded.error) {
       if (isApiError(loaded.error) && loaded.error.status === 404) {
         return (
-          <Page title="Call not found" width="narrow">
+          <Page title="Call not found" width="narrow" className="call-state">
             <EmptyState
               icon="phone"
               level={1}
               title="We cannot find that call"
               action={
-                <Link className="btn btn-primary" to="/scenarios">
-                  Choose a scenario
-                </Link>
+                <div className="cluster" style={{ justifyContent: 'center' }}>
+                  <Link className="btn btn-primary" to="/scenarios">
+                    Choose a scenario
+                  </Link>
+                  <Link className="btn btn-secondary" to="/home">
+                    Back to home
+                  </Link>
+                </div>
               }
             >
               It may have been discarded, or it belongs to a different browser profile.
@@ -37,7 +43,7 @@ export default function Call() {
         );
       }
       return (
-        <Page title="Call" width="narrow">
+        <Page title="Call" width="narrow" className="call-state">
           <ErrorState
             error={loaded.error}
             onRetry={loaded.reload}
@@ -47,11 +53,7 @@ export default function Call() {
         </Page>
       );
     }
-    return (
-      <Page title="Opening your call">
-        <LoadingCards count={2} label="Opening your call" />
-      </Page>
-    );
+    return <CallSkeleton />;
   }
 
   if (session.status === 'completed') {

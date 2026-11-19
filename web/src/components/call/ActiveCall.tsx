@@ -1,20 +1,28 @@
-import { useCallback, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { REDACTION_LABELS, type RedactionKind } from '#shared/domain/text.ts';
 import { api, errorMessage } from '../../lib/api.ts';
 import { useAppConfig } from '../../lib/config.tsx';
 import { useDocumentTitle, useMediaQuery } from '../../lib/hooks.ts';
+import { usePreferences } from '../../lib/profile.ts';
+import { useSound } from '../../lib/sound.ts';
 import { useStoredState } from '../../lib/storage.ts';
 import { useToast } from '../../lib/toast.tsx';
+import { forgetVoiceSession } from '../../lib/voice-sessions.ts';
 import { Dialog } from '../Dialog.tsx';
+import { VoiceOptIn } from '../voice/VoiceOptIn.tsx';
+import { VoicePanel } from '../voice/VoicePanel.tsx';
 import { CallHeader } from './CallHeader.tsx';
 import { Composer } from './Composer.tsx';
 import { ContextPanel } from './ContextPanel.tsx';
 import { EndCallDialog } from './EndCallDialog.tsx';
+import { HintChips } from './HintChips.tsx';
 import { MessageList } from './MessageList.tsx';
-import { Presence } from './Presence.tsx';
+import { CustomerStage } from './StagePanel.tsx';
+import { hintsFor, withStarter, type Hint, type HintId } from './hints.ts';
 import { useCall } from './useCall.ts';
+import { useCallVoice } from './useCallVoice.ts';
 
 function subscribeViewport(onChange: () => void) {
   const viewport = window.visualViewport;
@@ -33,6 +41,12 @@ function redactionNotice(kinds: RedactionKind[]): string {
   return `Firefly removed ${what} from your message before saving it. Please never use real customer details.`;
 }
 
+/** Adds recognised speech after what is already in the box. */
+function appendWords(draft: string, words: string): string {
+  if (draft.trim() === '') return words;
+  return `${draft}${/\s$/.test(draft) ? '' : ' '}${words}`;
+}
+
 export function ActiveCall({
   session,
   onEnded,
@@ -43,13 +57,25 @@ export function ActiveCall({
   const navigate = useNavigate();
   const { toast } = useToast();
   const { config } = useAppConfig();
-  const wide = useMediaQuery('(min-width: 1000px)');
+  const { voice: voiceOn } = usePreferences();
+  const [soundOn] = useSound();
+  // The shell drops its sidebar at this width, and the portrait becomes a strip above the chat.
+  const wide = useMediaQuery('(min-width: 961px)');
   const visibleHeight = useVisibleHeight();
+  const landscapePhone = useMediaQuery('(max-height: 520px)');
+  // Short on room: a landscape phone, or the keyboard covering most of a portrait one.
+  const short = landscapePhone || (visibleHeight > 0 && visibleHeight < 520);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [ending, setEnding] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
   const [notes, setNotes] = useStoredState(`firefly.notes.${session.id}`, '', 'session');
+  const [reply, setReply] = useState('');
+  const [usedHints, setUsedHints] = useState<HintId[]>([]);
+  const [focusReply, setFocusReply] = useState(0);
+  const [focusVoice, setFocusVoice] = useState(0);
+  const replyRef = useRef<HTMLTextAreaElement>(null);
+  const callButtonRef = useRef<HTMLButtonElement>(null);
   useDocumentTitle(`Call: ${session.scenario.title}`);
 
   // If the server says the call is no longer active, show whatever state it is in now.
@@ -65,18 +91,72 @@ export function ActiveCall({
     onEnded: resync,
   });
 
-  const tell = (kinds: RedactionKind[]) => {
-    if (kinds.length > 0)
-      toast({ tone: 'info', title: 'Details removed', message: redactionNotice(kinds) });
-  };
+  // After words are put into the box, put the caret at the end so the person can carry on.
+  useEffect(() => {
+    if (focusReply === 0) return;
+    const box = replyRef.current;
+    if (!box) return;
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  }, [focusReply]);
+
+  // Once voice is turned on from here, the way to start a call is the next thing to reach.
+  useEffect(() => {
+    if (focusVoice > 0 && voiceOn) callButtonRef.current?.focus();
+  }, [focusVoice, voiceOn]);
+
+  const tell = useCallback(
+    (kinds: RedactionKind[]) => {
+      if (kinds.length > 0)
+        toast({ tone: 'info', title: 'Details removed', message: redactionNotice(kinds) });
+    },
+    [toast],
+  );
   const handleSend = async (text: string) => {
     const result = await send(text);
     tell(result.redactions);
     return result;
   };
-  const handleRetry = async (key: string) => {
-    const result = await retry(key);
-    tell(result.redactions);
+  // Stable between keystrokes, so the conversation is not redrawn while the person types.
+  const handleRetry = useCallback(
+    (key: string) => {
+      void retry(key).then((result) => tell(result.redactions));
+    },
+    [retry, tell],
+  );
+
+  const limit = config?.limits.maxMessageChars ?? 1500;
+  const { voice, calling, handsFree, setHandsFree, toggleCall, hangUp } = useCallVoice({
+    sessionId: session.id,
+    allowed: voiceOn,
+    customer: session.scenario.persona.name,
+    mood: chat.state.band.id,
+    busy: chat.pending,
+    turns: chat.turns,
+    playTones: soundOn,
+    canSend: (text) => !chat.limitReached && text.length <= limit,
+    send: handleSend,
+    putInBox: (words) => {
+      setReply((current) => appendWords(current, words));
+      setFocusReply((tick) => tick + 1);
+    },
+  });
+
+  // Typing or sending takes the turn: the customer's voice stops.
+  const changeReply = (next: string) => {
+    voice.stopSpeaking();
+    setReply(next);
+  };
+  const sendTyped = (text: string) => {
+    voice.stopSpeaking();
+    return handleSend(text);
+  };
+
+  const pickHint = (hint: Hint) => {
+    voice.stopSpeaking();
+    setReply((current) => withStarter(current, hint.starter));
+    setUsedHints((used) => [...used, hint.id]);
+    setFocusReply((tick) => tick + 1);
   };
 
   const savedTraineeTurns = chat.turns.filter(
@@ -87,6 +167,7 @@ export function ActiveCall({
     setEnding(true);
     setEndError(null);
     try {
+      hangUp();
       const next = await api.endSession(session.id);
       setEndOpen(false);
       onEnded(next);
@@ -101,10 +182,12 @@ export function ActiveCall({
     setEnding(true);
     setEndError(null);
     try {
+      hangUp();
       await api.deleteSession(session.id);
+      forgetVoiceSession(session.id);
       setEndOpen(false);
       toast({ tone: 'info', title: 'Call discarded', message: 'Nothing was saved.' });
-      navigate('/', { replace: true });
+      navigate('/home', { replace: true });
     } catch (error) {
       setEndError(errorMessage(error));
       setEnding(false);
@@ -116,77 +199,99 @@ export function ActiveCall({
     setEndOpen(true);
   };
 
-  const context = (
-    <ContextPanel session={session} state={chat.state} notes={notes} onNotes={setNotes} />
-  );
-  const limit = config?.limits.maxMessageChars ?? 1500;
-  const guided = session.scenario.config.mode === 'guided';
-  const presence = (variant: 'panel' | 'strip') => (
-    <Presence
-      session={session}
-      state={chat.state}
-      pending={chat.pending}
-      replies={chat.replies}
-      discoveries={chat.discoveries}
-      variant={variant}
-    />
-  );
+  const { persona, config: setup } = session.scenario;
+  const guided = setup.mode === 'guided';
+  const latestCustomer = [...chat.turns].reverse().find((turn) => turn.role === 'customer');
+  const hints = guided
+    ? hintsFor({
+        areas: session.scenario.expectedDiscoveryAreas,
+        band: chat.state.band.id,
+        traineeTurns: savedTraineeTurns,
+        used: usedHints,
+      })
+    : [];
+  const canHear = voiceOn && voice.support.synthesis;
+  // The customer's voice is the announcement while a voice call is on; reading it too would say it twice.
+  const announcement = calling && voice.support.synthesis ? '' : chat.announcement;
 
   return (
     <div
       className="call"
-      data-mode={session.scenario.config.mode}
-      // Immersive practice gets a neutral chamber: nothing about the customer's state leaks.
-      data-band={guided ? chat.state.band.id : 'neutral'}
-      data-trend={guided ? chat.state.trend : 'steady'}
+      data-mode={setup.mode}
+      data-short={short || undefined}
       style={visibleHeight > 0 ? { ['--vvh' as string]: `${visibleHeight}px` } : undefined}
     >
-      <CallHeader session={session} onOpenDetails={() => setDetailsOpen(true)} onEnd={openEnd} />
-      <div className="call-body">
-        <div className="call-main">
-          {wide ? null : presence('strip')}
-          <MessageList
-            turns={chat.turns}
-            persona={session.scenario.persona}
+      <div className="call-frame">
+        <CallHeader session={session} onOpenDetails={() => setDetailsOpen(true)} onEnd={openEnd} />
+        <div className="call-body">
+          <CustomerStage
+            session={session}
+            state={chat.state}
             typing={chat.pending}
-            onRetry={(key) => void handleRetry(key)}
-            guided={guided}
-            signalKeys={chat.signalKeys}
-            shifts={chat.shifts}
+            speaking={voice.customerSpeaking}
+            latest={latestCustomer?.text ?? null}
+            discoveries={chat.discoveries}
+            variant={wide ? 'panel' : 'strip'}
           />
-          <p className="sr-only" role="status" aria-live="polite">
-            {chat.announcement}
-          </p>
-          <Composer
-            maxChars={limit}
-            busy={chat.pending}
-            blockedMessage={
-              chat.limitReached
-                ? 'This call has reached its message limit. End the call to get your coaching.'
-                : null
-            }
-            turnsRemaining={chat.turnsRemaining}
-            onSend={handleSend}
-          />
+          <div className="chat glass">
+            <MessageList
+              turns={chat.turns}
+              persona={persona}
+              typing={chat.pending}
+              onRetry={handleRetry}
+              onListen={canHear ? voice.replay : undefined}
+              guided={guided}
+              signalKeys={chat.signalKeys}
+              shifts={chat.shifts}
+            />
+            <p className="sr-only" role="status" aria-live="polite">
+              {announcement}
+            </p>
+            <div className="chat-dock">
+              <HintChips hints={hints} onPick={pickHint} />
+              <Composer
+                value={reply}
+                onChange={changeReply}
+                inputRef={replyRef}
+                maxChars={limit}
+                busy={chat.pending}
+                blockedMessage={
+                  chat.limitReached
+                    ? 'This call has reached its message limit. End the call to get your coaching.'
+                    : null
+                }
+                turnsRemaining={chat.turnsRemaining}
+                onSend={sendTyped}
+                voiceBar={
+                  voiceOn ? (
+                    <VoicePanel
+                      voice={voice}
+                      calling={calling}
+                      handsFree={handsFree}
+                      onHandsFree={setHandsFree}
+                      onToggleCall={toggleCall}
+                      customer={persona.name}
+                      hasDraft={reply.trim() !== ''}
+                      callRef={callButtonRef}
+                    />
+                  ) : undefined
+                }
+                footerExtra={
+                  voiceOn ? undefined : <VoiceOptIn onEnabled={() => setFocusVoice((n) => n + 1)} />
+                }
+              />
+            </div>
+          </div>
         </div>
-        {wide ? (
-          <aside className="call-aside" aria-label="Call details">
-            <h2 className="sr-only">Call details</h2>
-            {presence('panel')}
-            {context}
-          </aside>
-        ) : null}
       </div>
-      {wide ? null : (
-        <Dialog
-          open={detailsOpen}
-          onClose={() => setDetailsOpen(false)}
-          title="Call details"
-          variant="sheet"
-        >
-          {context}
-        </Dialog>
-      )}
+      <Dialog
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        title="Call details"
+        variant={wide ? 'dialog' : 'sheet'}
+      >
+        <ContextPanel session={session} state={chat.state} notes={notes} onNotes={setNotes} />
+      </Dialog>
       <EndCallDialog
         open={endOpen}
         onClose={() => setEndOpen(false)}
