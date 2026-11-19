@@ -1,0 +1,20 @@
+/* The offline notice: calm, full width, above the page. */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: 1px solid color-mix(in srgb, var(--caution) 55%, var(--border));
+  background: color-mix(in srgb, var(--caution) 14%, var(--surface));
+  color: var(--text);
+  font-size: var(--fs-small);
+  text-align: center;
+}
+.offline-banner svg {
+  flex: none;
+  color: var(--caution);
+}
+.offline-banner p {
+  margin: 0;
+}

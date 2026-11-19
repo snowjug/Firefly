@@ -97,8 +97,9 @@ export function ProgressBody({
       <SummaryCards progress={progress} />
       <TrendsSection progress={progress} mastery={ready ? mastery : undefined} />
 
-      {ready ? (
-        <div className="pg-duo">
+      {/* One wrapper in every state, so the opportunities are never remounted when the calls load. */}
+      <div className={ready ? 'pg-duo' : 'pg-duo pg-duo-solo'}>
+        {ready ? (
           <div className="pg-area-path">
             <PracticePath
               calls={completed.slice(0, PATH_LENGTH)}
@@ -106,14 +107,14 @@ export function ProgressBody({
               includeSamples={includeSamples}
             />
           </div>
+        ) : null}
+        {ready ? (
           <div className="pg-area-ms">
             <MilestonesSection state={milestones} />
           </div>
-          <div className="pg-area-opp">{opportunities}</div>
-        </div>
-      ) : (
-        opportunities
-      )}
+        ) : null}
+        <div className="pg-area-opp">{opportunities}</div>
+      </div>
 
       <p className="pg-reminder t-meta">
         These numbers are practice signals from a handful of calls, not an assessment of you. They

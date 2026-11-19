@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { isApiError, type ApiError } from './api.ts';
 
 export interface AsyncState<T> {
@@ -91,6 +91,22 @@ export function useMediaQuery(query: string): boolean {
     return () => mql.removeEventListener('change', onChange);
   }, [query]);
   return matches;
+}
+
+/** False while the browser reports that it has no network connection. */
+export function useOnline(): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      window.addEventListener('online', notify);
+      window.addEventListener('offline', notify);
+      return () => {
+        window.removeEventListener('online', notify);
+        window.removeEventListener('offline', notify);
+      };
+    },
+    () => navigator.onLine,
+    () => true,
+  );
 }
 
 /** Calls `fn` every `ms` while `active`. Cleans up on unmount. */

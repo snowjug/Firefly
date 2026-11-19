@@ -243,6 +243,25 @@ test.describe('setup with the keyboard', () => {
   });
 });
 
+test.describe('connection', () => {
+  test('losing the connection is said plainly and clears when it returns', async ({
+    page,
+    context,
+  }) => {
+    await page.goto('/history');
+    await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
+    const notice = page.getByRole('status').filter({ hasText: 'You appear to be offline' });
+    await expect(notice).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText('What you have already sent is saved');
+
+    await context.setOffline(false);
+    await expect(notice).toHaveCount(0);
+  });
+});
+
 test.describe('progress journey', () => {
   test('a finished call lights the constellations, joins the path and is checked for milestones', async ({
     page,

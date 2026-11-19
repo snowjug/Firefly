@@ -81,7 +81,10 @@ export function Dialog({
       document.removeEventListener('keydown', onKey, true);
       root?.removeAttribute('inert');
       document.body.style.overflow = overflow;
-      opener?.focus?.();
+      // If what opened the dialog has gone (the prompt that started the tour, say), land on the page
+      // content rather than nowhere.
+      if (opener?.isConnected) opener.focus?.();
+      else document.getElementById('main')?.focus({ preventScroll: true });
     };
   }, [open, dismissible]);
 

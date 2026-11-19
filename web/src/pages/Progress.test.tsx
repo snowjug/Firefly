@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deriveAchievements } from '#shared/domain/achievements.ts';
 import type { DimensionTrendDTO, ProgressDTO, SessionSummaryDTO } from '#shared/domain/api.ts';
 import { DIMENSION_IDS, type DimensionId } from '#shared/domain/vocab.ts';
@@ -85,6 +85,11 @@ function renderProgress() {
     </MemoryRouter>,
   );
 }
+
+// The journey views load on demand. Load them once up front so no test waits on the first import.
+beforeAll(async () => {
+  await import('../components/progress/ProgressBody.tsx');
+});
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -387,6 +392,25 @@ describe('Progress page: the mastery journey', () => {
     const practise = await screen.findByRole('link', { name: /Practise it in/ });
     expect(practise).toHaveTextContent('Calming a tense call');
     expect(practise).toHaveAttribute('href', '/scenarios/calm-down/setup');
+  });
+
+  it('does not rebuild the opportunities when the calls finish loading', async () => {
+    progress.mockResolvedValue(WITH_DATA);
+    let release: (answer: Awaited<ReturnType<typeof api.listSessions>>) => void = () => undefined;
+    listSessions.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    renderProgress();
+    const before = await screen.findByText(
+      /came up as an improvement area in 3 of 5 completed calls/i,
+    );
+
+    release({ sessions: [call()], total: 1 });
+    await screen.findByRole('region', { name: /skills? (is|are) lit/ });
+    // A rebuilt section would leave the old element detached from the page.
+    expect(before).toBeInTheDocument();
   });
 
   it('keeps the rest of the page when the calls cannot be loaded, and can retry', async () => {

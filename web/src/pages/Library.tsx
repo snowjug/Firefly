@@ -51,14 +51,20 @@ export default function Library() {
   // The map is the first view on a wide screen; the list is always one switch away and is the only
   // view on a phone. The address wins, then what the person last chose, then the screen size.
   const requestedView = params.get('view');
+  const routeView: LibraryView = isView(requestedView)
+    ? requestedView
+    : (() => {
+        const stored = readStorage<unknown>(VIEW_KEY, null);
+        return isView(stored) ? stored : roomy ? 'map' : 'list';
+      })();
+  // The switch answers at once; the address follows a moment later, because the router applies
+  // navigation as a transition and a controlled control would otherwise snap back for a frame.
+  const [chosen, setChosen] = useState<{ view: LibraryView; key: string } | null>(null);
   const view: LibraryView = !mappable
     ? 'list'
-    : isView(requestedView)
-      ? requestedView
-      : (() => {
-          const stored = readStorage<unknown>(VIEW_KEY, null);
-          return isView(stored) ? stored : roomy ? 'map' : 'list';
-        })();
+    : chosen !== null && chosen.key === location.key
+      ? chosen.view
+      : routeView;
   /** The address keeps the chosen view when filters or the search change. */
   const searchString = useCallback(
     (next: LibraryQuery) => {
@@ -69,6 +75,7 @@ export default function Library() {
     [requestedView],
   );
   const changeView = (next: LibraryView) => {
+    setChosen({ view: next, key: location.key });
     writeStorage(VIEW_KEY, next);
     const search = toSearchParams(urlQuery);
     search.set('view', next);

@@ -87,7 +87,8 @@ export function MissionMap({
     }
   };
 
-  const practised = (id: string) => practice.get(id)?.state === 'practised';
+  // The lit path records practice that was completed, even while a new call is running.
+  const practised = (id: string) => (practice.get(id)?.completed ?? 0) > 0;
 
   return (
     <section className="mm" aria-label="Mission map">

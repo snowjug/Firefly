@@ -206,6 +206,11 @@
     animation: none !important;
   }
 }
+:root[data-motion='reduce']::view-transition-group(*),
+:root[data-motion='reduce']::view-transition-old(*),
+:root[data-motion='reduce']::view-transition-new(*) {
+  animation: none !important;
+}
 .page-enter {
   animation: page-in var(--dur-3) var(--ease-out);
 }

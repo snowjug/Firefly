@@ -1,6 +1,15 @@
 import { requestTour, setTourState, useTourState } from '../../lib/tour.ts';
 import { Icon } from '../Icon.tsx';
 
+/** Starts downloading the tour while the pointer or focus is on the button that opens it. */
+const warmTour = () => void import('./FirstRunTour.tsx');
+
+/** The button that was just pressed is about to disappear, so hand focus to the page first. */
+const skipTour = () => {
+  document.getElementById('main')?.focus({ preventScroll: true });
+  setTourState('skipped');
+};
+
 /**
  * A quiet invitation on the home page for someone who has not seen the tour. It is not a modal and
  * never blocks anything; "No thanks" remembers the choice on this device.
@@ -22,10 +31,16 @@ export function TourPrompt() {
         </p>
       </div>
       <div className="cluster tour-prompt-actions">
-        <button type="button" className="btn btn-secondary" onClick={requestTour}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={requestTour}
+          onPointerEnter={warmTour}
+          onFocus={warmTour}
+        >
           Start the tour
         </button>
-        <button type="button" className="btn btn-ghost" onClick={() => setTourState('skipped')}>
+        <button type="button" className="btn btn-ghost" onClick={skipTour}>
           No thanks
         </button>
       </div>

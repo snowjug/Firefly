@@ -3,9 +3,14 @@ import { Link, NavLink, Outlet, useLocation, useMatch } from 'react-router';
 import { ProviderBadge } from './ProviderBadge.tsx';
 import { Dialog } from './Dialog.tsx';
 import { Icon } from './Icon.tsx';
-import { FirstRunTour } from './tour/FirstRunTour.tsx';
+import { OfflineBanner } from './OfflineBanner.tsx';
+import { useOnDemand } from '../lib/onDemand.ts';
 import { useTourRequests } from '../lib/tour.ts';
 import { useTheme } from '../lib/theme.tsx';
+
+// The tour (and the examples inside it) is only needed if someone asks for it, so it is not part of
+// the first download.
+const loadTour = () => import('./tour/FirstRunTour.tsx');
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -43,9 +48,19 @@ export function Shell() {
   const tourRequests = useTourRequests();
   const [seenRequests, setSeenRequests] = useState(tourRequests);
   const [tourOpen, setTourOpen] = useState(false);
+  // Once asked for, the tour stays mounted (closed) so reopening it is instant.
+  const [tourAsked, setTourAsked] = useState(false);
+  const tourCode = useOnDemand(loadTour, tourAsked);
+  const FirstRunTour = tourCode.module?.FirstRunTour;
   if (seenRequests !== tourRequests) {
     setSeenRequests(tourRequests);
     setTourOpen(true);
+    setTourAsked(true);
+  }
+  // If the tour's code cannot be loaded, forget the request so that asking again tries again.
+  if (tourCode.failed && tourAsked) {
+    setTourAsked(false);
+    setTourOpen(false);
   }
 
   // Move focus to the page content when the route changes so keyboard and screen-reader users start at the top.
@@ -103,6 +118,8 @@ export function Shell() {
       )}
 
       <main id="main" tabIndex={-1} ref={mainRef} style={{ display: 'contents' }}>
+        {/* The call fills the screen and already explains a failed send where it happens. */}
+        {onCall ? null : <OfflineBanner />}
         <Outlet />
       </main>
 
@@ -121,7 +138,7 @@ export function Shell() {
         </footer>
       )}
 
-      <FirstRunTour open={tourOpen} onClose={() => setTourOpen(false)} />
+      {FirstRunTour ? <FirstRunTour open={tourOpen} onClose={() => setTourOpen(false)} /> : null}
 
       <Dialog open={menuOpen} onClose={() => setMenuOpen(false)} title="Menu" variant="sheet">
         <nav aria-label="Main" className="menu-list">

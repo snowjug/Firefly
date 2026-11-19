@@ -35,11 +35,16 @@ export interface ScenarioPractice {
   lastAt: string | null;
 }
 
-/** Practice state for every scenario that has any history. Sample calls never count. */
+/**
+ * Practice state for every scenario that has any history. Sample calls never count. A scenario with
+ * a call still running is "in progress" even if it was practised before, so the running call is
+ * the one that is offered and a second one is never suggested alongside it.
+ */
 export function summariseScenarioPractice(
   sessions: readonly PracticeSession[],
 ): Map<string, ScenarioPractice> {
   const result = new Map<string, ScenarioPractice>();
+  const running = new Set<string>();
   const ordered = [...sessions]
     .filter((s) => !s.isSample)
     .sort((a, b) => ((a.endedAt ?? a.startedAt) < (b.endedAt ?? b.startedAt) ? -1 : 1));
@@ -53,10 +58,9 @@ export function summariseScenarioPractice(
       lastAt: null,
     };
     if (session.status === 'active' || session.status === 'completing') {
-      if (current.state === 'new') current.state = 'in-progress';
+      running.add(session.scenarioId);
     } else if (session.status === 'completed' && session.completion === 'completed') {
       current.completed += 1;
-      current.state = 'practised';
       current.latest = session.overallScore;
       current.lastAt = session.endedAt ?? session.startedAt;
       if (session.overallScore !== null) {
@@ -67,6 +71,13 @@ export function summariseScenarioPractice(
       }
     }
     result.set(session.scenarioId, current);
+  }
+  for (const entry of result.values()) {
+    entry.state = running.has(entry.scenarioId)
+      ? 'in-progress'
+      : entry.completed > 0
+        ? 'practised'
+        : 'new';
   }
   return result;
 }

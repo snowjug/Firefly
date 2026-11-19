@@ -289,6 +289,20 @@ describe('Brief: the call launch', () => {
     expect(screen.queryByRole('dialog', { name: 'Starting your call' })).not.toBeInTheDocument();
     expect(readDraft()).not.toBeNull();
     expect(screen.getByTestId('url')).toHaveTextContent('/scenarios/team-workspace/brief');
+    // The launch screen had focus and has gone: it moves to the way forward, not to nowhere.
+    await waitFor(() => expect(within(alert).getByRole('button', { name: 'Retry' })).toHaveFocus());
+  });
+
+  it('puts focus on the explanation when there is nothing to retry', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.createSession).mockRejectedValue(
+      new ApiError(409, 'conflict', 'That scenario is not available.', false),
+    );
+    renderBrief();
+    await user.click(await beginButton());
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    await waitFor(() => expect(alert).toHaveFocus());
   });
 
   it('is never shown when reduced motion is asked for', async () => {

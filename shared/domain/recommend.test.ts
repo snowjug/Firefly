@@ -81,6 +81,21 @@ describe('summariseScenarioPractice', () => {
     expect(map.get('b')?.state).toBe('in-progress');
     expect(map.has('c')).toBe(false);
   });
+
+  it('keeps a scenario in progress while a call runs, however it was practised before', () => {
+    const running = { status: 'active', completion: null, endedAt: null } as const;
+    const earlier = summariseScenarioPractice([
+      session('a', 'starter', 4),
+      session('a', 'starter', null, running),
+    ]);
+    // A completed call that finishes after the running one began must not hide it either.
+    const later = summariseScenarioPractice([
+      session('b', 'starter', null, { ...running, startedAt: '2026-03-01T08:00:00.000Z' }),
+      session('b', 'starter', 3),
+    ]);
+    expect(earlier.get('a')).toMatchObject({ state: 'in-progress', completed: 1, best: 4 });
+    expect(later.get('b')).toMatchObject({ state: 'in-progress', completed: 1, best: 3 });
+  });
 });
 
 describe('recommendMission', () => {
@@ -207,5 +222,17 @@ describe('scenarioForSkill', () => {
     });
     expect(scenarioForSkill(pool, [open], 'closing')?.id).toBe('closing-mid');
     expect(scenarioForSkill(pool, [], 'scoping-discovery')).toBeNull();
+  });
+
+  it('does not offer a scenario whose new call is running, even if it was practised before', () => {
+    const history = [
+      session('closing-easy', 'starter', 4),
+      session('closing-easy', 'starter', null, {
+        status: 'active',
+        completion: null,
+        endedAt: null,
+      }),
+    ];
+    expect(scenarioForSkill(pool, history, 'closing')?.id).toBe('closing-mid');
   });
 });

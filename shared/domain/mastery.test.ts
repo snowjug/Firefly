@@ -52,6 +52,20 @@ describe('assessMastery', () => {
     ]);
   });
 
+  it('shows the second decimal when the average would otherwise look like the target', () => {
+    const m = find(
+      [
+        call('a', 'starter', { clarity: 4 }),
+        call('b', 'starter', { clarity: 4 }),
+        call('c', 'standard', { clarity: 4 }),
+        call('d', 'starter', { clarity: 3 }),
+      ],
+      'clarity',
+    );
+    expect(m.tier).toBe('glowing');
+    expect(m.next?.needs).toEqual(['a recent average of 3.8 or more (now 3.75)']);
+  });
+
   it('needs a second call and a solid average to glow', () => {
     const m = find(
       [call('a', 'starter', { clarity: 3 }), call('a', 'starter', { clarity: 4 })],

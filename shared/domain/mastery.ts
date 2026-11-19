@@ -125,6 +125,13 @@ function scoredCalls(
   return scored.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }
 
+// The average as the person reads it. If it rounds to the same text as the target it would look as
+// if the target were already met, so the second decimal is shown (3.75 is not yet 3.8).
+function describeAverage(average: number, target: number): string {
+  const short = average.toFixed(1);
+  return short === target.toFixed(1) ? average.toFixed(2) : short;
+}
+
 function unmet(rule: TierRule, all: Scored[], recent: Scored[], average: number): string[] {
   const needs: string[] = [];
   const scenarios = new Set(all.map((call) => call.scenarioId)).size;
@@ -153,7 +160,7 @@ function unmet(rule: TierRule, all: Scored[], recent: Scored[], average: number)
   }
   if (recent.length > 0 && average < rule.minAverage) {
     needs.push(
-      `a recent average of ${rule.minAverage.toFixed(1)} or more (now ${average.toFixed(1)})`,
+      `a recent average of ${rule.minAverage.toFixed(1)} or more (now ${describeAverage(average, rule.minAverage)})`,
     );
   }
   if (

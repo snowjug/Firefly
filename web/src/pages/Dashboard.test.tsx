@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DemoStatusDTO, ProgressDTO, SessionSummaryDTO } from '#shared/domain/api.ts';
 import { DIMENSION_IDS } from '#shared/domain/vocab.ts';
 import { Shell } from '../components/Shell.tsx';
@@ -116,6 +116,15 @@ function renderHome() {
   );
 }
 
+// What the page loads on demand is loaded once up front, so no test waits on a first import.
+beforeAll(async () => {
+  await Promise.all([
+    import('../components/dashboard/NextMission.tsx'),
+    import('../components/mastery/MasteryStars.tsx'),
+    import('../components/tour/FirstRunTour.tsx'),
+  ]);
+});
+
 beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
@@ -193,7 +202,7 @@ describe('Dashboard', () => {
     );
     expect(screen.queryByText(/New here\?/)).not.toBeInTheDocument();
     expect(await screen.findByText(/6 of 6 skills lit so far/)).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: /Skill constellations/ })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: /Skill constellations/ })).toBeInTheDocument();
   });
 
   it('remembers "No thanks" and stops inviting', async () => {
@@ -202,6 +211,8 @@ describe('Dashboard', () => {
     await user.click(await screen.findByRole('button', { name: 'No thanks' }));
     expect(screen.queryByText(/New here\?/)).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem('firefly.tour') ?? 'null')).toBe('skipped');
+    // The button that had focus is gone, so focus is on the page, not lost.
+    expect(document.getElementById('main')).toHaveFocus();
   });
 
   it('opens the tour on request and walks through working examples', async () => {
@@ -243,6 +254,8 @@ describe('Dashboard', () => {
     await user.click(within(tour).getByRole('button', { name: 'Done' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem('firefly.tour') ?? 'null')).toBe('done');
+    // The invitation that opened the tour has gone, so focus lands on the page.
+    await waitFor(() => expect(document.getElementById('main')).toHaveFocus());
   });
 
   it('lets someone skip at any step, which is remembered', async () => {
@@ -253,6 +266,7 @@ describe('Dashboard', () => {
     await user.click(within(tour).getByRole('button', { name: 'Skip tour' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem('firefly.tour') ?? 'null')).toBe('skipped');
+    await waitFor(() => expect(document.getElementById('main')).toHaveFocus());
   });
 
   it('keeps sound off unless the person turns it on in the tour', async () => {

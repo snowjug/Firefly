@@ -386,6 +386,17 @@ ul.pg-next-needs,
   grid-area: opp;
   min-width: 0;
 }
+/* Before the calls have loaded only the opportunities are there, so they take the whole row. */
+.pg-duo-solo {
+  grid-template-areas: 'opp';
+}
+@media (min-width: 1000px) {
+  .pg-duo-solo {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'opp';
+    grid-template-rows: auto;
+  }
+}
 .pg-path {
   display: grid;
   margin: 0;

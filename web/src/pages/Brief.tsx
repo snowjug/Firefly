@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
@@ -27,14 +27,18 @@ import {
   settingRows,
   temperatureBandFor,
 } from '../components/scenario/setup-model.ts';
-import { api, errorMessage, isApiError } from '../lib/api.ts';
+import { ApiError, api, errorMessage, isApiError } from '../lib/api.ts';
 import { useAppConfig } from '../lib/config.tsx';
 import { clearDraft, loadDraft, saveDraft } from '../lib/draft.ts';
 import { useApi } from '../lib/hooks.ts';
 import { useReducedMotion } from '../lib/theme.tsx';
+import { withTimeout } from '../lib/timeout.ts';
 import '../styles/setup.css';
 import '../styles/brief.css';
 import '../styles/launch.css';
+
+/** Starting a call is quick. If it takes longer than this something is wrong, so say so. */
+const START_TIMEOUT_MS = 20_000;
 
 /** Stable for one visit to the brief, so a double click or a retry never starts two calls. */
 function newRequestId(): string {
@@ -163,7 +167,15 @@ function BriefView({ scenario }: { scenario: PublicScenarioDTO }) {
   const [launching, setLaunching] = useState(false);
   const [startedId, setStartedId] = useState<string | null>(null);
   const inFlight = useRef(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
   const reducedMotion = useReducedMotion();
+
+  // When a start fails, the launch screen (or the button that was pressed) has just gone, so bring
+  // focus to the explanation and its Retry button instead of leaving it nowhere.
+  useEffect(() => {
+    if (failure !== null) (retryRef.current ?? errorRef.current)?.focus();
+  }, [failure]);
 
   const chooseMode = (next: PracticeMode) => {
     setMode(next);
@@ -186,12 +198,19 @@ function BriefView({ scenario }: { scenario: PublicScenarioDTO }) {
       void import('./Call.tsx');
     }
     try {
-      const session = await api.createSession({
-        scenarioId: scenario.id,
-        overrides,
-        mode,
-        clientRequestId,
-      });
+      const session = await withTimeout(
+        START_TIMEOUT_MS,
+        (signal) =>
+          api.createSession({ scenarioId: scenario.id, overrides, mode, clientRequestId }, signal),
+        () =>
+          // Retrying is safe: the request id is the same, so a call that did start is not started twice.
+          new ApiError(
+            0,
+            'timeout',
+            'Starting the call is taking too long. Check that the server is running, then try again.',
+            true,
+          ),
+      );
       clearDraft();
       if (reducedMotion) openCall(session.id);
       else setStartedId(session.id);
@@ -349,7 +368,12 @@ function BriefView({ scenario }: { scenario: PublicScenarioDTO }) {
         </div>
 
         {failure !== null ? (
-          <div className="callout callout-negative brf-error" role="alert">
+          <div
+            ref={errorRef}
+            tabIndex={-1}
+            className="callout callout-negative brf-error"
+            role="alert"
+          >
             <Icon name="alert" size={20} />
             <div className="brf-error-body">
               <p>
@@ -357,7 +381,12 @@ function BriefView({ scenario }: { scenario: PublicScenarioDTO }) {
               </p>
               <p>Your choices are kept.</p>
               {retryable ? (
-                <button type="button" className="btn btn-secondary btn-sm" onClick={begin}>
+                <button
+                  ref={retryRef}
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={begin}
+                >
                   <Icon name="refresh" size={16} /> Retry
                 </button>
               ) : null}

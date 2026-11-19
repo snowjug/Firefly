@@ -5,17 +5,23 @@ import { assessMastery } from '#shared/domain/mastery.ts';
 import { recommendMission } from '#shared/domain/recommend.ts';
 import { DIMENSIONS } from '#shared/domain/vocab.ts';
 import { FireflyCore } from '../components/core/FireflyCore.tsx';
-import { NextMission } from '../components/dashboard/NextMission.tsx';
 import { DifficultyChip } from '../components/Chips.tsx';
 import { Icon, type IconName } from '../components/Icon.tsx';
-import { MasteryStars } from '../components/mastery/MasteryStars.tsx';
 import { ErrorState, Page, SkeletonBlock } from '../components/Page.tsx';
 import { TourPrompt } from '../components/tour/TourPrompt.tsx';
 import { api } from '../lib/api.ts';
 import { formatRelative, formatScore } from '../lib/format.ts';
 import { useApi } from '../lib/hooks.ts';
+import { useOnDemand } from '../lib/onDemand.ts';
 import { usePractice } from '../lib/practice.ts';
 import '../styles/dashboard.css';
+
+// What sits below the first screen, or appears once the data has arrived, loads after the page has
+// painted, while the data is on its way, so it is usually ready when the data lands.
+const loadNextMission = () => import('../components/dashboard/NextMission.tsx');
+const loadMasteryStars = () => import('../components/mastery/MasteryStars.tsx');
+const reloadPage = () => window.location.reload();
+const loadFailure = new Error('A part of the page did not load.');
 
 const STEPS: { icon: IconName; title: string; text: string }[] = [
   {
@@ -45,6 +51,10 @@ const NO_SESSIONS: SessionSummaryDTO[] = [];
 export default function Dashboard() {
   const demo = useApi((signal) => api.demo(signal), []);
   const { scenarios, sessions, progress } = usePractice();
+  const nextMissionCode = useOnDemand(loadNextMission);
+  const masteryStarsCode = useOnDemand(loadMasteryStars);
+  const NextMission = nextMissionCode.module?.NextMission;
+  const MasteryStars = masteryStarsCode.module?.MasteryStars;
 
   const list = sessions.data?.sessions ?? NO_SESSIONS;
   const recent = list.slice(0, 4);
@@ -133,7 +143,17 @@ export default function Dashboard() {
         </div>
       ) : recommendation ? (
         <div className="dash-block">
-          <NextMission recommendation={recommendation} />
+          {NextMission ? (
+            <NextMission recommendation={recommendation} />
+          ) : nextMissionCode.failed ? (
+            <ErrorState
+              error={loadFailure}
+              onRetry={reloadPage}
+              title="We couldn’t load your next mission"
+            />
+          ) : (
+            <SkeletonBlock height={190} />
+          )}
         </div>
       ) : null}
 
@@ -251,7 +271,11 @@ export default function Dashboard() {
           )}
           {lit > 0 ? (
             <div className="focus-stars">
-              <MasteryStars mastery={mastery} />
+              {MasteryStars ? (
+                <MasteryStars mastery={mastery} />
+              ) : (
+                <div className="ms" aria-hidden="true" />
+              )}
             </div>
           ) : null}
         </section>

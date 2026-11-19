@@ -1,16 +1,40 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { ProgressBody } from '../components/progress/ProgressBody.tsx';
 import { Icon } from '../components/Icon.tsx';
 import { EmptyState, ErrorState, Page, PageHeader, SkeletonBlock } from '../components/Page.tsx';
 import { Switch } from '../components/report/Switch.tsx';
 import { api } from '../lib/api.ts';
 import { useApi } from '../lib/hooks.ts';
+import { useOnDemand } from '../lib/onDemand.ts';
 import '../styles/progress.css';
 import '../styles/report.css';
 
+// The journey views are fetched as soon as the page opens, in parallel with the progress summary,
+// so the page itself paints without waiting for them.
+const loadBody = () => import('../components/progress/ProgressBody.tsx');
+const reloadPage = () => window.location.reload();
+const loadFailure = new Error('A part of the page did not load.');
+
+function ProgressSkeleton() {
+  return (
+    <div className="stack" role="status" aria-label="Loading your progress">
+      <div className="pg-summary">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="surface pg-card">
+            <SkeletonBlock height={12} width="50%" />
+            <SkeletonBlock height={30} width="40%" />
+            <SkeletonBlock height={14} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Progress() {
   const [includeSamples, setIncludeSamples] = useState(false);
+  const bodyCode = useOnDemand(loadBody);
+  const ProgressBody = bodyCode.module?.ProgressBody;
   // The answer carries the setting it was asked with, so sample numbers are never shown as your own.
   const state = useApi(
     async (signal) => ({ includeSamples, progress: await api.progress(includeSamples, signal) }),
@@ -28,17 +52,7 @@ export default function Progress() {
         title="We couldn’t load your progress"
       />
     ) : (
-      <div className="stack" role="status" aria-label="Loading your progress">
-        <div className="pg-summary">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="surface pg-card">
-              <SkeletonBlock height={12} width="50%" />
-              <SkeletonBlock height={30} width="40%" />
-              <SkeletonBlock height={14} />
-            </div>
-          ))}
-        </div>
-      </div>
+      <ProgressSkeleton />
     );
   } else if (data.progress.completedSessions === 0) {
     body = (
@@ -62,10 +76,16 @@ export default function Progress() {
         sessions&rdquo; above.
       </EmptyState>
     );
-  } else {
+  } else if (ProgressBody) {
     body = (
       <ProgressBody progress={data.progress} includeSamples={data.includeSamples} busy={stale} />
     );
+  } else if (bodyCode.failed) {
+    body = (
+      <ErrorState error={loadFailure} onRetry={reloadPage} title="We couldn’t load your progress" />
+    );
+  } else {
+    body = <ProgressSkeleton />;
   }
 
   return (
