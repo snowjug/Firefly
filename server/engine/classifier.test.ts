@@ -311,13 +311,28 @@ describe('rules classifier: everyday phrasing', () => {
       ['Have you or a colleague had a go at resetting it already?', 'already_tried'],
       ['What have you and your colleagues already attempted?', 'already_tried'],
       ['What have you been told so far by our chat team?', 'previous_contact'],
-      ['Has your leadership team been told yet?', 'previous_contact'],
       ['How much revenue do you lose for each hour this is down?', 'business_impact'],
       ['Is the Australian store behaving differently from the others?', 'affected_scope'],
       ['Has every market been hit or only a few of them?', 'affected_scope'],
     ];
     for (const [question, intent] of expectations) {
       expect(classify(question).discoveryIntents, question).toContain(intent);
+    }
+  });
+
+  it('does not read change or billing history as a question about earlier contact', () => {
+    for (const question of [
+      'Has anyone checked your change history or our status page so far?',
+      'Can you check the billing history for me?',
+      'Who else in the business knows about this, and what have they been told?',
+    ]) {
+      expect(classify(question).discoveryIntents, question).not.toContain('previous_contact');
+    }
+    for (const question of [
+      'Is there a case history on this?',
+      'What were you told by our chat team?',
+    ]) {
+      expect(classify(question).discoveryIntents, question).toContain('previous_contact');
     }
   });
 

@@ -169,6 +169,26 @@ describe('scenario library', () => {
     }
   });
 
+  it('does not accuse the trainee of repeating a question that was never asked', async () => {
+    const scenario = library.find((s) => s.id === 'checkout-outage-before-investor-event');
+    if (!scenario) throw new Error('The checkout scenario is missing');
+    // "Change history" is not earlier contact with support, and who else in the business knows is
+    // not the same question, so neither answer can make the next question a repeat.
+    const effective = applyConfig(scenario, { difficulty: 'challenge' }, { seed: 1 });
+    const result = await simulate(effective, [
+      "Hello Declan, it's Sam from support. I'm sorry checkout is down. I know the CEO is presenting at eleven, so every minute counts. What are your shoppers actually seeing when they hit pay?",
+      'Is it failing for every storefront and every region, or is anything still working?',
+      'Did anybody on your side release or alter anything before the failures began?',
+      'Is it possible to roll that change back?',
+      'Has anyone checked your change history or our status page so far?',
+      'Who else in the business knows about this, and what have they been told?',
+    ]);
+    const customer = result.transcript.filter((t) => t.role === 'customer').map((t) => t.text);
+    expect(customer.join(' ')).not.toMatch(
+      /\balready (?:answered|told you|said|mentioned)|mentioned that already|are you listening/i,
+    );
+  });
+
   it('keeps hidden facts hidden when the trainee never asks about them', async () => {
     for (const scenario of library) {
       for (const difficulty of DIFFICULTIES) {

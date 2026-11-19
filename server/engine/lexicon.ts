@@ -260,13 +260,11 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\b(?:spoken|talked|spoke|talk) to (?:anyone|someone|anybody|somebody|support|it)\b/,
     /\bwhat (?:were|was) you told\b/,
     /\bwho did you (?:speak|talk)\b/,
-    /\b(?:been told|already (?:raised|logged|reported|contacted|spoken))\b/,
-    /\bhistory\b/,
+    /\b(?:you(?:'ve| have)(?: already)? been told|(?:were|was) you (?:ever |already )?told|been told by (?:us|support|our|the (?:support|chat|help|service) \w+)|already (?:raised|logged|reported|contacted|spoken))\b/,
+    // Case or contact history, not "change history" or "billing history".
+    /\b(?:case|ticket|contact|support|call|conversation|chat) history\b|\bhistory (?:with|of) (?:us|support|contact|calls|cases|tickets)\b/,
     // "What have you been told so far?", "What did the chat team say?"
-    /\bwhat (?:have|has|had|were|was|did|do) (?:you|they|he|she|we|our [a-z]+|the [a-z]+)(?: been)? (?:told|said|say|tell you|advised|suggested|recommended)\b/,
-    // Who else knows: "Who else in your organisation knows?", "Has your leadership been told?"
-    /\bwho else (?:in|at|on|within) (?:your|the) (?:organi[sz]ation|company|business|team|office|department|firm|side)\b/,
-    /\b(?:has|have|had|did|does|is|are|was|were) (?:anyone|anybody|someone|somebody|everyone|leadership|management|your (?:boss|manager|ceo|cto|cio|director|leadership|executives?|board)|the (?:ceo|board|leadership|management))\b[^.?!]{0,30}\b(?:been )?(?:told|informed|aware|notified|briefed|updated|alerted|know|knows|knew|heard)\b/,
+    /\bwhat (?:have|has|had|were|was|did|do) (?:you|our [a-z]+|the (?:support|chat|help|service|sales|account) \w+)(?: been)? (?:told|said|say|tell you|advised|suggested|recommended)\b/,
   ],
   urgency_deadline: [
     /\bdeadline\b/,
