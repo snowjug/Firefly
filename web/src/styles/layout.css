@@ -127,6 +127,9 @@
   margin: 0 auto;
   padding: var(--sp-6) var(--sp-4) var(--sp-8);
   flex: 1 0 auto;
+  /* A page is at least one screen tall, so the footer starts below the fold and is never seen
+     jumping down out of view as the page's content arrives. */
+  min-height: calc(100vh - var(--nav-height));
 }
 .page:focus {
   outline: none;
