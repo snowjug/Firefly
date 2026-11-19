@@ -4,6 +4,33 @@ import { createCall, endViaApi, sayViaApi, seriousA11yViolations } from './helpe
 const SPOTLIGHT = 'team-cannot-open-shared-workspace';
 const UNKNOWN_ID = '00000000-0000-4000-8000-000000000000';
 
+const PROFILE = {
+  name: 'Sam Rivera',
+  role: 'Apprentice support engineer',
+  location: 'Leeds',
+  createdAt: '2026-01-05T09:00:00.000Z',
+  preferences: {
+    defaultDifficulty: 'starter',
+    hints: 'auto',
+    voice: false,
+    notifyReports: true,
+    notifyBadges: true,
+  },
+};
+
+/** Gives the page a local profile before it loads, the way someone who has signed in has one. */
+async function signedIn(page: Page, preferences: Partial<typeof PROFILE.preferences> = {}) {
+  await page.addInitScript(
+    (profile) => {
+      // Only once per browser, so a test that signs out is not signed in again by the next page load.
+      if (localStorage.getItem('e2e.seeded') !== null) return;
+      localStorage.setItem('e2e.seeded', '1');
+      localStorage.setItem('firefly.profile', JSON.stringify(profile));
+    },
+    { ...PROFILE, preferences: { ...PROFILE.preferences, ...preferences } },
+  );
+}
+
 /** A finished call, so the report, history, progress and calibration pages have real content. */
 async function finishedCall(page: Page) {
   const call = await createCall(page);
@@ -43,10 +70,21 @@ interface Stop {
 /** Every page a trainee, mentor or trainer can reach, in a state with something to look at. */
 function stops(finished: string, live: string): Stop[] {
   return [
-    { name: 'Start', path: '/' },
+    { name: 'Landing', path: '/' },
+    { name: 'Sign-in (profile saved)', path: '/sign-in' },
+    {
+      name: 'Sign-in (new)',
+      path: '/sign-in',
+      prepare: async (page) => {
+        await page.evaluate(() => localStorage.removeItem('firefly.profile'));
+        await page.reload();
+        await expect(page.getByRole('heading', { level: 1 })).toContainText('Create your practice');
+      },
+    },
+    { name: 'Home', path: '/home' },
+    { name: 'Practice setup', path: '/practice' },
     { name: 'Library', path: '/scenarios' },
     { name: 'Setup', path: `/scenarios/${SPOTLIGHT}/setup` },
-    { name: 'Brief', path: `/scenarios/${SPOTLIGHT}/brief` },
     {
       name: 'Live call',
       path: `/calls/${live}`,
@@ -55,6 +93,14 @@ function stops(finished: string, live: string): Stop[] {
     { name: 'Report', path: `/sessions/${finished}/report` },
     { name: 'Transcript', path: `/sessions/${finished}/transcript` },
     { name: 'History', path: '/history' },
+    { name: 'Rewards', path: '/rewards' },
+    {
+      name: 'Rewards (challenges)',
+      path: '/rewards',
+      prepare: async (page) => {
+        await page.getByRole('tab', { name: /^Challenges/ }).click();
+      },
+    },
     {
       name: 'Progress with samples',
       path: '/progress',
@@ -72,15 +118,28 @@ function stops(finished: string, live: string): Stop[] {
       },
     },
     { name: 'Trainer', path: '/trainer' },
-    { name: 'About', path: '/about' },
+    { name: 'Help', path: '/help' },
     { name: 'Settings', path: '/settings' },
+    {
+      name: 'Settings (notifications)',
+      path: '/settings',
+      prepare: async (page) => {
+        await page.getByRole('tab', { name: 'Notifications' }).click();
+      },
+    },
+    {
+      name: 'Settings (data and privacy)',
+      path: '/settings',
+      prepare: async (page) => {
+        await page.getByRole('tab', { name: 'Data & privacy' }).click();
+      },
+    },
     { name: 'Not found', path: '/no-such-page' },
     // Links go out of date, so the missing-thing states are pages too.
     { name: 'Unknown call', path: `/calls/${UNKNOWN_ID}` },
     { name: 'Unknown report', path: `/sessions/${UNKNOWN_ID}/report` },
     { name: 'Unknown transcript', path: `/sessions/${UNKNOWN_ID}/transcript` },
     { name: 'Unknown scenario (setup)', path: '/scenarios/no-such-scenario/setup' },
-    { name: 'Unknown scenario (brief)', path: '/scenarios/no-such-scenario/brief' },
   ];
 }
 
@@ -103,7 +162,8 @@ for (const theme of ['light', 'dark'] as const) {
   test(`every page passes the automated accessibility checks in the ${theme} theme`, async ({
     page,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
+    await signedIn(page);
     await page.addInitScript(
       (value) => localStorage.setItem('firefly.theme', JSON.stringify(value)),
       theme,
@@ -123,7 +183,8 @@ for (const theme of ['light', 'dark'] as const) {
 
 for (const width of [320, 1440]) {
   test(`no page scrolls sideways at ${width}px wide`, async ({ page }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
+    await signedIn(page);
     await page.setViewportSize({ width, height: width < 600 ? 640 : 900 });
     const problems: string[] = [];
     for (const stop of await seed(page)) {
@@ -154,59 +215,122 @@ test.describe('display preferences', () => {
   test('motion stops when the device asks for less, and when the app is told to', async ({
     page,
   }) => {
-    // A call is open, so the start page shows its pulsing "line is open" marker; the Firefly Core in
-    // the hero is a canvas, so it is sampled directly. With nothing asked for, both are moving.
-    await createCall(page);
+    // The landing page's sphere and orbiting lights keep moving until someone asks for less.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/');
     await expect(page.locator('h1').first()).toBeVisible();
-    await expect(page.locator('.resume-pulse')).toBeVisible();
     expect(await animating(page)).toBeGreaterThan(0);
-    const core = () =>
-      page.evaluate(() =>
-        (document.querySelector('.hero-core canvas') as HTMLCanvasElement).toDataURL(),
-      );
-    await expect(page.locator('.hero-core .core')).toHaveAttribute('data-canvas', 'on');
-    const first = await core();
-    await page.waitForTimeout(400);
-    expect(await core()).not.toBe(first);
 
-    // Reduced motion: nothing loops, and the core holds one still frame.
+    // Reduced motion from the device: nothing loops.
     await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.reload();
+    await expect(page.locator('h1').first()).toBeVisible();
     expect(await animating(page)).toBe(0);
-    await page.waitForTimeout(300);
-    const still = await core();
-    await page.waitForTimeout(400);
-    expect(await core()).toBe(still);
 
     // The in-app switch works on a device that asks for nothing, and survives a reload.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/settings');
-    await page.getByRole('radio', { name: 'On', exact: true }).check({ force: true });
-    await expect(page.getByText('Animation and transitions are reduced.')).toBeVisible();
+    await page.getByLabel('Reduce motion', { exact: true }).selectOption('reduce');
+    await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduce');
     await page.goto('/');
     await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduce');
     expect(await animating(page)).toBe(0);
-    await expect(page.locator('.hero-core .core')).toHaveAttribute('data-canvas', 'on');
-    const held = await core();
-    await page.waitForTimeout(400);
-    expect(await core()).toBe(held);
   });
 
   test('the theme applies at once and is still there after a reload', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await page.goto('/settings');
-    await page.getByRole('radio', { name: 'Dark', exact: true }).check({ force: true });
+    await page.getByLabel('Theme', { exact: true }).selectOption('dark');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
+    await expect(page.getByLabel('Theme', { exact: true })).toHaveValue('dark');
+  });
+});
+
+test.describe('profile and preferences', () => {
+  test('a profile is created, edited and forgotten on this device, and its preferences are used', async ({
+    page,
+  }) => {
+    await page.goto('/settings');
+    // Without a profile, what lives on the profile says so instead of pretending to work.
+    await expect(page.getByText('Create your profile first.').first()).toBeVisible();
+
+    await page.goto('/sign-in');
+    await page.getByLabel('Name').fill('Sam Rivera');
+    await page.getByLabel(/Role/).fill('Apprentice support engineer');
+    await page.getByRole('button', { name: /Continue/ }).click();
+    await expect(page).toHaveURL(/\/home$/);
+
+    await page.goto('/settings');
+    await expect(page.getByText('Sam Rivera')).toBeVisible();
+    await page.getByRole('button', { name: 'Edit profile' }).click();
+    const edit = page.getByRole('dialog');
+    await edit.getByLabel('Name').fill('Sam R');
+    await edit.getByRole('button', { name: /Save/ }).click();
+    await expect(page.getByText('Sam R', { exact: true })).toBeVisible();
+
+    // A preference changes what the practice page starts on.
+    await page.getByLabel('Default difficulty').selectOption('challenge');
+    await page.goto('/practice');
+    await expect(page.getByRole('radio', { name: 'Challenge', exact: true })).toBeChecked();
+
+    // Signing out forgets the profile here, and nothing else.
+    await page.goto('/settings');
+    await page.getByRole('button', { name: /Sign out of this device/ }).click();
+    expect(await page.evaluate(() => localStorage.getItem('firefly.profile'))).toBeNull();
+  });
+
+  test('voice is off until it is turned on, after a plain explanation', async ({ page }) => {
+    await signedIn(page);
+    await page.goto('/settings');
+    const voice = page.getByRole('switch', { name: /Enable voice/ });
+    await expect(voice).not.toBeChecked();
+
+    // Turning it on shows what it means first, and nothing changes until it is accepted.
+    await voice.click({ force: true });
+    const dialog = page.getByRole('dialog', { name: /Turn on voice/ });
+    await expect(dialog).toContainText(/never records, keeps or uploads audio/);
+    await expect(dialog).toContainText(/never use real customer information/);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(voice).not.toBeChecked();
+
+    await voice.click({ force: true });
+    await page
+      .getByRole('dialog', { name: /Turn on voice/ })
+      .getByRole('button', { name: 'Turn on voice' })
+      .click();
+    await expect(voice).toBeChecked();
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('firefly.profile') ?? 'null'),
+    );
+    expect(stored.preferences.voice).toBe(true);
+  });
+});
+
+test.describe('notifications', () => {
+  test('a finished call is announced in the bell menu, and nothing leaves the browser', async ({
+    page,
+  }) => {
+    await signedIn(page);
+    await page.goto('/home');
+    await expect(page.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible();
+
+    const call = await finishedCall(page);
+    await page.goto('/home');
+    const bell = page.getByRole('button', { name: /^Notifications, \d+ new$/ });
+    await expect(bell).toBeVisible();
+    await bell.click();
+    const panel = page.getByRole('region', { name: 'Notifications' });
+    await expect(
+      panel.getByRole('link', { name: /Your coaching report is ready/ }),
+    ).toHaveAttribute('href', `/sessions/${call.id}/report`);
   });
 });
 
 test.describe('setup with the keyboard', () => {
   /** Presses Tab until the control has focus, as a keyboard user would. */
-  async function tabTo(page: Page, target: Locator, limit = 80) {
+  async function tabTo(page: Page, target: Locator, limit = 120) {
     for (let presses = 0; presses <= limit; presses++) {
       if (await target.evaluate((el) => el === document.activeElement)) return;
       await page.keyboard.press('Tab');
@@ -216,28 +340,17 @@ test.describe('setup with the keyboard', () => {
 
   test('a call can be set up and begun without a pointer', async ({ page }) => {
     await page.goto('/scenarios/locked-out-after-password-reset/setup');
-    const step = page.locator('h2.stp-heading');
-    await expect(step).toHaveText('Is this the issue you want to practise?');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Configure your scenario' }),
+    ).toBeVisible();
 
-    for (let steps = 0; steps < 10; steps++) {
-      const current = (await step.textContent()) ?? '';
-      if (current.includes('Review your call')) break;
-      if (current.includes('How much is the business affected?')) {
-        // Radio groups are changed with the arrow keys, from the option Tab lands on.
-        await tabTo(page, page.locator('input[type="radio"]:checked').first());
-        await page.keyboard.press('ArrowDown');
-      }
-      await tabTo(page, page.getByRole('button', { name: 'Next' }));
-      await page.keyboard.press('Enter');
-      await expect(step).not.toHaveText(current);
-    }
+    // Radio groups are changed with the arrow keys, from the option Tab lands on.
+    await tabTo(page, page.locator('input[name="stp-difficulty"]:checked'));
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('radio', { name: 'Standard', exact: true })).toBeChecked();
+    await expect(page.getByText('Customised')).toBeVisible();
 
-    await expect(step).toHaveText('Review your call');
-    await expect(page.getByText('Changed from default').first()).toBeVisible();
-    await tabTo(page, page.getByRole('button', { name: 'Continue to brief' }));
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('heading', { level: 2, name: 'Your goal' })).toBeVisible();
-    await tabTo(page, page.getByRole('button', { name: 'Begin call' }));
+    await tabTo(page, page.getByRole('button', { name: 'Start call simulation' }));
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/calls\/[\w-]+$/);
   });
@@ -249,7 +362,9 @@ test.describe('connection', () => {
     context,
   }) => {
     await page.goto('/history');
-    await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'My practice history' }),
+    ).toBeVisible();
     const notice = page.getByRole('status').filter({ hasText: 'You appear to be offline' });
     await expect(notice).toHaveCount(0);
 
@@ -262,41 +377,41 @@ test.describe('connection', () => {
   });
 });
 
-test.describe('progress journey', () => {
-  test('a finished call lights the constellations, joins the path and is checked for milestones', async ({
+test.describe('rewards and progress', () => {
+  test('a finished call earns points that say why, and the report and Rewards agree', async ({
     page,
   }) => {
+    await signedIn(page);
     const call = await finishedCall(page);
 
+    const response = await page.request.get(
+      `/api/rewards?tzOffset=${await page.evaluate(() => new Date().getTimezoneOffset())}`,
+    );
+    expect(response.ok()).toBeTruthy();
+    const rewards = (await response.json()) as {
+      points: number;
+      ledger: { sessionId: string | null; points: number; reason: string; title: string }[];
+    };
+    const earned = rewards.ledger.filter((entry) => entry.sessionId === call.id);
+    expect(earned.length).toBeGreaterThan(0);
+    for (const entry of earned) expect(entry.reason.length).toBeGreaterThan(10);
+
+    // The report lists what this call earned, with the reason for each.
     await page.goto(`/sessions/${call.id}/report`);
-    await expect(page.getByRole('heading', { level: 2, name: 'Six skill scores' })).toBeVisible();
-    const earnedOnReport = await page
-      .getByRole('region', { name: 'Earned in this call' })
-      .getByRole('heading', { level: 3 })
-      .allTextContents();
+    const section = page.locator('#rewards');
+    await expect(section).toBeVisible();
+    await expect(section).toContainText(earned[0]!.reason);
 
+    // Rewards shows the same, as a points history, and never as a ranking.
+    await page.goto('/rewards');
+    await expect(page.getByRole('heading', { level: 2, name: 'Points history' })).toBeVisible();
+    await expect(page.getByText(earned[0]!.reason).first()).toBeVisible();
+    await expect(page.getByText(/leaderboard|rank(?:ing)? #|\bXP\b/i)).toHaveCount(0);
+
+    // My progress has something to show, and the path leads back to the report.
     await page.goto('/progress');
-    const hero = page.getByRole('region', { name: /skills? (is|are) lit\./ });
-    await expect(hero).toBeVisible();
-    await expect(hero.getByRole('img', { name: /Skill constellations\./ })).toBeVisible();
-    await expect(hero.getByText('Next to light up')).toBeVisible();
-    await expect(page.getByText(/leaderboard|rank(?:ing)? #|streak/i)).toHaveCount(0);
-
-    // Each milestone is listed, and exactly the ones the report awarded are lit.
-    const milestones = page.getByRole('region', { name: 'Milestones' });
-    await expect(milestones.getByRole('heading', { level: 3 })).toHaveCount(6);
-    await expect(
-      milestones
-        .getByRole('listitem')
-        .filter({ hasText: /Earned in 1 call/ })
-        .getByRole('heading', { level: 3 }),
-    ).toHaveText(earnedOnReport);
-
-    // The path leads straight back to the report of the call.
-    const path = page.getByRole('list', { name: 'Completed calls, newest first' });
-    await expect(path.getByRole('listitem')).toHaveCount(1);
-    await path.getByRole('link').click();
-    await expect(page).toHaveURL(new RegExp(`/sessions/${call.id}/report$`));
+    await expect(page.getByRole('heading', { level: 2, name: 'Skill by skill' })).toBeVisible();
+    await expect(page.getByText(/leaderboard|rank(?:ing)? #/i)).toHaveCount(0);
   });
 });
 
@@ -410,7 +525,7 @@ test.describe('trainer data tools', () => {
     await expect(page.getByRole('status').filter({ hasText: /^Reset complete/ })).toBeVisible();
     await expect(practiceCount(page)).toHaveText('0');
     await page.goto('/history');
-    await expect(page.getByText('No practice sessions yet')).toBeVisible();
+    await expect(page.getByText('No practice calls yet')).toBeVisible();
   });
 
   test('cancelling a destructive action changes nothing', async ({ page }) => {
