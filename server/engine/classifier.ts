@@ -31,6 +31,7 @@ import {
   NEXT_CONTACT,
   NEXT_STEPS_VAGUE,
   OFFERS_HELP,
+  OWNERSHIP_ACTION,
   OWNERSHIP_CLEAR,
   OWNERSHIP_VAGUE,
   prep,
@@ -148,7 +149,7 @@ export function classifyTurnRules(text: string, ctx: ClassifierContext): TurnCla
       out.askedQuestion = true;
       if (!isHousekeepingQuestion(ls)) {
         questionTexts.push(ls);
-        const found = detectIntents(ls);
+        const found = detectIntents(withoutContactTalk(ls));
         for (const intent of found) intents.add(intent);
         if (found.length > 0) note('discovery-question', sentence);
       }
@@ -190,7 +191,7 @@ export function classifyTurnRules(text: string, ctx: ClassifierContext): TurnCla
     }
 
     if (!asking) {
-      if (OWNERSHIP_CLEAR.test(ls)) {
+      if (OWNERSHIP_CLEAR.test(ls) || OWNERSHIP_ACTION.test(ls)) {
         ownership = 'clear';
         note('ownership-clear', sentence);
       } else if (OWNERSHIP_VAGUE.test(ls)) {

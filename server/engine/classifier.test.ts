@@ -167,6 +167,29 @@ describe('rules classifier: ownership, next steps and promises', () => {
     expect(classify("I'll stay with you until we have it sorted.").ownership).toBe('clear');
   });
 
+  it('reads a promise to do something concrete as taking the problem on', () => {
+    for (const text of [
+      "I'll get the account unlocked and update you by 2pm.",
+      "I'll reset your password and call you back in ten minutes.",
+      "I'm going to get an engineer on this right now.",
+      "I'll sort this out for you.",
+      "I'll get the licence assigned and confirm by email this afternoon.",
+    ]) {
+      expect(classify(text).ownership, text).toBe('clear');
+    }
+    // Looking into something, opening a page, or being unable to help is not taking it on.
+    for (const text of [
+      "I'll log into the portal and check.",
+      "I'll open the portal now.",
+      "I'll check the logs.",
+      'I will not be able to fix this today.',
+      "You'll need to reset your password.",
+      'Can I reset your password?',
+    ]) {
+      expect(classify(text).ownership, text).not.toBe('clear');
+    }
+  });
+
   it('separates unverified promises from realistic commitments', () => {
     expect(classify('I promise it will be fixed by 3pm.').promise).toBe('unverified');
     const realistic = classify("I can't promise a fix time, but I'll update you by 3pm.");
@@ -313,6 +336,7 @@ describe('rules classifier: everyday phrasing', () => {
   it('does not mistake housekeeping questions for discovery', () => {
     for (const text of [
       "What's the best phone number to reach you on?",
+      'Can you tell me your name and the best phone number to reach you on?',
       'Sorry, could you say that again?',
       'Is it okay if I phone you back later?',
       'Could you hold for a moment while I pull up your account?',

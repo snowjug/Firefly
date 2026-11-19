@@ -50,7 +50,7 @@ const ID_NOUN =
   '(?:your (?:(?:full |first |last |sur|family )?name|e-?mail(?: address)?|(?:phone|mobile|contact|telephone|call-?back|direct) (?:number|no\\.?)|account (?:number|name|id|reference)|(?:case|ticket|reference|customer|licen[cs]e|subscription|service) (?:number|id|reference)|date of birth|dob|post ?code|job title|role|department|username|user name|user id|company(?: name)?|organi[sz]ation(?: name)?|spelling)|(?:a|the best|the) (?:phone|mobile|contact|telephone|call-?back|direct) (?:number|no\\.?)|(?:a|the) e-?mail address|the (?:right )?spelling)';
 // What may follow a detail being asked for, as long as it does not start a second question.
 const NO_SECOND_QUESTION =
-  '(?:(?!\\b(?:when|what|which|who|how|why|where|did|has|have|had|is there|are there|since)\\b)[^?]){0,40}';
+  '(?:(?!\\b(?:when|what|which|who|how|why|where|did|has|have|had|is there|are there|since)\\b)[^?]){0,70}';
 
 const HOUSEKEEPING: RegExp[] = [
   // Asking for something to be repeated or said more slowly
@@ -325,6 +325,12 @@ export const IMPACT_ACK: RegExp[] = [
 
 export const OWNERSHIP_CLEAR =
   /\b(?:i(?:'ll| will| am going to|'m going to|'m gonna) (?:take (?:ownership|this on|care of this|charge)|own this|own it|look after this|see this through|stay (?:on|with) (?:this|it|you)|stick with (?:this|it|you)|be (?:your|the) (?:point of contact|owner|contact)|personally (?:look|handle|follow|take|make sure|check)|follow (?:this|it) (?:up|through)|make sure (?:this|it|that)|work on this|get (?:this|it) (?:sorted|resolved|fixed|moving|escalated)|escalate (?:this|it)|chase|drive this|raise (?:this|it))|(?:and|then) (?:i(?:'ll| will) )?(?:stay|stick) (?:on|with) (?:this|it|you|the case)|until (?:it(?:'s| is)|this is) (?:fixed|resolved|sorted|done)|i'?ve got (?:this|it)|this is (?:my|mine)|(?:my|mine) (?:case|priority|responsibility)|(?:i|we)(?:'ll| will) (?:make sure|ensure|see this through)|i'?m (?:responsible|on it|taking)|leave (?:it|this) with me|i can take (?:that|this|it)|i'?ll (?:take|handle) (?:that|this|it))\b/;
+// Promising to do something that moves the customer's problem forward is taking it on, even
+// without the word "ownership": "I'll get the account unlocked", "I'm going to get an engineer on
+// this", "I'll sort this out for you". Looking into something is not enough, and neither is
+// logging in or opening a page, so the verbs here are about outcomes.
+export const OWNERSHIP_ACTION =
+  /\bi(?:'ll| will|'m going to| am going to|'m gonna) (?:(?:now|just|go ahead and|straight away|right away|personally) )*(?:(?:unlock|reset|fix|restore|resolve|reinstate|reactivate|re-?enable|correct|repair|re-?issue|refund|escalate|expedite|arrange|organi[sz]e|sort)\b(?: (?:this|it|that|the \w+|your \w+))?(?: out)?|get (?:an? |the |our |some )?(?:engineers?|specialists?|developers?|team|colleagues?|manager|someone)\b[^.?!]{0,20}\b(?:on|to|involved|looking|working|help|fix)\b|get (?:the|your|this|it|that|everything)\b[^.?!]{0,25}?\b(?:unlocked|fixed|sorted|resolved|restored|reset|working|back|running|unblocked|reactivated|enabled|assigned|updated|corrected|raised|escalated|moving)\b|raise (?:this|it|that)\b|log (?:a|this|it) (?:case|ticket|incident|request|issue|fault)\b)/;
 export const OWNERSHIP_VAGUE =
   /\b(?:(?:we|i)(?:'ll| will| can| might| could) (?:look|see|try|check|have a look|take a look|investigate|get back)|someone (?:will|should|can|might)|let me (?:see|check|look|try)|i'?ll (?:try|see)|hopefully|we should be able|i think we can|bear with me|(?:the|our) team (?:will|should))\b/;
 
