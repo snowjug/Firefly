@@ -1,10 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_ID, makeSession } from '../components/report/report.fixtures.ts';
-import { api } from '../lib/api.ts';
+import { ApiError, api } from '../lib/api.ts';
 import type * as ApiModule from '../lib/api.ts';
+import { resetProfileForTests } from '../lib/profile.ts';
 import Transcript from './Transcript.tsx';
 
 vi.mock('../lib/api.ts', async (importOriginal) => {
@@ -21,6 +22,7 @@ function renderTranscript(path = `/sessions/${SESSION_ID}/transcript`) {
         <Route path="sessions/:id/transcript" element={<Transcript />} />
         <Route path="sessions/:id/report" element={<p>The report screen</p>} />
         <Route path="calls/:id" element={<p>The call screen</p>} />
+        <Route path="history" element={<p>The history screen</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -28,21 +30,74 @@ function renderTranscript(path = `/sessions/${SESSION_ID}/transcript`) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  localStorage.clear();
+  resetProfileForTests();
   Element.prototype.scrollIntoView = vi.fn();
 });
 
+afterEach(() => {
+  localStorage.clear();
+  resetProfileForTests();
+});
+
 describe('Transcript page', () => {
+  it('has one page heading, the call it belongs to and a way back to the report', async () => {
+    getSession.mockResolvedValue(makeSession());
+    renderTranscript();
+    await screen.findByRole('list', { name: 'Conversation' });
+    expect(screen.getByRole('heading', { level: 1, name: 'Transcript' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    const call = screen.getByRole('region', { name: 'Locked out after a password reset' });
+    expect(within(call).getByText('10 turns')).toBeInTheDocument();
+    expect(within(call).getByText('Starter')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to report' })).toHaveAttribute(
+      'href',
+      `/sessions/${SESSION_ID}/report`,
+    );
+  });
+
+  it('prints through the browser', async () => {
+    const user = userEvent.setup();
+    const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+    getSession.mockResolvedValue(makeSession());
+    renderTranscript();
+    await user.click(await screen.findByRole('button', { name: 'Print' }));
+    expect(print).toHaveBeenCalledTimes(1);
+  });
+
   it('lists every turn with a text speaker label, a turn id and a time', async () => {
     getSession.mockResolvedValue(makeSession());
     renderTranscript();
     const list = await screen.findByRole('list', { name: 'Conversation' });
     expect(list.children).toHaveLength(10);
     const first = document.getElementById('turn-1') as HTMLElement;
-    expect(first).toHaveTextContent('Customer – Maya Okafor');
+    expect(first).toHaveTextContent('Customer \u2013 Maya Okafor');
     expect(first).toHaveTextContent('Turn 1');
     expect(first).toHaveTextContent('Customer message number 1.');
+    expect(first.querySelector('time')).toHaveAttribute('datetime');
     expect(document.getElementById('turn-2')).toHaveTextContent('You');
     expect(document.getElementById('turn-2')).toHaveTextContent('Trainee message number 2.');
+  });
+
+  it('puts the customer and the learner on opposite sides, with avatars that are only decoration', async () => {
+    localStorage.setItem(
+      'firefly.profile',
+      JSON.stringify({ name: 'Priya Raman', role: '', location: '', preferences: {} }),
+    );
+    resetProfileForTests();
+    getSession.mockResolvedValue(makeSession());
+    renderTranscript();
+    await screen.findByRole('list', { name: 'Conversation' });
+    const customer = document.getElementById('turn-1') as HTMLElement;
+    const you = document.getElementById('turn-2') as HTMLElement;
+    expect(customer).toHaveAttribute('data-role', 'customer');
+    expect(you).toHaveAttribute('data-role', 'trainee');
+    const customerAvatar = customer.querySelector('.tx-avatar') as HTMLElement;
+    const yourAvatar = you.querySelector('.tx-avatar') as HTMLElement;
+    expect(customerAvatar).toHaveAttribute('aria-hidden', 'true');
+    expect(customerAvatar).toHaveTextContent('MO');
+    expect(yourAvatar).toHaveAttribute('aria-hidden', 'true');
+    expect(yourAvatar).toHaveTextContent('PR');
   });
 
   it('scrolls to, focuses and highlights the turn named in ?turn=, with a text tag', async () => {
@@ -115,6 +170,23 @@ describe('Transcript page', () => {
     getSession.mockResolvedValue(makeSession({ status: 'active', report: null }));
     renderTranscript();
     expect(await screen.findByText('The call screen')).toBeInTheDocument();
+  });
+
+  it('explains a transcript that cannot be opened and links back to history', async () => {
+    getSession.mockRejectedValue(
+      new ApiError(404, 'not_found', 'That session was not found.', false),
+    );
+    renderTranscript();
+    expect(
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'We couldn\u2019t open this transcript',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to history' })).toHaveAttribute(
+      'href',
+      '/history',
+    );
   });
 
   it('wraps a very long unbroken message instead of overflowing', async () => {

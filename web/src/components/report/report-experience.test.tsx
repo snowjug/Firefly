@@ -1,85 +1,219 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
-import type { CoachingReport } from '#shared/domain/report.ts';
-import { DIMENSION_IDS, DIMENSIONS } from '#shared/domain/vocab.ts';
-import { ReportConstellation, constellationLayout } from './ReportConstellation.tsx';
-import { ReportView } from './ReportView.tsx';
-import { makeEarlyReport, makeReport, makeSession, makeTurns } from './report.fixtures.ts';
-import { ReportTurnsContext, segmentAround } from './turns-context.ts';
+import { afterEach, describe, expect, it } from 'vitest';
+import { DIMENSION_IDS } from '#shared/domain/vocab.ts';
 import { EvidenceQuote } from './EvidenceQuote.tsx';
+import { pickCallRewards } from './RewardsSection.tsx';
+import { ScoreOverview } from './ScoreOverview.tsx';
+import { SectionNav } from './SectionNav.tsx';
+import { feedbackNote, issueUrl, noPointsReason, reportSubline } from './labels.ts';
+import {
+  SESSION_ID,
+  makeBadge,
+  makeLedgerEntry,
+  makeReport,
+  makeRewards,
+  makeSpecReport,
+  makeTurns,
+} from './report.fixtures.ts';
+import { ReportTurnsContext, segmentAround } from './turns-context.ts';
 
-function withScores(scores: Partial<Record<(typeof DIMENSION_IDS)[number], number>>) {
-  const base = makeReport();
-  return makeReport({
-    dimensions: base.dimensions.map((d) => ({ ...d, score: scores[d.id] ?? d.score })),
+function stubMatchMedia(matches: boolean) {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }),
   });
 }
 
-function renderView(report: CoachingReport, proficiency: 'novice' | 'expert' = 'novice') {
-  const session = makeSession({ report });
-  session.scenario = {
-    ...session.scenario,
-    config: { ...session.scenario.config, proficiency },
-  };
-  return render(
-    <MemoryRouter>
-      <ReportView session={session} report={report} focusHeading={false} />
-    </MemoryRouter>,
-  );
-}
+afterEach(() => stubMatchMedia(false));
 
-describe('constellationLayout', () => {
-  const nodes = constellationLayout(makeReport().dimensions);
+describe('the line under "Call feedback"', () => {
+  const withScore = (
+    overallScore: number | null,
+    status: 'completed' | 'ended-early' = 'completed',
+  ) =>
+    makeReport({
+      completion: {
+        status,
+        traineeTurns: 5,
+        evidence: 'sufficient',
+        note: null,
+      },
+      summary: { overall: 'x', overallScore, coachingFocus: [] },
+    });
 
-  it('places the six skills in rubric order, starting at the top', () => {
-    expect(nodes.map((n) => n.id)).toEqual([...DIMENSION_IDS]);
-    expect(nodes[0]?.y).toBeLessThan(nodes[3]?.y ?? 0);
+  it('describes the result instead of praising by default', () => {
+    expect(reportSubline(withScore(4.6))).toMatch(/what worked well/);
+    expect(reportSubline(withScore(3.2))).toMatch(/where a different choice could help/);
+    expect(reportSubline(withScore(1.8))).toMatch(/clearest places to improve/);
+    expect(reportSubline(withScore(null))).toMatch(/too little on this call for an overall score/);
+    const lines = [4.6, 3.2, 1.8, null].map((score) => reportSubline(withScore(score)));
+    expect(new Set(lines).size).toBe(4);
+    for (const line of lines) expect(line).not.toMatch(/great|well done|congrat/i);
   });
 
-  it('draws stronger skills larger, further out and brighter', () => {
-    const weak = constellationLayout(withScores({ clarity: 1 }).dimensions).find(
-      (n) => n.id === 'clarity',
-    );
-    const strong = constellationLayout(withScores({ clarity: 5 }).dimensions).find(
-      (n) => n.id === 'clarity',
-    );
-    expect(weak && strong).toBeTruthy();
-    expect(strong!.size).toBeGreaterThan(weak!.size);
-    const distance = (n: { x: number; y: number }) => Math.hypot(n.x - 200, n.y - 200);
-    expect(distance(strong!)).toBeGreaterThan(distance(weak!));
-    expect(weak!.tier).toBe(0);
-    expect(strong!.tier).toBe(4);
-  });
-
-  it('keeps every name inside the picture and off the lines', () => {
-    for (const n of nodes) {
-      expect(n.labelX).toBeGreaterThan(0);
-      expect(n.labelX).toBeLessThan(100);
-      expect(n.labelY).toBeGreaterThan(0);
-      expect(n.labelY).toBeLessThan(100);
-    }
-    expect(nodes.map((n) => n.anchor)).toEqual([
-      'middle',
-      'start',
-      'start',
-      'middle',
-      'end',
-      'end',
-    ]);
+  it('calls a call that ended early a first look, whatever it scored', () => {
+    expect(reportSubline(withScore(4.8, 'ended-early'))).toMatch(/first look/);
   });
 });
 
-describe('ReportConstellation', () => {
-  it('is decorative: hidden from assistive technology and out of the tab order', () => {
-    const { container } = render(<ReportConstellation dimensions={makeReport().dimensions} />);
-    expect(container.querySelector('.rp-const')).toHaveAttribute('aria-hidden', 'true');
-    expect(container.querySelectorAll('.rp-star')).toHaveLength(6);
-    for (const link of container.querySelectorAll('a')) {
-      expect(link).toHaveAttribute('tabindex', '-1');
-    }
-    expect(container.querySelectorAll('.rp-const-label')).toHaveLength(6);
+describe('why a call earned nothing', () => {
+  const completion = makeReport().completion;
+  it('uses the same terms as the rewards rules', () => {
+    expect(noPointsReason({ isSample: true }, completion)).toMatch(/never earn points/);
+    expect(noPointsReason({ isSample: false }, { ...completion, status: 'ended-early' })).toMatch(
+      /^Calls that end early earn no points\./,
+    );
+    expect(
+      noPointsReason({ isSample: false }, { ...completion, evidence: 'insufficient' }),
+    ).toMatch(/too little on this call to coach/);
+    expect(noPointsReason({ isSample: false }, completion)).toBe(
+      'No points were recorded for this call.',
+    );
+  });
+});
+
+describe('the note for a mentor', () => {
+  const evaluator = { name: 'Firefly model evaluator', version: 'model-1.0.0' };
+
+  it('names the call, the skill and the turn, and nothing from the conversation', () => {
+    const note = feedbackNote({
+      sessionId: 'abc-123',
+      skill: 'clarity',
+      turn: 6,
+      evaluator,
+    });
+    expect(note).toContain('Session: abc-123');
+    expect(note).toContain('Skill: Clarity');
+    expect(note).toContain('Turn: 6');
+    expect(note).toContain('Firefly model evaluator, version model-1.0.0');
+  });
+
+  it('says "not sure" when the person did not pick a skill or a turn', () => {
+    const note = feedbackNote({ sessionId: 'abc-123', skill: null, turn: null, evaluator });
+    expect(note).toContain('Skill: Not sure (the whole report)');
+    expect(note).toContain('Turn: Not sure');
+  });
+
+  it('opens a new issue on the project with the note filled in and a warning about real data', () => {
+    const note = feedbackNote({ sessionId: 'abc-123', skill: 'closing', turn: 2, evaluator });
+    const url = new URL(issueUrl(note));
+    expect(`${url.origin}${url.pathname}`).toBe('https://github.com/snowjug/Firefly/issues/new');
+    expect(url.searchParams.get('title')).toBe('Incorrect feedback in a coaching report');
+    const body = url.searchParams.get('body') ?? '';
+    expect(body).toContain('Skill: Closing');
+    expect(body).toMatch(/do not add real customer information/i);
+  });
+});
+
+describe('what one call earned out of the whole ledger', () => {
+  const session = {
+    id: SESSION_ID,
+    startedAt: '2026-11-12T10:00:00.000Z',
+    endedAt: '2026-11-12T10:09:00.000Z',
+  };
+
+  it('keeps this call\u2019s entries, the day\u2019s points it triggered and its own badges', () => {
+    const picked = pickCallRewards(
+      makeRewards({
+        ledger: [
+          makeLedgerEntry({ id: 'a', points: 50 }),
+          makeLedgerEntry({ id: 'b', sessionId: 'other', points: 50 }),
+          makeLedgerEntry({
+            id: 'day',
+            ruleId: 'practice-day',
+            sessionId: null,
+            points: 5,
+            at: session.endedAt,
+          }),
+          makeLedgerEntry({
+            id: 'other-day',
+            ruleId: 'practice-day',
+            sessionId: null,
+            points: 5,
+            at: '2026-11-10T10:00:00.000Z',
+          }),
+        ],
+        badges: [
+          makeBadge({ earned: true, earnedInSessionId: SESSION_ID }),
+          makeBadge({ id: 'scope-detective', earned: true, earnedInSessionId: 'other' }),
+          makeBadge({ id: 'de-escalator', earned: false }),
+        ],
+      }),
+      session,
+    );
+    expect(picked.entries.map((e) => e.id)).toEqual(['a', 'day']);
+    expect(picked.points).toBe(55);
+    expect(picked.badges.map((b) => b.id)).toEqual(['first-practice']);
+  });
+
+  it('finds nothing for a call that earned nothing', () => {
+    const picked = pickCallRewards(
+      makeRewards({ ledger: [makeLedgerEntry({ sessionId: 'other' })] }),
+      session,
+    );
+    expect(picked).toEqual({ entries: [], badges: [], points: 0 });
+  });
+});
+
+describe('the score row', () => {
+  function renderScores(report = makeSpecReport()) {
+    return render(
+      <MemoryRouter>
+        <ScoreOverview report={report} />
+      </MemoryRouter>,
+    );
+  }
+
+  it('draws an empty ring and says so when there is no overall score', () => {
+    const base = makeReport();
+    renderScores(makeReport({ summary: { ...base.summary, overallScore: null } }));
+    expect(screen.getByRole('img', { name: 'No overall score for this call' })).toBeInTheDocument();
+    expect(screen.getByText('No overall score for this call.')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /Overall score:/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Across the six skills. A practice signal, not a grade or a ranking.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('lists the skills in rubric order with the number, its name and a warmer bar for weaker scores', () => {
+    const { container } = renderScores(makeReport());
+    const rows = [...container.querySelectorAll('.rp-skill-row')];
+    expect(rows.map((row) => row.getAttribute('href'))).toEqual(
+      DIMENSION_IDS.map((id) => `#dim-${id}`),
+    );
+    const clarity = rows[3] as HTMLElement;
+    expect(clarity).toHaveTextContent('3 of 5');
+    expect(clarity).toHaveTextContent('Developing');
+    expect(clarity).toHaveAttribute('data-tone', 'ok');
+    expect(rows[1]).toHaveAttribute('data-tone', 'low');
+  });
+
+  it('leaves out quick facts it has nothing to say about', () => {
+    const base = makeReport();
+    renderScores(
+      makeReport({
+        discovery: { results: [], found: 0, partial: 0, missed: 0, total: 0 },
+        journey: { ...base.journey, points: [] },
+        summary: { ...base.summary, coachingFocus: [] },
+      }),
+    );
+    const facts = screen.getByRole('list', { name: 'At a glance' });
+    expect(within(facts).queryByText('Hidden facts found')).not.toBeInTheDocument();
+    expect(within(facts).queryByText('Customer mood')).not.toBeInTheDocument();
+    expect(within(facts).queryByText('Coaching focus')).not.toBeInTheDocument();
+    expect(within(facts).getByText('Your turns')).toBeInTheDocument();
   });
 });
 
@@ -121,38 +255,48 @@ describe('EvidenceQuote in a report', () => {
     expect(within(items[0] as HTMLElement).getByText('Trainee message number 2.')).toBeVisible();
     expect(within(items[1] as HTMLElement).getByText('Customer message number 3.')).toBeVisible();
     // The link to the full transcript is still there.
-    expect(screen.getByRole('link', { name: /turn 4, view in transcript/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /turn 4, view in transcript/i })).toHaveAttribute(
+      'href',
+      '/sessions/s/transcript?turn=4',
+    );
+  });
+
+  it('shows a turn without a quote and a quote without a link', () => {
+    render(
+      <MemoryRouter>
+        <EvidenceQuote turn={3} href="/t?turn=3" />
+        <EvidenceQuote quote="Only words." label="You said" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: /turn 3/i })).toBeInTheDocument();
+    expect(screen.getByText('\u201cOnly words.\u201d')).toBeInTheDocument();
+    expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 });
 
-describe('the report experience', () => {
-  it('shows what the call earned, each with proof from the conversation', () => {
-    renderView(withScores({ 'ownership-next-steps': 5, closing: 5, clarity: 4 }), 'novice');
-    const section = screen.getByRole('region', { name: 'Earned in this call' });
-    expect(within(section).getByRole('heading', { name: 'Clear Ownership' })).toBeVisible();
-    expect(within(section).getByRole('heading', { name: 'Complete the Loop' })).toBeVisible();
-    expect(within(section).getByRole('heading', { name: 'Plain Language' })).toBeVisible();
-    expect(
-      within(section).getAllByRole('link', { name: /view in transcript/i }).length,
-    ).toBeGreaterThanOrEqual(3);
-    expect(screen.getByRole('link', { name: 'Earned' })).toBeInTheDocument();
+describe('"On this page"', () => {
+  const items = [
+    { id: 'skills', label: 'Six skills' },
+    { id: 'discovery', label: 'Discovery' },
+  ];
+
+  it('is a row of links on a wide screen', () => {
+    stubMatchMedia(true);
+    render(<SectionNav items={items} />);
+    const nav = screen.getByRole('navigation', { name: 'On this page' });
+    expect(within(nav).getByRole('link', { name: 'Discovery' })).toHaveAttribute(
+      'href',
+      '#discovery',
+    );
+    expect(within(nav).queryByText('Jump to a section')).not.toBeInTheDocument();
   });
 
-  it('does not award Plain Language when the customer was not new to the technology', () => {
-    renderView(withScores({ clarity: 5 }), 'expert');
-    expect(screen.queryByRole('heading', { name: 'Plain Language' })).not.toBeInTheDocument();
-  });
-
-  it('shows nothing earned for a call that ended early', () => {
-    renderView(makeEarlyReport());
-    expect(screen.queryByRole('region', { name: 'Earned in this call' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Earned' })).not.toBeInTheDocument();
-  });
-
-  it('keeps the six skills and their numbers available as plain text beside the constellation', () => {
-    renderView(makeReport());
-    const overview = screen.getAllByRole('link', { name: new RegExp(DIMENSIONS['clarity'].label) });
-    expect(overview.length).toBeGreaterThan(0);
-    expect(screen.getByText('3.7')).toBeInTheDocument();
+  it('folds into a "Jump to a section" disclosure on a narrow one', async () => {
+    const user = userEvent.setup();
+    stubMatchMedia(false);
+    render(<SectionNav items={items} />);
+    const nav = screen.getByRole('navigation', { name: 'On this page' });
+    await user.click(within(nav).getByText('Jump to a section'));
+    expect(within(nav).getByRole('link', { name: 'Six skills' })).toBeVisible();
   });
 });

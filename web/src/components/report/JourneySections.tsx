@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { CURVEBALL_LABELS } from '#shared/domain/vocab.ts';
 import { Icon } from '../Icon.tsx';
+import { SectionHead } from './SectionHead.tsx';
 import { TemperatureTimeline } from './TemperatureTimeline.tsx';
 import { CURVEBALL_STATUS } from './labels.ts';
 
@@ -14,16 +15,11 @@ export function JourneySection({
 }) {
   return (
     <section id="mood" className="rp-section" aria-labelledby="mood-title">
-      <div className="rp-section-head">
-        <h2 id="mood-title" className="t-section">
-          Customer temperature
-        </h2>
-        <p className="rp-lead">
-          How the customer&rsquo;s mood moved through the call, and what moved it. Turning points
-          link back to the exact turn in your transcript.
-        </p>
-      </div>
-      <div className="surface rp-card rp-timeline-card">
+      <SectionHead id="mood-title" title="Customer temperature">
+        How the customer&rsquo;s mood moved through the call, and what moved it. Turning points link
+        back to the exact turn in your transcript.
+      </SectionHead>
+      <div className="glass card rp-timeline-card">
         <TemperatureTimeline points={journey.points} turnHref={turnHref} />
       </div>
     </section>
@@ -41,19 +37,14 @@ export function CurveballSection({
   const status = CURVEBALL_STATUS[curveball.status];
   return (
     <section id="curveball" className="rp-section" aria-labelledby="curveball-title">
-      <div className="rp-section-head">
-        <h2 id="curveball-title" className="t-section">
-          Curveball
-        </h2>
-        <p className="rp-lead">
-          A curveball is an unexpected turn the customer takes mid-call. It is part of the practice,
-          not a mistake.
-        </p>
-      </div>
-      <article className="surface rp-card rp-curve" aria-labelledby="curveball-type">
+      <SectionHead id="curveball-title" title="Curveball">
+        A curveball is an unexpected turn the customer takes mid-call. It is part of the practice,
+        not a mistake.
+      </SectionHead>
+      <article className="glass card rp-curve" aria-labelledby="curveball-type">
         <header className="rp-curve-head">
-          <span className="rp-tone-icon rp-tone-caution" aria-hidden="true">
-            <Icon name="flag" size={18} />
+          <span className="tone-icon" data-tone="violet" aria-hidden="true">
+            <Icon name="flag" size={20} />
           </span>
           <div className="grow">
             <h3 id="curveball-type" className="rp-moment-title">

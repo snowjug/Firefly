@@ -394,6 +394,16 @@ function Timeline({
                 Turn
               </text>
               {ticks.map((tick) => (
+                <line
+                  key={`v-${tick.index}`}
+                  className="tl-grid tl-vgrid"
+                  x1={tick.x}
+                  x2={tick.x}
+                  y1={plot.top}
+                  y2={plot.bottom}
+                />
+              ))}
+              {ticks.map((tick) => (
                 <text
                   key={tick.index}
                   className="tl-tick"
@@ -404,6 +414,16 @@ function Timeline({
                   {tick.text}
                 </text>
               ))}
+              {count > 1 ? (
+                <>
+                  <text className="tl-edge" x={xs[0]} y={layout.edgeY} textAnchor="middle">
+                    Start
+                  </text>
+                  <text className="tl-edge" x={xs[count - 1]} y={layout.edgeY} textAnchor="middle">
+                    End
+                  </text>
+                </>
+              ) : null}
 
               <line
                 className="tl-guide"

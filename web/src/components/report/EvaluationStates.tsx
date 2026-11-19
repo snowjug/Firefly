@@ -237,22 +237,27 @@ export function ReportUnavailable({ session }: { session: SessionDTO }) {
 export function ReportSkeleton() {
   return (
     <Page title="Loading report" className="rp-root">
-      <h1 className="sr-only">Coaching report</h1>
-      <div className="stack" role="status" aria-label="Loading your report">
+      <h1 className="sr-only">Call feedback</h1>
+      <div className="rp-skeleton" role="status" aria-label="Loading your report">
+        <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-2)' }}>
+          <SkeletonBlock height={32} width="min(18rem, 60%)" />
+          <SkeletonBlock height={18} width="min(28rem, 85%)" />
+        </div>
         <div className="glass card stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
           <SkeletonBlock height={14} width="30%" />
-          <SkeletonBlock height={34} width="70%" />
+          <SkeletonBlock height={28} width="60%" />
           <SkeletonBlock height={16} width="55%" />
           <SkeletonBlock height={72} />
         </div>
-        <div className="grid-3">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="surface card-tight stack">
-              <SkeletonBlock height={14} width="60%" />
-              <SkeletonBlock height={22} width="40%" />
-              <SkeletonBlock height={8} />
-            </div>
-          ))}
+        <div className="rp-scores">
+          <div className="glass card rp-overall">
+            <SkeletonBlock height={168} width={168} />
+          </div>
+          <div className="glass card stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
+            {Array.from({ length: 6 }, (_, i) => (
+              <SkeletonBlock key={i} height={20} />
+            ))}
+          </div>
         </div>
         <span className="sr-only">Loading your report&hellip;</span>
       </div>

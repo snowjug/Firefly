@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { TurnDTO, TurnMarker } from '#shared/domain/api.ts';
+import { initials, useProfile } from '../../lib/profile.ts';
 import { formatTime } from '../../lib/format.ts';
 import { Icon, type IconName } from '../Icon.tsx';
 import '../../styles/transcript.css';
@@ -39,12 +40,14 @@ export function describeMarker(marker: TurnMarker): {
 function TurnItem({
   turn,
   customerName,
+  youInitials,
   cited,
   showMarkers,
   linked,
 }: {
   turn: TurnDTO;
   customerName: string;
+  youInitials: string | null;
   cited: readonly string[] | undefined;
   showMarkers: boolean;
   linked: boolean;
@@ -61,51 +64,64 @@ function TurnItem({
       data-linked={linked ? 'true' : undefined}
       aria-current={linked ? 'location' : undefined}
     >
-      <div className="tx-head">
-        <span className="tx-speaker">{isCustomer ? `Customer \u2013 ${customerName}` : 'You'}</span>
-        <span className="tx-where">
-          Turn {turn.index}
-          <span aria-hidden="true"> &middot; </span>
-          <time dateTime={turn.createdAt}>{formatTime(turn.createdAt)}</time>
-        </span>
-        {cited ? (
-          <span className="chip chip-accent tx-tag">
-            <Icon name="flag" size={13} /> Cited in report
+      <span className="tx-avatar" data-role={turn.role} aria-hidden="true">
+        {isCustomer ? (
+          initials(customerName)
+        ) : youInitials ? (
+          youInitials
+        ) : (
+          <Icon name="user" size={18} />
+        )}
+      </span>
+      <div className="tx-bubble">
+        <div className="tx-head">
+          <span className="tx-speaker">
+            {isCustomer ? `Customer \u2013 ${customerName}` : 'You'}
           </span>
-        ) : linked ? (
-          <span className="chip tx-tag">Linked turn</span>
+          <span className="tx-where">
+            Turn {turn.index}
+            <span aria-hidden="true"> &middot; </span>
+            <time dateTime={turn.createdAt}>{formatTime(turn.createdAt)}</time>
+          </span>
+          {cited ? (
+            <span className="chip chip-accent tx-tag">
+              <Icon name="flag" size={13} /> Cited in report
+            </span>
+          ) : linked ? (
+            <span className="chip tx-tag">Linked turn</span>
+          ) : null}
+        </div>
+        <p className="tx-text">{turn.text}</p>
+        {cited ? (
+          <ul role="list" className="tx-cites" aria-label="Where the report uses this turn">
+            {cited.map((label) => (
+              <li key={label} className="tx-cite">
+                {label}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {markers.length > 0 ? (
+          <ul role="list" className="tx-markers" aria-label="Analysis markers">
+            {markers.map((marker, index) => {
+              const view = describeMarker(marker);
+              return (
+                <li key={`${marker.kind}-${index}`} className="tx-marker" data-tone={view.tone}>
+                  <Icon name={view.icon} size={14} />
+                  <span>{view.text}</span>
+                </li>
+              );
+            })}
+          </ul>
         ) : null}
       </div>
-      <p className="tx-text">{turn.text}</p>
-      {cited ? (
-        <ul role="list" className="tx-cites" aria-label="Where the report uses this turn">
-          {cited.map((label) => (
-            <li key={label} className="tx-cite">
-              {label}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {markers.length > 0 ? (
-        <ul role="list" className="tx-markers" aria-label="Analysis markers">
-          {markers.map((marker, index) => {
-            const view = describeMarker(marker);
-            return (
-              <li key={`${marker.kind}-${index}`} className="tx-marker" data-tone={view.tone}>
-                <Icon name={view.icon} size={14} />
-                <span>{view.text}</span>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
     </li>
   );
 }
 
 /**
- * The conversation as a semantic ordered list. Each turn has an id (`turn-N`) that links from the
- * report land on; the linked turn is scrolled into view, focused and highlighted.
+ * The conversation as a semantic ordered list of chat bubbles. Each turn has an id (`turn-N`) that
+ * links from the report land on; the linked turn is scrolled into view, focused and highlighted.
  */
 export function TranscriptList({
   turns,
@@ -120,6 +136,9 @@ export function TranscriptList({
   showMarkers: boolean;
   linked: number | null;
 }) {
+  const profile = useProfile();
+  const youInitials = profile ? initials(profile.name) : null;
+
   useEffect(() => {
     if (linked === null) return;
     const element = document.getElementById(`turn-${linked}`);
@@ -135,6 +154,7 @@ export function TranscriptList({
           key={turn.index}
           turn={turn}
           customerName={customerName}
+          youInitials={youInitials}
           cited={cited.get(turn.index)}
           showMarkers={showMarkers}
           linked={linked === turn.index}

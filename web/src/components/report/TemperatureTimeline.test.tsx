@@ -98,6 +98,17 @@ describe('TemperatureTimeline', () => {
     }
   });
 
+  it('marks the start and the end under the turn numbers, with a grid line at each turn shown', () => {
+    const { container } = renderTimeline();
+    expect([...container.querySelectorAll('.tl-edge')].map((node) => node.textContent)).toEqual([
+      'Start',
+      'End',
+    ]);
+    expect(container.querySelectorAll('.tl-vgrid')).toHaveLength(
+      container.querySelectorAll('.tl-tick').length,
+    );
+  });
+
   it('renders a two-point journey', () => {
     renderTimeline([point(1, 52, 'start', 0), point(2, 22, 'end', -30)]);
     expect(

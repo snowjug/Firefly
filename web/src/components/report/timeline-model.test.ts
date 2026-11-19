@@ -4,6 +4,7 @@ import {
   defaultSelection,
   journeyAriaLabel,
   layoutChart,
+  moodRange,
   planLabels,
   planTicks,
   summariseJourney,
@@ -28,6 +29,17 @@ describe('journey summary', () => {
     expect(
       summariseJourney(buildMoments([point(1, 12, 'start', 0), point(2, 33, 'end', 21)])),
     ).toBe('started Calm, ended Concerned');
+  });
+});
+
+describe('the customer mood in one phrase', () => {
+  it('names where it started and where it ended', () => {
+    expect(moodRange(PEAKED_JOURNEY)).toBe('Frustrated to Calm');
+    expect(moodRange([point(1, 12, 'start', 0), point(2, 5, 'end', -7)])).toBe('Stayed Calm');
+    expect(moodRange([point(1, 12, 'start', 0), point(2, 33, 'end', 21)])).toBe(
+      'Calm to Concerned',
+    );
+    expect(moodRange([])).toBeNull();
   });
 });
 
@@ -93,5 +105,10 @@ describe('layout', () => {
     const layout = layoutChart(moments, 640);
     expect(layout.xs).toHaveLength(2);
     expect((layout.xs[1] as number) - (layout.xs[0] as number)).toBeGreaterThan(300);
+  });
+
+  it('keeps the plot a positive width even if the container is measured tiny for a moment', () => {
+    const layout = layoutChart(buildMoments(PEAKED_JOURNEY), 60);
+    expect(layout.plot.right).toBeGreaterThan(layout.plot.left);
   });
 });

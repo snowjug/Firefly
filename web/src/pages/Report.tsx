@@ -15,10 +15,14 @@ function ReportScreen({ id }: { id: string }) {
   if (!session) {
     if (loading) return <ReportSkeleton />;
     return (
-      <Page title="Report not found" width="narrow">
-        <h1 className="sr-only">Coaching report</h1>
-        <ErrorState error={error} onRetry={reload} title={'We couldn\u2019t open this report'} />
-        <p className="center-text" style={{ marginTop: 'var(--sp-4)' }}>
+      <Page title="Report not found" width="narrow" className="rp-root">
+        <ErrorState
+          level={1}
+          error={error}
+          onRetry={reload}
+          title={'We couldn\u2019t open this report'}
+        />
+        <p className="center-text">
           <Link to="/history" className="btn btn-secondary">
             Back to history
           </Link>
