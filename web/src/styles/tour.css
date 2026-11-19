@@ -106,7 +106,7 @@
   border: 1px solid color-mix(in srgb, var(--glow) 50%, transparent);
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--glow) 12%, transparent);
-  color: var(--glow);
+  color: var(--glow-text);
   font-size: var(--fs-meta);
   font-weight: 650;
 }
@@ -210,7 +210,7 @@
   height: 2.8rem;
   border-radius: 50%;
   background: color-mix(in srgb, var(--glow) 16%, transparent);
-  color: var(--glow);
+  color: var(--glow-text);
 }
 .tour-prompt-text {
   flex: 1 1 18rem;

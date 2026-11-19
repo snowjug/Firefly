@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+﻿import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   MemoryRouter,
@@ -16,7 +16,7 @@ import Library from './Library.tsx';
 
 vi.mock('../lib/api.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
-  return { ...actual, api: { scenarios: vi.fn() } };
+  return { ...actual, api: { scenarios: vi.fn(), listSessions: vi.fn(), progress: vi.fn() } };
 });
 
 const starter = makeScenario({
@@ -77,6 +77,18 @@ const url = () => screen.getByTestId('url');
 beforeEach(() => {
   sessionStorage.clear();
   vi.mocked(api.scenarios).mockResolvedValue([challenge, starter, spotlight]);
+  vi.mocked(api.listSessions).mockResolvedValue({ sessions: [], total: 0 });
+  vi.mocked(api.progress).mockResolvedValue({
+    totalSessions: 0,
+    completedSessions: 0,
+    dimensionTrends: [],
+    strongest: null,
+    focus: null,
+    focusReason: null,
+    repeatedOpportunities: [],
+    recentChange: 'not-enough-data',
+    note: '',
+  });
 });
 afterEach(() => {
   cleanup();
@@ -230,5 +242,121 @@ describe('Library', () => {
     vi.mocked(api.scenarios).mockResolvedValueOnce([]);
     renderLibrary();
     expect(await screen.findByText('No scenarios are available yet')).toBeInTheDocument();
+  });
+});
+
+function stubScreen(wide: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    (query: string) =>
+      ({
+        matches: wide && query.includes('min-width'),
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }) as unknown as MediaQueryList,
+  );
+}
+
+describe('Library views', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('opens on the mission map on a wide screen, with the list one switch away', async () => {
+    stubScreen(true);
+    const user = userEvent.setup();
+    renderLibrary();
+    expect(await screen.findByRole('toolbar', { name: 'Missions' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Map' })).toBeChecked();
+    // The map shows the first match in its panel and offers the same actions as a card.
+    expect(screen.getByRole('link', { name: `Set up call: ${starter.title}` })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Sort by')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('radio', { name: 'List' }));
+    expect(await screen.findByLabelText('Sort by')).toBeInTheDocument();
+    expect(screen.queryByRole('toolbar', { name: 'Missions' })).not.toBeInTheDocument();
+    expect(titles()).toEqual([spotlight.title, starter.title, challenge.title]);
+    expect(url()).toHaveTextContent('/scenarios?view=list');
+    expect(JSON.parse(localStorage.getItem('firefly.library.view') ?? 'null')).toBe('list');
+  });
+
+  it('remembers the chosen view and lets the address decide', async () => {
+    stubScreen(true);
+    localStorage.setItem('firefly.library.view', JSON.stringify('list'));
+    renderLibrary();
+    expect(await screen.findByLabelText('Sort by')).toBeInTheDocument();
+    cleanup();
+
+    renderLibrary('/scenarios?view=map');
+    expect(await screen.findByRole('toolbar', { name: 'Missions' })).toBeInTheDocument();
+  });
+
+  it('keeps the chosen view while searching and filtering', async () => {
+    stubScreen(true);
+    const user = userEvent.setup();
+    renderLibrary('/scenarios?view=list');
+    await screen.findByText(starter.title);
+    await user.selectOptions(screen.getByLabelText('Difficulty'), 'starter');
+    expect(url()).toHaveTextContent('view=list');
+    expect(url()).toHaveTextContent('difficulty=starter');
+    await user.type(screen.getByRole('searchbox', { name: 'Search scenarios' }), 'locked');
+    await waitFor(() => expect(url()).toHaveTextContent('q=locked'));
+    expect(url()).toHaveTextContent('view=list');
+  });
+
+  it('searching narrows the map to the matches and puts the first one in the panel', async () => {
+    stubScreen(true);
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByRole('toolbar', { name: 'Missions' });
+    await user.type(screen.getByRole('searchbox', { name: 'Search scenarios' }), 'invoice');
+    expect(await screen.findByRole('article', { name: challenge.title })).toBeInTheDocument();
+    const dimmed = document.querySelector(`[data-mission="${starter.id}"]`) as HTMLElement;
+    expect(dimmed).toHaveAttribute('data-match', 'false');
+  });
+
+  it('shows only the list on a phone, with no switch', async () => {
+    stubScreen(false);
+    renderLibrary();
+    await screen.findByText(starter.title);
+    expect(screen.queryByRole('radio', { name: 'Map' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('toolbar', { name: 'Missions' })).not.toBeInTheDocument();
+    expect(titles()).toHaveLength(3);
+  });
+
+  it('marks what has been practised and what to do next in the list', async () => {
+    vi.mocked(api.listSessions).mockResolvedValue({
+      sessions: [
+        {
+          id: 's1',
+          scenarioId: starter.id,
+          scenarioTitle: starter.title,
+          issueType: 'sign-in-access',
+          difficulty: 'starter',
+          startingTemperature: 'calm',
+          impact: 'low',
+          style: 'talkative',
+          mode: 'guided',
+          providerKind: 'mock',
+          providerLabel: 'Demo',
+          isSample: false,
+          status: 'completed',
+          startedAt: '2026-03-01T09:00:00.000Z',
+          endedAt: '2026-03-01T09:10:00.000Z',
+          durationSeconds: 600,
+          traineeTurns: 5,
+          completion: 'completed',
+          overallScore: 4.2,
+          dimensionScores: null,
+          mentorReviewed: false,
+        },
+      ],
+      total: 1,
+    });
+    renderLibrary();
+    const card = (await screen.findByRole('article', { name: starter.title })) as HTMLElement;
+    expect(await within(card).findByText('Practised, best 4.2')).toBeInTheDocument();
+    expect(screen.getAllByText(/Not attempted/).length).toBe(2);
+    expect(screen.getByText('Recommended next')).toBeInTheDocument();
   });
 });

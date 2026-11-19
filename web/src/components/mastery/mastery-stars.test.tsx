@@ -22,20 +22,18 @@ describe('MasteryStars', () => {
     call('2', 'b', { closing: 4, clarity: 3 }),
   ]);
 
-  it('lays the six constellations out in rubric order with names that stay off the lines', () => {
+  it('lays the six constellations out in rubric order with names that always fit the picture', () => {
     const nodes = starLayout(lit);
     expect(nodes).toHaveLength(6);
-    expect(nodes.map((n) => n.anchor)).toEqual([
-      'middle',
-      'start',
-      'start',
-      'middle',
-      'end',
-      'end',
-    ]);
+    // Names are centred under their star (over it for the top one), so none can spill past an edge.
+    expect(nodes.every((n) => n.anchor === 'middle')).toBe(true);
+    expect(nodes[0]?.labelY).toBeLessThan((nodes[0]?.y ?? 0) / 3);
+    for (const n of nodes.slice(1)) expect(n.labelY).toBeGreaterThan((n.y / 300) * 100);
     for (const n of nodes) {
-      expect(n.labelX).toBeGreaterThan(0);
-      expect(n.labelX).toBeLessThan(100);
+      expect(n.labelX).toBeGreaterThan(10);
+      expect(n.labelX).toBeLessThan(90);
+      expect(n.labelY).toBeGreaterThan(0);
+      expect(n.labelY).toBeLessThan(100);
     }
   });
 

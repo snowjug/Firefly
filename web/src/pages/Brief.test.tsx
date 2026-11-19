@@ -7,6 +7,7 @@ import { makeScenario } from '../components/scenario/scenario-fixtures.ts';
 import type * as ApiModule from '../lib/api.ts';
 import { ApiError, api } from '../lib/api.ts';
 import { useAppConfig } from '../lib/config.tsx';
+import { ThemeProvider } from '../lib/theme.tsx';
 import Brief from './Brief.tsx';
 
 vi.mock('../lib/api.ts', async (importOriginal) => {
@@ -47,14 +48,16 @@ function Probe() {
 
 function renderBrief() {
   render(
-    <MemoryRouter initialEntries={['/scenarios/team-workspace/brief']}>
-      <Probe />
-      <Routes>
-        <Route path="/scenarios/:id/brief" element={<Brief />} />
-        <Route path="/scenarios/:id/setup" element={<p>Setup page</p>} />
-        <Route path="/calls/:id" element={<p>Call page</p>} />
-      </Routes>
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter initialEntries={['/scenarios/team-workspace/brief']}>
+        <Probe />
+        <Routes>
+          <Route path="/scenarios/:id/brief" element={<Brief />} />
+          <Route path="/scenarios/:id/setup" element={<p>Setup page</p>} />
+          <Route path="/calls/:id" element={<p>Call page</p>} />
+        </Routes>
+      </MemoryRouter>
+    </ThemeProvider>,
   );
 }
 
@@ -65,6 +68,8 @@ const beginButton = () => screen.findByRole('button', { name: /Begin call/ });
 
 beforeEach(() => {
   sessionStorage.clear();
+  // Most of these tests are about starting a call, not about the launch moment (which reduced motion skips).
+  localStorage.setItem('firefly.motion', JSON.stringify('reduce'));
   vi.mocked(api.scenario).mockResolvedValue(scenario);
   vi.mocked(useAppConfig).mockReturnValue(appConfig());
 });
@@ -228,5 +233,71 @@ describe('Brief', () => {
       await screen.findByRole('heading', { level: 1, name: "We couldn't find that scenario" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Begin call/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('Brief: the call launch', () => {
+  beforeEach(() => localStorage.setItem('firefly.motion', JSON.stringify('full')));
+
+  it('shows the launch moment while the call is created, then opens the call', async () => {
+    const user = userEvent.setup();
+    let finish: (value: SessionDTO) => void = () => undefined;
+    vi.mocked(api.createSession).mockReturnValue(
+      new Promise<SessionDTO>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    renderBrief();
+    await user.click(await beginButton());
+
+    const dialog = await screen.findByRole('dialog', { name: 'Starting your call' });
+    expect(dialog).toHaveTextContent('Scenario locked');
+    // Nothing says "line open" until the call really exists, and the page has not moved on.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(dialog).not.toHaveTextContent('Line open');
+    expect(screen.getByTestId('url')).toHaveTextContent('/scenarios/team-workspace/brief');
+
+    await act(async () => finish(session('call-7')));
+    await waitFor(() => expect(screen.getByTestId('url')).toHaveTextContent('/calls/call-7'), {
+      timeout: 3000,
+    });
+    expect(api.createSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('can be skipped from the keyboard', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.createSession).mockResolvedValue(session('call-8'));
+    renderBrief();
+    await user.click(await beginButton());
+    await screen.findByRole('dialog', { name: 'Starting your call' });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.getByTestId('url')).toHaveTextContent('/calls/call-8'), {
+      timeout: 1500,
+    });
+  });
+
+  it('goes away and keeps every choice when the call cannot be started', async () => {
+    const user = userEvent.setup();
+    saveDraft({ impact: 'high' });
+    vi.mocked(api.createSession).mockRejectedValue(
+      new ApiError(0, 'network', "Can't reach Firefly right now.", true),
+    );
+    renderBrief();
+    await user.click(await beginButton());
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent("Can't reach Firefly right now.");
+    expect(screen.queryByRole('dialog', { name: 'Starting your call' })).not.toBeInTheDocument();
+    expect(readDraft()).not.toBeNull();
+    expect(screen.getByTestId('url')).toHaveTextContent('/scenarios/team-workspace/brief');
+  });
+
+  it('is never shown when reduced motion is asked for', async () => {
+    localStorage.setItem('firefly.motion', JSON.stringify('reduce'));
+    const user = userEvent.setup();
+    vi.mocked(api.createSession).mockResolvedValue(session('call-9'));
+    renderBrief();
+    await user.click(await beginButton());
+    await waitFor(() => expect(screen.getByTestId('url')).toHaveTextContent('/calls/call-9'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

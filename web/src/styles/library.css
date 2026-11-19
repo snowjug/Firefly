@@ -129,6 +129,12 @@
   align-items: center;
   font-weight: 620;
 }
+.lib-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3) var(--sp-5);
+}
 .lib-sort {
   flex-direction: row;
   align-items: center;
@@ -198,11 +204,46 @@
   gap: 0.3rem;
   white-space: nowrap;
 }
+.scn-spotlight {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+}
+.scn-card[data-recommended='true'] {
+  border-color: color-mix(in srgb, var(--glow) 55%, var(--glass-border));
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 1px color-mix(in srgb, var(--glow) 18%, transparent);
+}
+.scn-practice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+.scn-practice-dot {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  border: 1.5px solid var(--star-0);
+  border-radius: 50%;
+}
+.scn-card[data-practice='practised'] .scn-practice-dot {
+  border-color: var(--glow);
+  background: var(--glow);
+  box-shadow: 0 0 8px var(--glow-soft);
+}
+.scn-card[data-practice='in-progress'] .scn-practice-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
 .scn-card-title {
-  font-size: 1.15rem;
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
   line-height: 1.25;
-  letter-spacing: -0.012em;
+  letter-spacing: -0.01em;
 }
 .scn-card-summary {
   display: -webkit-box;

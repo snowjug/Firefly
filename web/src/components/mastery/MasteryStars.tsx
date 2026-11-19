@@ -17,7 +17,8 @@ export interface StarNode {
   tier: number;
   x: number;
   y: number;
-  anchor: 'start' | 'end' | 'middle';
+  /** Names are centred under (or, for the top star, over) their star so they always fit the box. */
+  anchor: 'middle';
   /** Where the name sits, as a percentage of the width and height. */
   labelX: number;
   labelY: number;
@@ -29,18 +30,15 @@ export function starLayout(mastery: readonly DimensionMastery[]): StarNode[] {
     const angle = ((-90 + index * 60) * Math.PI) / 180;
     const x = CENTRE + Math.cos(angle) * RADIUS;
     const y = CENTRE + Math.sin(angle) * RADIUS;
-    const side = Math.cos(angle);
-    const anchor = side > 0.3 ? 'start' : side < -0.3 ? 'end' : 'middle';
-    const gap = 32;
-    const labelX = anchor === 'start' ? x + gap : anchor === 'end' ? x - gap : x;
-    const labelY = anchor === 'middle' ? y + (Math.sin(angle) < 0 ? -gap : gap) : y;
+    const gap = 28;
+    const labelY = y + (index === 0 ? -gap : gap);
     return {
       dimension: m.dimension,
       tier: m.tierIndex,
       x,
       y,
-      anchor,
-      labelX: (labelX / SIZE) * 100,
+      anchor: 'middle',
+      labelX: (x / SIZE) * 100,
       labelY: (labelY / SIZE) * 100,
     };
   });

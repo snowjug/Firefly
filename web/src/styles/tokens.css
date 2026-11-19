@@ -137,6 +137,7 @@
   --accent-contrast: #04150f;
   --accent-2: #92bfdc;
   --glow: #f6bd5e;
+  --glow-text: #f6bd5e;
   --glow-soft: rgba(246, 189, 94, 0.34);
   --cta-bg: linear-gradient(135deg, #ffd27a 0%, #f2a63f 100%);
   --cta-bg-hover: linear-gradient(135deg, #ffdc92 0%, #f7b358 100%);
@@ -202,6 +203,7 @@
   --accent-contrast: #ffffff;
   --accent-2: #2c6a8c;
   --glow: #b45f06;
+  --glow-text: #8f4505;
   --glow-soft: rgba(180, 95, 6, 0.3);
   --cta-bg: linear-gradient(135deg, #b45f06 0%, #944509 100%);
   --cta-bg-hover: linear-gradient(135deg, #a05405 0%, #823c07 100%);
@@ -267,6 +269,7 @@
     --accent-contrast: #ffffff;
     --accent-2: #2c6a8c;
     --glow: #b45f06;
+    --glow-text: #8f4505;
     --glow-soft: rgba(180, 95, 6, 0.3);
     --cta-bg: linear-gradient(135deg, #b45f06 0%, #944509 100%);
     --cta-bg-hover: linear-gradient(135deg, #a05405 0%, #823c07 100%);

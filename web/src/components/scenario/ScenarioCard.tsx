@@ -1,32 +1,55 @@
 import { memo, useId } from 'react';
 import { Link } from 'react-router';
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
+import type { ScenarioPractice } from '#shared/domain/recommend.ts';
 import { DIMENSIONS } from '#shared/domain/vocab.ts';
 import { DifficultyChip } from '../Chips.tsx';
 import { Icon } from '../Icon.tsx';
+import { practiceText } from '../mission/practice-text.ts';
 import { ScenarioChips } from './ScenarioChips.tsx';
 import { setupPath } from './paths.ts';
 
 interface ScenarioCardProps {
   scenario: PublicScenarioDTO;
   onPreview(scenario: PublicScenarioDTO): void;
+  /** What has happened with this mission. Leave out when it is not known. */
+  practice?: ScenarioPractice;
+  /** Whether it is the one suggested next. */
+  recommended?: boolean;
+  /** Show "Not attempted" for a mission with no history (only once the history has loaded). */
+  showPractice?: boolean;
 }
 
 /** One scenario in the library: enough to choose by, with the full brief a click away. */
-export const ScenarioCard = memo(function ScenarioCard({ scenario, onPreview }: ScenarioCardProps) {
+export const ScenarioCard = memo(function ScenarioCard({
+  scenario,
+  onPreview,
+  practice,
+  recommended = false,
+  showPractice = false,
+}: ScenarioCardProps) {
   const titleId = useId();
   const { persona } = scenario;
   return (
     <article
       className="glass card scn-card card-interactive"
       data-spotlight={scenario.spotlight ? 'true' : undefined}
+      data-recommended={recommended ? 'true' : undefined}
+      data-practice={showPractice ? (practice?.state ?? 'new') : undefined}
       aria-labelledby={titleId}
     >
-      {scenario.spotlight ? (
+      {scenario.spotlight || recommended ? (
         <p className="scn-spotlight">
-          <span className="chip chip-accent">
-            <Icon name="spark" size={14} /> Demo spotlight
-          </span>
+          {recommended ? (
+            <span className="chip chip-accent">
+              <Icon name="spark" size={14} /> Recommended next
+            </span>
+          ) : null}
+          {scenario.spotlight ? (
+            <span className="chip chip-accent">
+              <Icon name="spark" size={14} /> Demo spotlight
+            </span>
+          ) : null}
         </p>
       ) : null}
       <div className="scn-card-top">
@@ -41,6 +64,12 @@ export const ScenarioCard = memo(function ScenarioCard({ scenario, onPreview }: 
         {scenario.title}
       </h2>
       <p className="scn-card-summary">{scenario.summary}</p>
+      {showPractice ? (
+        <p className="scn-practice t-meta">
+          <span className="scn-practice-dot" aria-hidden="true" />
+          {practiceText(practice)}
+        </p>
+      ) : null}
 
       <p className="scn-persona">
         <Icon name="user" size={16} />

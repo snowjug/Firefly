@@ -238,7 +238,7 @@
   box-shadow: 0 0 18px -4px var(--glow-soft);
 }
 .path-number {
-  color: var(--glow);
+  color: var(--glow-text);
   font-family: var(--font-display);
   font-size: 1.1rem;
   font-weight: 600;
@@ -315,10 +315,18 @@
   padding: 0;
   list-style: none;
 }
+/* Rows may shrink below their content, so a long title is cut with an ellipsis rather than
+   pushing the page wider than the screen. When the title would get cramped, the difficulty and
+   score drop to their own line instead. */
+.recent-list > li {
+  min-width: 0;
+}
 .recent-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-1) var(--sp-3);
+  min-width: 0;
   padding: var(--sp-3) var(--sp-2);
   border-bottom: 1px solid var(--border);
   border-radius: 10px;
@@ -329,6 +337,16 @@
 .recent-item:hover {
   background: color-mix(in srgb, var(--glow) 7%, transparent);
 }
+.recent-item > .grow {
+  flex: 1 1 9rem;
+}
+.recent-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-left: auto;
+}
 .recent-title {
   display: block;
   font-weight: 620;
@@ -338,11 +356,12 @@
 }
 .recent-score {
   min-width: 3.2ch;
-  color: var(--glow);
+  color: var(--glow-text);
   font-family: var(--font-display);
   font-size: 1.25rem;
   font-weight: 600;
   text-align: right;
+  white-space: nowrap;
 }
 .focus-skill {
   font-family: var(--font-display);

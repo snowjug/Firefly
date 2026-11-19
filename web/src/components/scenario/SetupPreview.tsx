@@ -4,7 +4,13 @@ import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import { DifficultyChip } from '../Chips.tsx';
 import { Icon } from '../Icon.tsx';
 import { TemperatureOrb } from '../TemperatureOrb.tsx';
-import { describeCall, type SettingRow, type SetupChoices } from './setup-model.ts';
+import { FireflyCore } from '../core/FireflyCore.tsx';
+import {
+  describeCall,
+  temperatureBandFor,
+  type SettingRow,
+  type SetupChoices,
+} from './setup-model.ts';
 
 interface SetupPreviewProps {
   scenario: PublicScenarioDTO;
@@ -31,11 +37,22 @@ function useScrollable<T extends HTMLElement>(variant: string) {
   return { ref, scrollable };
 }
 
-function PreviewBody({ scenario, choices, rows, onReset }: Omit<SetupPreviewProps, 'variant'>) {
+function PreviewBody({
+  scenario,
+  choices,
+  rows,
+  onReset,
+  core = false,
+}: Omit<SetupPreviewProps, 'variant'> & { core?: boolean }) {
   const profile = DIFFICULTY_PROFILES[choices.difficulty];
   const changed = rows.some((row) => row.changed);
   return (
     <div className="stp-preview-body">
+      {core ? (
+        <div className="stp-preview-core" aria-hidden="true">
+          <FireflyCore mood={temperatureBandFor(choices.startingTemperature)} quality="low" />
+        </div>
+      ) : null}
       <p className="stp-sentence">{describeCall(scenario, choices)}</p>
 
       <div className="stp-preview-difficulty">
@@ -94,7 +111,7 @@ export function SetupPreview({ variant, ...body }: SetupPreviewProps) {
         <h2 id={titleId} className="stp-preview-title">
           Your call so far
         </h2>
-        <PreviewBody {...body} />
+        <PreviewBody {...body} core />
       </section>
     );
   }

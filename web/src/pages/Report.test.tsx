@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -81,7 +81,8 @@ describe('Report page: session status', () => {
       { level: 1, name: 'Locked out after a password reset' },
       { timeout: 4000 },
     );
-    expect(title).toHaveFocus();
+    // Focus is applied in an effect right after the heading appears, so wait for it.
+    await waitFor(() => expect(title).toHaveFocus());
   });
 
   it('offers a retry when the evaluation failed, and keeps the transcript one click away', async () => {

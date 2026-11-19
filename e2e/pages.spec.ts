@@ -154,14 +154,30 @@ test.describe('display preferences', () => {
   test('motion stops when the device asks for less, and when the app is told to', async ({
     page,
   }) => {
-    // With nothing asked for, the start page has looping animation (so the checks below mean something).
+    // A call is open, so the start page shows its pulsing "line is open" marker; the Firefly Core in
+    // the hero is a canvas, so it is sampled directly. With nothing asked for, both are moving.
+    await createCall(page);
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/');
     await expect(page.locator('h1').first()).toBeVisible();
+    await expect(page.locator('.resume-pulse')).toBeVisible();
     expect(await animating(page)).toBeGreaterThan(0);
+    const core = () =>
+      page.evaluate(() =>
+        (document.querySelector('.hero-core canvas') as HTMLCanvasElement).toDataURL(),
+      );
+    await expect(page.locator('.hero-core .core')).toHaveAttribute('data-canvas', 'on');
+    const first = await core();
+    await page.waitForTimeout(400);
+    expect(await core()).not.toBe(first);
 
+    // Reduced motion: nothing loops, and the core holds one still frame.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(await animating(page)).toBe(0);
+    await page.waitForTimeout(300);
+    const still = await core();
+    await page.waitForTimeout(400);
+    expect(await core()).toBe(still);
 
     // The in-app switch works on a device that asks for nothing, and survives a reload.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -171,6 +187,10 @@ test.describe('display preferences', () => {
     await page.goto('/');
     await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduce');
     expect(await animating(page)).toBe(0);
+    await expect(page.locator('.hero-core .core')).toHaveAttribute('data-canvas', 'on');
+    const held = await core();
+    await page.waitForTimeout(400);
+    expect(await core()).toBe(held);
   });
 
   test('the theme applies at once and is still there after a reload', async ({ page }) => {

@@ -87,12 +87,11 @@
   white-space: nowrap;
   pointer-events: none;
   transform: translate(-50%, -50%);
-}
-.ms-label[data-anchor='start'] {
-  transform: translate(0, -50%);
-}
-.ms-label[data-anchor='end'] {
-  transform: translate(-100%, -50%);
+  /* A soft halo keeps a name readable where a link passes behind it. */
+  text-shadow:
+    0 0 6px var(--bg),
+    0 0 6px var(--bg),
+    0 0 2px var(--bg);
 }
 @container (max-width: 15rem) {
   .ms-label {

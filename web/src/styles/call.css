@@ -118,7 +118,7 @@
   white-space: nowrap;
 }
 .call-sound[aria-pressed='true'] {
-  color: var(--glow);
+  color: var(--glow-text);
 }
 @media (max-width: 560px) {
   .call-heading {
@@ -237,7 +237,7 @@
   border: 1px solid color-mix(in srgb, var(--glow) 50%, transparent);
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--glow) 12%, transparent);
-  color: var(--glow);
+  color: var(--glow-text);
   font-size: var(--fs-meta);
   font-weight: 650;
   animation: signal-in var(--dur-5) var(--ease-spring) both;
@@ -419,7 +419,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: var(--glow);
+  color: var(--glow-text);
   font-weight: 650;
 }
 .msg-signal-dot {

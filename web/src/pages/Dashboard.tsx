@@ -191,16 +191,18 @@ export default function Dashboard() {
                       <span className="recent-title">{s.scenarioTitle}</span>
                       <span className="t-meta">{formatRelative(s.startedAt)}</span>
                     </span>
-                    <DifficultyChip difficulty={s.difficulty} />
-                    <span
-                      className="tabular recent-score"
-                      aria-label={
-                        s.overallScore === null
-                          ? 'No score'
-                          : `Overall ${formatScore(s.overallScore)} out of 5`
-                      }
-                    >
-                      {s.status === 'active' ? 'In progress' : formatScore(s.overallScore)}
+                    <span className="recent-end">
+                      <DifficultyChip difficulty={s.difficulty} />
+                      <span
+                        className="tabular recent-score"
+                        aria-label={
+                          s.overallScore === null
+                            ? 'No score'
+                            : `Overall ${formatScore(s.overallScore)} out of 5`
+                        }
+                      >
+                        {s.status === 'active' ? 'In progress' : formatScore(s.overallScore)}
+                      </span>
                     </span>
                   </Link>
                 </li>

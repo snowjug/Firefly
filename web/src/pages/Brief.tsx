@@ -9,10 +9,12 @@ import {
   type PracticeMode,
 } from '#shared/domain/vocab.ts';
 import { Icon } from '../components/Icon.tsx';
+import { FireflyCore } from '../components/core/FireflyCore.tsx';
 import { ErrorState, Page, SkeletonBlock } from '../components/Page.tsx';
 import { ProviderBadge } from '../components/ProviderBadge.tsx';
 import { ChoiceGroup } from '../components/scenario/ChoiceGroup.tsx';
 import { isOneOf } from '../components/scenario/guards.ts';
+import { LaunchSequence } from '../components/scenario/LaunchSequence.tsx';
 import { setupPath } from '../components/scenario/paths.ts';
 import { ScenarioNotFound } from '../components/scenario/ScenarioNotFound.tsx';
 import { isNotFoundError } from '../components/scenario/scenario-errors.ts';
@@ -23,13 +25,16 @@ import {
   draftFor,
   overridesFromChoices,
   settingRows,
+  temperatureBandFor,
 } from '../components/scenario/setup-model.ts';
 import { api, errorMessage, isApiError } from '../lib/api.ts';
 import { useAppConfig } from '../lib/config.tsx';
 import { clearDraft, loadDraft, saveDraft } from '../lib/draft.ts';
 import { useApi } from '../lib/hooks.ts';
+import { useReducedMotion } from '../lib/theme.tsx';
 import '../styles/setup.css';
 import '../styles/brief.css';
+import '../styles/launch.css';
 
 /** Stable for one visit to the brief, so a double click or a retry never starts two calls. */
 function newRequestId(): string {
@@ -155,11 +160,18 @@ function BriefView({ scenario }: { scenario: PublicScenarioDTO }) {
   const [clientRequestId] = useState(newRequestId);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
+  const [launching, setLaunching] = useState(false);
+  const [startedId, setStartedId] = useState<string | null>(null);
   const inFlight = useRef(false);
+  const reducedMotion = useReducedMotion();
 
   const chooseMode = (next: PracticeMode) => {
     setMode(next);
     saveDraft({ scenarioId: scenario.id, overrides, mode: next });
+  };
+
+  const openCall = (id: string) => {
+    void navigate(`/calls/${id}`, { viewTransition: true });
   };
 
   const begin = async () => {
@@ -167,6 +179,12 @@ function BriefView({ scenario }: { scenario: PublicScenarioDTO }) {
     inFlight.current = true;
     setPending(true);
     setFailure(null);
+    // The launch sequence is a real-time moment, so it is never shown to someone who asked for less
+    // motion. While it plays, fetch the call screen so the hand-over is instant.
+    if (!reducedMotion) {
+      setLaunching(true);
+      void import('./Call.tsx');
+    }
     try {
       const session = await api.createSession({
         scenarioId: scenario.id,
@@ -175,11 +193,13 @@ function BriefView({ scenario }: { scenario: PublicScenarioDTO }) {
         clientRequestId,
       });
       clearDraft();
-      void navigate(`/calls/${session.id}`, { viewTransition: true });
+      if (reducedMotion) openCall(session.id);
+      else setStartedId(session.id);
     } catch (error) {
       setFailure(error);
       inFlight.current = false;
       setPending(false);
+      setLaunching(false);
     }
   };
 
@@ -244,6 +264,9 @@ function BriefView({ scenario }: { scenario: PublicScenarioDTO }) {
             <h2 id={`${beforeId}-customer`} className="brf-h">
               Your customer
             </h2>
+            <div className="brf-core" aria-hidden="true">
+              <FireflyCore mood={temperatureBandFor(choices.startingTemperature)} quality="low" />
+            </div>
             <div className="brf-persona">
               <span className="brf-monogram" aria-hidden="true">
                 {initialsOf(persona.name)}
@@ -367,6 +390,17 @@ function BriefView({ scenario }: { scenario: PublicScenarioDTO }) {
           {pending ? 'Starting your call…' : ''}
         </p>
       </section>
+      {launching ? (
+        <LaunchSequence
+          title={scenario.title}
+          persona={persona}
+          mood={temperatureBandFor(choices.startingTemperature)}
+          ready={startedId !== null}
+          onDone={() => {
+            if (startedId) openCall(startedId);
+          }}
+        />
+      ) : null}
     </>
   );
 }

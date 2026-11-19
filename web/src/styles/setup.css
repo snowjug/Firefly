@@ -346,6 +346,13 @@
   gap: var(--sp-4);
   overflow-wrap: anywhere;
 }
+/* The customer's starting temperature as light: it changes colour as the choice does. */
+.stp-preview-core {
+  --core-size: 11rem;
+  display: grid;
+  place-items: center;
+  margin: calc(var(--sp-3) * -1) auto calc(var(--sp-3) * -1);
+}
 .stp-sentence {
   font-family: var(--font-display);
   font-size: 1.05rem;
