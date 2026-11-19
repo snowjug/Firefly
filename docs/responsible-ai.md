@@ -11,20 +11,34 @@ Firefly is a **training aid**. It gives apprentices a safe place to practise cus
 | Discussing a call with a mentor, who adds what automatic feedback cannot    | Replacing mentor review                                             |
 | Repeating a scenario at a different difficulty                              | Training on or storing real customer cases, logs or screenshots     |
 
-Scores are practice signals from a handful of simulated calls. The Progress page shows no leaderboard, ranking, streak or points, and never compares one person with another.
+Scores are practice signals from a handful of simulated calls. Firefly shows no leaderboard or ranking, and never compares one person with another. It does have rewards, and they are built to encourage practice rather than to judge it: see **Rewards** below and [rewards.md](rewards.md).
 
 ## Safeguards in the product
 
 **Fictional by design**
 
 - Every scenario uses invented people, organisations and products. The library tests fail if a scenario contains an email address, a phone number or a link.
-- The interface labels the customer as simulated and fictional, and the app warns against entering real customer information before a call starts, in the message box, in the private notes and on the About page.
+- The interface labels the customer as simulated and fictional, and the app warns against entering real customer information before a call starts, in the message box, in the private notes and on the Help page.
 
 **Less personal data**
 
 - Obvious personal data in a trainee's message (email addresses, phone numbers, long numbers, identifiers) is replaced with a marker before the message is saved or sent to any model. The message box warns before sending.
 - Private notes stay in the browser tab. They are not sent to the server or included in reports.
-- There is no sign-in, no analytics, no tracking and no telemetry. Logs hold short session ids, codes and timings, not transcripts.
+- There is no account, no password, no analytics, no tracking and no telemetry. A name (and an optional role and location) can be saved in the browser as a local profile so the app can greet you and remember preferences. It never leaves the browser, and "Sign out of this device" forgets it. Logs hold short session ids, codes and timings, not transcripts.
+- The notifications in the bell menu are worked out in the browser from saved calls. Nothing is emailed or pushed.
+
+**Rewards**
+
+- Rewards are points, levels, a streak and badges. They exist to encourage three things: practising again, trying different kinds of call and getting better at a skill. They are never an assessment or a ranking, they are never compared with anyone else, and they are private to the browser profile that earned them.
+- They are worked out from saved calls every time they are asked for, by plain tested rules ([rewards.md](rewards.md)). Every award shows the reason it was given and, where there is one, the quoted moment.
+- By design they do not pay for speed, call length or volume, a high overall score on its own, repeating one scenario, or calls that end early or have too little evidence. Nothing is taken away for a retry or a missed day; a streak forgives one missed day.
+- Sample sessions never earn anything.
+
+**Voice (Beta)**
+
+- Voice is off until a person turns it on, and typing always keeps working. Turning it on shows what it means first: your browser turns speech into text and Firefly receives only that text.
+- Firefly never records, keeps or uploads audio. In Chrome and Edge the browser itself usually sends audio to its maker's online speech service, unless the device can recognise speech on-device (Firefly asks for that when the browser offers it). Some browser voices that read the customer aloud are online voices too, which send the customer's fictional words to that service. See [voice.md](voice.md#what-leaves-your-device).
+- Recognised text goes through the same personal-data replacement as typed text, and is saved in the transcript the way typed text is. Speech recognition can mishear words, so a call that used voice carries a reminder to check quotes against the transcript. Coaching reads words only, not tone, accent or pace.
 
 **Control of the model**
 
@@ -47,7 +61,7 @@ Scores are practice signals from a handful of simulated calls. The Progress page
 ## Limits you should know about
 
 - **Automatic coaching can be wrong.** The rules evaluator reads patterns in text, so it can miss a good way of saying something or read a sentence too generously. A model-written evaluation can be fluent and still mistaken. Quotes are shown so a person can check what a score rests on.
-- **No tone of voice.** Firefly is text only. Warmth, pace and pauses cannot be assessed.
+- **Tone of voice is not assessed.** Coaching reads the words that were said or typed. Warmth, pace, accent and pauses cannot be assessed, even when voice is used.
 - **A simulation is not a customer.** A scenario has fixed facts, and the demo-mode customer is rules-based and less flexible than a person or a model.
 - **English only**, and nothing here has been tested for how well it works for every kind of speaker. Non-native phrasing must never be marked down; if you see it happen, treat that as a bug.
 - **The live model path is only partly verified.** Gemini has been run end to end against the real API in a few scripted calls; Azure OpenAI and other OpenAI-compatible services have been tested only against a local fake server. None of this measures how good a model's coaching is. See the verification notes in [ai-providers.md](ai-providers.md).
@@ -58,6 +72,6 @@ Scores are practice signals from a handful of simulated calls. The Progress page
 - **Where data lives.** In the default setup, everything is in a SQLite file on the machine that runs the server (`data/firefly.db`, git-ignored) and is not encrypted by Firefly. If you use a live model, trainee messages and call transcripts are sent to the provider you configure, so choose and configure it with your organisation's data rules in mind.
 - **Free-tier model services may learn from what you send.** Google's Gemini API terms say that, for unpaid services, Google uses the content you submit and the responses to improve its products, that human reviewers may read it, and that sensitive, confidential or personal information must not be submitted; paid services do not use prompts and responses that way. Firefly sends only fictional scenario text and redacted trainee messages, so type nothing real. Read the provider's current terms before connecting any key. See [ai-providers.md](ai-providers.md#gemini-google-ai-studio).
 - **Keep API keys out of Git.** Keys belong in the git-ignored `.env`. If one is ever pasted into a chat, a ticket or a commit, treat it as exposed: delete it at the provider and create a new one.
-- **Who can see it.** Firefly has no accounts. An anonymous browser cookie separates one learner's history from another's on a shared server. It is not authentication. Keep Firefly on a trusted network, or put sign-in and TLS in front of it.
+- **Who can see it.** Firefly has no accounts: the local profile in the browser is a name for greetings, not a login. An anonymous browser cookie separates one learner's history from another's on a shared server. It is not authentication. Keep Firefly on a trusted network, or put sign-in and TLS in front of it.
 - **Deleting data.** The Trainer page can remove sample sessions, delete a profile's practice sessions, or reset everything for that profile. A single session can be deleted from History. Deleting the database file removes everything.
 - **Using it well.** Use scores to start a conversation with a mentor. Do not use them for evaluation, and do not publish individual results.
