@@ -438,15 +438,15 @@ Firefly makes no compliance or certification claims. Data lives in a local SQLit
 
 ## Quality and Testing
 
-Verified on 19 November 2026 against the code at commit `55e73d5`, with Node.js 26.13.1 locally. The same checks run in GitHub Actions on Node.js 24.22.2; [run 44402961242](https://github.com/snowjug/Firefly/actions/runs/44402961242) passed for that commit.
+Verified on 19 November 2026 against the code at commit `277646a`, in a fresh clone with Node.js 24.22.2. The same checks run in GitHub Actions; [run 44471348435](https://github.com/snowjug/Firefly/actions/runs/44471348435) passed for that commit. Later commits change documentation only.
 
 | Check                         | Command                      | Result                                                                                                                   |
 | ----------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Formatting, lint and types    | `npm run check`              | Pass                                                                                                                     |
 | Scenario validation           | `npm run validate:scenarios` | 13 scenarios loaded, all valid                                                                                           |
-| Unit, component and API tests | `npm test`                   | 888 tests in 39 files pass (742 in the server and shared project, 146 in the web project)                                |
+| Unit, component and API tests | `npm test`                   | 903 tests in 39 files pass (755 in the server and shared project, 148 in the web project)                                |
 | Production build              | `npm run build`              | Pass                                                                                                                     |
-| Browser tests                 | `npm run test:e2e`           | 24 pass (22 desktop, 2 phone viewport)                                                                                   |
+| Browser tests                 | `npm run test:e2e`           | 25 pass (23 desktop, 2 phone viewport)                                                                                   |
 | Accessibility                 | Part of the browser tests    | axe-core (WCAG 2.0, 2.1 and 2.2 A and AA rules) found no serious or critical violations on 19 page states in both themes |
 | Layout and motion             | Part of the browser tests    | No sideways scroll at 320 px or 1440 px; reduced motion honoured from the device and the app                             |
 | Secret scan and lockfile      | `npm run check`              | No findings; all resolved URLs use the public registry                                                                   |
@@ -459,7 +459,7 @@ The full dependency tree reports 7 moderate findings, all one `minimatch` adviso
 - The live provider has not been validated against a real Azure OpenAI or other service. It was tested only against a local fake server.
 - No real mentor calibration dataset exists, so nothing is known about how closely the scores agree with people.
 - Accessibility is checked by automated tools and keyboard tests only. Nobody has tested with a screen reader.
-- Demo mode is pattern-based. It can miss unusual phrasing, so it is less flexible than a person or a model.
+- Demo mode is pattern-based. It can miss unusual phrasing, and it cannot answer small-talk questions about itself, such as the customer's name or phone number, so the customer carries on with the call instead. It is less flexible than a person or a model.
 - Firefly is not deployed. There is no hosting configuration.
 - It has no sign-in, so keep it on a trusted network. Text and English only; there is no voice.
 - The repository has no LICENSE file.

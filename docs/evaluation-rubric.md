@@ -338,7 +338,7 @@ A model can write the words. It cannot change a number the engine recorded.
 ## Limits of automatic scoring
 
 - The scores are only as good as the classifications. A classifier can miss a way of saying something
-  ("I'll unlock it and stay with this" may not be read as taking ownership) or read a sentence too
+  ("Consider it handled" may not be read as taking ownership) or read a sentence too
   generously. Quotes are shown so a reviewer can see what the score rests on.
 - Tone of voice, pace and warmth cannot be heard in text. Empathy is judged from what was said.
 - The customer is a simulation with a fixed scenario. Behaviours that would be fine with a real customer
