@@ -1,0 +1,588 @@
+/* The coaching report, second layer. report.css holds the structure shared with History, Progress
+   and Transcript; this file is the report's own composition: the skill constellation, the evidence
+   trails, earned milestones and the in-place conversation moments. Every rule is scoped under
+   .rp-root so it wins over report.css whichever stylesheet loads first.
+
+   Rule for anything animated here: text never fades. Entrances use transform and shadow only, so
+   text always sits at full contrast, even mid-animation. */
+
+/* ------------------------------------------------------------------ Hero */
+.rp-root .rp-hero {
+  border-color: color-mix(in srgb, var(--glow) 22%, var(--glass-border));
+}
+.rp-root .rp-hero::after {
+  inset: -42% -8% auto auto;
+  width: 38rem;
+  height: 30rem;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--glow) 14%, transparent),
+    transparent
+  );
+}
+.rp-root .rp-hero-top {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 23rem);
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    'id const'
+    'text const'
+    'glance more';
+}
+.rp-root .rp-title {
+  font-weight: 600;
+}
+.rp-root .rp-side {
+  display: contents;
+}
+.rp-root .rp-const-wrap {
+  grid-area: const;
+  align-self: start;
+}
+.rp-root .rp-overall-more {
+  grid-area: more;
+  align-self: start;
+}
+/* Three quiet facts under the summary rather than another box. */
+.rp-root .rp-glance {
+  grid-area: glance;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-3) var(--sp-6);
+  padding: var(--sp-3) 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: none;
+}
+.rp-root .rp-glance > div {
+  display: grid;
+  gap: 2px;
+}
+.rp-root .rp-glance dd {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  text-align: left;
+}
+@media (max-width: 760px) {
+  .rp-root .rp-hero-top {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas:
+      'id'
+      'const'
+      'text'
+      'more'
+      'glance';
+  }
+  .rp-root .rp-dim {
+    padding: var(--sp-5) 0;
+  }
+}
+
+/* ------------------------------------------------------------------ Skill constellation */
+.rp-root .rp-const-wrap {
+  position: relative;
+  container-type: inline-size;
+  width: min(100%, 23rem);
+  margin-inline: auto;
+  aspect-ratio: 1;
+}
+.rp-root .rp-const {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.rp-root .rp-const-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.rp-root .rp-const-ring {
+  fill: none;
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+.rp-root .rp-const-spoke {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+.rp-root .rp-const-outline {
+  fill: color-mix(in srgb, var(--glow) 9%, transparent);
+  stroke: var(--glow);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+.rp-root .rp-const-core {
+  fill: color-mix(in srgb, var(--surface) 80%, transparent);
+  stroke: color-mix(in srgb, var(--glow) 55%, transparent);
+  stroke-width: 1.2;
+}
+.rp-root .rp-star {
+  pointer-events: auto;
+  cursor: pointer;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.rp-root .rp-star-body {
+  fill: var(--star-0);
+  stroke: none;
+}
+.rp-root .rp-star-halo {
+  opacity: 0;
+}
+.rp-root .rp-star-ring {
+  fill: none;
+  stroke: var(--star-4);
+  stroke-width: 1.2;
+  opacity: 0.85;
+}
+.rp-root .rp-star[data-tier='0'] .rp-star-body {
+  fill: none;
+  stroke: var(--star-0);
+  stroke-width: 1.6;
+}
+.rp-root .rp-star[data-tier='1'] .rp-star-body {
+  fill: var(--star-1);
+}
+.rp-root .rp-star[data-tier='2'] .rp-star-body {
+  fill: var(--star-2);
+}
+.rp-root .rp-star[data-tier='3'] .rp-star-body {
+  fill: var(--star-3);
+}
+.rp-root .rp-star[data-tier='4'] .rp-star-body {
+  fill: var(--star-4);
+}
+.rp-root .rp-star[data-tier='1'] .rp-star-halo {
+  opacity: 0.3;
+}
+.rp-root .rp-star[data-tier='2'] .rp-star-halo {
+  opacity: 0.55;
+}
+.rp-root .rp-star[data-tier='3'] .rp-star-halo {
+  opacity: 0.8;
+}
+.rp-root .rp-star[data-tier='4'] .rp-star-halo {
+  opacity: 1;
+}
+.rp-root .rp-star:hover .rp-star-body {
+  filter: brightness(1.15);
+}
+.rp-root .rp-const-label {
+  position: absolute;
+  color: var(--text-2);
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+.rp-root .rp-const-label[data-anchor='start'] {
+  transform: translate(0, -50%);
+}
+.rp-root .rp-const-label[data-anchor='end'] {
+  transform: translate(-100%, -50%);
+}
+/* On a small screen the names would not fit around the stars; the skill list below carries them. */
+@container (max-width: 17rem) {
+  .rp-root .rp-const-label {
+    display: none;
+  }
+}
+
+/* The score sits in the core of the constellation. */
+.rp-root .rp-overall {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+.rp-root .rp-overall .t-label {
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+}
+.rp-root .rp-overall-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.2rem;
+  margin: 0;
+}
+.rp-root .rp-overall-num {
+  font-size: 2.5rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.rp-root .rp-overall-of {
+  font-size: var(--fs-meta);
+}
+.rp-root .rp-overall-more {
+  display: grid;
+  gap: var(--sp-2);
+  padding-inline: var(--sp-2);
+}
+
+/* The stars come on one after another and the outline is drawn through them. */
+.rp-root .rp-const:not([data-revealed='true']) .rp-star {
+  opacity: 0;
+}
+.rp-root .rp-const[data-revealed='true'] .rp-star {
+  animation: rp-star-in var(--dur-5) var(--ease-spring) both;
+  animation-delay: calc(240ms + var(--i, 0) * 110ms);
+}
+.rp-root .rp-const[data-revealed='true'] .rp-const-outline {
+  animation: rp-draw 1100ms var(--ease-settle) 120ms both;
+}
+@keyframes rp-star-in {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+@keyframes rp-draw {
+  from {
+    stroke-dashoffset: 1;
+    fill-opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ Skill overview */
+.rp-root .rp-ov {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  box-shadow: none;
+}
+.rp-root .rp-ov:hover {
+  box-shadow: var(--shadow-1);
+}
+
+/* ------------------------------------------------------------------ Evidence trails
+   Each skill reads as a row: who it is and how it scored on the left, the reasoning and the proof
+   from the call on the right. Rows are separated by hairlines rather than boxed as cards. */
+.rp-root .rp-dims {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.rp-root .rp-dim {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  column-gap: var(--sp-6);
+  row-gap: var(--sp-4);
+  align-items: start;
+  padding: var(--sp-6) 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.rp-root .rp-dim:first-child {
+  border-top: 0;
+  padding-top: var(--sp-2);
+}
+.rp-root .rp-dim:target {
+  border-color: var(--border);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--glow) 8%, transparent),
+    transparent 70%
+  );
+}
+.rp-root .rp-dim-head {
+  display: grid;
+  grid-column: 1;
+  grid-row: 1;
+  gap: var(--sp-1);
+}
+.rp-root .rp-dim-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.rp-root .rp-dim-score {
+  grid-column: 1;
+  grid-row: 2;
+}
+.rp-root .rp-rationale {
+  grid-column: 2;
+  grid-row: 1;
+  max-width: 68ch;
+}
+.rp-root .rp-dim-evidence {
+  grid-column: 2;
+  grid-row: 2;
+}
+.rp-root .rp-guidance {
+  grid-column: 2;
+  grid-row: 3;
+  margin-top: 0;
+}
+@container rp (max-width: 700px) {
+  .rp-root .rp-dim {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rp-root .rp-dim-head,
+  .rp-root .rp-dim-score,
+  .rp-root .rp-rationale,
+  .rp-root .rp-dim-evidence,
+  .rp-root .rp-guidance {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
+/* ------------------------------------------------------------------ Earned in this call */
+.rp-root .rp-earned {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: var(--sp-4);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.rp-root .rp-badge {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-4);
+  height: 100%;
+  padding: var(--sp-5);
+  border: 1px solid color-mix(in srgb, var(--glow) 40%, var(--border));
+  border-radius: var(--r-card);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--glow) 11%, var(--surface)),
+    var(--surface) 70%
+  );
+  box-shadow:
+    var(--shadow-1),
+    0 24px 60px -40px var(--glow-soft);
+  animation: rp-rise var(--dur-5) var(--ease-settle) both;
+  animation-delay: calc(200ms + var(--i, 0) * 140ms);
+}
+@keyframes rp-rise {
+  from {
+    transform: translateY(14px) scale(0.985);
+  }
+}
+.rp-root .rp-badge-mark svg {
+  width: 48px;
+  height: 48px;
+}
+.rp-root .rp-badge-ring {
+  fill: color-mix(in srgb, var(--glow) 12%, transparent);
+  stroke: var(--glow);
+  stroke-width: 1.5;
+}
+.rp-root .rp-badge-star {
+  fill: var(--glow);
+}
+.rp-root .rp-badge-body {
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
+  min-width: 0;
+}
+.rp-root .rp-badge-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.rp-root .rp-badge-criteria {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+/* ------------------------------------------------------------------ A moment, in place */
+.rp-root .rp-ctx {
+  margin-top: var(--sp-1);
+}
+.rp-root .rp-ctx-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 32px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: var(--fs-label);
+  font-weight: 650;
+  list-style: none;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    color var(--dur-2) var(--ease-out);
+}
+.rp-root .rp-ctx-summary::-webkit-details-marker {
+  display: none;
+}
+.rp-root .rp-ctx-summary:hover,
+.rp-root .rp-ctx[open] .rp-ctx-summary {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.rp-root .rp-ctx-list {
+  display: grid;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 0;
+  padding: 0 0 0 var(--sp-3);
+  border-left: 2px solid var(--border);
+  list-style: none;
+}
+.rp-root .rp-ctx-turn {
+  display: grid;
+  gap: 2px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+.rp-root .rp-ctx-turn[data-role='trainee'] {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.rp-root .rp-ctx-turn[data-cited='true'] {
+  background: color-mix(in srgb, var(--glow) 13%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--glow) 42%, transparent) inset;
+  color: var(--text);
+}
+.rp-root .rp-ctx-who {
+  color: var(--text-3);
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.rp-root .rp-ctx-n {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.rp-root .rp-ctx-text {
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------ Discovery trail */
+.rp-root .rp-trail {
+  display: flex;
+  align-items: center;
+  margin: var(--sp-2) 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-root .rp-trail-node {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  min-width: 0;
+}
+.rp-root .rp-trail-node:last-child {
+  flex: 0 0 auto;
+}
+.rp-root .rp-trail-node:not(:last-child)::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 2px;
+  margin-inline: 8px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  opacity: 0.55;
+}
+.rp-root .rp-trail-node[data-status='discovered']:not(:last-child)::after {
+  background: linear-gradient(90deg, var(--glow), color-mix(in srgb, var(--glow) 22%, transparent));
+  opacity: 1;
+}
+.rp-root .rp-trail-node a {
+  display: grid;
+  place-items: center;
+}
+.rp-root .rp-trail-orb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--star-0);
+  border-radius: 50%;
+  background: transparent;
+}
+.rp-root .rp-trail-orb[data-importance='critical'] {
+  width: 24px;
+  height: 24px;
+}
+.rp-root .rp-trail-node[data-status='discovered'] .rp-trail-orb {
+  border-color: var(--glow);
+  background: var(--glow);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--glow) 18%, transparent),
+    0 0 18px var(--glow-soft);
+}
+.rp-root .rp-trail-node[data-status='partial'] .rp-trail-orb {
+  border-color: var(--glow);
+  background: linear-gradient(90deg, var(--glow) 50%, transparent 50%);
+}
+
+/* ------------------------------------------------------------------ Next practice */
+.rp-root .rp-next {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-color: color-mix(in srgb, var(--glow) 28%, var(--border));
+}
+.rp-root .rp-next > :not(.rp-next-core) {
+  position: relative;
+  z-index: 1;
+}
+.rp-root .rp-next-core {
+  --core-size: 20rem;
+  position: absolute;
+  z-index: 0;
+  right: -5rem;
+  top: -5rem;
+  opacity: 0.9;
+}
+@media (max-width: 760px) {
+  .rp-root .rp-next-core {
+    --core-size: 13rem;
+    right: -4rem;
+    top: -4rem;
+    opacity: 0.55;
+  }
+}
+.rp-root .rp-next-suggest {
+  border-color: color-mix(in srgb, var(--glow) 38%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--glow) 12%, transparent),
+    color-mix(in srgb, var(--accent) 7%, transparent)
+  );
+}
+
+@media print {
+  .rp-root .rp-const:not([data-revealed='true']) .rp-star {
+    opacity: 1 !important;
+  }
+  .rp-root .rp-const .rp-star,
+  .rp-root .rp-const .rp-const-outline,
+  .rp-root .rp-badge {
+    animation: none !important;
+  }
+  .rp-root .rp-next-core {
+    display: none;
+  }
+  .rp-root .rp-dim {
+    break-inside: avoid;
+  }
+}

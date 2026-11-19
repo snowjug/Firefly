@@ -8,6 +8,7 @@ import { DifficultyChip } from '../Chips.tsx';
 import { Icon } from '../Icon.tsx';
 import { ScoreMeter } from '../ScoreMeter.tsx';
 import { TemperatureOrb } from '../TemperatureOrb.tsx';
+import { ReportConstellation } from './ReportConstellation.tsx';
 import {
   ENDED_EARLY_NOTE,
   SAMPLE_NOTE,
@@ -130,14 +131,29 @@ export function ReportHeader({
         </div>
 
         <div className="rp-side">
-          <div className="rp-overall">
-            <p className="t-label">Overall</p>
+          <div className="rp-const-wrap">
+            <ReportConstellation dimensions={report.dimensions} />
+            <div className="rp-overall">
+              <p className="t-label">Overall</p>
+              <p className="rp-overall-score">
+                {summary.overallScore !== null ? (
+                  <>
+                    <span className="rp-overall-num tabular">
+                      {scoreText(summary.overallScore)}
+                    </span>
+                    <span className="rp-overall-of"> of 5</span>
+                  </>
+                ) : (
+                  <span className="rp-overall-num" aria-hidden="true">
+                    &ndash;
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="rp-overall-more">
             {summary.overallScore !== null ? (
               <>
-                <p className="rp-overall-score">
-                  <span className="rp-overall-num tabular">{scoreText(summary.overallScore)}</span>
-                  <span className="rp-overall-of"> of 5</span>
-                </p>
                 <span aria-hidden="true">
                   <ScoreMeter
                     score={summary.overallScore}

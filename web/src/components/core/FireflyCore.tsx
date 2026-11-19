@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useTheme } from '../../lib/theme.tsx';
+import { useReducedMotion } from '../../lib/theme.tsx';
 import {
   CoreEngine,
   type CoreMood,
@@ -55,7 +55,7 @@ export function FireflyCore({
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const controller = useRef<Controller | null>(null);
-  const { reducedMotion } = useTheme();
+  const reducedMotion = useReducedMotion();
   const flags = useRef({ reduced: reducedMotion, paused, visible: true });
 
   useEffect(() => {
