@@ -1,0 +1,590 @@
+/* Calibration */
+
+.cal-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+}
+.cal-measure {
+  max-width: 70ch;
+}
+.cal-subhead {
+  font-family: var(--font-display);
+  font-weight: 650;
+}
+.cal-section-head {
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+/* Introduction */
+.cal-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+}
+@media (max-width: 1000px) {
+  .cal-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .cal-steps {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.cal-step {
+  display: grid;
+  gap: var(--sp-1);
+  align-content: start;
+  padding: var(--sp-4);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.cal-step-number {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-bottom: var(--sp-1);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: var(--fs-meta);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.cal-step-title {
+  font-weight: 620;
+}
+
+/* Sample toggle */
+.cal-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--sp-3);
+  row-gap: 2px;
+  max-width: 44rem;
+}
+.cal-toggle .option-check {
+  grid-row: 1 / span 2;
+}
+.cal-toggle .option-title,
+.cal-toggle .hint {
+  grid-column: 2;
+}
+
+/* Results */
+.cal-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-3);
+  text-align: center;
+}
+.cal-empty p {
+  max-width: 58ch;
+  color: var(--text-2);
+}
+.cal-size-title {
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+.cal-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin: 0;
+}
+@media (max-width: 1000px) {
+  .cal-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .cal-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.cal-stat {
+  display: grid;
+  gap: var(--sp-1);
+  align-content: start;
+  min-width: 0;
+  padding: var(--sp-4);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.cal-stat dt {
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.cal-stat dd {
+  margin: 0;
+}
+.cal-stat-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.cal-stat-text {
+  font-size: 1.2rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.cal-stat-unit {
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  font-weight: 560;
+  letter-spacing: 0;
+  color: var(--text-3);
+}
+.cal-stat-note {
+  font-size: var(--fs-meta);
+  color: var(--text-3);
+}
+
+/* Tables */
+.cal-table-wrap {
+  position: relative; /* keeps visually hidden text inside the scroll area, so it cannot widen the page */
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+.cal-table-wrap:focus-visible {
+  outline-offset: 2px;
+}
+.cal-table th[scope='row'] {
+  font-size: inherit;
+  font-weight: 620;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+.cal-skill {
+  display: block;
+}
+.cal-scroll-hint {
+  display: none;
+}
+@media (max-width: 1180px) {
+  .cal-scroll-hint {
+    display: inline;
+  }
+}
+@media (max-width: 640px) {
+  /* The figures carry the meaning; the bar is decoration, so drop it where width is tight. */
+  .cal-bar {
+    display: none;
+  }
+  .cal-table th,
+  .cal-table td {
+    padding: 0.6rem 0.5rem;
+  }
+}
+.cal-muted {
+  color: var(--text-3);
+}
+.cal-within {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.cal-bar {
+  display: block;
+  width: 4.5rem;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.cal-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--cta-bg);
+}
+.cal-records {
+  min-width: 64rem;
+}
+.cal-records th,
+.cal-records td {
+  padding: 0.65rem 0.75rem;
+}
+.cal-records-scenario {
+  min-width: 12rem;
+  max-width: 18rem;
+  overflow-wrap: anywhere;
+}
+.cal-records-title {
+  display: block;
+  font-weight: 560;
+}
+.cal-records-reviewer {
+  overflow-wrap: anywhere;
+}
+.cal-records-versions {
+  display: grid;
+}
+.cal-pair {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.1rem;
+  white-space: nowrap;
+}
+.cal-pair-sep {
+  padding-inline: 0.15rem;
+  color: var(--text-3);
+}
+.cal-pair b {
+  font-weight: 560;
+  color: var(--text-3);
+}
+.cal-pair b[data-gap='1'] {
+  font-weight: 650;
+  color: var(--text);
+}
+.cal-pair b[data-gap='2'] {
+  font-weight: 700;
+  color: var(--caution);
+}
+
+/* Review queue */
+.cal-queue {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+}
+.cal-queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.cal-queue-text {
+  min-width: 0;
+}
+.cal-queue-title {
+  font-weight: 620;
+  overflow-wrap: anywhere;
+}
+.cal-queue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  margin-top: var(--sp-1);
+}
+.cal-queue-note {
+  max-width: 62ch;
+  margin-top: var(--sp-1);
+}
+@media (max-width: 640px) {
+  .cal-queue-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Blind review */
+.cal-review {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+}
+.cal-review-head {
+  display: grid;
+  gap: var(--sp-2);
+  justify-items: start;
+}
+.cal-review-title {
+  font-size: clamp(1.4rem, 1.15rem + 0.9vw, 1.85rem);
+  font-weight: 650;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.cal-review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+}
+.cal-review-lead {
+  max-width: 62ch;
+}
+.cal-skip {
+  justify-self: start;
+}
+@media (min-width: 1001px) {
+  /* Side by side, the form is already in view: the link is for keyboard users, shown on focus. */
+  .cal-skip:not(:focus) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
+.cal-review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .cal-review-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.cal-transcript {
+  position: sticky;
+  top: calc(var(--nav-height) + var(--sp-4));
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
+  border-radius: var(--r-card);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.cal-transcript-scroll {
+  max-height: calc(100vh - var(--nav-height) - 9rem);
+  overflow: auto;
+  padding-right: var(--sp-1);
+}
+@media (max-width: 1000px) {
+  .cal-transcript {
+    position: static;
+  }
+  .cal-transcript-scroll {
+    max-height: none;
+    overflow: visible;
+  }
+}
+.cal-turns {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+}
+.cal-turn {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.cal-turn[data-role='trainee'] {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  border-left-width: 4px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
+}
+.cal-turn-role {
+  font-size: var(--fs-label);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.cal-turn-index {
+  font-weight: 560;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+}
+.cal-turn-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cal-form {
+  display: grid;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+.cal-scale-guide {
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.cal-scale-guide summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 var(--sp-4);
+  font-size: var(--fs-small);
+  font-weight: 620;
+  cursor: pointer;
+}
+.cal-scale-guide dl {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+.cal-scale-guide dt {
+  font-size: var(--fs-small);
+  font-weight: 620;
+}
+.cal-scale-guide dd {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+.cal-problems {
+  align-items: flex-start;
+}
+.cal-problems-title {
+  font-weight: 650;
+}
+.cal-problems ul {
+  display: grid;
+  gap: 2px;
+  margin: var(--sp-2) 0 0;
+  padding-left: 1.1rem;
+}
+.cal-problems a {
+  color: var(--negative);
+}
+.cal-field {
+  min-width: 0;
+  margin: 0;
+  padding: var(--sp-4) 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.cal-field-title {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--sp-1);
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  font-weight: 650;
+}
+.cal-field-title + * {
+  clear: both;
+}
+.cal-scale {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.cal-choice {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 4.25rem;
+  padding: var(--sp-3) var(--sp-1);
+  border-radius: 12px;
+  text-align: center;
+}
+.cal-choice:hover {
+  transform: none;
+}
+.cal-choice .option-check {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin: 0;
+}
+.cal-choice-num {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 650;
+  line-height: 1.1;
+}
+.cal-choice-name {
+  font-size: var(--fs-label);
+  font-weight: 560;
+  line-height: 1.2;
+  color: var(--text-2);
+}
+.cal-selected {
+  min-height: 2.9em;
+  margin-top: var(--sp-2);
+  color: var(--text-2);
+}
+@media (max-width: 640px) {
+  .cal-scale {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cal-choice {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--sp-3);
+    min-height: 3rem;
+    padding: var(--sp-3) var(--sp-4);
+    text-align: left;
+  }
+  .cal-choice .option-check {
+    position: static;
+    flex: none;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin: 0;
+  }
+  .cal-choice-name {
+    font-size: var(--fs-small);
+  }
+}
+.cal-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+@media (max-width: 480px) {
+  .cal-form-actions .btn {
+    width: 100%;
+  }
+}
+.cal-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+}
+@media (max-width: 480px) {
+  .cal-dialog-actions .btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* After saving */
+.cal-comparison {
+  display: grid;
+  gap: var(--sp-4);
+  justify-items: start;
+  max-width: 54rem;
+}
+.cal-comparison > * {
+  min-width: 0;
+}
+.cal-comparison .cal-table-wrap {
+  width: 100%;
+}

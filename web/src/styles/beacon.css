@@ -1,0 +1,201 @@
+/* The Firefly "beacon": a restrained 3D motif built from CSS transforms (no WebGL). Three tilted rings
+   turn slowly around a glowing core with a few drifting points of light. Everything animates with
+   transform and opacity only, pauses when off-screen, and is static under reduced motion. */
+
+.beacon {
+  position: relative;
+  width: min(100%, 440px);
+  aspect-ratio: 1;
+  margin-inline: auto;
+  perspective: 1000px;
+  isolation: isolate;
+}
+.beacon-glow {
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--glow) 38%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      circle at 30% 70%,
+      color-mix(in srgb, var(--accent) 28%, transparent),
+      transparent 58%
+    );
+  filter: blur(26px);
+  opacity: 0.9;
+  animation: beacon-breathe 7s var(--ease-in-out) infinite;
+}
+.beacon-gyro {
+  position: absolute;
+  inset: 8%;
+  transform-style: preserve-3d;
+  animation: beacon-turn 36s linear infinite;
+  will-change: transform;
+}
+.beacon-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow:
+    0 0 28px -4px color-mix(in srgb, var(--accent) 45%, transparent),
+    inset 0 0 22px -8px color-mix(in srgb, var(--accent) 45%, transparent);
+  transform-style: preserve-3d;
+}
+.beacon-ring.r1 {
+  transform: rotateX(72deg);
+}
+.beacon-ring.r2 {
+  inset: 9%;
+  border-color: color-mix(in srgb, var(--accent-2) 65%, transparent);
+  transform: rotateY(72deg) rotateZ(24deg);
+}
+.beacon-ring.r3 {
+  inset: 20%;
+  border-color: color-mix(in srgb, var(--glow) 60%, transparent);
+  box-shadow:
+    0 0 24px -4px color-mix(in srgb, var(--glow) 45%, transparent),
+    inset 0 0 18px -8px color-mix(in srgb, var(--glow) 40%, transparent);
+  transform: rotateX(48deg) rotateY(48deg);
+}
+.beacon-dot {
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  background: #fff4c4;
+  box-shadow:
+    0 0 12px 3px color-mix(in srgb, var(--glow) 80%, transparent),
+    0 0 28px 8px color-mix(in srgb, var(--glow) 35%, transparent);
+}
+.beacon-ring.r2 .beacon-dot {
+  background: #d9f7ff;
+  box-shadow:
+    0 0 12px 3px color-mix(in srgb, var(--accent) 80%, transparent),
+    0 0 28px 8px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.beacon-ring.r1 .beacon-dot.second {
+  top: auto;
+  bottom: -4px;
+}
+.beacon-ring {
+  animation: ring-orbit 18s linear infinite;
+}
+.beacon-ring.r2 {
+  animation-duration: 26s;
+  animation-direction: reverse;
+}
+.beacon-ring.r3 {
+  animation-duration: 14s;
+}
+.beacon-core {
+  position: absolute;
+  inset: 38%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 34%, #fffbe6 0%, #ffe28a 22%, var(--glow) 55%, transparent 78%),
+    radial-gradient(
+      circle at 60% 70%,
+      color-mix(in srgb, var(--accent) 60%, transparent),
+      transparent 70%
+    );
+  box-shadow:
+    0 0 46px 10px color-mix(in srgb, var(--glow) 45%, transparent),
+    0 0 110px 30px color-mix(in srgb, var(--glow) 18%, transparent);
+  animation: beacon-pulse 5.5s var(--ease-in-out) infinite;
+}
+
+@keyframes beacon-turn {
+  to {
+    transform: rotateY(360deg) rotateX(8deg);
+  }
+}
+@keyframes ring-orbit {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes beacon-pulse {
+  50% {
+    transform: scale(1.07);
+    opacity: 0.92;
+  }
+}
+@keyframes beacon-breathe {
+  50% {
+    transform: scale(1.06);
+    opacity: 0.7;
+  }
+}
+
+.beacon[data-paused='true'] *,
+.beacon[data-paused='true'] {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beacon-gyro {
+    transform: rotateY(24deg) rotateX(8deg);
+    animation: none;
+  }
+  .beacon-ring,
+  .beacon-core,
+  .beacon-glow {
+    animation: none;
+  }
+}
+:root[data-motion='reduce'] .beacon-gyro {
+  transform: rotateY(24deg) rotateX(8deg);
+  animation: none;
+}
+:root[data-motion='reduce'] .beacon-ring,
+:root[data-motion='reduce'] .beacon-core,
+:root[data-motion='reduce'] .beacon-glow {
+  animation: none;
+}
+
+/* Temperature orb: a small, calm indicator. The band is always also written as text. */
+.temp-orb {
+  --orb: var(--temp-calm);
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    #fff 0%,
+    var(--orb) 55%,
+    color-mix(in srgb, var(--orb) 60%, #000) 100%
+  );
+  box-shadow: 0 0 12px 2px color-mix(in srgb, var(--orb) 55%, transparent);
+  transition:
+    background var(--dur-4) var(--ease-out),
+    box-shadow var(--dur-4) var(--ease-out);
+}
+.temp-orb[data-band='calm'] {
+  --orb: var(--temp-calm);
+}
+.temp-orb[data-band='concerned'] {
+  --orb: var(--temp-concerned);
+}
+.temp-orb[data-band='frustrated'] {
+  --orb: var(--temp-frustrated);
+}
+.temp-orb[data-band='angry'] {
+  --orb: var(--temp-angry);
+}
+.temp-orb[data-band='escalating'] {
+  --orb: var(--temp-escalating);
+}
+.temp-orb-lg {
+  width: 22px;
+  height: 22px;
+}

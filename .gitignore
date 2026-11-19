@@ -1,0 +1,24 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.vite/
+*.tsbuildinfo
+
+# Local data and configuration
+data/*
+!data/.gitkeep
+.env
+.env.*
+!.env.example
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# Throwaway local scripts and captures
+scripts/_tmp/
+screenshots/

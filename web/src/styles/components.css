@@ -1,0 +1,613 @@
+/* Components: materials, buttons, forms, chips, dialogs and states. */
+
+/* ------------------------------------------------------------------ Materials */
+.glass {
+  position: relative;
+  background: var(--glass-fallback);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-1);
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--blur-1)) saturate(140%);
+    backdrop-filter: blur(var(--blur-1)) saturate(140%);
+  }
+  .glass-strong {
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: blur(var(--blur-2)) saturate(150%);
+    backdrop-filter: blur(var(--blur-2)) saturate(150%);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .glass-strong {
+    background: var(--glass-fallback) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+/* Thin top highlight that gives glass its edge. */
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--glass-highlight), transparent);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-1);
+}
+.card {
+  padding: var(--sp-5);
+  border-radius: var(--r-card);
+}
+.card-tight {
+  padding: var(--sp-4);
+}
+.panel {
+  padding: var(--sp-6);
+  border-radius: var(--r-panel);
+}
+
+/* Interactive cards lift subtly on hover and focus. */
+.card-interactive {
+  transition:
+    transform var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+}
+.card-interactive:hover,
+.card-interactive:focus-within {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+  border-color: var(--border-strong);
+}
+.card-interactive:active {
+  transform: translateY(0);
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  border: 0;
+  margin: 0;
+}
+
+/* ------------------------------------------------------------------ Buttons */
+.btn {
+  --btn-bg: transparent;
+  --btn-fg: var(--text);
+  --btn-border: var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  padding: 0.55rem 1.05rem;
+  border-radius: var(--r-control);
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: 600;
+  font-size: var(--fs-small);
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    background var(--dur-2) var(--ease-out),
+    border-color var(--dur-2) var(--ease-out);
+}
+.btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--text-3);
+}
+.btn:active {
+  transform: translateY(0) scale(0.985);
+}
+.btn[disabled],
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-primary {
+  --btn-fg: var(--cta-text);
+  --btn-border: transparent;
+  background: var(--cta-bg);
+  box-shadow: var(--shadow-lift);
+}
+.btn-primary:hover {
+  background: var(--cta-bg-hover);
+  border-color: transparent;
+}
+.btn-secondary {
+  background: var(--surface-2);
+  --btn-border: var(--border);
+}
+.btn-ghost {
+  --btn-border: transparent;
+}
+.btn-ghost:hover {
+  background: var(--surface-2);
+  border-color: transparent;
+}
+.btn-danger {
+  --btn-fg: var(--negative);
+  --btn-border: color-mix(in srgb, var(--negative) 55%, transparent);
+}
+.btn-danger:hover {
+  background: var(--negative-bg);
+}
+.btn-danger-solid {
+  --btn-fg: #fff;
+  --btn-border: transparent;
+  background: #c81e4a;
+}
+.btn-sm {
+  min-height: 36px;
+  padding: 0.35rem 0.8rem;
+  font-size: var(--fs-meta);
+}
+.btn-lg {
+  min-height: 52px;
+  padding: 0.75rem 1.5rem;
+  font-size: var(--fs-body);
+  border-radius: 14px;
+}
+.btn-icon {
+  min-width: var(--tap);
+  padding-inline: 0.6rem;
+}
+.btn .spinner {
+  width: 1em;
+  height: 1em;
+}
+
+.spinner {
+  display: inline-block;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ------------------------------------------------------------------ Chips and badges */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0.7rem;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+  color: var(--text-2);
+  font-size: var(--fs-meta);
+  font-weight: 560;
+  white-space: nowrap;
+}
+.chip-accent {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.chip-positive {
+  color: var(--positive);
+  background: var(--positive-bg);
+  border-color: color-mix(in srgb, var(--positive) 35%, transparent);
+}
+.chip-caution {
+  color: var(--caution);
+  background: var(--caution-bg);
+  border-color: color-mix(in srgb, var(--caution) 35%, transparent);
+}
+.chip-negative {
+  color: var(--negative);
+  background: var(--negative-bg);
+  border-color: color-mix(in srgb, var(--negative) 35%, transparent);
+}
+.chip-info {
+  color: var(--info);
+  background: var(--info-bg);
+  border-color: color-mix(in srgb, var(--info) 35%, transparent);
+}
+.dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* ------------------------------------------------------------------ Forms */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.label {
+  font-size: var(--fs-small);
+  font-weight: 620;
+  color: var(--text);
+}
+.hint {
+  font-size: var(--fs-meta);
+  color: var(--text-3);
+}
+.field-error {
+  font-size: var(--fs-meta);
+  color: var(--negative);
+  font-weight: 560;
+}
+.input,
+.textarea,
+.select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--text);
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+.textarea {
+  resize: vertical;
+  line-height: var(--lh-body);
+}
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-3);
+}
+.input:hover,
+.textarea:hover,
+.select:hover {
+  border-color: var(--text-3);
+}
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+.input[aria-invalid='true'],
+.textarea[aria-invalid='true'] {
+  border-color: var(--negative);
+}
+
+/* Selectable option card (radio / checkbox look) used by the setup flow. */
+.option {
+  position: relative;
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-4);
+  border-radius: var(--r-card);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    background var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out);
+}
+.option:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.option input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.option:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.option:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.option:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.option-title {
+  font-weight: 620;
+}
+.option-check {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  margin-top: 0.15rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-3);
+  display: grid;
+  place-items: center;
+}
+.option:has(input:checked) .option-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.option:has(input:checked) .option-check::after {
+  content: '';
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--accent-contrast);
+}
+.option:has(input[type='checkbox']) .option-check {
+  border-radius: 6px;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 65%, transparent);
+}
+.segmented label {
+  position: relative;
+  min-height: 38px;
+  padding: 0.4rem 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background var(--dur-2) var(--ease-out),
+    color var(--dur-2) var(--ease-out);
+}
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+.segmented label:has(input:checked) {
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border-strong) inset;
+}
+.segmented label:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ Callouts, empty and error states */
+.callout {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-radius: var(--r-card);
+  border: 1px solid var(--border);
+  background: var(--info-bg);
+  font-size: var(--fs-small);
+}
+.callout-caution {
+  background: var(--caution-bg);
+  border-color: color-mix(in srgb, var(--caution) 35%, transparent);
+}
+.callout-negative {
+  background: var(--negative-bg);
+  border-color: color-mix(in srgb, var(--negative) 35%, transparent);
+}
+.callout-positive {
+  background: var(--positive-bg);
+  border-color: color-mix(in srgb, var(--positive) 35%, transparent);
+}
+.callout svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.state {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-8) var(--sp-5);
+  text-align: center;
+}
+.state-icon {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.state-negative .state-icon {
+  background: var(--negative-bg);
+  color: var(--negative);
+}
+.state p {
+  max-width: 44ch;
+  color: var(--text-2);
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-3) 85%, transparent);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--text) 8%, transparent),
+    transparent
+  );
+  animation: shimmer 1.4s var(--ease-in-out) infinite;
+}
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ------------------------------------------------------------------ Dialog and sheet */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: var(--sp-4);
+  background: var(--scrim);
+  animation: fade-in var(--dur-2) var(--ease-out);
+}
+.scrim-bottom {
+  place-items: end center;
+}
+.dialog {
+  width: min(560px, 100%);
+  max-height: min(88vh, 100%);
+  overflow: auto;
+  padding: var(--sp-6);
+  border-radius: var(--r-modal);
+  box-shadow: var(--shadow-2);
+  animation: pop-in var(--dur-3) var(--ease-out);
+}
+.sheet {
+  width: min(720px, 100%);
+  max-height: 86vh;
+  overflow: auto;
+  padding: var(--sp-5);
+  border-radius: var(--r-modal) var(--r-modal) 0 0;
+  box-shadow: var(--shadow-2);
+  animation: sheet-in var(--dur-3) var(--ease-out);
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+/* ------------------------------------------------------------------ Toasts */
+.toast-region {
+  position: fixed;
+  z-index: var(--z-toast);
+  inset: auto var(--sp-4) var(--sp-4) auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-width: min(420px, calc(100vw - 2rem));
+}
+.toast {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: 14px;
+  animation: pop-in var(--dur-3) var(--ease-out);
+}
+
+/* ------------------------------------------------------------------ Tables */
+.table-wrap {
+  position: relative; /* keeps visually hidden text inside the scroll area */
+  overflow-x: auto;
+  border-radius: var(--r-card);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+.table th,
+.table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.table th {
+  font-size: var(--fs-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 650;
+}
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ------------------------------------------------------------------ Score meter (1-5) */
+.meter {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  height: 8px;
+}
+.meter-seg {
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.meter-seg[data-on='true'] {
+  background: var(--cta-bg);
+}
+.meter-seg[data-tone='low'][data-on='true'] {
+  background: var(--caution);
+}
+.meter-seg[data-tone='very-low'][data-on='true'] {
+  background: var(--negative);
+}
+
+.kbd {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}

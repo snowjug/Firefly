@@ -1,0 +1,205 @@
+/* App shell: navigation, page container, footer, route transitions. */
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
+  height: var(--nav-height);
+  border-radius: 0;
+  border-width: 0 0 1px 0;
+  box-shadow: none;
+}
+.nav-inner {
+  max-width: var(--content-width);
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 var(--sp-4);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--text);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+}
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 45%, #ffe9a8 0%, var(--glow) 40%, transparent 72%),
+    linear-gradient(145deg, #1b2a52, #0d1425);
+  box-shadow: 0 0 22px -4px color-mix(in srgb, var(--glow) 70%, transparent);
+}
+.brand-mark::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff7d6;
+  box-shadow: 0 0 10px 2px #ffd25e;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: var(--sp-3);
+}
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 0.85rem;
+  border-radius: 10px;
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  transition:
+    background var(--dur-2) var(--ease-out),
+    color var(--dur-2) var(--ease-out);
+}
+.nav-link:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.nav-link[aria-current='page'] {
+  color: var(--text);
+  background: var(--surface-3);
+  box-shadow: 0 0 0 1px var(--border) inset;
+}
+.nav-end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.menu-button {
+  display: none;
+}
+@media (max-width: 900px) {
+  .nav-links {
+    display: none;
+  }
+  .menu-button {
+    display: inline-flex;
+  }
+}
+.menu-list {
+  display: grid;
+  gap: var(--sp-1);
+}
+.menu-list .nav-link {
+  min-height: 48px;
+  font-size: var(--fs-body);
+}
+
+.page {
+  width: 100%;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-4) var(--sp-8);
+  flex: 1 0 auto;
+}
+.page:focus {
+  outline: none;
+}
+.page-header {
+  display: grid;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-6);
+}
+.page-narrow {
+  max-width: 820px;
+}
+.page-wide {
+  max-width: 1380px;
+}
+@media (max-width: 720px) {
+  .page {
+    padding-top: var(--sp-5);
+  }
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding: var(--sp-4);
+}
+.footer-inner {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-meta);
+  color: var(--text-3);
+}
+
+.grid-cards {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+}
+.grid-2 {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.grid-3 {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 900px) {
+  .grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .grid-2,
+  .grid-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Route transitions use the View Transitions API where available; the effect is a short crossfade. */
+@supports (view-transition-name: none) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: var(--dur-2);
+    animation-timing-function: var(--ease-out);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+.page-enter {
+  animation: page-in var(--dur-3) var(--ease-out);
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
