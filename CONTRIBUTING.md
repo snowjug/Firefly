@@ -7,6 +7,7 @@ Firefly is built by a team of apprentices and mentors. Small, focused changes th
 ```
 git clone https://github.com/snowjug/Firefly.git
 cd Firefly
+git checkout feature/firefly-end-to-end-product   # until this work is merged into main
 npm ci
 npm run dev
 ```
@@ -15,7 +16,7 @@ You need Node.js 24 or newer. The README explains the commands in full. Demo mod
 
 ## Make a change
 
-1. **Create a branch** from `main`, for example `feature/short-description` or `fix/short-description`.
+1. **Create a branch** from the right base: `feature/firefly-end-to-end-product` until that work is merged into `main`, and `main` after that. Name it for the change, for example `feature/short-description` or `fix/short-description`.
 2. **Keep the change focused.** One idea per pull request. Do not mix a refactor with a behaviour change.
 3. **Test it locally.** Run the checks below, and try the change in the browser, in both themes and at phone width, with the keyboard only.
 4. **Open a pull request.** Say what changed and why, how you tested it, and include a screenshot for visible changes. CI runs the same checks as `npm run check`.
