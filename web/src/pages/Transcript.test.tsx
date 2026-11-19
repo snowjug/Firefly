@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,7 +51,8 @@ describe('Transcript page', () => {
     await screen.findByRole('list', { name: 'Conversation' });
 
     const turn = document.getElementById('turn-4') as HTMLElement;
-    expect(turn).toHaveFocus();
+    // The page focuses the turn in an effect, which can land just after the list appears.
+    await waitFor(() => expect(turn).toHaveFocus());
     expect(turn).toHaveAttribute('data-linked', 'true');
     expect(turn).toHaveAttribute('aria-current', 'location');
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
@@ -66,7 +67,7 @@ describe('Transcript page', () => {
     getSession.mockResolvedValue(makeSession());
     renderTranscript(`/sessions/${SESSION_ID}/transcript#turn-6`);
     await screen.findByRole('list', { name: 'Conversation' });
-    expect(document.getElementById('turn-6')).toHaveFocus();
+    await waitFor(() => expect(document.getElementById('turn-6')).toHaveFocus());
   });
 
   it('shows analysis markers as labelled text and hides them with the switch', async () => {
