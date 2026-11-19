@@ -1,6 +1,12 @@
 import type { DimensionTrendDTO } from '#shared/domain/api.ts';
+import {
+  CONSTELLATIONS,
+  MASTERY_TIER_LABELS,
+  type DimensionMastery,
+} from '#shared/domain/mastery.ts';
 import { DIMENSIONS } from '#shared/domain/vocab.ts';
 import { Icon, type IconName } from '../Icon.tsx';
+import { TierGlyph } from '../mastery/MasteryStars.tsx';
 import { TrendSparkline } from './TrendSparkline.tsx';
 import '../../styles/progress.css';
 
@@ -23,10 +29,13 @@ export function DimensionTrendCard({
   trend,
   strongest,
   focus,
+  mastery,
 }: {
   trend: DimensionTrendDTO;
   strongest: boolean;
   focus: boolean;
+  /** How brightly this skill's constellation shines, when the practice history is available. */
+  mastery?: DimensionMastery;
 }) {
   const meta = DIMENSIONS[trend.dimension];
   const change = CHANGE_WORDS[trend.change];
@@ -44,6 +53,15 @@ export function DimensionTrendCard({
           </div>
         ) : null}
       </header>
+      {mastery ? (
+        <p className="pg-tier" data-tier={mastery.tierIndex}>
+          <TierGlyph tier={mastery.tierIndex} size={30} />
+          <span>
+            <strong>{MASTERY_TIER_LABELS[mastery.tier].label}</strong>
+            <span className="t-meta"> &middot; {CONSTELLATIONS[trend.dimension].name}</span>
+          </span>
+        </p>
+      ) : null}
       {trend.points.length > 0 ? (
         <>
           <TrendSparkline points={trend.points} label={trendLabel(trend)} />
@@ -68,6 +86,20 @@ export function DimensionTrendCard({
       ) : (
         <p className="t-small t-muted">No scores for this skill yet.</p>
       )}
+      {mastery?.next ? (
+        <div className="pg-needs">
+          <p className="t-label">To reach {MASTERY_TIER_LABELS[mastery.next.tier].label}</p>
+          <ul role="list">
+            {mastery.next.needs.map((need) => (
+              <li key={need}>{need}</li>
+            ))}
+          </ul>
+        </div>
+      ) : mastery ? (
+        <p className="t-small t-muted pg-needs">
+          This skill is a Beacon. Keep it lit by practising it in new scenarios.
+        </p>
+      ) : null}
     </article>
   );
 }

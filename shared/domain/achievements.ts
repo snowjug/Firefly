@@ -134,6 +134,48 @@ function fromDimension(
   return { turnIndex: evidence.turnIndex, quote: evidence.quote, detail };
 }
 
+/** One finished call and the achievements it earned. */
+export interface AchievementCall {
+  sessionId: string;
+  scenarioTitle: string;
+  /** When the call ended (or started, when no end time exists). */
+  at: string;
+  earned: readonly EarnedAchievement[];
+}
+
+export interface AchievementTally {
+  definition: AchievementDefinition;
+  /** How many of the calls looked at earned it. */
+  count: number;
+  /** The most recent call that earned it, with the evidence that supports it. */
+  latest: { sessionId: string; scenarioTitle: string; at: string; proof: AchievementProof } | null;
+}
+
+/**
+ * How many of the given calls earned each achievement. All six always appear, in a fixed order, so
+ * what has not been earned yet stays visible (with what it takes) instead of disappearing.
+ */
+export function tallyAchievements(calls: readonly AchievementCall[]): AchievementTally[] {
+  return ACHIEVEMENT_IDS.map((id) => {
+    let count = 0;
+    let latest: AchievementTally['latest'] = null;
+    for (const call of calls) {
+      const earned = call.earned.find((item) => item.id === id);
+      if (!earned) continue;
+      count += 1;
+      if (latest === null || call.at > latest.at) {
+        latest = {
+          sessionId: call.sessionId,
+          scenarioTitle: call.scenarioTitle,
+          at: call.at,
+          proof: earned.proof,
+        };
+      }
+    }
+    return { definition: ACHIEVEMENTS[id], count, latest };
+  });
+}
+
 /** The achievements this call earned, each with the evidence that supports it. */
 export function deriveAchievements(
   report: CoachingReport,

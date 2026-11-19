@@ -66,17 +66,20 @@ export function describeStars(mastery: readonly DimensionMastery[]): string {
 /**
  * The six skills as constellations that light up with practice. Dormant is an empty ring; each tier
  * adds size and light; a beacon also gets a ring and rays. When `decorative` is set the same
- * information must be available as text next to it.
+ * information must be available as text next to it. With `reveal` the stars come on one after
+ * another when the view first appears (and not at all under reduced motion).
  */
 export function MasteryStars({
   mastery,
   labels = true,
   decorative = false,
+  reveal = false,
   className = '',
 }: {
   mastery: readonly DimensionMastery[];
   labels?: boolean;
   decorative?: boolean;
+  reveal?: boolean;
   className?: string;
 }) {
   const gradient = useId();
@@ -89,6 +92,7 @@ export function MasteryStars({
       aria-label={decorative ? undefined : describeStars(mastery)}
       aria-hidden={decorative ? true : undefined}
       data-light={light.toFixed(2)}
+      data-reveal={reveal ? 'true' : undefined}
     >
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} focusable="false" className="ms-svg">
         <defs>
@@ -124,8 +128,13 @@ export function MasteryStars({
           style={{ opacity: 0.25 + light * 0.75 }}
         />
         <circle className="ms-nucleus" cx={CENTRE} cy={CENTRE} r={3 + light * 4} />
-        {nodes.map((n) => (
-          <g key={n.dimension} className="ms-star" data-tier={n.tier}>
+        {nodes.map((n, index) => (
+          <g
+            key={n.dimension}
+            className="ms-star"
+            data-tier={n.tier}
+            style={{ ['--i' as string]: index }}
+          >
             <circle
               className="ms-halo"
               cx={n.x}
@@ -159,5 +168,33 @@ export function MasteryStars({
           ))
         : null}
     </div>
+  );
+}
+
+/** One star at one tier, to sit beside text. Decorative: the tier is always named in words next to it. */
+export function TierGlyph({ tier, size = 28 }: { tier: number; size?: number }) {
+  const gradient = useId();
+  const radius = BODY_RADIUS[tier] ?? 6;
+  return (
+    <svg
+      className="ms-glyph"
+      width={size}
+      height={size}
+      viewBox="0 0 40 40"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        <radialGradient id={gradient}>
+          <stop offset="0" style={{ stopColor: 'var(--glow)', stopOpacity: 0.65 }} />
+          <stop offset="1" style={{ stopColor: 'var(--glow)', stopOpacity: 0 }} />
+        </radialGradient>
+      </defs>
+      <g className="ms-star" data-tier={tier}>
+        <circle className="ms-halo" cx={20} cy={20} r={radius * 2.2} fill={`url(#${gradient})`} />
+        <circle className="ms-body" cx={20} cy={20} r={radius} />
+        {tier === 4 ? <circle className="ms-beacon-ring" cx={20} cy={20} r={14} /> : null}
+      </g>
+    </svg>
   );
 }

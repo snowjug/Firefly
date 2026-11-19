@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assessMastery, brightest, type MasterySession } from './mastery.ts';
-import type { Difficulty, DimensionId } from './vocab.ts';
+import { assessMastery, brightest, nextToLight, type MasterySession } from './mastery.ts';
+import { DIMENSION_IDS, type Difficulty, type DimensionId } from './vocab.ts';
 
 let counter = 0;
 function call(
@@ -108,6 +108,19 @@ describe('assessMastery', () => {
     expect(find(sessions, 'clarity').tier).toBe('dormant');
   });
 
+  it('counts sample calls only when asked to, and still ignores calls that ended early', () => {
+    const sessions = [
+      call('a', 'starter', { clarity: 4 }, { isSample: true }),
+      call('b', 'starter', { clarity: 5 }, { isSample: true, completion: 'ended-early' }),
+    ];
+    const asked = assessMastery(sessions, { includeSamples: true }).find(
+      (m) => m.dimension === 'clarity',
+    )!;
+    expect(asked.tier).toBe('kindling');
+    expect(asked.calls).toBe(1);
+    expect(find(sessions, 'clarity').tier).toBe('dormant');
+  });
+
   it('judges the most recent five calls, so skills can improve', () => {
     const older = Array.from({ length: 5 }, (_, i) => call(`o${i}`, 'starter', { clarity: 1 }));
     const newer = Array.from({ length: 5 }, (_, i) => call(`n${i}`, 'standard', { clarity: 4 }));
@@ -132,5 +145,32 @@ describe('brightest', () => {
       call('b', 'starter', { clarity: 3, closing: 5 }),
     ]);
     expect(brightest(m)?.tier).toBe('glowing');
+  });
+});
+
+describe('nextToLight', () => {
+  const lit = assessMastery([
+    call('a', 'starter', { clarity: 3, closing: 5, 'opening-rapport': 4 }),
+    call('b', 'starter', { clarity: 3, closing: 5, 'opening-rapport': 4 }),
+  ]);
+
+  it('prefers the suggested focus while it can still brighten', () => {
+    expect(nextToLight(lit, 'closing')?.dimension).toBe('closing');
+  });
+
+  it('otherwise takes the dimmest skill, the first in rubric order on a tie', () => {
+    expect(nextToLight(lit, null)?.dimension).toBe('scoping-discovery');
+    expect(nextToLight(assessMastery([]), null)?.dimension).toBe('opening-rapport');
+  });
+
+  it('is null once every skill is a Beacon', () => {
+    const beacons = assessMastery([
+      call('a', 'challenge', Object.fromEntries(DIMENSION_IDS.map((id) => [id, 5]))),
+      call('b', 'standard', Object.fromEntries(DIMENSION_IDS.map((id) => [id, 5]))),
+      call('c', 'starter', Object.fromEntries(DIMENSION_IDS.map((id) => [id, 5]))),
+      call('d', 'starter', Object.fromEntries(DIMENSION_IDS.map((id) => [id, 5]))),
+    ]);
+    expect(beacons.every((m) => m.tier === 'beacon')).toBe(true);
+    expect(nextToLight(beacons, 'clarity')).toBeNull();
   });
 });

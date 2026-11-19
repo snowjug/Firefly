@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveAchievements } from './achievements.ts';
+import { ACHIEVEMENT_IDS, deriveAchievements, tallyAchievements } from './achievements.ts';
 import type { CoachingReport } from './report.ts';
 import { DIMENSION_IDS, type DimensionId } from './vocab.ts';
 
@@ -182,5 +182,35 @@ describe('deriveAchievements', () => {
     ]);
     expect(ids(report({ curveball: { ...base, status: 'unresolved' } }))).toEqual([]);
     expect(ids(report({ curveball: { ...base, status: 'active' } }))).toEqual([]);
+  });
+});
+
+describe('tallyAchievements', () => {
+  const call = (sessionId: string, at: string, earned: ReturnType<typeof deriveAchievements>) => ({
+    sessionId,
+    scenarioTitle: `Scenario ${sessionId}`,
+    at,
+    earned,
+  });
+  const earn = (r: CoachingReport) => deriveAchievements(r, { proficiency: 'intermediate' });
+
+  it('always lists all six, in a fixed order, even when nothing was earned', () => {
+    const tally = tallyAchievements([]);
+    expect(tally.map((t) => t.definition.id)).toEqual([...ACHIEVEMENT_IDS]);
+    expect(tally.every((t) => t.count === 0 && t.latest === null)).toBe(true);
+  });
+
+  it('counts the calls that earned each one and points at the most recent', () => {
+    const signal = earn(report({ discovery: [{}] }));
+    const tally = tallyAchievements([
+      call('older', '2026-02-01T10:00:00.000Z', signal),
+      call('newer', '2026-02-03T10:00:00.000Z', signal),
+      call('none', '2026-02-04T10:00:00.000Z', earn(report())),
+    ]);
+    const found = tally.find((t) => t.definition.id === 'found-the-signal');
+    expect(found?.count).toBe(2);
+    expect(found?.latest).toMatchObject({ sessionId: 'newer', scenarioTitle: 'Scenario newer' });
+    expect(found?.latest?.proof.quote).toBe('When did it start?');
+    expect(tally.filter((t) => t.count > 0)).toHaveLength(1);
   });
 });

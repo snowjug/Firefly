@@ -105,10 +105,14 @@ interface Scored {
   at: string;
 }
 
-function scoredCalls(sessions: readonly MasterySession[], dimension: DimensionId): Scored[] {
+function scoredCalls(
+  sessions: readonly MasterySession[],
+  dimension: DimensionId,
+  includeSamples: boolean,
+): Scored[] {
   const scored: Scored[] = [];
   for (const session of sessions) {
-    if (session.isSample || session.completion !== 'completed') continue;
+    if ((session.isSample && !includeSamples) || session.completion !== 'completed') continue;
     const score = session.dimensionScores?.[dimension];
     if (typeof score !== 'number') continue;
     scored.push({
@@ -168,8 +172,9 @@ function unmet(rule: TierRule, all: Scored[], recent: Scored[], average: number)
 function assessDimension(
   sessions: readonly MasterySession[],
   dimension: DimensionId,
+  includeSamples: boolean,
 ): DimensionMastery {
-  const all = scoredCalls(sessions, dimension);
+  const all = scoredCalls(sessions, dimension, includeSamples);
   const recent = all.slice(0, RECENT_WINDOW);
   const average =
     recent.length > 0 ? recent.reduce((sum, call) => sum + call.score, 0) / recent.length : 0;
@@ -196,9 +201,21 @@ function assessDimension(
   };
 }
 
+export interface MasteryOptions {
+  /**
+   * Sample calls are built-in demo data, not the person's own practice, so they only count where
+   * the person has asked to see them (the Progress page's "Include sample sessions" switch).
+   */
+  includeSamples?: boolean;
+}
+
 /** Mastery for all six coaching dimensions, in rubric order. */
-export function assessMastery(sessions: readonly MasterySession[]): DimensionMastery[] {
-  return DIMENSION_IDS.map((dimension) => assessDimension(sessions, dimension));
+export function assessMastery(
+  sessions: readonly MasterySession[],
+  options: MasteryOptions = {},
+): DimensionMastery[] {
+  const includeSamples = options.includeSamples === true;
+  return DIMENSION_IDS.map((dimension) => assessDimension(sessions, dimension, includeSamples));
 }
 
 /** The constellation with the most light so far, ties broken by rubric order. */
@@ -206,4 +223,19 @@ export function brightest(mastery: readonly DimensionMastery[]): DimensionMaster
   const lit = mastery.filter((m) => m.tierIndex > 0);
   if (lit.length === 0) return null;
   return lit.reduce((best, m) => (m.tierIndex > best.tierIndex ? m : best));
+}
+
+/**
+ * The constellation to light next: the suggested focus while it can still brighten, otherwise the
+ * dimmest one that can (ties broken by rubric order). Null once every skill is a Beacon.
+ */
+export function nextToLight(
+  mastery: readonly DimensionMastery[],
+  focus: DimensionId | null,
+): DimensionMastery | null {
+  const open = mastery.filter((m) => m.next !== null);
+  if (open.length === 0) return null;
+  const preferred = focus ? open.find((m) => m.dimension === focus) : undefined;
+  if (preferred) return preferred;
+  return open.reduce((dimmest, m) => (m.tierIndex < dimmest.tierIndex ? m : dimmest));
 }

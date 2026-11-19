@@ -243,6 +243,44 @@ test.describe('setup with the keyboard', () => {
   });
 });
 
+test.describe('progress journey', () => {
+  test('a finished call lights the constellations, joins the path and is checked for milestones', async ({
+    page,
+  }) => {
+    const call = await finishedCall(page);
+
+    await page.goto(`/sessions/${call.id}/report`);
+    await expect(page.getByRole('heading', { level: 2, name: 'Six skill scores' })).toBeVisible();
+    const earnedOnReport = await page
+      .getByRole('region', { name: 'Earned in this call' })
+      .getByRole('heading', { level: 3 })
+      .allTextContents();
+
+    await page.goto('/progress');
+    const hero = page.getByRole('region', { name: /skills? (is|are) lit\./ });
+    await expect(hero).toBeVisible();
+    await expect(hero.getByRole('img', { name: /Skill constellations\./ })).toBeVisible();
+    await expect(hero.getByText('Next to light up')).toBeVisible();
+    await expect(page.getByText(/leaderboard|rank(?:ing)? #|streak/i)).toHaveCount(0);
+
+    // Each milestone is listed, and exactly the ones the report awarded are lit.
+    const milestones = page.getByRole('region', { name: 'Milestones' });
+    await expect(milestones.getByRole('heading', { level: 3 })).toHaveCount(6);
+    await expect(
+      milestones
+        .getByRole('listitem')
+        .filter({ hasText: /Earned in 1 call/ })
+        .getByRole('heading', { level: 3 }),
+    ).toHaveText(earnedOnReport);
+
+    // The path leads straight back to the report of the call.
+    const path = page.getByRole('list', { name: 'Completed calls, newest first' });
+    await expect(path.getByRole('listitem')).toHaveCount(1);
+    await path.getByRole('link').click();
+    await expect(page).toHaveURL(new RegExp(`/sessions/${call.id}/report$`));
+  });
+});
+
 test.describe('mentor calibration', () => {
   const SKILLS = [
     'Opening & Rapport',

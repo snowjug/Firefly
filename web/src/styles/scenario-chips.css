@@ -1,0 +1,10 @@
+/* The short row of facts about how a customer starts (impact, mood, style, stage). Shared by the
+   library, the setup and brief pages, the start page and the progress page. */
+.scn-chips {
+  gap: 0.4rem;
+}
+.scn-chip {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

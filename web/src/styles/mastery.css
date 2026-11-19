@@ -111,3 +111,38 @@
     opacity: 0.5;
   }
 }
+
+.ms-glyph {
+  flex: none;
+  overflow: visible;
+}
+
+/* On arrival the stars come on one after another, the links drawing between them. Only shapes
+   animate (names stay put), and nothing runs under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .ms[data-reveal='true'] .ms-star {
+    animation: ms-rise var(--dur-6) var(--ease-settle) both;
+    animation-delay: calc(var(--i, 0) * 140ms + 160ms);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .ms[data-reveal='true'] .ms-link {
+    animation: ms-fade var(--dur-6) var(--ease-out) both;
+    animation-delay: 700ms;
+  }
+  .ms[data-reveal='true'] .ms-glow,
+  .ms[data-reveal='true'] .ms-nucleus {
+    animation: ms-fade var(--dur-6) var(--ease-out) both;
+  }
+}
+@keyframes ms-rise {
+  from {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+}
+@keyframes ms-fade {
+  from {
+    opacity: 0;
+  }
+}

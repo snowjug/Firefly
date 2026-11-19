@@ -71,6 +71,38 @@ export function summariseScenarioPractice(
   return result;
 }
 
+/**
+ * A scenario built to practise one skill: ones not tried yet come first, then the one you scored
+ * lowest on, with the gentlest difficulty breaking ties. A call already in progress is never offered.
+ */
+export function scenarioForSkill(
+  scenarios: readonly PublicScenarioDTO[],
+  sessions: readonly PracticeSession[],
+  dimension: DimensionId,
+): PublicScenarioDTO | null {
+  const practice = summariseScenarioPractice(sessions);
+  const candidates = scenarios.filter(
+    (s) => s.coachingFocus.includes(dimension) && practice.get(s.id)?.state !== 'in-progress',
+  );
+  const rank = (s: PublicScenarioDTO) => {
+    const seen = practice.get(s.id);
+    const tried = seen !== undefined && seen.completed > 0;
+    return [tried ? 1 : 0, tried ? (seen?.best ?? 6) : 0, DIFFICULTY_RANK[s.difficulty]] as const;
+  };
+  const sorted = [...candidates].sort((a, b) => {
+    const left = rank(a);
+    const right = rank(b);
+    return (
+      left[0] - right[0] ||
+      left[1] - right[1] ||
+      left[2] - right[2] ||
+      a.estimatedMinutes - b.estimatedMinutes ||
+      a.title.localeCompare(b.title)
+    );
+  });
+  return sorted[0] ?? null;
+}
+
 export type RecommendationKind =
   'first-call' | 'build-skill' | 'step-up' | 'ease-back' | 'new-ground' | 'revisit';
 

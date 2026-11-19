@@ -271,14 +271,6 @@
   font-weight: 620;
   color: var(--text);
 }
-.scn-chips {
-  gap: 0.4rem;
-}
-.scn-chip {
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
 .scn-focus {
   font-size: var(--fs-meta);
   color: var(--text-2);

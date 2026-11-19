@@ -5,6 +5,7 @@ import { Icon } from '../Icon.tsx';
 import { briefPath, setupPath } from '../scenario/paths.ts';
 import { ScenarioChips } from '../scenario/ScenarioChips.tsx';
 import { temperatureBandFor } from '../scenario/setup-model.ts';
+import '../../styles/next-mission.css';
 
 const HEADINGS: Record<MissionRecommendation['kind'], string> = {
   'first-call': 'Your first mission',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PublicScenarioDTO, SessionSummaryDTO } from './api.ts';
-import { recommendMission, summariseScenarioPractice } from './recommend.ts';
+import { recommendMission, scenarioForSkill, summariseScenarioPractice } from './recommend.ts';
 import type { Difficulty, DimensionId } from './vocab.ts';
 
 function scenario(
@@ -172,5 +172,40 @@ describe('recommendMission', () => {
       progress: null,
     });
     expect(rec?.kind).toBe('first-call');
+  });
+});
+
+describe('scenarioForSkill', () => {
+  const pool = [
+    scenario('closing-hard', 'challenge', ['closing', 'clarity']),
+    scenario('closing-easy', 'starter', ['closing'], 8),
+    scenario('closing-mid', 'standard', ['closing']),
+    scenario('clarity-only', 'starter', ['clarity']),
+  ];
+
+  it('prefers a scenario that has not been tried, gentlest first', () => {
+    expect(scenarioForSkill(pool, [], 'closing')?.id).toBe('closing-easy');
+    expect(scenarioForSkill(pool, [session('closing-easy', 'starter', 4)], 'closing')?.id).toBe(
+      'closing-mid',
+    );
+  });
+
+  it('goes back to the scenario scored lowest once everything has been tried', () => {
+    const tried = [
+      session('closing-easy', 'starter', 4),
+      session('closing-mid', 'standard', 2),
+      session('closing-hard', 'challenge', 3),
+    ];
+    expect(scenarioForSkill(pool, tried, 'closing')?.id).toBe('closing-mid');
+  });
+
+  it('skips a call that is already in progress and returns null when nothing teaches the skill', () => {
+    const open = session('closing-easy', 'starter', null, {
+      status: 'active',
+      completion: null,
+      endedAt: null,
+    });
+    expect(scenarioForSkill(pool, [open], 'closing')?.id).toBe('closing-mid');
+    expect(scenarioForSkill(pool, [], 'scoping-discovery')).toBeNull();
   });
 });
