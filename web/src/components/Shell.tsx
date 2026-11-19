@@ -3,6 +3,8 @@ import { Link, NavLink, Outlet, useLocation, useMatch } from 'react-router';
 import { ProviderBadge } from './ProviderBadge.tsx';
 import { Dialog } from './Dialog.tsx';
 import { Icon } from './Icon.tsx';
+import { FirstRunTour } from './tour/FirstRunTour.tsx';
+import { useTourRequests } from '../lib/tour.ts';
 import { useTheme } from '../lib/theme.tsx';
 
 const NAV = [
@@ -36,6 +38,15 @@ export function Shell() {
   const mainRef = useRef<HTMLElement>(null);
   const first = useRef(true);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // The tour opens only when someone asks for it (from the home page or Settings), never by itself.
+  const tourRequests = useTourRequests();
+  const [seenRequests, setSeenRequests] = useState(tourRequests);
+  const [tourOpen, setTourOpen] = useState(false);
+  if (seenRequests !== tourRequests) {
+    setSeenRequests(tourRequests);
+    setTourOpen(true);
+  }
 
   // Move focus to the page content when the route changes so keyboard and screen-reader users start at the top.
   useEffect(() => {
@@ -109,6 +120,8 @@ export function Shell() {
           </div>
         </footer>
       )}
+
+      <FirstRunTour open={tourOpen} onClose={() => setTourOpen(false)} />
 
       <Dialog open={menuOpen} onClose={() => setMenuOpen(false)} title="Menu" variant="sheet">
         <nav aria-label="Main" className="menu-list">
