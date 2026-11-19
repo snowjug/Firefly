@@ -1,59 +1,73 @@
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
+import type { MissionRecommendation } from '#shared/domain/recommend.ts';
 import type { ScenarioOverrides } from '#shared/domain/scenario.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import {
   CALL_STAGES,
-  CALL_STAGE_LABELS,
-  CURVEBALL_LABELS,
   CURVEBALL_TYPES,
   DIFFICULTIES,
+  DIFFICULTY_RANK,
   IMPACTS,
-  IMPACT_LABELS,
-  ISSUE_TYPE_LABELS,
+  ISSUE_TYPES,
+  PRACTICE_MODES,
   PROFICIENCIES,
-  PROFICIENCY_LABELS,
   START_TEMPERATURES,
   START_TEMPERATURE_LABELS,
   STYLES,
-  STYLE_LABELS,
   temperatureBand,
   type BusinessImpact,
   type CallStage,
   type CommunicationStyle,
   type CurveballType,
   type Difficulty,
+  type IssueType,
+  type PracticeMode,
   type Proficiency,
   type StartTemperature,
   type TemperatureBandId,
 } from '#shared/domain/vocab.ts';
+import type { HintsPreference } from '../../lib/profile.ts';
 import { isOneOf, isRecord } from './guards.ts';
 
-// Pure logic for the call setup flow: the eight steps, the choices a trainee can make, how they map
-// to the `overrides` sent to the server (only what differs from the scenario), and the plain-language
-// description shown in the live preview. Nothing here goes beyond the public scenario.
-
-export const SETUP_STEPS = [
-  { id: 'issue', name: 'Issue', title: 'The issue' },
-  { id: 'impact', name: 'Impact', title: 'Business impact' },
-  { id: 'temperament', name: 'Temperament', title: 'Customer temperament' },
-  { id: 'style', name: 'Style', title: 'Communication style' },
-  { id: 'stage', name: 'Stage', title: 'Call stage' },
-  { id: 'difficulty', name: 'Difficulty', title: 'Difficulty' },
-  { id: 'curveballs', name: 'Curveballs', title: 'Curveballs' },
-  { id: 'review', name: 'Review', title: 'Review and begin' },
-] as const;
-
-export const STEP_COUNT = SETUP_STEPS.length;
-
-/** A step number from the URL, kept within 1..STEP_COUNT. */
-export function parseStep(raw: string | null): number {
-  const n = Number.parseInt(raw ?? '', 10);
-  return Number.isFinite(n) ? Math.min(STEP_COUNT, Math.max(1, n)) : 1;
-}
+// Pure logic for the practice setup page: the choices a trainee can make, how they map to the
+// `overrides` sent to the server (only what differs from the scenario), which scenario to start
+// from, and how the curveball switch and its list behave. Nothing here goes beyond the public
+// scenario: hidden facts are never part of it.
 
 export type SettingKey =
-  'impact' | 'startingTemperature' | 'style' | 'proficiency' | 'callStage' | 'difficulty';
+  'difficulty' | 'impact' | 'startingTemperature' | 'proficiency' | 'style' | 'callStage';
 
+/** The settings in the order the page shows them. */
+const SETTING_KEYS: readonly SettingKey[] = [
+  'difficulty',
+  'impact',
+  'startingTemperature',
+  'proficiency',
+  'style',
+  'callStage',
+];
+
+export const SETTING_NAMES: Record<SettingKey | 'curveballs', string> = {
+  difficulty: 'Difficulty',
+  impact: 'Business impact',
+  startingTemperature: 'Customer temperature',
+  proficiency: 'Technical proficiency',
+  style: 'Communication style',
+  callStage: 'Call stage',
+  curveballs: 'Curveballs',
+};
+
+/** One short line for each Quick start card. The full summary of the chosen one sits under them. */
+export const DIFFICULTY_TAGLINES: Record<Difficulty, string> = {
+  starter: 'Clearer clues, a friendlier customer',
+  standard: 'Moderate ambiguity',
+  challenge: 'High pressure, less to go on',
+};
+
+/**
+ * "recommended" leaves curveballs to the difficulty, "none" switches them off and "choose" lists the
+ * ones the trainee picked.
+ */
 export type CurveballMode = 'recommended' | 'none' | 'choose';
 
 export interface SetupChoices {
@@ -91,6 +105,8 @@ export function maxCurveballs(difficulty: Difficulty): number {
 const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four'];
 const numberWord = (n: number) => NUMBER_WORDS[n] ?? String(n);
 
+const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 /** "one curveball", "two curveballs". */
 export function curveballCount(n: number): string {
   return `${numberWord(n)} ${n === 1 ? 'curveball' : 'curveballs'}`;
@@ -124,6 +140,78 @@ function effectiveCurveballMode(choices: SetupChoices): CurveballMode {
   return choices.curveballMode === 'choose' && choices.curveballs.length === 0
     ? 'none'
     : choices.curveballMode;
+}
+
+/** The curveballs this scenario offers, in the order they are listed everywhere. */
+export function availableCurveballs(scenario: PublicScenarioDTO): CurveballType[] {
+  return CURVEBALL_TYPES.filter((type) => scenario.curveballOptions.includes(type));
+}
+
+/**
+ * Whether the curveball switch reads "on". The difficulty's own recommendation counts as on when it
+ * includes a curveball; Starter recommends none, so it reads "off" until one is chosen.
+ */
+export function curveballsOn(choices: SetupChoices): boolean {
+  const mode = effectiveCurveballMode(choices);
+  return (
+    mode === 'choose' ||
+    (mode === 'recommended' && DIFFICULTY_PROFILES[choices.difficulty].defaultCurveballCount > 0)
+  );
+}
+
+/**
+ * Flips the curveball switch. Off means none. On means what the difficulty recommends; where that
+ * is nothing (Starter) the first curveball the scenario offers is ticked, so "on" never means "none".
+ */
+export function withCurveballsOn(
+  scenario: PublicScenarioDTO,
+  choices: SetupChoices,
+  on: boolean,
+): SetupChoices {
+  if (!on) return { ...choices, curveballMode: 'none', curveballs: [] };
+  if (DIFFICULTY_PROFILES[choices.difficulty].defaultCurveballCount > 0) {
+    return { ...choices, curveballMode: 'recommended', curveballs: [] };
+  }
+  const first = availableCurveballs(scenario)[0];
+  return first
+    ? { ...choices, curveballMode: 'choose', curveballs: [first] }
+    : { ...choices, curveballMode: 'none', curveballs: [] };
+}
+
+/**
+ * Ticks or unticks one curveball. Ticking never goes past what the difficulty allows. Once nothing
+ * is ticked the choice goes back to what the difficulty recommends.
+ */
+export function withCurveballPick(
+  scenario: PublicScenarioDTO,
+  choices: SetupChoices,
+  type: CurveballType,
+  picked: boolean,
+): SetupChoices {
+  const current = choices.curveballMode === 'choose' ? choices.curveballs : [];
+  const next = picked
+    ? [...current.filter((pick) => pick !== type), type]
+    : current.filter((pick) => pick !== type);
+  const { picks } = fitCurveballs(next, choices.difficulty, scenario.curveballOptions);
+  return picks.length > 0
+    ? { ...choices, curveballMode: 'choose', curveballs: picks }
+    : { ...choices, curveballMode: 'recommended', curveballs: [] };
+}
+
+/** The line under the curveball switch. It never says when a curveball will happen. */
+export function curveballSummary(choices: SetupChoices): string {
+  if (!curveballsOn(choices)) return 'No curveballs on this call.';
+  if (effectiveCurveballMode(choices) === 'choose') {
+    const n = choices.curveballs.length;
+    return `${capitalise(curveballCount(n))} chosen. You will not be told when ${n === 1 ? 'it' : 'one'} may come up.`;
+  }
+  return recommendedCurveballText(choices.difficulty);
+}
+
+function curveballsChanged(choices: SetupChoices): boolean {
+  const mode = effectiveCurveballMode(choices);
+  if (mode === 'choose') return true;
+  return mode === 'none' && DIFFICULTY_PROFILES[choices.difficulty].defaultCurveballCount > 0;
 }
 
 // ------------------------------------------------------------------------------------------
@@ -186,8 +274,12 @@ export function overridesFromChoices(
   if (choices.callStage !== scenario.callStage) overrides.callStage = choices.callStage;
   if (choices.difficulty !== scenario.difficulty) overrides.difficulty = choices.difficulty;
   const mode = effectiveCurveballMode(choices);
-  if (mode === 'none') overrides.curveballs = [];
-  else if (mode === 'choose') {
+  if (mode === 'none') {
+    // A difficulty that recommends no curveballs already means "none".
+    if (DIFFICULTY_PROFILES[choices.difficulty].defaultCurveballCount > 0) {
+      overrides.curveballs = [];
+    }
+  } else if (mode === 'choose') {
     overrides.curveballs = fitCurveballs(
       choices.curveballs,
       choices.difficulty,
@@ -197,175 +289,120 @@ export function overridesFromChoices(
   return overrides;
 }
 
-// ------------------------------------------------------------------------------------------
-// Rows for summaries
-
-export interface SettingRow {
-  key: SettingKey | 'curveballs' | 'issue';
-  /** The setup step where this can be changed. */
-  step: number;
-  term: string;
-  value: string;
-  description: string;
-  defaultValue: string;
-  changed: boolean;
-  /** Set for the temperament row so it can show the orb. */
-  band?: TemperatureBandId;
+/** What differs from the scenario as written, in the order the page shows it. */
+export function changedSettings(
+  scenario: PublicScenarioDTO,
+  choices: SetupChoices,
+): (SettingKey | 'curveballs')[] {
+  const base = defaultChoices(scenario);
+  const changed: (SettingKey | 'curveballs')[] = SETTING_KEYS.filter(
+    (key) => choices[key] !== base[key],
+  );
+  if (curveballsChanged(choices)) changed.push('curveballs');
+  return changed;
 }
 
-const DIFFICULTY_TABLE = Object.fromEntries(
-  DIFFICULTIES.map((d) => [
-    d,
-    { label: DIFFICULTY_PROFILES[d].label, description: DIFFICULTY_PROFILES[d].summary },
-  ]),
-) as Record<Difficulty, { label: string; description: string }>;
+// ------------------------------------------------------------------------------------------
+// Which scenario
+
+/** Issue types that have at least one scenario, in the order the vocabulary lists them. */
+export function issueTypesOf(scenarios: readonly PublicScenarioDTO[]): IssueType[] {
+  const present = new Set(scenarios.map((scenario) => scenario.issueType));
+  return ISSUE_TYPES.filter((type) => present.has(type));
+}
+
+/** The scenarios of one issue type, gentlest first. */
+export function scenariosOfIssue(
+  scenarios: readonly PublicScenarioDTO[],
+  issueType: IssueType,
+): PublicScenarioDTO[] {
+  return scenarios
+    .filter((scenario) => scenario.issueType === issueType)
+    .sort(
+      (a, b) =>
+        DIFFICULTY_RANK[a.difficulty] - DIFFICULTY_RANK[b.difficulty] ||
+        a.title.localeCompare(b.title),
+    );
+}
+
+/** The scenario of this issue type written for the difficulty, else the gentlest one. */
+export function scenarioForIssue(
+  scenarios: readonly PublicScenarioDTO[],
+  issueType: IssueType,
+  difficulty: Difficulty,
+): PublicScenarioDTO | null {
+  const family = scenariosOfIssue(scenarios, issueType);
+  return family.find((scenario) => scenario.difficulty === difficulty) ?? family[0] ?? null;
+}
+
+/**
+ * Moves what the trainee changed onto another scenario. Their changes are theirs, not the
+ * scenario's, so they stay, and so does the difficulty they have chosen; everything else they did
+ * not touch takes the new scenario's own value.
+ */
+export function carryChoices(
+  from: PublicScenarioDTO,
+  to: PublicScenarioDTO,
+  choices: SetupChoices,
+): SetupChoices {
+  return choicesFromOverrides(to, {
+    ...overridesFromChoices(from, choices),
+    difficulty: choices.difficulty,
+  });
+}
+
+/**
+ * Switching the issue type: the scenario of that type written for the chosen difficulty, or the
+ * gentlest one, with the trainee's changes carried over.
+ */
+export function switchIssue(
+  scenarios: readonly PublicScenarioDTO[],
+  issueType: IssueType,
+  from: PublicScenarioDTO,
+  choices: SetupChoices,
+): { scenario: PublicScenarioDTO; choices: SetupChoices } | null {
+  const scenario = scenarioForIssue(scenarios, issueType, choices.difficulty);
+  return scenario ? { scenario, choices: carryChoices(from, scenario, choices) } : null;
+}
+
+export interface StartPick {
+  scenario: PublicScenarioDTO;
+  /** Why it was suggested, when the history decided. Null when it is simply the first one. */
+  reason: string | null;
+}
+
+/**
+ * The scenario the practice page opens on: the recommended one among those written for the
+ * difficulty, or the first of them. A difficulty with no scenario falls back to the whole library.
+ */
+export function chooseStartScenario(
+  scenarios: readonly PublicScenarioDTO[],
+  difficulty: Difficulty,
+  recommend: (pool: PublicScenarioDTO[]) => MissionRecommendation | null,
+): StartPick | null {
+  const written = scenarios.filter((scenario) => scenario.difficulty === difficulty);
+  const pool = written.length > 0 ? written : [...scenarios];
+  const recommendation = recommend(pool);
+  if (recommendation) return { scenario: recommendation.scenario, reason: recommendation.reason };
+  const first = pool[0];
+  return first ? { scenario: first, reason: null } : null;
+}
+
+// ------------------------------------------------------------------------------------------
+// Practice mode
+
+/** Guided or immersive when nothing has been chosen: the hints setting wins, else the difficulty. */
+export function defaultMode(difficulty: Difficulty, hints: HintsPreference): PracticeMode {
+  if (hints === 'on') return 'guided';
+  if (hints === 'off') return 'immersive';
+  return DIFFICULTY_PROFILES[difficulty].defaultMode;
+}
+
+// ------------------------------------------------------------------------------------------
+// Temperature
 
 export function temperatureBandFor(temperature: StartTemperature): TemperatureBandId {
   return temperatureBand(START_TEMPERATURE_LABELS[temperature].startValue).id;
-}
-
-/** The scenario itself as the first row of a review. It is chosen on the library, so it never reads "changed". */
-export function issueRow(scenario: PublicScenarioDTO): SettingRow {
-  return {
-    key: 'issue',
-    step: 1,
-    term: 'Issue',
-    value: scenario.title,
-    description: ISSUE_TYPE_LABELS[scenario.issueType],
-    defaultValue: scenario.title,
-    changed: false,
-  };
-}
-
-export function settingRows(scenario: PublicScenarioDTO, choices: SetupChoices): SettingRow[] {
-  const defaults = defaultChoices(scenario);
-  const simple = <K extends SettingKey>(
-    key: K,
-    step: number,
-    term: string,
-    table: Record<SetupChoices[K], { label: string; description: string }>,
-  ): SettingRow => ({
-    key,
-    step,
-    term,
-    value: table[choices[key]].label,
-    description: table[choices[key]].description,
-    defaultValue: table[defaults[key]].label,
-    changed: choices[key] !== defaults[key],
-  });
-
-  const temperament = simple(
-    'startingTemperature',
-    3,
-    'Customer temperament',
-    START_TEMPERATURE_LABELS,
-  );
-  temperament.band = temperatureBandFor(choices.startingTemperature);
-
-  return [
-    simple('impact', 2, 'Business impact', IMPACT_LABELS),
-    temperament,
-    simple('style', 4, 'Communication style', STYLE_LABELS),
-    simple('proficiency', 4, 'Technical proficiency', PROFICIENCY_LABELS),
-    simple('callStage', 5, 'Call stage', CALL_STAGE_LABELS),
-    simple('difficulty', 6, 'Difficulty', DIFFICULTY_TABLE),
-    curveballRow(scenario, choices),
-  ];
-}
-
-function curveballRow(scenario: PublicScenarioDTO, choices: SetupChoices): SettingRow {
-  const profile = DIFFICULTY_PROFILES[choices.difficulty];
-  const mode = effectiveCurveballMode(choices);
-  const base = { key: 'curveballs' as const, step: 7, term: 'Curveballs' };
-  const defaultValue = 'Recommended for the difficulty';
-  if (mode === 'none') {
-    return {
-      ...base,
-      value: 'None',
-      description: 'No curveballs on this call.',
-      defaultValue,
-      changed: profile.defaultCurveballCount > 0,
-    };
-  }
-  if (mode === 'choose') {
-    const picks = fitCurveballs(
-      choices.curveballs,
-      choices.difficulty,
-      scenario.curveballOptions,
-    ).picks;
-    return {
-      ...base,
-      value: picks.map((p) => CURVEBALL_LABELS[p].label).join(', '),
-      description: 'The customer may do something unexpected. You will not be told when.',
-      defaultValue,
-      changed: true,
-    };
-  }
-  return {
-    ...base,
-    value: `Recommended for ${profile.label}`,
-    description: recommendedCurveballText(choices.difficulty),
-    defaultValue,
-    changed: false,
-  };
-}
-
-// ------------------------------------------------------------------------------------------
-// The sentence in "Your call so far"
-
-const TEMPERAMENT_WORDS: Record<StartTemperature, string> = {
-  calm: 'calm',
-  anxious: 'anxious',
-  frustrated: 'frustrated',
-  angry: 'angry',
-};
-
-const STYLE_WORDS: Record<CommunicationStyle, string> = {
-  talkative: 'talkative',
-  terse: 'terse',
-  demanding: 'demanding',
-  vague: 'vague',
-  'non-native': 'a non-native English speaker',
-};
-
-const STAGE_SENTENCES: Record<CallStage, string> = {
-  'first-contact': "It's a first contact.",
-  'follow-up': "It's a follow-up on an open case.",
-  escalated: "It's an escalated case.",
-  closure: "It's a closure call.",
-};
-
-const isAcronym = (word: string) =>
-  word.length > 1 && /[A-Z]/.test(word) && word === word.toUpperCase();
-
-/** "IT administrator" stays as written; "Senior Platform Engineer" becomes "senior platform engineer". */
-function lowerRole(role: string): string {
-  return role
-    .trim()
-    .split(/\s+/)
-    .map((word) => (isAcronym(word) ? word : word.toLowerCase()))
-    .join(' ');
-}
-
-function withArticle(phrase: string): string {
-  const first = phrase.split(/\s+/)[0] ?? '';
-  let vowelSound: boolean;
-  if (isAcronym(first)) vowelSound = /^[AEFHILMNORSX]/.test(first);
-  else if (/^(uni|use|usu|eur|one|once)/i.test(first)) vowelSound = false;
-  else if (/^(hour|honest|honou?r|heir)/i.test(first)) vowelSound = true;
-  else vowelSound = /^[aeiou]/i.test(first);
-  return `${vowelSound ? 'an' : 'a'} ${phrase}`;
-}
-
-/** One plain sentence about the call, built only from the public scenario and the current choices. */
-export function describeCall(scenario: PublicScenarioDTO, choices: SetupChoices): string {
-  const { name, role, organisation } = scenario.persona;
-  const knowledge = PROFICIENCY_LABELS[choices.proficiency].label.toLowerCase();
-  return [
-    `${name}, ${withArticle(lowerRole(role))} at ${organisation}, is ${TEMPERAMENT_WORDS[choices.startingTemperature]} and ${STYLE_WORDS[choices.style]}, with ${knowledge} technical knowledge.`,
-    STAGE_SENTENCES[choices.callStage],
-    `Business impact is ${IMPACT_LABELS[choices.impact].label.toLowerCase()}.`,
-  ].join(' ');
 }
 
 // ------------------------------------------------------------------------------------------
@@ -374,9 +411,15 @@ export function describeCall(scenario: PublicScenarioDTO, choices: SetupChoices)
 export interface DraftLike {
   scenarioId: string;
   overrides: ScenarioOverrides;
+  mode?: PracticeMode;
 }
 
 /** The saved draft counts only when it is for this scenario. */
 export function draftFor<T extends DraftLike>(draft: T | null, scenarioId: string): T | null {
   return draft && draft.scenarioId === scenarioId && isRecord(draft.overrides) ? draft : null;
+}
+
+/** The practice mode the trainee chose, if the draft holds a valid one. */
+export function modeFromDraft(draft: { mode?: unknown } | null): PracticeMode | null {
+  return isOneOf(PRACTICE_MODES, draft?.mode) ? draft.mode : null;
 }

@@ -1,22 +1,24 @@
-import { useId, useState } from 'react';
+import { useId, useState, type Ref } from 'react';
 import { Icon } from '../Icon.tsx';
 import { FACETS, type FacetCounts, type FacetKey, type LibraryQuery } from './library-filters.ts';
 
 interface LibraryFiltersProps {
   query: LibraryQuery;
   counts: { available: FacetCounts; totals: FacetCounts };
-  /** How many of the collapsible filters are set (the search box is always visible). */
-  activeFacets: number;
+  searchRef?: Ref<HTMLInputElement>;
   onSearchChange(value: string): void;
   onSearchBlur(): void;
   onFacetChange(key: FacetKey, value: string): void;
 }
 
-/** Search plus one native select per filter. On narrow screens the selects sit behind a "Filters" button. */
+/**
+ * A search box and one native select for each filter. Every control has a visible label. On a phone
+ * the selects sit behind a "Filters" button, which says how many are set.
+ */
 export function LibraryFilters({
   query,
   counts,
-  activeFacets,
+  searchRef,
   onSearchChange,
   onSearchBlur,
   onFacetChange,
@@ -24,6 +26,7 @@ export function LibraryFilters({
   const baseId = useId();
   const [open, setOpen] = useState(false);
   const panelId = `${baseId}-filters`;
+  const active = FACETS.filter((def) => Boolean(query.facets[def.key])).length;
 
   return (
     <form
@@ -33,46 +36,37 @@ export function LibraryFilters({
       onSubmit={(event) => event.preventDefault()}
     >
       <div className="lib-search-row">
-        <div className="lib-search-field">
-          <Icon name="search" size={18} />
-          <label htmlFor={`${baseId}-q`} className="sr-only">
+        <div className="field lib-search">
+          <label className="label" htmlFor={`${baseId}-q`}>
             Search scenarios
           </label>
-          <input
-            id={`${baseId}-q`}
-            type="search"
-            className="input lib-search-input"
-            placeholder="Title, topic or customer"
-            autoComplete="off"
-            spellCheck={false}
-            maxLength={100}
-            value={query.q}
-            onChange={(event) => onSearchChange(event.target.value)}
-            onBlur={onSearchBlur}
-          />
-          {query.q ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-icon btn-sm lib-search-clear"
-              aria-label="Clear search"
-              onClick={() => onSearchChange('')}
-            >
-              <Icon name="x" size={16} />
-            </button>
-          ) : null}
+          <span className="input-icon">
+            <Icon name="search" size={18} />
+            <input
+              ref={searchRef}
+              id={`${baseId}-q`}
+              type="search"
+              className="input"
+              placeholder="Title, topic or customer"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={100}
+              value={query.q}
+              onChange={(event) => onSearchChange(event.target.value)}
+              onBlur={onSearchBlur}
+            />
+          </span>
         </div>
         <button
           type="button"
-          className="btn btn-secondary lib-filters-toggle"
+          className="btn btn-secondary lib-toggle"
           aria-expanded={open}
           aria-controls={panelId}
           onClick={() => setOpen((value) => !value)}
         >
           <Icon name="filter" size={18} />
           Filters
-          {activeFacets > 0 ? (
-            <span className="chip chip-accent lib-filter-count">{activeFacets} active</span>
-          ) : null}
+          {active > 0 ? <span className="chip chip-accent">{active} set</span> : null}
           <Icon name={open ? 'chevron-up' : 'chevron-down'} size={16} />
         </button>
       </div>
@@ -81,9 +75,9 @@ export function LibraryFilters({
         {FACETS.map((def) => {
           const id = `${baseId}-${def.key}`;
           const value = query.facets[def.key] ?? '';
-          // Options no scenario has are left out, unless one is already selected from the URL.
+          // Options no scenario has are left out, unless one is already selected from the address.
           const values = def.values.filter(
-            (v) => (counts.totals[def.key][v] ?? 0) > 0 || v === value,
+            (option) => (counts.totals[def.key][option] ?? 0) > 0 || option === value,
           );
           return (
             <div className="field" key={def.key}>
@@ -98,9 +92,9 @@ export function LibraryFilters({
                 onChange={(event) => onFacetChange(def.key, event.target.value)}
               >
                 <option value="">{def.anyLabel}</option>
-                {values.map((v) => (
-                  <option key={v} value={v}>
-                    {def.valueLabel(v)} ({counts.available[def.key][v] ?? 0})
+                {values.map((option) => (
+                  <option key={option} value={option}>
+                    {def.valueLabel(option)} ({counts.available[def.key][option] ?? 0})
                   </option>
                 ))}
               </select>

@@ -2,105 +2,102 @@ import { memo, useId } from 'react';
 import { Link } from 'react-router';
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
 import type { ScenarioPractice } from '#shared/domain/recommend.ts';
-import { DIMENSIONS } from '#shared/domain/vocab.ts';
+import {
+  IMPACT_LABELS,
+  ISSUE_TYPE_LABELS,
+  START_TEMPERATURE_LABELS,
+} from '#shared/domain/vocab.ts';
 import { DifficultyChip } from '../Chips.tsx';
 import { Icon } from '../Icon.tsx';
-import { practiceText } from '../mission/practice-text.ts';
-import { ScenarioChips } from './ScenarioChips.tsx';
+import { TemperatureOrb } from '../TemperatureOrb.tsx';
+import { IssueIcon } from '../ui/IssueIcon.tsx';
 import { setupPath } from './paths.ts';
+import { practiceText } from './practice-text.ts';
+import { temperatureBandFor } from './setup-model.ts';
 
 interface ScenarioCardProps {
   scenario: PublicScenarioDTO;
-  onPreview(scenario: PublicScenarioDTO): void;
-  /** What has happened with this mission. Leave out when it is not known. */
+  /** What has happened with this scenario. Leave out when it is not known. */
   practice?: ScenarioPractice;
-  /** Whether it is the one suggested next. */
-  recommended?: boolean;
-  /** Show "Not attempted" for a mission with no history (only once the history has loaded). */
+  /** Set on the one suggested next: why it is suggested. */
+  recommendedReason?: string;
+  /** Say "Not tried yet" for a scenario with no history (only once the history has loaded). */
   showPractice?: boolean;
 }
 
-/** One scenario in the library: enough to choose by, with the full brief a click away. */
+/** One scenario in the library: enough to choose by. The Start link opens its setup page. */
 export const ScenarioCard = memo(function ScenarioCard({
   scenario,
-  onPreview,
   practice,
-  recommended = false,
+  recommendedReason,
   showPractice = false,
 }: ScenarioCardProps) {
   const titleId = useId();
-  const { persona } = scenario;
   return (
     <article
-      className="glass card scn-card card-interactive"
-      data-spotlight={scenario.spotlight ? 'true' : undefined}
-      data-recommended={recommended ? 'true' : undefined}
-      data-practice={showPractice ? (practice?.state ?? 'new') : undefined}
+      className="glass card card-interactive lib-card"
+      data-recommended={recommendedReason ? 'true' : undefined}
       aria-labelledby={titleId}
     >
-      {scenario.spotlight || recommended ? (
-        <p className="scn-spotlight">
-          {recommended ? (
-            <span className="chip chip-accent">
-              <Icon name="spark" size={14} /> Recommended next
-            </span>
+      <div className="lib-card-top">
+        <IssueIcon issue={scenario.issueType} />
+        <div className="lib-card-head">
+          {recommendedReason || scenario.spotlight ? (
+            <p className="lib-card-flags">
+              {recommendedReason ? (
+                <span className="chip chip-accent">
+                  <Icon name="spark" size={14} /> Recommended next
+                </span>
+              ) : null}
+              {scenario.spotlight ? <span className="chip chip-violet">Demo spotlight</span> : null}
+            </p>
           ) : null}
-          {scenario.spotlight ? (
-            <span className="chip chip-accent">
-              <Icon name="spark" size={14} /> Demo spotlight
-            </span>
-          ) : null}
-        </p>
-      ) : null}
-      <div className="scn-card-top">
-        <DifficultyChip difficulty={scenario.difficulty} />
-        <span className="scn-minutes t-meta">
-          <Icon name="clock" size={14} />
-          <span>About {scenario.estimatedMinutes} min</span>
-        </span>
+          <h2 id={titleId} className="lib-card-title">
+            {scenario.title}
+          </h2>
+          <p className="lib-card-issue">{ISSUE_TYPE_LABELS[scenario.issueType]}</p>
+        </div>
       </div>
 
-      <h2 id={titleId} className="scn-card-title">
-        {scenario.title}
-      </h2>
-      <p className="scn-card-summary">{scenario.summary}</p>
-      {showPractice ? (
-        <p className="scn-practice t-meta">
-          <span className="scn-practice-dot" aria-hidden="true" />
-          {practiceText(practice)}
+      <p className="lib-card-summary">{scenario.summary}</p>
+
+      <ul role="list" className="cluster lib-card-chips" aria-label="Scenario settings">
+        <li>
+          <DifficultyChip difficulty={scenario.difficulty} />
+        </li>
+        <li className="chip">{IMPACT_LABELS[scenario.impact].label} impact</li>
+        <li className="chip">
+          <TemperatureOrb band={temperatureBandFor(scenario.startingTemperature)} />
+          Starts {START_TEMPERATURE_LABELS[scenario.startingTemperature].label.toLowerCase()}
+        </li>
+      </ul>
+
+      <p className="lib-card-meta">
+        <span>
+          <Icon name="clock" size={14} /> About {scenario.estimatedMinutes} minutes
+        </span>
+        {showPractice ? (
+          <span data-practice={practice?.state ?? 'new'}>
+            <span className="lib-practice-dot" aria-hidden="true" />
+            {practiceText(practice)}
+          </span>
+        ) : null}
+      </p>
+
+      {recommendedReason ? (
+        <p className="lib-card-reason">
+          <strong>Why:</strong> {recommendedReason}
         </p>
       ) : null}
 
-      <p className="scn-persona">
-        <Icon name="user" size={16} />
-        <span>
-          <strong>{persona.name}</strong>, {persona.role}, {persona.organisation}
-        </span>
-      </p>
-
-      <ScenarioChips scenario={scenario} />
-
-      <p className="scn-focus">
-        <span className="scn-focus-label">Coaching focus</span>{' '}
-        {scenario.coachingFocus.map((id) => DIMENSIONS[id].short).join(' \u00b7 ')}
-      </p>
-
-      <div className="scn-card-actions">
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => onPreview(scenario)}
-          aria-label={`Preview ${scenario.title}`}
-        >
-          Preview
-        </button>
+      <div className="lib-card-foot">
         <Link
           to={setupPath(scenario.id)}
-          className="btn btn-primary"
+          className="btn btn-primary lib-card-link"
           viewTransition
-          aria-label={`Set up call: ${scenario.title}`}
+          aria-label={`Start ${scenario.title}`}
         >
-          Set up call <Icon name="arrow-right" size={18} />
+          Start <Icon name="arrow-right" size={18} />
         </Link>
       </div>
     </article>

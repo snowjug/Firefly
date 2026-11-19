@@ -1,18 +1,18 @@
-/* The call launch: a short, skippable moment between the brief and the call. */
+/* The call launch: a short, skippable moment between setting up and the call. */
 
 .launch {
-  --launch-tint: var(--glow);
+  --launch-tint: var(--primary);
   position: fixed;
   inset: 0;
   z-index: var(--z-launch);
   display: grid;
   align-content: center;
   justify-items: center;
-  gap: var(--sp-4);
+  gap: var(--sp-5);
   padding: var(--sp-5);
   background: radial-gradient(
-    60% 50% at 50% 36%,
-    color-mix(in srgb, var(--launch-tint) 22%, var(--bg)),
+    60% 50% at 50% 34%,
+    color-mix(in srgb, var(--launch-tint) 20%, var(--bg)),
     var(--bg) 72%
   );
   cursor: pointer;
@@ -30,16 +30,33 @@
 .launch[data-mood='angry'] {
   --launch-tint: var(--temp-angry);
 }
+.launch[data-mood='escalating'] {
+  --launch-tint: var(--temp-escalating);
+}
 @keyframes launch-in {
   from {
     opacity: 0;
   }
 }
-.launch-core {
-  --core-size: min(64vw, 21rem);
-  display: grid;
-  place-items: center;
-  margin-bottom: calc(var(--sp-5) * -1);
+.launch-avatar {
+  --ill-radius: 50%;
+  width: min(52vw, 13rem);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 6px var(--surface),
+    0 0 0 7px var(--border-strong),
+    0 0 64px 8px color-mix(in srgb, var(--launch-tint) 38%, transparent);
+}
+.launch[data-stage='0'] .launch-avatar,
+.launch[data-stage='1'] .launch-avatar {
+  animation: launch-pulse 1.6s var(--ease-in-out) infinite;
+}
+@keyframes launch-pulse {
+  50% {
+    transform: scale(1.025);
+  }
 }
 .launch-text {
   display: grid;
@@ -67,9 +84,9 @@
   text-transform: uppercase;
 }
 .launch-steps strong {
-  font-family: var(--font-display);
+  font-family: var(--font-heading);
   font-size: 1.4rem;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.2;
 }
 .launch-sub {

@@ -1,46 +1,18 @@
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import {
-  CALL_STAGES,
-  CALL_STAGE_LABELS,
   DIFFICULTIES,
   DIFFICULTY_RANK,
-  DIMENSIONS,
-  DIMENSION_IDS,
   IMPACTS,
   IMPACT_LABELS,
+  ISSUE_TYPES,
   ISSUE_TYPE_LABELS,
-  STYLES,
-  STYLE_LABELS,
 } from '#shared/domain/vocab.ts';
-import { isOneOf } from './guards.ts';
 
 // Pure logic for the scenario library: what can be filtered, how a filtered view is written to and
-// read from the URL, and how scenarios are matched, counted and ordered.
+// read from the address, and how scenarios are matched, counted and ordered.
 
-export const DURATION_BANDS = ['short', 'medium', 'long'] as const;
-export type DurationBand = (typeof DURATION_BANDS)[number];
-
-const DURATION_LABELS: Record<DurationBand, string> = {
-  short: 'Up to 10 minutes',
-  medium: '11 to 15 minutes',
-  long: 'Over 15 minutes',
-};
-
-export function durationBand(minutes: number): DurationBand {
-  return minutes <= 10 ? 'short' : minutes <= 15 ? 'medium' : 'long';
-}
-
-export const SORT_KEYS = ['recommended', 'shortest', 'difficulty'] as const;
-export type SortKey = (typeof SORT_KEYS)[number];
-
-export const SORT_LABELS: Record<SortKey, string> = {
-  recommended: 'Recommended',
-  shortest: 'Shortest first',
-  difficulty: 'Easiest first',
-};
-
-export const FACET_KEYS = ['difficulty', 'impact', 'style', 'stage', 'focus', 'duration'] as const;
+export const FACET_KEYS = ['issue', 'difficulty', 'impact'] as const;
 export type FacetKey = (typeof FACET_KEYS)[number];
 
 export interface FacetDefinition {
@@ -49,7 +21,7 @@ export interface FacetDefinition {
   anyLabel: string;
   values: readonly string[];
   valueLabel(value: string): string;
-  valuesOf(scenario: PublicScenarioDTO): readonly string[];
+  valueOf(scenario: PublicScenarioDTO): string;
 }
 
 function facet(
@@ -57,7 +29,7 @@ function facet(
   label: string,
   anyLabel: string,
   entries: readonly (readonly [string, string])[],
-  valuesOf: (scenario: PublicScenarioDTO) => readonly string[],
+  valueOf: (scenario: PublicScenarioDTO) => string,
 ): FacetDefinition {
   const labels = new Map(entries);
   return {
@@ -66,81 +38,54 @@ function facet(
     anyLabel,
     values: entries.map(([value]) => value),
     valueLabel: (value) => labels.get(value) ?? value,
-    valuesOf,
+    valueOf,
   };
 }
 
 export const FACETS: readonly FacetDefinition[] = [
   facet(
+    'issue',
+    'Issue type',
+    'All issue types',
+    ISSUE_TYPES.map((type) => [type, ISSUE_TYPE_LABELS[type]] as const),
+    (scenario) => scenario.issueType,
+  ),
+  facet(
     'difficulty',
     'Difficulty',
-    'Any difficulty',
-    DIFFICULTIES.map((d) => [d, DIFFICULTY_PROFILES[d].label] as const),
-    (s) => [s.difficulty],
+    'All difficulties',
+    DIFFICULTIES.map((difficulty) => [difficulty, DIFFICULTY_PROFILES[difficulty].label] as const),
+    (scenario) => scenario.difficulty,
   ),
   facet(
     'impact',
     'Business impact',
-    'Any impact',
-    IMPACTS.map((i) => [i, IMPACT_LABELS[i].label] as const),
-    (s) => [s.impact],
-  ),
-  facet(
-    'style',
-    'Communication style',
-    'Any style',
-    STYLES.map((s) => [s, STYLE_LABELS[s].label] as const),
-    (s) => [s.style],
-  ),
-  facet(
-    'stage',
-    'Call stage',
-    'Any stage',
-    CALL_STAGES.map((c) => [c, CALL_STAGE_LABELS[c].label] as const),
-    (s) => [s.callStage],
-  ),
-  facet(
-    'focus',
-    'Coaching focus',
-    'Any focus',
-    DIMENSION_IDS.map((d) => [d, DIMENSIONS[d].label] as const),
-    (s) => s.coachingFocus,
-  ),
-  facet(
-    'duration',
-    'Duration',
-    'Any length',
-    DURATION_BANDS.map((b) => [b, DURATION_LABELS[b]] as const),
-    (s) => [durationBand(s.estimatedMinutes)],
+    'All impacts',
+    IMPACTS.map((impact) => [impact, IMPACT_LABELS[impact].label] as const),
+    (scenario) => scenario.impact,
   ),
 ];
 
 export interface LibraryQuery {
   q: string;
   facets: Partial<Record<FacetKey, string>>;
-  sort: SortKey;
 }
 
-export const EMPTY_QUERY: LibraryQuery = { q: '', facets: {}, sort: 'recommended' };
+export const EMPTY_QUERY: LibraryQuery = { q: '', facets: {} };
 
 const MAX_QUERY_LENGTH = 100;
 
-/** Reads a filtered view from the URL. Unknown or stale values are ignored, never trusted. */
+/** Reads a filtered view from the address. Unknown or stale values are ignored, never trusted. */
 export function parseQuery(params: URLSearchParams): LibraryQuery {
   const facets: Partial<Record<FacetKey, string>> = {};
   for (const def of FACETS) {
     const value = params.get(def.key);
     if (value && def.values.includes(value)) facets[def.key] = value;
   }
-  const sort = params.get('sort');
-  return {
-    q: (params.get('q') ?? '').slice(0, MAX_QUERY_LENGTH),
-    facets,
-    sort: isOneOf(SORT_KEYS, sort) ? sort : 'recommended',
-  };
+  return { q: (params.get('q') ?? '').slice(0, MAX_QUERY_LENGTH), facets };
 }
 
-/** Writes a view to the URL, leaving out everything that is at its default. */
+/** Writes a view to the address, leaving out everything that is empty. */
 export function toSearchParams(query: LibraryQuery): URLSearchParams {
   const params = new URLSearchParams();
   const q = query.q.trim();
@@ -149,7 +94,6 @@ export function toSearchParams(query: LibraryQuery): URLSearchParams {
     const value = query.facets[def.key];
     if (value) params.set(def.key, value);
   }
-  if (query.sort !== 'recommended') params.set('sort', query.sort);
   return params;
 }
 
@@ -160,22 +104,9 @@ export function withFacet(query: LibraryQuery, key: FacetKey, value: string): Li
   return { ...query, facets };
 }
 
-export interface ActiveFilter {
-  key: FacetKey | 'q';
-  /** The control this filter belongs to, for example "Difficulty". */
-  label: string;
-  value: string;
-}
-
-export function activeFilters(query: LibraryQuery): ActiveFilter[] {
-  const filters: ActiveFilter[] = [];
-  const q = query.q.trim();
-  if (q) filters.push({ key: 'q', label: 'Search', value: q });
-  for (const def of FACETS) {
-    const value = query.facets[def.key];
-    if (value) filters.push({ key: def.key, label: def.label, value: def.valueLabel(value) });
-  }
-  return filters;
+/** True when a search or any filter narrows the list. */
+export function isFiltered(query: LibraryQuery): boolean {
+  return query.q.trim() !== '' || FACETS.some((def) => Boolean(query.facets[def.key]));
 }
 
 // ------------------------------------------------------------------------------------------
@@ -222,7 +153,7 @@ function matchesFacets(
 ): boolean {
   return FACETS.every((def) => {
     const wanted = facets[def.key];
-    return def.key === skip || !wanted || def.valuesOf(scenario).includes(wanted);
+    return def.key === skip || !wanted || def.valueOf(scenario) === wanted;
   });
 }
 
@@ -236,7 +167,7 @@ export function filterScenarios(
 export type FacetCounts = Record<FacetKey, Record<string, number>>;
 
 function emptyCounts(): FacetCounts {
-  return { difficulty: {}, impact: {}, style: {}, stage: {}, focus: {}, duration: {} };
+  return { issue: {}, difficulty: {}, impact: {} };
 }
 
 /**
@@ -253,15 +184,13 @@ export function facetCounts(
   const searched = scenarios.filter((s) => matchesSearch(s, query.q));
   for (const def of FACETS) {
     for (const s of scenarios) {
-      for (const value of def.valuesOf(s)) {
-        totals[def.key][value] = (totals[def.key][value] ?? 0) + 1;
-      }
+      const value = def.valueOf(s);
+      totals[def.key][value] = (totals[def.key][value] ?? 0) + 1;
     }
     for (const s of searched) {
       if (!matchesFacets(s, query.facets, def.key)) continue;
-      for (const value of def.valuesOf(s)) {
-        available[def.key][value] = (available[def.key][value] ?? 0) + 1;
-      }
+      const value = def.valueOf(s);
+      available[def.key][value] = (available[def.key][value] ?? 0) + 1;
     }
   }
   return { available, totals };
@@ -270,25 +199,20 @@ export function facetCounts(
 // ------------------------------------------------------------------------------------------
 // Order
 
-export function sortScenarios(
+/**
+ * The one suggested next comes first, then the demo spotlight, then the gentlest to the hardest,
+ * with the title breaking ties so the order never shuffles.
+ */
+export function orderScenarios(
   scenarios: readonly PublicScenarioDTO[],
-  sort: SortKey,
+  recommendedId: string | null,
 ): PublicScenarioDTO[] {
   const rank = (s: PublicScenarioDTO) => DIFFICULTY_RANK[s.difficulty];
-  const byTitle = (a: PublicScenarioDTO, b: PublicScenarioDTO) => a.title.localeCompare(b.title);
-  const ordered = [...scenarios];
-  if (sort === 'shortest') {
-    ordered.sort(
-      (a, b) => a.estimatedMinutes - b.estimatedMinutes || rank(a) - rank(b) || byTitle(a, b),
-    );
-  } else if (sort === 'difficulty') {
-    ordered.sort(
-      (a, b) => rank(a) - rank(b) || a.estimatedMinutes - b.estimatedMinutes || byTitle(a, b),
-    );
-  } else {
-    ordered.sort(
-      (a, b) => Number(b.spotlight) - Number(a.spotlight) || rank(a) - rank(b) || byTitle(a, b),
-    );
-  }
-  return ordered;
+  return [...scenarios].sort(
+    (a, b) =>
+      Number(b.id === recommendedId) - Number(a.id === recommendedId) ||
+      Number(b.spotlight) - Number(a.spotlight) ||
+      rank(a) - rank(b) ||
+      a.title.localeCompare(b.title),
+  );
 }
