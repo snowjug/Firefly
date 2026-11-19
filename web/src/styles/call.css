@@ -251,7 +251,6 @@
 }
 @keyframes signal-in {
   from {
-    opacity: 0;
     transform: translateY(6px) scale(0.92);
   }
 }
@@ -333,6 +332,11 @@
   padding: 0;
   list-style: none;
 }
+.msg-item {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+}
 .msg {
   display: flex;
   align-items: flex-end;
@@ -402,7 +406,6 @@
 }
 @keyframes msg-in {
   from {
-    opacity: 0;
     transform: translateY(10px) scale(0.985);
   }
 }
@@ -452,14 +455,15 @@
   color: var(--text);
 }
 
-/* A change in the conversation: a quiet rule and one line, never an alert. */
+/* A change in the conversation: a quiet rule and one line, never an alert. It spans the full row
+   under the reply it follows. */
 .shift {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: var(--sp-3);
   margin: 0;
-  padding: var(--sp-1) 0;
+  padding: var(--sp-1) 0 0;
   animation: msg-in var(--dur-5) var(--ease-settle) both;
 }
 .shift-rule {

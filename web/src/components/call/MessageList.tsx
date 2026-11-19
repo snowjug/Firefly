@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../Icon.tsx';
 import { formatTime } from '../../lib/format.ts';
 import type { ChatShift, ChatTurn } from './useCall.ts';
@@ -30,6 +30,7 @@ function Message({
   onRetry,
   fresh,
   signal,
+  shifts,
 }: {
   turn: ChatTurn;
   persona: Persona;
@@ -38,48 +39,55 @@ function Message({
   fresh: boolean;
   /** A signal came to light in this reply (guided practice only). */
   signal: boolean;
+  /** Changes in the customer's mood that appeared after this reply (guided practice only). */
+  shifts: ChatShift[];
 }) {
   const mine = turn.role === 'trainee';
   return (
-    <li
-      className={`msg ${mine ? 'msg-trainee' : 'msg-customer'}`}
-      data-status={turn.status}
-      data-fresh={fresh || undefined}
-      data-signal={signal || undefined}
-    >
-      {mine ? null : (
-        <span className="avatar" aria-hidden="true">
-          {initials(persona.name)}
-        </span>
-      )}
-      <div className="msg-body">
-        <p className="msg-meta">
-          <span className="msg-who">{mine ? 'You' : persona.name}</span>
-          <time dateTime={turn.createdAt}>{formatTime(turn.createdAt)}</time>
-          {signal ? (
-            <span className="msg-signal">
-              <span className="msg-signal-dot" aria-hidden="true" />
-              Signal found in this reply
-            </span>
+    <li className="msg-item">
+      <div
+        className={`msg ${mine ? 'msg-trainee' : 'msg-customer'}`}
+        data-status={turn.status}
+        data-fresh={fresh || undefined}
+        data-signal={signal || undefined}
+      >
+        {mine ? null : (
+          <span className="avatar" aria-hidden="true">
+            {initials(persona.name)}
+          </span>
+        )}
+        <div className="msg-body">
+          <p className="msg-meta">
+            <span className="msg-who">{mine ? 'You' : persona.name}</span>
+            <time dateTime={turn.createdAt}>{formatTime(turn.createdAt)}</time>
+            {signal ? (
+              <span className="msg-signal">
+                <span className="msg-signal-dot" aria-hidden="true" />
+                Signal found in this reply
+              </span>
+            ) : null}
+          </p>
+          <p className="bubble">{turn.text}</p>
+          {turn.status === 'sending' ? <p className="msg-status">Sending…</p> : null}
+          {turn.status === 'failed' ? (
+            <div className="msg-status msg-failed" role="alert">
+              <span>
+                <strong>{turn.saved ? 'Saved.' : 'Not sent.'}</strong> {turn.error}
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => onRetry(turn.key)}
+              >
+                <Icon name="refresh" size={16} /> Retry
+              </button>
+            </div>
           ) : null}
-        </p>
-        <p className="bubble">{turn.text}</p>
-        {turn.status === 'sending' ? <p className="msg-status">Sending…</p> : null}
-        {turn.status === 'failed' ? (
-          <div className="msg-status msg-failed" role="alert">
-            <span>
-              <strong>{turn.saved ? 'Saved.' : 'Not sent.'}</strong> {turn.error}
-            </span>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => onRetry(turn.key)}
-            >
-              <Icon name="refresh" size={16} /> Retry
-            </button>
-          </div>
-        ) : null}
+        </div>
       </div>
+      {shifts.map((shift) => (
+        <Shift key={`${shift.afterKey}-${shift.kind}`} shift={shift} name={persona.name} />
+      ))}
     </li>
   );
 }
@@ -89,14 +97,17 @@ function shiftText(shift: ChatShift, name: string): string {
   return `${name}'s mood shifted from ${shift.from?.label ?? 'one state'} to ${shift.to?.label ?? 'another'}.`;
 }
 
-/** A quiet marker in the transcript: the conversation changed. It never suggests what to say. */
+/**
+ * A quiet marker after a reply: the conversation changed. It sits inside the reply's own list item
+ * (so the list still has one item per message) and never suggests what to say.
+ */
 function Shift({ shift, name }: { shift: ChatShift; name: string }) {
   return (
-    <li className="shift" data-kind={shift.kind} data-direction={shift.direction}>
+    <div className="shift" data-kind={shift.kind} data-direction={shift.direction}>
       <span className="shift-rule" aria-hidden="true" />
       <p className="shift-text">{shiftText(shift, name)}</p>
       <span className="shift-rule" aria-hidden="true" />
-    </li>
+    </div>
   );
 }
 
@@ -175,26 +186,15 @@ export function MessageList({
           </p>
           <ol role="list" className="msg-list">
             {turns.map((turn) => (
-              <Fragment key={turn.key}>
-                <Message
-                  turn={turn}
-                  persona={persona}
-                  onRetry={onRetry}
-                  fresh={!openingKeys.has(turn.key)}
-                  signal={guided && signalKeys.includes(turn.key)}
-                />
-                {guided
-                  ? shifts
-                      .filter((shift) => shift.afterKey === turn.key)
-                      .map((shift) => (
-                        <Shift
-                          key={`${shift.afterKey}-${shift.kind}`}
-                          shift={shift}
-                          name={persona.name}
-                        />
-                      ))
-                  : null}
-              </Fragment>
+              <Message
+                key={turn.key}
+                turn={turn}
+                persona={persona}
+                onRetry={onRetry}
+                fresh={!openingKeys.has(turn.key)}
+                signal={guided && signalKeys.includes(turn.key)}
+                shifts={guided ? shifts.filter((shift) => shift.afterKey === turn.key) : []}
+              />
             ))}
             {typing ? (
               <li className="msg msg-customer msg-typing" aria-hidden="true">

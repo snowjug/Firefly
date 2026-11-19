@@ -9,7 +9,13 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  scroll-behavior: smooth;
+}
+/* Smooth scrolling is only for jumping between sections of a report. Everywhere else the page
+   scrolls exactly when asked, which keeps keyboard focus, anchors and assistive tools predictable. */
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.rp-root):not([data-motion='reduce']) {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
