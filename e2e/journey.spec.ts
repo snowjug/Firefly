@@ -142,6 +142,32 @@ test.describe('a trainee journey through the interface', () => {
     await expect(page).toHaveURL(/\/sessions\/[\w-]+\/report$/, { timeout: 20_000 });
     await expect(page.getByRole('heading', { level: 2, name: 'Discovery' })).toBeVisible();
   });
+
+  test('a scenario opened straight after typing in the search is not undone by the search sync', async ({
+    page,
+  }) => {
+    // Hold the Setup page's code back so the library stays on screen past the search pause, which
+    // is when the typed search used to be written over the address that had just been opened.
+    await page.route(/\/assets\/Setup-[\w-]+\.js$/, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      await route.continue();
+    });
+    await page.goto('/scenarios');
+    await page.getByRole('searchbox', { name: 'Search scenarios' }).fill('export');
+    // `force` makes the click land at once, inside the search pause, instead of after Playwright
+    // has waited for the card to settle (which is usually longer than the pause).
+    await page
+      .getByRole('link', { name: /Set up call: A user needs help finding a feature/ })
+      .click({ force: true });
+
+    await expect(page).toHaveURL(/\/scenarios\/cannot-find-export-feature\/setup$/);
+    await expect(
+      page.getByRole('heading', { level: 2, name: 'Is this the issue you want to practise?' }),
+    ).toBeVisible();
+    // And it stays there: nothing writes the search over the new address afterwards.
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(/\/setup$/);
+  });
 });
 
 test.describe('what the simulation does', () => {

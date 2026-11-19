@@ -57,6 +57,8 @@ function Harness() {
 }
 
 function renderLibrary(entry = '/scenarios') {
+  // The page compares its own address with the browser's, so the browser starts where the router does.
+  window.history.replaceState(null, '', entry);
   render(
     <MemoryRouter initialEntries={[entry]}>
       <Harness />
@@ -79,6 +81,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  window.history.replaceState(null, '', '/');
 });
 
 describe('Library', () => {
@@ -101,6 +104,20 @@ describe('Library', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Showing 1 of 3 scenarios');
     await waitFor(() => expect(url()).toHaveTextContent('/scenarios?q=invoice'));
     expect(screen.getByTestId('navigation')).toHaveTextContent('REPLACE');
+  });
+
+  it('does not pull the person back to the library when a link was followed during the search pause', async () => {
+    const user = userEvent.setup();
+    renderLibrary();
+    await screen.findByText(starter.title);
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search scenarios' }), 'invoice');
+    // A link has just been followed: the browser has moved on, but the old page is still showing
+    // (the next page's chunk is still loading).
+    window.history.replaceState(null, '', '/scenarios/invoice-shock/setup');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    expect(url()).toHaveTextContent(/^\/scenarios$/);
   });
 
   it('filters by choosing an option, shows it as a removable filter and can clear everything', async () => {

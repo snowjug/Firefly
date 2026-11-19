@@ -52,11 +52,15 @@ export default function Library() {
   const query = useMemo<LibraryQuery>(() => ({ ...urlQuery, q: text }), [urlQuery, text]);
 
   const writeSearch = useCallback(() => {
+    // The pause can end just after a link was followed, while the next page's chunk is still loading
+    // and this page is still on screen. Writing then would replace the new address and send the
+    // person back to the library.
+    if (window.location.pathname !== location.pathname) return;
     void navigate(
       { search: toSearchParams({ ...urlQuery, q: text }).toString() },
       { replace: true },
     );
-  }, [navigate, urlQuery, text]);
+  }, [navigate, location.pathname, urlQuery, text]);
 
   const searchPending = text.trim() !== urlSearch.trim();
   useEffect(() => {
