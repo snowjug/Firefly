@@ -8,6 +8,7 @@ import {
 } from '#shared/domain/vocab.ts';
 import { TemperatureOrb } from '../TemperatureOrb.tsx';
 import { temperatureBandFor } from './setup-model.ts';
+import '../../styles/scenario-chips.css';
 
 /** The scenario's starting settings as plain-language chips. The temperature is always written out. */
 export function ScenarioChips({

@@ -1,6 +1,8 @@
 /* Components: materials, buttons, forms, chips, dialogs and states. */
 
 /* ------------------------------------------------------------------ Materials */
+/* Panels are tinted and translucent over the static ambient background. Only the strong variant
+   (navigation, dialogs, overlays) blurs what is behind it, so long pages of cards stay cheap. */
 .glass {
   position: relative;
   background: var(--glass-fallback);
@@ -11,13 +13,11 @@
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
   .glass {
     background: var(--glass-bg);
-    -webkit-backdrop-filter: blur(var(--blur-1)) saturate(140%);
-    backdrop-filter: blur(var(--blur-1)) saturate(140%);
   }
   .glass-strong {
     background: var(--glass-bg-strong);
-    -webkit-backdrop-filter: blur(var(--blur-2)) saturate(150%);
-    backdrop-filter: blur(var(--blur-2)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--blur-2)) saturate(140%);
+    backdrop-filter: blur(var(--blur-2)) saturate(140%);
   }
 }
 @media (prefers-reduced-transparency: reduce) {
@@ -125,8 +125,31 @@
 .btn-primary {
   --btn-fg: var(--cta-text);
   --btn-border: transparent;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   background: var(--cta-bg);
   box-shadow: var(--shadow-lift);
+}
+/* A slow sheen crosses the ember button on hover and focus; transform only, so it stays cheap. */
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.34) 50%,
+    transparent 75%
+  );
+  transform: translateX(-130%);
+  transition: transform var(--dur-5) var(--ease-settle);
+  pointer-events: none;
+}
+.btn-primary:hover::after,
+.btn-primary:focus-visible::after {
+  transform: translateX(130%);
 }
 .btn-primary:hover {
   background: var(--cta-bg-hover);
@@ -504,7 +527,7 @@
   padding: var(--sp-6);
   border-radius: var(--r-modal);
   box-shadow: var(--shadow-2);
-  animation: pop-in var(--dur-3) var(--ease-out);
+  animation: pop-in var(--dur-4) var(--ease-settle);
 }
 .sheet {
   width: min(720px, 100%);
@@ -513,7 +536,7 @@
   padding: var(--sp-5);
   border-radius: var(--r-modal) var(--r-modal) 0 0;
   box-shadow: var(--shadow-2);
-  animation: sheet-in var(--dur-3) var(--ease-out);
+  animation: sheet-in var(--dur-4) var(--ease-settle);
 }
 @keyframes fade-in {
   from {

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router';
+import { recommendMission, summariseScenarioPractice } from '#shared/domain/recommend.ts';
 import { Icon } from '../components/Icon.tsx';
+import { MissionMap } from '../components/mission/MissionMap.tsx';
+import { ViewToggle, type LibraryView } from '../components/mission/ViewToggle.tsx';
 import { EmptyState, ErrorState, LoadingCards, Page } from '../components/Page.tsx';
 import { isOneOf } from '../components/scenario/guards.ts';
 import { LibraryFilters } from '../components/scenario/LibraryFilters.tsx';
@@ -21,23 +24,63 @@ import {
 } from '../components/scenario/library-filters.ts';
 import { ScenarioCard } from '../components/scenario/ScenarioCard.tsx';
 import { ScenarioPreviewDialog } from '../components/scenario/ScenarioPreviewDialog.tsx';
-import { api } from '../lib/api.ts';
 import { plural } from '../lib/format.ts';
-import { useApi } from '../lib/hooks.ts';
+import { useMediaQuery } from '../lib/hooks.ts';
+import { usePractice } from '../lib/practice.ts';
+import { readStorage, writeStorage } from '../lib/storage.ts';
 import '../styles/library.css';
+import '../styles/mission-map.css';
 
 const SEARCH_DEBOUNCE_MS = 250;
+const VIEW_KEY = 'firefly.library.view';
+const isView = (value: unknown): value is LibraryView => value === 'map' || value === 'list';
 
 export default function Library() {
-  const scenarios = useApi((signal) => api.scenarios(signal), []);
+  const { scenarios, sessions, progress } = usePractice();
   const navigate = useNavigate();
   const location = useLocation();
   const navigationType = useNavigationType();
   const [params] = useSearchParams();
   const sortId = useId();
+  const mappable = useMediaQuery('(min-width: 760px)');
+  const roomy = useMediaQuery('(min-width: 1000px)');
 
   const urlQuery = useMemo(() => parseQuery(params), [params]);
   const urlSearch = urlQuery.q;
+
+  // The map is the first view on a wide screen; the list is always one switch away and is the only
+  // view on a phone. The address wins, then what the person last chose, then the screen size.
+  const requestedView = params.get('view');
+  const routeView: LibraryView = isView(requestedView)
+    ? requestedView
+    : (() => {
+        const stored = readStorage<unknown>(VIEW_KEY, null);
+        return isView(stored) ? stored : roomy ? 'map' : 'list';
+      })();
+  // The switch answers at once; the address follows a moment later, because the router applies
+  // navigation as a transition and a controlled control would otherwise snap back for a frame.
+  const [chosen, setChosen] = useState<{ view: LibraryView; key: string } | null>(null);
+  const view: LibraryView = !mappable
+    ? 'list'
+    : chosen !== null && chosen.key === location.key
+      ? chosen.view
+      : routeView;
+  /** The address keeps the chosen view when filters or the search change. */
+  const searchString = useCallback(
+    (next: LibraryQuery) => {
+      const search = toSearchParams(next);
+      if (isView(requestedView)) search.set('view', requestedView);
+      return search.toString();
+    },
+    [requestedView],
+  );
+  const changeView = (next: LibraryView) => {
+    setChosen({ view: next, key: location.key });
+    writeStorage(VIEW_KEY, next);
+    const search = toSearchParams(urlQuery);
+    search.set('view', next);
+    void navigate({ search: search.toString() }, { replace: true });
+  };
 
   // The search box keeps its own text so typing is never held up by the URL. The URL follows after a
   // short pause (replacing the entry, so Back is not flooded), and the box follows the URL again when
@@ -56,11 +99,8 @@ export default function Library() {
     // and this page is still on screen. Writing then would replace the new address and send the
     // person back to the library.
     if (window.location.pathname !== location.pathname) return;
-    void navigate(
-      { search: toSearchParams({ ...urlQuery, q: text }).toString() },
-      { replace: true },
-    );
-  }, [navigate, location.pathname, urlQuery, text]);
+    void navigate({ search: searchString({ ...urlQuery, q: text }) }, { replace: true });
+  }, [navigate, location.pathname, urlQuery, text, searchString]);
 
   const searchPending = text.trim() !== urlSearch.trim();
   useEffect(() => {
@@ -70,7 +110,7 @@ export default function Library() {
   }, [searchPending, writeSearch]);
 
   const go = (next: LibraryQuery) => {
-    void navigate({ search: toSearchParams(next).toString() });
+    void navigate({ search: searchString(next) });
   };
 
   const all = scenarios.data;
@@ -79,8 +119,22 @@ export default function Library() {
     () => sortScenarios(filterScenarios(all ?? [], query), query.sort),
     [all, query],
   );
+  const matchIds = useMemo(() => new Set(visible.map((s) => s.id)), [visible]);
   const active = activeFilters(query);
   const activeFacets = active.filter((f) => f.key !== 'q').length;
+
+  // What has been practised and what to suggest next. Both are optional: if the history cannot be
+  // loaded, missions simply show without a practice state.
+  const history = sessions.data?.sessions;
+  const practice = useMemo(() => summariseScenarioPractice(history ?? []), [history]);
+  const recommendation = useMemo(
+    () =>
+      all && history
+        ? recommendMission({ scenarios: all, sessions: history, progress: progress.data })
+        : null,
+    [all, history, progress.data],
+  );
+  const showPractice = history !== undefined;
 
   const statusRef = useRef<HTMLParagraphElement>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -158,28 +212,33 @@ export default function Library() {
             <p ref={statusRef} tabIndex={-1} role="status" className="lib-count">
               {countText}
             </p>
-            {all.length > 1 ? (
-              <div className="field lib-sort">
-                <label className="label" htmlFor={sortId}>
-                  Sort by
-                </label>
-                <select
-                  id={sortId}
-                  className="select"
-                  value={query.sort}
-                  onChange={(event) => {
-                    const sort = event.target.value;
-                    if (isOneOf(SORT_KEYS, sort)) go({ ...query, sort });
-                  }}
-                >
-                  {SORT_KEYS.map((key) => (
-                    <option key={key} value={key}>
-                      {SORT_LABELS[key]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
+            <div className="lib-tools">
+              {mappable && all.length > 1 ? (
+                <ViewToggle value={view} onChange={changeView} />
+              ) : null}
+              {view === 'list' && all.length > 1 ? (
+                <div className="field lib-sort">
+                  <label className="label" htmlFor={sortId}>
+                    Sort by
+                  </label>
+                  <select
+                    id={sortId}
+                    className="select"
+                    value={query.sort}
+                    onChange={(event) => {
+                      const sort = event.target.value;
+                      if (isOneOf(SORT_KEYS, sort)) go({ ...query, sort });
+                    }}
+                  >
+                    {SORT_KEYS.map((key) => (
+                      <option key={key} value={key}>
+                        {SORT_LABELS[key]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           {active.length > 0 ? (
@@ -219,11 +278,25 @@ export default function Library() {
             >
               Try a different word, or remove a filter to see more of the library.
             </EmptyState>
+          ) : view === 'map' ? (
+            <MissionMap
+              scenarios={all}
+              matchIds={matchIds}
+              practice={practice}
+              recommendation={recommendation}
+              onPreview={openPreview}
+            />
           ) : (
             <ul role="list" className="grid-cards lib-grid">
               {visible.map((scenario) => (
                 <li key={scenario.id}>
-                  <ScenarioCard scenario={scenario} onPreview={openPreview} />
+                  <ScenarioCard
+                    scenario={scenario}
+                    onPreview={openPreview}
+                    practice={practice.get(scenario.id)}
+                    recommended={recommendation?.scenario.id === scenario.id}
+                    showPractice={showPractice}
+                  />
                 </li>
               ))}
             </ul>

@@ -22,7 +22,7 @@ flowchart LR
   ENG --> PROV
   EVAL --> PROV
   SVC --> DB
-  PROV -.->|only when configured| LLM[Azure OpenAI or OpenAI-compatible endpoint]
+  PROV -.->|only when configured| LLM[Azure OpenAI, Gemini or an OpenAI-compatible endpoint]
 ```
 
 ## Components
@@ -32,7 +32,7 @@ flowchart LR
 | Shared domain      | `shared/domain/`                       | The contract between server and web: vocabulary, zod schemas for scenarios, reports and classifications, the API types, scenario configuration (`applyConfig`), and calibration maths. Pure, no I/O. |
 | Scenario library   | `server/scenarios/`                    | Thirteen synthetic scenarios as TypeScript objects, validated when the server starts. See [scenario-authoring.md](scenario-authoring.md).                                                            |
 | Simulation engine  | `server/engine/`                       | Classifies what the trainee did, decides which hidden facts may be revealed, updates the customer's state, fires curveballs and writes the reply (demo mode). Deterministic for a given seed.        |
-| Model provider     | `server/providers/`, `server/prompts/` | One interface with a demo implementation and a live one for Azure OpenAI or any OpenAI-compatible endpoint. See [ai-providers.md](ai-providers.md).                                                  |
+| Model provider     | `server/providers/`, `server/prompts/` | One interface with a demo implementation and a live one for Azure OpenAI, Google's Gemini API or any OpenAI-compatible endpoint. See [ai-providers.md](ai-providers.md).                             |
 | Coaching evaluator | `server/evaluator/`                    | Scores the six coaching dimensions from the transcript and the engine's records, verifies every quote, and builds the report. See [evaluation-rubric.md](evaluation-rubric.md).                      |
 | Services           | `server/services/`                     | Session lifecycle, idempotency, evaluation jobs, progress and calibration, sample data.                                                                                                              |
 | Persistence        | `server/db/`                           | SQLite through `node:sqlite`, versioned migrations, profile-scoped queries.                                                                                                                          |
@@ -136,11 +136,31 @@ Errors are always JSON with a stable `code`, a message that is safe to show, and
 
 ## Web app
 
-A single-page app with one route per screen: Home, Scenarios, Setup, Brief, the live Call, Report, Transcript, History, Progress, Calibration, Trainer, About and Settings. Each page is its own chunk and loads on demand.
+A single-page app with one route per screen: Start, Scenarios, Setup, Brief, the live Call, Report, Transcript, History, Progress, Calibration, Trainer, About and Settings. Each page is its own chunk and loads on demand; the Firefly Core, the first-run tour and the report are separate chunks too, so none of them is part of the first download.
 
-- **Live call.** Messages appear immediately and are confirmed by the server; a failed message keeps its id so Retry is safe. The conversation follows new messages only while the reader is at the bottom. New customer replies are announced politely once, as a whole.
+```mermaid
+flowchart TD
+  subgraph Pages["Pages: lazy route chunks"]
+    ST[Start] ~~~ LI["Scenarios: mission map or list"] ~~~ SB["Setup and Brief: launch sequence"] ~~~ CA["Call: conversation chamber"] ~~~ RE["Report: debrief"] ~~~ PR["Progress: mastery journey"]
+  end
+  Pages --> Data["Data hooks<br/>useApi, usePractice, useCall, useMilestones"]
+  Data -->|"JSON over HTTP (unchanged API)"| API[(Server)]
+  Pages --> Domain["Pure domain logic in shared/domain<br/>mastery, achievements, recommend"]
+  Data --> Domain
+  Pages --> Visuals["Visual layer<br/>tokens and CSS, Firefly Core (Canvas 2D),<br/>MasteryStars, motion and sound helpers"]
+```
+
+- **The API did not change for the redesign.** Everything new on screen is derived in the browser from data the app already loads: the saved call summaries, the progress summary and the coaching reports. `PublicStateDTO` (the call state the browser sees) still carries only what a trainee may know.
+- **Gamification is pure functions.** `shared/domain/mastery.ts` turns completed calls into skill tiers (and says what the next tier needs), `achievements.ts` derives milestones from a coaching report and its quoted turns, and `recommend.ts` chooses the next mission and says why. They have no I/O and are covered by tests. See [experience-design.md](experience-design.md#gamification).
+- **Live call.** Messages appear immediately and are confirmed by the server; a failed message keeps its id so Retry is safe. The conversation follows new messages only while the reader is at the bottom, with one list item per message. New customer replies are announced politely once, as a whole. In immersive practice the customer's presence shows no mood, signals or counts; guided practice shows them.
+- **Report.** Quotes link to their turn in the transcript, and each quoted moment can be shown with the turns around it. Entrance motion never fades text in.
+- **Progress.** Calls come from `GET /sessions` (at most 100 summaries), the tier and recommendation logic runs in the browser, and milestones are derived from the latest eight completed calls' reports (`GET /sessions/:id`), so a milestone can never disagree with the report that earned it. Sample sessions count only while the page's switch is on, and the page says so.
 - **Temperature timeline.** An accessible SVG with a data-table alternative, drawn from the report's journey points.
-- **Themes and motion.** Two designed themes (dark and light), glass surfaces with solid fallbacks, and reduced-motion support from both the system setting and Settings.
+- **Firefly Core.** A hand-written Canvas 2D engine (`web/src/components/core`) with no dependency. It pauses when off screen, lowers its own quality on slow hardware, draws one still frame under reduced motion and leaves a CSS glow if a canvas cannot be created.
+- **Themes, motion and sound.** Two designed themes (dark and light), glass surfaces with solid fallbacks, reduced-motion support from both the system setting and Settings, and optional synthesised sound that is off until switched on.
+- **Connection.** An offline notice appears when the browser loses its connection; failed requests offer Try again, and a failed message is kept for Retry.
+
+The redesign added no runtime dependency: the product still depends only on React, React Router and zod.
 
 ## Why these choices
 

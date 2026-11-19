@@ -1,4 +1,5 @@
-/* Progress: calm summaries and small per-skill trend lines. No rankings, streaks or badges. */
+/* Progress: the skill constellations, each skill's history, the path of completed calls and the
+   milestones. It shows practice, never rankings, streaks or comparisons with other people. */
 
 .pg-controls {
   display: grid;
@@ -238,4 +239,329 @@
   max-width: 62ch;
   padding-top: var(--sp-4);
   border-top: 1px solid var(--border);
+}
+.pg-repeat-item .pg-link {
+  margin-top: var(--sp-2);
+}
+
+/* ------------------------------------------------------------------ Constellation hero */
+.pg-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-6);
+  align-items: center;
+  padding: var(--sp-5);
+  border: 1px solid color-mix(in srgb, var(--glow) 22%, var(--border));
+  border-radius: var(--r-panel);
+  background:
+    radial-gradient(
+      70% 90% at 24% 45%,
+      color-mix(in srgb, var(--glow) 13%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      50% 60% at 92% 8%,
+      color-mix(in srgb, var(--accent-2) 10%, transparent),
+      transparent 70%
+    ),
+    var(--surface);
+}
+@media (min-width: 900px) {
+  .pg-hero {
+    grid-template-columns: minmax(0, 25rem) minmax(0, 1fr);
+    gap: var(--sp-7);
+    padding: var(--sp-7);
+  }
+}
+.pg-hero-stars {
+  --ms-size: 25rem;
+  min-width: 0;
+}
+.pg-hero-text {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: center;
+  min-width: 0;
+}
+.pg-hero-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+}
+.pg-hero-sub {
+  max-width: 54ch;
+  color: var(--text-2);
+}
+.pg-next-light {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+  padding: var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--glow) 32%, var(--border));
+  border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--glow) 7%, var(--surface));
+}
+.pg-next-name {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+ul.pg-next-needs,
+.pg-needs ul[role='list'] {
+  margin: var(--sp-1) 0 0;
+  padding-left: 1.15rem;
+  list-style: disc;
+  font-size: var(--fs-small);
+}
+.pg-next-needs li,
+.pg-needs li {
+  padding-left: 0.15rem;
+}
+.pg-how {
+  font-size: var(--fs-small);
+}
+.pg-how summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--text-2);
+  font-weight: 620;
+}
+.pg-how summary:hover {
+  color: var(--text);
+}
+.pg-tiers {
+  display: grid;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
+  padding: 0;
+  list-style: none;
+}
+.pg-tiers li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.pg-tier {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: calc(var(--sp-1) * -1) 0 0;
+}
+.pg-needs {
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
+/* ------------------------------------------------------------------ Path and milestones */
+.pg-duo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'path' 'ms' 'opp';
+  gap: var(--sp-7);
+  align-items: start;
+}
+@media (min-width: 1000px) {
+  .pg-duo {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    grid-template-areas:
+      'path ms'
+      'opp ms';
+    grid-template-rows: auto 1fr;
+  }
+}
+.pg-area-path {
+  grid-area: path;
+  min-width: 0;
+}
+.pg-area-ms {
+  grid-area: ms;
+  min-width: 0;
+}
+.pg-area-opp {
+  grid-area: opp;
+  min-width: 0;
+}
+/* Before the calls have loaded only the opportunities are there, so they take the whole row. */
+.pg-duo-solo {
+  grid-template-areas: 'opp';
+}
+@media (min-width: 1000px) {
+  .pg-duo-solo {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'opp';
+    grid-template-rows: auto;
+  }
+}
+.pg-path {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pg-path-item {
+  --size: 14px;
+  position: relative;
+}
+.pg-path-item[data-level='1'] {
+  --size: 20px;
+}
+.pg-path-item[data-level='2'] {
+  --size: 26px;
+}
+/* The line the lights hang on, trimmed so it begins and ends at the first and last light. */
+.pg-path-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sp-2) + 13px);
+  width: 2px;
+  background: var(--border-strong);
+}
+.pg-path-item:first-child::before {
+  top: 50%;
+}
+.pg-path-item:last-child::before {
+  bottom: 50%;
+}
+.pg-path-item:only-child::before {
+  display: none;
+}
+.pg-path-link {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-2);
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--dur-2) var(--ease-out);
+}
+.pg-path-link:hover {
+  background: color-mix(in srgb, var(--glow) 7%, transparent);
+}
+.pg-path-node {
+  justify-self: center;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--glow) calc(var(--lit) * 100%), var(--surface-3));
+  box-shadow:
+    0 0 0 3px var(--bg),
+    0 0 calc(var(--lit) * 18px) calc(var(--lit) * 3px)
+      color-mix(in srgb, var(--glow) 55%, transparent);
+}
+.pg-path-body {
+  display: grid;
+  min-width: 0;
+}
+.pg-path-title {
+  overflow: hidden;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-path-score {
+  color: var(--glow-text);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.pg-path-more {
+  margin-top: var(--sp-3);
+}
+.pg-ms-count {
+  color: var(--text-2);
+}
+.pg-ms-list {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pg-ms {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+.pg-ms[data-earned='true'] {
+  border-color: color-mix(in srgb, var(--glow) 42%, var(--border));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--glow) 10%, var(--surface)),
+    var(--surface)
+  );
+}
+.pg-ms-mark svg {
+  display: block;
+  width: 48px;
+  height: 48px;
+}
+.pg-ms-ring {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 5;
+}
+.pg-ms-star {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.pg-ms[data-earned='true'] .pg-ms-ring {
+  stroke: var(--glow);
+  stroke-dasharray: none;
+}
+.pg-ms[data-earned='true'] .pg-ms-star {
+  fill: var(--glow);
+  stroke: var(--glow);
+}
+.pg-ms[data-earned='true'] .pg-ms-mark {
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--glow) 55%, transparent));
+}
+.pg-ms-body {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.pg-ms-title {
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.pg-ms-earned {
+  margin-top: var(--sp-1);
+}
+.pg-ms-quote {
+  margin: var(--sp-1) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--glow);
+  border-radius: 0 10px 10px 0;
+  background: color-mix(in srgb, var(--glow) 6%, transparent);
+  font-size: var(--fs-small);
+  font-style: italic;
+}
+.pg-ms-note {
+  margin-top: var(--sp-3);
+}
+@media (max-width: 480px) {
+  .pg-hero {
+    padding: var(--sp-4);
+  }
+  .pg-ms {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

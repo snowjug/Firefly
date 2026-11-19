@@ -50,12 +50,14 @@ Scores are practice signals from a handful of simulated calls. The Progress page
 - **No tone of voice.** Firefly is text only. Warmth, pace and pauses cannot be assessed.
 - **A simulation is not a customer.** A scenario has fixed facts, and the demo-mode customer is rules-based and less flexible than a person or a model.
 - **English only**, and nothing here has been tested for how well it works for every kind of speaker. Non-native phrasing must never be marked down; if you see it happen, treat that as a bug.
-- **The live model path is unverified** against real services in this repository. See the verification note in [ai-providers.md](ai-providers.md).
+- **The live model path is only partly verified.** Gemini has been run end to end against the real API in a few scripted calls; Azure OpenAI and other OpenAI-compatible services have been tested only against a local fake server. None of this measures how good a model's coaching is. See the verification notes in [ai-providers.md](ai-providers.md).
 - **No certification.** Firefly makes no claim of compliance with any standard or regulation, and nothing here is legal advice.
 
 ## For people who run Firefly
 
 - **Where data lives.** In the default setup, everything is in a SQLite file on the machine that runs the server (`data/firefly.db`, git-ignored) and is not encrypted by Firefly. If you use a live model, trainee messages and call transcripts are sent to the provider you configure, so choose and configure it with your organisation's data rules in mind.
+- **Free-tier model services may learn from what you send.** Google's Gemini API terms say that, for unpaid services, Google uses the content you submit and the responses to improve its products, that human reviewers may read it, and that sensitive, confidential or personal information must not be submitted; paid services do not use prompts and responses that way. Firefly sends only fictional scenario text and redacted trainee messages, so type nothing real. Read the provider's current terms before connecting any key. See [ai-providers.md](ai-providers.md#gemini-google-ai-studio).
+- **Keep API keys out of Git.** Keys belong in the git-ignored `.env`. If one is ever pasted into a chat, a ticket or a commit, treat it as exposed: delete it at the provider and create a new one.
 - **Who can see it.** Firefly has no accounts. An anonymous browser cookie separates one learner's history from another's on a shared server. It is not authentication. Keep Firefly on a trusted network, or put sign-in and TLS in front of it.
 - **Deleting data.** The Trainer page can remove sample sessions, delete a profile's practice sessions, or reset everything for that profile. A single session can be deleted from History. Deleting the database file removes everything.
 - **Using it well.** Use scores to start a conversation with a mentor. Do not use them for evaluation, and do not publish individual results.

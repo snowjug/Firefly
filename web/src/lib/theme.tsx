@@ -96,3 +96,8 @@ export function useTheme(): ThemeState {
   if (!ctx) throw new Error('useTheme must be used inside ThemeProvider');
   return ctx;
 }
+
+/** For decorative components that should still work (without motion preferences) outside the provider. */
+export function useReducedMotion(): boolean {
+  return useContext(ThemeContext)?.reducedMotion ?? false;
+}

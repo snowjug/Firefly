@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigDTO, DemoStatusDTO } from '#shared/domain/api.ts';
 import type * as ApiModule from '../lib/api.ts';
 import { ConfigProvider } from '../lib/config.tsx';
+import { resetSoundForTests } from '../lib/sound.ts';
 import { ThemeProvider } from '../lib/theme.tsx';
+import { resetTourForTests, useTourRequests } from '../lib/tour.ts';
 import Settings from './Settings.tsx';
 
 const mocks = vi.hoisted(() => ({ config: vi.fn(), demo: vi.fn() }));
@@ -42,6 +44,8 @@ function renderSettings() {
 beforeEach(() => {
   vi.resetAllMocks();
   localStorage.clear();
+  resetSoundForTests();
+  resetTourForTests();
   document.documentElement.removeAttribute('data-theme');
   document.documentElement.removeAttribute('data-motion');
   mocks.config.mockResolvedValue(CONFIG);
@@ -112,5 +116,47 @@ describe('Settings data and system', () => {
     expect(system).toHaveTextContent('A live provider was requested but is not set up.');
     expect(system).toHaveTextContent('Developer features are switched on');
     expect(within(system).queryByRole('radio')).not.toBeInTheDocument();
+  });
+});
+
+function TourRequests() {
+  return <output data-testid="tour-requests">{useTourRequests()}</output>;
+}
+
+describe('Settings sound and tour', () => {
+  it('keeps sound off until asked and remembers the choice on this device', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderSettings();
+    const toggle = screen.getByRole('switch', { name: 'Sound effects' });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText('Sound effects are off.')).toBeInTheDocument();
+    expect(toggle).toHaveAccessibleDescription(/Nothing plays unless you turn this on/);
+
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    expect(screen.getByText('Sound effects are on.')).toBeInTheDocument();
+    expect(localStorage.getItem('firefly.sound')).toBe('true');
+
+    unmount();
+    resetSoundForTests();
+    renderSettings();
+    expect(screen.getByRole('switch', { name: 'Sound effects' })).toBeChecked();
+  });
+
+  it('can replay the quick tour at any time', async () => {
+    const user = userEvent.setup();
+    render(
+      <ThemeProvider>
+        <ConfigProvider>
+          <MemoryRouter initialEntries={['/settings']}>
+            <Settings />
+            <TourRequests />
+          </MemoryRouter>
+        </ConfigProvider>
+      </ThemeProvider>,
+    );
+    expect(screen.getByTestId('tour-requests')).toHaveTextContent('0');
+    await user.click(screen.getByRole('button', { name: 'Replay the quick tour' }));
+    expect(screen.getByTestId('tour-requests')).toHaveTextContent('1');
   });
 });

@@ -36,23 +36,33 @@
   letter-spacing: -0.02em;
 }
 .brand-mark {
+  position: relative;
   width: 30px;
   height: 30px;
-  border-radius: 10px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
   background:
-    radial-gradient(circle at 50% 45%, #ffe9a8 0%, var(--glow) 40%, transparent 72%),
-    linear-gradient(145deg, #1b2a52, #0d1425);
-  box-shadow: 0 0 22px -4px color-mix(in srgb, var(--glow) 70%, transparent);
+    radial-gradient(circle at 50% 50%, var(--glow-soft) 0%, transparent 68%), var(--surface-2);
+  border: 1px solid var(--glass-border);
+}
+.brand-mark::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--glow) 55%, transparent);
+  opacity: 0.7;
 }
 .brand-mark::after {
   content: '';
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #fff7d6;
-  box-shadow: 0 0 10px 2px #ffd25e;
+  background: #fff4d0;
+  box-shadow:
+    0 0 8px 2px var(--glow),
+    0 0 18px 4px var(--glow-soft);
 }
 .nav-links {
   display: flex;
@@ -80,8 +90,10 @@
 }
 .nav-link[aria-current='page'] {
   color: var(--text);
-  background: var(--surface-3);
-  box-shadow: 0 0 0 1px var(--border) inset;
+  background: color-mix(in srgb, var(--glow) 12%, var(--surface-2));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--glow) 38%, transparent) inset,
+    0 8px 22px -14px var(--glow-soft);
 }
 .nav-end {
   margin-left: auto;
@@ -115,6 +127,9 @@
   margin: 0 auto;
   padding: var(--sp-6) var(--sp-4) var(--sp-8);
   flex: 1 0 auto;
+  /* A page is at least one screen tall, so the footer starts below the fold and is never seen
+     jumping down out of view as the page's content arrives. */
+  min-height: calc(100vh - var(--nav-height));
 }
 .page:focus {
   outline: none;
@@ -193,6 +208,11 @@
   ::view-transition-new(*) {
     animation: none !important;
   }
+}
+:root[data-motion='reduce']::view-transition-group(*),
+:root[data-motion='reduce']::view-transition-old(*),
+:root[data-motion='reduce']::view-transition-new(*) {
+  animation: none !important;
 }
 .page-enter {
   animation: page-in var(--dur-3) var(--ease-out);

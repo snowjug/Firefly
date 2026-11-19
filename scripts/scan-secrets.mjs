@@ -10,6 +10,8 @@ const PATTERNS = [
   { name: 'GitHub token', re: /\bgh[pousr]_[A-Za-z0-9]{30,}\b/ },
   { name: 'GitHub fine-grained token', re: /\bgithub_pat_[A-Za-z0-9_]{40,}\b/ },
   { name: 'OpenAI-style secret key', re: /\bsk-[A-Za-z0-9_-]{24,}\b/ },
+  { name: 'Google API key', re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
+  { name: 'Google AI Studio auth key', re: /\bAQ\.[A-Za-z0-9_-]{30,}/ },
   { name: 'AWS access key id', re: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: 'Slack token', re: /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/ },
   { name: 'Azure storage connection string', re: /AccountKey=[A-Za-z0-9+/=]{40,}/ },

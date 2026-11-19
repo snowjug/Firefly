@@ -1,7 +1,8 @@
 import type { PromptRequest } from '../prompts/types.ts';
 import { ProviderError, type ProviderConfig } from './types.ts';
 
-// The chat-completions client for Azure OpenAI and OpenAI-compatible servers.
+// The chat-completions client for Azure OpenAI, OpenAI-compatible servers and Google's Gemini API
+// (through its OpenAI-compatible endpoint).
 //
 // Safety rules for this file: errors and thrown messages are fixed strings. They never contain the
 // API key, the endpoint, request or response bodies, or any transcript text. Response bodies are read
@@ -85,6 +86,24 @@ interface Quirks {
   tokenParam: 'max_tokens' | 'max_completion_tokens';
   temperature: boolean;
   responseFormat: boolean;
+  /** Ask for the lowest reasoning effort, so the model answers quickly (Gemini only). */
+  reasoningEffort: boolean;
+  /** Extra tokens on top of `max_tokens`, for models that think before they answer. */
+  tokenHeadroom: number;
+}
+
+// Gemini models think before they answer and count that thinking against the completion limit, so
+// a reply can be cut off at a limit that looks generous. Gemini therefore starts with the lowest
+// reasoning effort and extra headroom; an endpoint that rejects the setting is retried without it.
+function initialQuirks(config: LiveConfig): Quirks {
+  const gemini = config.kind === 'gemini';
+  return {
+    tokenParam: 'max_tokens',
+    temperature: true,
+    responseFormat: true,
+    reasoningEffort: gemini,
+    tokenHeadroom: gemini ? REASONING_HEADROOM_TOKENS : 0,
+  };
 }
 
 function bodyFor(request: PromptRequest, model: string | null, quirks: Quirks): string {
@@ -92,8 +111,10 @@ function bodyFor(request: PromptRequest, model: string | null, quirks: Quirks): 
   if (model) body.model = model;
   body.messages = request.messages;
   if (quirks.temperature) body.temperature = request.temperature;
-  if (quirks.tokenParam === 'max_tokens') body.max_tokens = request.maxTokens;
+  if (quirks.tokenParam === 'max_tokens')
+    body.max_tokens = request.maxTokens + quirks.tokenHeadroom;
   else body.max_completion_tokens = request.maxTokens + REASONING_HEADROOM_TOKENS;
+  if (quirks.reasoningEffort) body.reasoning_effort = 'minimal';
   if (request.json && quirks.responseFormat) body.response_format = { type: 'json_object' };
   return JSON.stringify(body);
 }
@@ -241,14 +262,40 @@ function isContentFilterError(json: unknown): boolean {
   );
 }
 
+// Longest wait worth showing to someone who is mid-conversation.
+const MAX_ADVISED_WAIT_SECONDS = 120;
+
+// Google says how long a rate-limited caller should wait, as `RetryInfo.retryDelay` such as "39s".
+// Only that number is read; the rest of the error is never shown.
+function advisedWaitSeconds(json: unknown): number | null {
+  if (!isRecord(json) || !isRecord(json.error) || !Array.isArray(json.error.details)) return null;
+  for (const detail of json.error.details) {
+    const delay = isRecord(detail) ? detail.retryDelay : undefined;
+    const match = typeof delay === 'string' ? /^(\d+(?:\.\d+)?)s$/.exec(delay) : null;
+    if (!match) continue;
+    const seconds = Math.ceil(Number(match[1]));
+    return seconds >= 1 && seconds <= MAX_ADVISED_WAIT_SECONDS ? seconds : null;
+  }
+  return null;
+}
+
 function failureFor(status: number, json: unknown): ProviderError {
   if (isContentFilterError(json)) return contentFiltered();
-  if (status === 401 || status === 403) {
+  // Google answers a missing or invalid API key with HTTP 400 rather than 401.
+  const badKey = status === 400 && /api key|api_key_invalid/.test(errorText(json));
+  if (status === 401 || status === 403 || badKey) {
     return new ProviderError('provider_not_configured', MESSAGES.credentials, false);
   }
   if (status === 404) return new ProviderError('provider_not_configured', MESSAGES.notFound, false);
   if (status === 408) return new ProviderError('provider_timeout', MESSAGES.timeout, true);
-  if (status === 429) return new ProviderError('provider_rate_limited', MESSAGES.rateLimited, true);
+  if (status === 429) {
+    const wait = advisedWaitSeconds(json);
+    const message =
+      wait === null
+        ? MESSAGES.rateLimited
+        : `The AI provider's rate limit was reached. Please try again in about ${wait} seconds.`;
+    return new ProviderError('provider_rate_limited', message, true);
+  }
   if (status >= 500) return new ProviderError('provider_unavailable', MESSAGES.unavailable, true);
   return new ProviderError(
     'provider_unavailable',
@@ -260,10 +307,15 @@ function failureFor(status: number, json: unknown): ProviderError {
 // ---------------------------------------------------------------------------------------
 // Compatibility: models differ in the parameters they accept
 
-type Fix = 'completion-tokens' | 'max-tokens' | 'no-temperature' | 'no-response-format';
+type Fix =
+  | 'completion-tokens'
+  | 'max-tokens'
+  | 'no-temperature'
+  | 'no-response-format'
+  | 'no-reasoning-effort';
 
 const REJECTION =
-  /unsupported|not supported|does not support|unrecognized|unknown (?:parameter|argument|field)|invalid (?:parameter|value|argument)|extra inputs|not permitted|not allowed|only the default/;
+  /unsupported|not supported|does not support|unrecognized|unknown (?:parameter|argument|field|name)|cannot find field|invalid (?:parameter|value|argument|reasoning_effort)|extra inputs|not permitted|not allowed|only the default/;
 
 /** Which single adjustment a 400 asks for, if any. Each adjustment is made at most once per call. */
 function detectFix(status: number, json: unknown, quirks: Quirks, made: Set<Fix>): Fix | null {
@@ -281,6 +333,7 @@ function detectFix(status: number, json: unknown, quirks: Quirks, made: Set<Fix>
   if (quirks.temperature && text.includes('temperature')) return 'no-temperature';
   if (quirks.responseFormat && /response_format|json_object/.test(text))
     return 'no-response-format';
+  if (quirks.reasoningEffort && text.includes('reasoning_effort')) return 'no-reasoning-effort';
   return null;
 }
 
@@ -288,6 +341,7 @@ function applyFix(fix: Fix, quirks: Quirks): void {
   if (fix === 'completion-tokens') quirks.tokenParam = 'max_completion_tokens';
   else if (fix === 'max-tokens') quirks.tokenParam = 'max_tokens';
   else if (fix === 'no-temperature') quirks.temperature = false;
+  else if (fix === 'no-reasoning-effort') quirks.reasoningEffort = false;
   else quirks.responseFormat = false;
 }
 
@@ -310,7 +364,7 @@ export function createChatClient(config: LiveConfig, options: ChatClientOptions 
   const target = targetFor(config);
   const sleep = options.sleep ?? defaultSleep;
   const maxRetries = Math.max(0, Math.floor(config.maxRetries));
-  const quirks: Quirks = { tokenParam: 'max_tokens', temperature: true, responseFormat: true };
+  const quirks = initialQuirks(config);
 
   return {
     async complete(request, signal) {

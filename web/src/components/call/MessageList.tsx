@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../Icon.tsx';
 import { formatTime } from '../../lib/format.ts';
-import type { ChatTurn } from './useCall.ts';
+import type { ChatShift, ChatTurn } from './useCall.ts';
 
 interface Persona {
   name: string;
@@ -28,42 +28,86 @@ function Message({
   turn,
   persona,
   onRetry,
+  fresh,
+  signal,
+  shifts,
 }: {
   turn: ChatTurn;
   persona: Persona;
   onRetry(key: string): void;
+  /** Arrived after the call was opened, so it gets the short entrance. */
+  fresh: boolean;
+  /** A signal came to light in this reply (guided practice only). */
+  signal: boolean;
+  /** Changes in the customer's mood that appeared after this reply (guided practice only). */
+  shifts: ChatShift[];
 }) {
   const mine = turn.role === 'trainee';
   return (
-    <li className={`msg ${mine ? 'msg-trainee' : 'msg-customer'}`} data-status={turn.status}>
-      {mine ? null : (
-        <span className="avatar" aria-hidden="true">
-          {initials(persona.name)}
-        </span>
-      )}
-      <div className="msg-body">
-        <p className="msg-meta">
-          <span className="msg-who">{mine ? 'You' : persona.name}</span>
-          <time dateTime={turn.createdAt}>{formatTime(turn.createdAt)}</time>
-        </p>
-        <p className="bubble">{turn.text}</p>
-        {turn.status === 'sending' ? <p className="msg-status">Sending…</p> : null}
-        {turn.status === 'failed' ? (
-          <div className="msg-status msg-failed" role="alert">
-            <span>
-              <strong>{turn.saved ? 'Saved.' : 'Not sent.'}</strong> {turn.error}
-            </span>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => onRetry(turn.key)}
-            >
-              <Icon name="refresh" size={16} /> Retry
-            </button>
-          </div>
-        ) : null}
+    <li className="msg-item">
+      <div
+        className={`msg ${mine ? 'msg-trainee' : 'msg-customer'}`}
+        data-status={turn.status}
+        data-fresh={fresh || undefined}
+        data-signal={signal || undefined}
+      >
+        {mine ? null : (
+          <span className="avatar" aria-hidden="true">
+            {initials(persona.name)}
+          </span>
+        )}
+        <div className="msg-body">
+          <p className="msg-meta">
+            <span className="msg-who">{mine ? 'You' : persona.name}</span>
+            <time dateTime={turn.createdAt}>{formatTime(turn.createdAt)}</time>
+            {signal ? (
+              <span className="msg-signal">
+                <span className="msg-signal-dot" aria-hidden="true" />
+                Signal found in this reply
+              </span>
+            ) : null}
+          </p>
+          <p className="bubble">{turn.text}</p>
+          {turn.status === 'sending' ? <p className="msg-status">Sending…</p> : null}
+          {turn.status === 'failed' ? (
+            <div className="msg-status msg-failed" role="alert">
+              <span>
+                <strong>{turn.saved ? 'Saved.' : 'Not sent.'}</strong> {turn.error}
+              </span>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => onRetry(turn.key)}
+              >
+                <Icon name="refresh" size={16} /> Retry
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
+      {shifts.map((shift) => (
+        <Shift key={`${shift.afterKey}-${shift.kind}`} shift={shift} name={persona.name} />
+      ))}
     </li>
+  );
+}
+
+function shiftText(shift: ChatShift, name: string): string {
+  if (shift.kind === 'silent') return `${name} has gone quiet.`;
+  return `${name}'s mood shifted from ${shift.from?.label ?? 'one state'} to ${shift.to?.label ?? 'another'}.`;
+}
+
+/**
+ * A quiet marker after a reply: the conversation changed. It sits inside the reply's own list item
+ * (so the list still has one item per message) and never suggests what to say.
+ */
+function Shift({ shift, name }: { shift: ChatShift; name: string }) {
+  return (
+    <div className="shift" data-kind={shift.kind} data-direction={shift.direction}>
+      <span className="shift-rule" aria-hidden="true" />
+      <p className="shift-text">{shiftText(shift, name)}</p>
+      <span className="shift-rule" aria-hidden="true" />
+    </div>
   );
 }
 
@@ -76,18 +120,26 @@ export function MessageList({
   persona,
   typing,
   onRetry,
+  guided = false,
+  signalKeys = [],
+  shifts = [],
 }: {
   turns: ChatTurn[];
   persona: Persona;
   typing: boolean;
   onRetry(key: string): void;
+  /** Guided practice shows mood shifts and signal markers; immersive practice shows neither. */
+  guided?: boolean;
+  signalKeys?: string[];
+  shifts?: ChatShift[];
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const hasOpened = useRef(false);
   const [atBottom, setAtBottom] = useState(true);
   const [seen, setSeen] = useState(turns.length);
-  const count = turns.length + (typing ? 1 : 0);
+  const [openingKeys] = useState(() => new Set(turns.map((turn) => turn.key)));
+  const count = turns.length + (typing ? 1 : 0) + (guided ? shifts.length : 0);
   const lastRole = turns[turns.length - 1]?.role;
 
   const scrollToEnd = useCallback((smooth: boolean) => {
@@ -134,7 +186,15 @@ export function MessageList({
           </p>
           <ol role="list" className="msg-list">
             {turns.map((turn) => (
-              <Message key={turn.key} turn={turn} persona={persona} onRetry={onRetry} />
+              <Message
+                key={turn.key}
+                turn={turn}
+                persona={persona}
+                onRetry={onRetry}
+                fresh={!openingKeys.has(turn.key)}
+                signal={guided && signalKeys.includes(turn.key)}
+                shifts={guided ? shifts.filter((shift) => shift.afterKey === turn.key) : []}
+              />
             ))}
             {typing ? (
               <li className="msg msg-customer msg-typing" aria-hidden="true">

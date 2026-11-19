@@ -54,6 +54,7 @@ function FactCard({
   const showBetter = fact.status !== 'discovered';
   return (
     <article
+      id={`fact-${fact.factId}`}
       className="surface rp-fact"
       data-status={fact.status}
       data-importance={fact.importance}
@@ -137,11 +138,15 @@ export function DiscoverySection({
         <p className="rp-disc-headline">{headline}</p>
         {total > 0 ? (
           <>
-            <div className="rp-disc-bar" aria-hidden="true">
-              {found > 0 ? <span data-status="discovered" style={{ flexGrow: found }} /> : null}
-              {partial > 0 ? <span data-status="partial" style={{ flexGrow: partial }} /> : null}
-              {missed > 0 ? <span data-status="missed" style={{ flexGrow: missed }} /> : null}
-            </div>
+            <ol className="rp-trail" aria-hidden="true">
+              {ordered.map((fact) => (
+                <li key={fact.factId} className="rp-trail-node" data-status={fact.status}>
+                  <a href={`#fact-${fact.factId}`} tabIndex={-1} aria-hidden="true">
+                    <span className="rp-trail-orb" data-importance={fact.importance} />
+                  </a>
+                </li>
+              ))}
+            </ol>
             <ul role="list" className="rp-disc-counts">
               <li>
                 <StatusGlyph status="discovered" /> {found} found

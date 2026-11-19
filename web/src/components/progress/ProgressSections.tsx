@@ -1,9 +1,17 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import type { DimensionTrendDTO, ProgressDTO } from '#shared/domain/api.ts';
+import type {
+  DimensionTrendDTO,
+  ProgressDTO,
+  PublicScenarioDTO,
+  SessionSummaryDTO,
+} from '#shared/domain/api.ts';
+import type { DimensionMastery } from '#shared/domain/mastery.ts';
+import { scenarioForSkill } from '#shared/domain/recommend.ts';
 import { DIMENSION_IDS, DIMENSIONS } from '#shared/domain/vocab.ts';
 import { formatDate, plural } from '../../lib/format.ts';
 import { Icon, type IconName } from '../Icon.tsx';
+import { setupPath } from '../scenario/paths.ts';
 import { DimensionTrendCard } from './DimensionTrendCard.tsx';
 import '../../styles/progress.css';
 
@@ -146,7 +154,13 @@ function ScoresTable({ trends }: { trends: readonly DimensionTrendDTO[] }) {
   );
 }
 
-export function TrendsSection({ progress }: { progress: ProgressDTO }) {
+export function TrendsSection({
+  progress,
+  mastery,
+}: {
+  progress: ProgressDTO;
+  mastery?: readonly DimensionMastery[];
+}) {
   const [table, setTable] = useState(false);
   const ordered = [...progress.dimensionTrends].sort(
     (a, b) => DIMENSION_IDS.indexOf(a.dimension) - DIMENSION_IDS.indexOf(b.dimension),
@@ -181,6 +195,7 @@ export function TrendsSection({ progress }: { progress: ProgressDTO }) {
             trend={trend}
             strongest={progress.strongest === trend.dimension}
             focus={progress.focus === trend.dimension}
+            mastery={mastery?.find((m) => m.dimension === trend.dimension)}
           />
         ))}
       </div>
@@ -193,7 +208,16 @@ export function TrendsSection({ progress }: { progress: ProgressDTO }) {
   );
 }
 
-export function OpportunitiesSection({ progress }: { progress: ProgressDTO }) {
+export function OpportunitiesSection({
+  progress,
+  scenarios,
+  sessions,
+}: {
+  progress: ProgressDTO;
+  /** With these, each repeated opportunity also points at a scenario built to practise it. */
+  scenarios?: readonly PublicScenarioDTO[];
+  sessions?: readonly SessionSummaryDTO[];
+}) {
   const items = progress.repeatedOpportunities;
   return (
     <section aria-labelledby="pg-repeat-title" className="pg-section">
@@ -209,15 +233,26 @@ export function OpportunitiesSection({ progress }: { progress: ProgressDTO }) {
       </div>
       {items.length > 0 ? (
         <ul role="list" className="pg-repeat">
-          {items.map((item) => (
-            <li key={item.dimension} className="surface pg-repeat-item">
-              <p className="pg-repeat-name">{DIMENSIONS[item.dimension].label}</p>
-              <p className="t-small t-muted">
-                Came up as an improvement area in {item.sessions} of{' '}
-                {plural(progress.completedSessions, 'completed call')}.
-              </p>
-            </li>
-          ))}
+          {items.map((item) => {
+            const practice = scenarios
+              ? scenarioForSkill(scenarios, sessions ?? [], item.dimension)
+              : null;
+            return (
+              <li key={item.dimension} className="surface pg-repeat-item">
+                <p className="pg-repeat-name">{DIMENSIONS[item.dimension].label}</p>
+                <p className="t-small t-muted">
+                  Came up as an improvement area in {item.sessions} of{' '}
+                  {plural(progress.completedSessions, 'completed call')}.
+                </p>
+                {practice ? (
+                  <Link to={setupPath(practice.id)} className="pg-link" viewTransition>
+                    Practise it in &ldquo;{practice.title}&rdquo;{' '}
+                    <Icon name="arrow-right" size={16} />
+                  </Link>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="pg-empty">

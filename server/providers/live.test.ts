@@ -150,6 +150,56 @@ describe('the live provider', () => {
   });
 });
 
+describe('the Gemini provider', () => {
+  it('needs only an API key, because the endpoint and model have defaults', () => {
+    const { provider: gemini, problem } = createProviderFromEnv({
+      FIREFLY_PROVIDER: 'gemini',
+      GEMINI_API_KEY: KEY,
+    });
+    expect(problem).toBeNull();
+    expect(gemini).toMatchObject({ kind: 'gemini', demo: false });
+    expect(gemini.label).toMatch(/^Gemini \(model "[^"]+"\)$/);
+    expect(gemini.label).not.toContain(KEY);
+    expect(typeof gemini.evaluateDraft).toBe('function');
+  });
+
+  it.each([
+    ['not set', {}],
+    ['left as a placeholder', { GEMINI_API_KEY: '<your-api-key>' }],
+  ])('falls back to demo mode when the key is %s', (_name, env) => {
+    const { provider: fallback, problem } = createProviderFromEnv({
+      FIREFLY_PROVIDER: 'gemini',
+      ...env,
+    });
+    expect(fallback).toMatchObject({ kind: 'mock', demo: true });
+    expect(problem).toMatch(/GEMINI_API_KEY/);
+  });
+
+  it('uses the configured model and address, and answers a classification', async () => {
+    const { provider: gemini } = createProviderFromEnv({
+      FIREFLY_PROVIDER: 'gemini',
+      GEMINI_API_KEY: KEY,
+      GEMINI_MODEL: 'gemini-test',
+      GEMINI_BASE_URL: `${llm.baseUrl}/`,
+      FIREFLY_LLM_MAX_RETRIES: '0',
+    });
+    expect(gemini.label).toBe('Gemini (model "gemini-test")');
+
+    llm.enqueue({ reply: classificationJson({ askedQuestion: true }) });
+    const result = await gemini.classifyTurn(classifyArgs('What error do you see?'));
+    expect(result.askedQuestion).toBe(true);
+
+    const sent = llm.requests[0];
+    expect(sent?.path).toBe('/v1/chat/completions');
+    expect(sent?.headers.authorization).toBe(`Bearer ${KEY}`);
+    expect(sent?.body).toMatchObject({
+      model: 'gemini-test',
+      reasoning_effort: 'minimal',
+      response_format: { type: 'json_object' },
+    });
+  });
+});
+
 describe('classifyTurn', () => {
   it('asks for a JSON object at temperature zero and returns the classification', async () => {
     llm.enqueue({

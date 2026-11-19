@@ -101,6 +101,12 @@
 .brf-settings .brf-h {
   margin-bottom: 0;
 }
+.brf-core {
+  --core-size: 9rem;
+  display: grid;
+  place-items: center;
+  margin: calc(var(--sp-3) * -1) auto calc(var(--sp-2) * -1);
+}
 .brf-persona {
   display: flex;
   align-items: center;
@@ -164,6 +170,28 @@
 }
 .brf-settings .stp-setting-term {
   padding-top: 0;
+}
+/* Wide screens: the settings sit two to a row, so the aside is not much taller than the text beside it. */
+@media (min-width: 1000px) {
+  .brf-layout {
+    grid-template-columns: minmax(0, 1fr) 26rem;
+  }
+  .brf-settings .stp-settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--sp-5);
+  }
+  .brf-settings .stp-setting {
+    margin-inline: 0;
+    padding: var(--sp-3) 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
+  }
+  .brf-settings .stp-setting:first-child {
+    border-top: 1px solid var(--border);
+  }
+  .brf-settings .stp-setting:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ------------------------------------------------------------------ Ready to begin */

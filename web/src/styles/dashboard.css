@@ -1,14 +1,19 @@
-/* Dashboard */
+/* Dashboard: mission control. A single composition rather than a grid of equal cards: the Firefly
+   Core and the headline, then the line you may have open, the one mission worth doing next, the
+   training loop as a path, and a quiet recent/focus pair. */
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   align-items: center;
   gap: var(--sp-6);
   padding: var(--sp-5) 0 var(--sp-7);
 }
 .hero-copy {
-  max-width: 40rem;
+  max-width: 42rem;
+}
+.hero-title {
+  font-size: clamp(2.2rem, 1rem + 3vw, 3.5rem);
 }
 .hero-notes {
   display: flex;
@@ -23,87 +28,225 @@
   gap: 0.4rem;
 }
 .hero-visual {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
   min-width: 0;
+}
+.hero-core {
+  --core-size: min(100%, 32rem);
+  display: grid;
+  place-items: center;
+  width: 100%;
+  margin-block: -1.5rem;
+}
+.hero-caption {
+  max-width: 32ch;
+  margin: 0;
+  text-align: center;
 }
 @media (max-width: 900px) {
   .hero {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .hero-visual {
     order: -1;
-    width: min(62%, 230px);
-    margin: 0 auto;
+  }
+  .hero-core {
+    --core-size: min(78%, 19rem);
+    margin-block: -0.5rem;
   }
 }
 
+/* ------------------------------------------------------------------ The line is open */
 .resume {
-  gap: var(--sp-4);
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-6);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid color-mix(in srgb, var(--glow) 40%, var(--border));
+  border-radius: var(--r-card);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--glow) 11%, transparent), transparent 70%),
+    var(--glass-bg);
+}
+.resume-pulse {
+  flex: none;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: var(--glow);
+  animation: resume-pulse 2.4s ease-out infinite;
+}
+@keyframes resume-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--glow-soft);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.9rem transparent;
+  }
+}
+.resume-text {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.resume-title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
-.steps {
+.dash-block {
+  margin-bottom: var(--sp-7);
+}
+.dash-heading {
+  margin-bottom: var(--sp-5);
+}
+
+/* ------------------------------------------------------------------ The training loop as a path */
+.path {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-4);
+  gap: var(--sp-5);
   padding: 0;
   margin: 0;
-  counter-reset: step;
+  list-style: none;
 }
-@media (max-width: 1000px) {
-  .steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 560px) {
-  .steps {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.step {
+.path-step {
   position: relative;
   display: grid;
   gap: var(--sp-2);
   align-content: start;
+  padding-top: var(--sp-7);
 }
-.step-number {
+.path-node {
   position: absolute;
-  top: var(--sp-4);
-  right: var(--sp-4);
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 1.5px solid color-mix(in srgb, var(--glow) 55%, transparent);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 0 18px -4px var(--glow-soft);
+}
+.path-number {
+  color: var(--glow-text);
   font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1;
-  color: color-mix(in srgb, var(--text) 14%, transparent);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.path-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 1.2rem;
+  left: 2.4rem;
+  right: calc(var(--sp-5) * -1);
+  height: 1.5px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--glow) 60%, transparent),
+    color-mix(in srgb, var(--glow) 8%, transparent)
+  );
+}
+.path-icon {
+  position: absolute;
+  top: 0.55rem;
+  right: 0;
+  color: var(--text-3);
+}
+.path-title {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+@media (max-width: 1000px) {
+  .path {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-6);
+  }
+  .path-step {
+    padding: 0 0 0 3.4rem;
+  }
+  .path-step:not(:last-child)::before {
+    top: 2.6rem;
+    bottom: calc(var(--sp-6) * -1 + 0.2rem);
+    left: 1.2rem;
+    right: auto;
+    width: 1.5px;
+    height: auto;
+    background: linear-gradient(
+      color-mix(in srgb, var(--glow) 60%, transparent),
+      color-mix(in srgb, var(--glow) 8%, transparent)
+    );
+  }
+  .path-icon {
+    top: 0.4rem;
+  }
 }
 
+/* ------------------------------------------------------------------ Recent practice and focus */
 .dash-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: var(--sp-7);
   align-items: start;
 }
 @media (max-width: 900px) {
   .dash-columns {
     grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-6);
   }
 }
-
+.dash-panel {
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+.recent-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Rows may shrink below their content, so a long title is cut with an ellipsis rather than
+   pushing the page wider than the screen. When the title would get cramped, the difficulty and
+   score drop to their own line instead. */
+.recent-list > li {
+  min-width: 0;
+}
 .recent-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  gap: var(--sp-1) var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  border-radius: 10px;
   color: inherit;
   text-decoration: none;
-  transition:
-    transform var(--dur-2) var(--ease-out),
-    border-color var(--dur-2) var(--ease-out),
-    background var(--dur-2) var(--ease-out);
+  transition: background var(--dur-2) var(--ease-out);
 }
 .recent-item:hover {
-  transform: translateY(-1px);
-  border-color: var(--border-strong);
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--glow) 7%, transparent);
+}
+.recent-item > .grow {
+  flex: 1 1 9rem;
+}
+.recent-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-left: auto;
 }
 .recent-title {
   display: block;
@@ -114,6 +257,20 @@
 }
 .recent-score {
   min-width: 3.2ch;
+  color: var(--glow-text);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
   text-align: right;
-  font-weight: 650;
+  white-space: nowrap;
+}
+.focus-skill {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+.focus-stars {
+  --ms-size: 17rem;
+  padding-top: var(--sp-3);
 }

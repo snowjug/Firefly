@@ -13,6 +13,7 @@ import { Composer } from './Composer.tsx';
 import { ContextPanel } from './ContextPanel.tsx';
 import { EndCallDialog } from './EndCallDialog.tsx';
 import { MessageList } from './MessageList.tsx';
+import { Presence } from './Presence.tsx';
 import { useCall } from './useCall.ts';
 
 function subscribeViewport(onChange: () => void) {
@@ -119,20 +120,39 @@ export function ActiveCall({
     <ContextPanel session={session} state={chat.state} notes={notes} onNotes={setNotes} />
   );
   const limit = config?.limits.maxMessageChars ?? 1500;
+  const guided = session.scenario.config.mode === 'guided';
+  const presence = (variant: 'panel' | 'strip') => (
+    <Presence
+      session={session}
+      state={chat.state}
+      pending={chat.pending}
+      replies={chat.replies}
+      discoveries={chat.discoveries}
+      variant={variant}
+    />
+  );
 
   return (
     <div
       className="call"
+      data-mode={session.scenario.config.mode}
+      // Immersive practice gets a neutral chamber: nothing about the customer's state leaks.
+      data-band={guided ? chat.state.band.id : 'neutral'}
+      data-trend={guided ? chat.state.trend : 'steady'}
       style={visibleHeight > 0 ? { ['--vvh' as string]: `${visibleHeight}px` } : undefined}
     >
       <CallHeader session={session} onOpenDetails={() => setDetailsOpen(true)} onEnd={openEnd} />
       <div className="call-body">
         <div className="call-main">
+          {wide ? null : presence('strip')}
           <MessageList
             turns={chat.turns}
             persona={session.scenario.persona}
             typing={chat.pending}
             onRetry={(key) => void handleRetry(key)}
+            guided={guided}
+            signalKeys={chat.signalKeys}
+            shifts={chat.shifts}
           />
           <p className="sr-only" role="status" aria-live="polite">
             {chat.announcement}
@@ -150,8 +170,9 @@ export function ActiveCall({
           />
         </div>
         {wide ? (
-          <aside className="call-aside surface" aria-label="Call details">
+          <aside className="call-aside" aria-label="Call details">
             <h2 className="sr-only">Call details</h2>
+            {presence('panel')}
             {context}
           </aside>
         ) : null}

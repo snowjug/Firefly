@@ -154,14 +154,30 @@ test.describe('display preferences', () => {
   test('motion stops when the device asks for less, and when the app is told to', async ({
     page,
   }) => {
-    // With nothing asked for, the start page has looping animation (so the checks below mean something).
+    // A call is open, so the start page shows its pulsing "line is open" marker; the Firefly Core in
+    // the hero is a canvas, so it is sampled directly. With nothing asked for, both are moving.
+    await createCall(page);
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/');
     await expect(page.locator('h1').first()).toBeVisible();
+    await expect(page.locator('.resume-pulse')).toBeVisible();
     expect(await animating(page)).toBeGreaterThan(0);
+    const core = () =>
+      page.evaluate(() =>
+        (document.querySelector('.hero-core canvas') as HTMLCanvasElement).toDataURL(),
+      );
+    await expect(page.locator('.hero-core .core')).toHaveAttribute('data-canvas', 'on');
+    const first = await core();
+    await page.waitForTimeout(400);
+    expect(await core()).not.toBe(first);
 
+    // Reduced motion: nothing loops, and the core holds one still frame.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(await animating(page)).toBe(0);
+    await page.waitForTimeout(300);
+    const still = await core();
+    await page.waitForTimeout(400);
+    expect(await core()).toBe(still);
 
     // The in-app switch works on a device that asks for nothing, and survives a reload.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -171,6 +187,10 @@ test.describe('display preferences', () => {
     await page.goto('/');
     await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduce');
     expect(await animating(page)).toBe(0);
+    await expect(page.locator('.hero-core .core')).toHaveAttribute('data-canvas', 'on');
+    const held = await core();
+    await page.waitForTimeout(400);
+    expect(await core()).toBe(held);
   });
 
   test('the theme applies at once and is still there after a reload', async ({ page }) => {
@@ -220,6 +240,63 @@ test.describe('setup with the keyboard', () => {
     await tabTo(page, page.getByRole('button', { name: 'Begin call' }));
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/calls\/[\w-]+$/);
+  });
+});
+
+test.describe('connection', () => {
+  test('losing the connection is said plainly and clears when it returns', async ({
+    page,
+    context,
+  }) => {
+    await page.goto('/history');
+    await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
+    const notice = page.getByRole('status').filter({ hasText: 'You appear to be offline' });
+    await expect(notice).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText('What you have already sent is saved');
+
+    await context.setOffline(false);
+    await expect(notice).toHaveCount(0);
+  });
+});
+
+test.describe('progress journey', () => {
+  test('a finished call lights the constellations, joins the path and is checked for milestones', async ({
+    page,
+  }) => {
+    const call = await finishedCall(page);
+
+    await page.goto(`/sessions/${call.id}/report`);
+    await expect(page.getByRole('heading', { level: 2, name: 'Six skill scores' })).toBeVisible();
+    const earnedOnReport = await page
+      .getByRole('region', { name: 'Earned in this call' })
+      .getByRole('heading', { level: 3 })
+      .allTextContents();
+
+    await page.goto('/progress');
+    const hero = page.getByRole('region', { name: /skills? (is|are) lit\./ });
+    await expect(hero).toBeVisible();
+    await expect(hero.getByRole('img', { name: /Skill constellations\./ })).toBeVisible();
+    await expect(hero.getByText('Next to light up')).toBeVisible();
+    await expect(page.getByText(/leaderboard|rank(?:ing)? #|streak/i)).toHaveCount(0);
+
+    // Each milestone is listed, and exactly the ones the report awarded are lit.
+    const milestones = page.getByRole('region', { name: 'Milestones' });
+    await expect(milestones.getByRole('heading', { level: 3 })).toHaveCount(6);
+    await expect(
+      milestones
+        .getByRole('listitem')
+        .filter({ hasText: /Earned in 1 call/ })
+        .getByRole('heading', { level: 3 }),
+    ).toHaveText(earnedOnReport);
+
+    // The path leads straight back to the report of the call.
+    const path = page.getByRole('list', { name: 'Completed calls, newest first' });
+    await expect(path.getByRole('listitem')).toHaveCount(1);
+    await path.getByRole('link').click();
+    await expect(page).toHaveURL(new RegExp(`/sessions/${call.id}/report$`));
   });
 });
 

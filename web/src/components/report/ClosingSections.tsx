@@ -5,6 +5,7 @@ import { DIMENSIONS, SCORE_DESCRIPTIONS, SCORE_LABELS } from '#shared/domain/voc
 import { formatDateTime } from '../../lib/format.ts';
 import { DifficultyChip } from '../Chips.tsx';
 import { Icon } from '../Icon.tsx';
+import { FireflyCore } from '../core/FireflyCore.tsx';
 import { Disclosure } from './Disclosure.tsx';
 import { AUTOMATIC_FEEDBACK_NOTE, transcriptHref } from './labels.ts';
 
@@ -26,6 +27,9 @@ export function NextPracticeSection({
         <p className="rp-lead">One thing to work on in your next call, not a list of everything.</p>
       </div>
       <div className="surface rp-card rp-next">
+        <div className="rp-next-core" aria-hidden="true">
+          <FireflyCore signals={{ total: 6, lit: 0 }} quality="low" />
+        </div>
         <div className="rp-next-focus">
           <p className="t-label">Focus skill</p>
           <p className="rp-next-skill">{focus.label}</p>

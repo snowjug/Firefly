@@ -1,10 +1,13 @@
 import { Link } from 'react-router';
 import { Icon } from '../components/Icon.tsx';
 import { Page, PageHeader, SkeletonBlock } from '../components/Page.tsx';
+import { Switch } from '../components/report/Switch.tsx';
 import { SegmentedChoice } from '../components/trainer/SegmentedChoice.tsx';
 import { api } from '../lib/api.ts';
 import { useAppConfig } from '../lib/config.tsx';
 import { useApi } from '../lib/hooks.ts';
+import { useSound } from '../lib/sound.ts';
+import { requestTour } from '../lib/tour.ts';
 import { useTheme, type MotionPreference, type ThemePreference } from '../lib/theme.tsx';
 import '../styles/settings.css';
 
@@ -39,6 +42,7 @@ function motionStatus(motion: MotionPreference, reduced: boolean): string {
 
 export default function Settings() {
   const { theme, setTheme, motion, setMotion, reducedMotion, resolvedTheme } = useTheme();
+  const [soundOn, setSoundOn] = useSound();
   const { config, loading, error, reload } = useAppConfig();
   const demo = useApi((signal) => api.demo(signal), []);
   const countText = (value: number | undefined) =>
@@ -85,6 +89,40 @@ export default function Settings() {
             <p role="status" className="st-status">
               {motionStatus(motion, reducedMotion)}
             </p>
+          </div>
+        </section>
+
+        <section className="glass card st-card" aria-labelledby="st-experience">
+          <div>
+            <h2 id="st-experience" className="t-section">
+              Sound and tour
+            </h2>
+            <p className="t-small t-muted">Both are optional and saved only in this browser.</p>
+          </div>
+          <div className="st-group">
+            <Switch checked={soundOn} onChange={setSoundOn} describedBy="st-sound-hint">
+              Sound effects
+            </Switch>
+            <p id="st-sound-hint" className="t-meta st-hint">
+              Short, soft tones when a customer reveals something, a call connects or a report
+              opens. Nothing plays unless you turn this on, and the tones are made in your browser,
+              so no audio files are loaded.
+            </p>
+            <p role="status" className="st-status">
+              {soundOn ? 'Sound effects are on.' : 'Sound effects are off.'}
+            </p>
+          </div>
+          <div className="st-group">
+            <p className="st-label">Quick tour</p>
+            <p className="t-small t-muted">
+              Five small working examples of a mission, a hidden signal, a customer reacting and
+              feedback in your own words. It takes under a minute and can be skipped at any step.
+            </p>
+            <div>
+              <button type="button" className="btn btn-secondary" onClick={requestTour}>
+                <Icon name="compass" size={16} /> Replay the quick tour
+              </button>
+            </div>
           </div>
         </section>
 

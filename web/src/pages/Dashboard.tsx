@@ -1,13 +1,27 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router';
+import type { SessionSummaryDTO } from '#shared/domain/api.ts';
+import { assessMastery } from '#shared/domain/mastery.ts';
+import { recommendMission } from '#shared/domain/recommend.ts';
 import { DIMENSIONS } from '#shared/domain/vocab.ts';
-import { Beacon } from '../components/Beacon.tsx';
+import { FireflyCore } from '../components/core/FireflyCore.tsx';
 import { DifficultyChip } from '../components/Chips.tsx';
 import { Icon, type IconName } from '../components/Icon.tsx';
 import { ErrorState, Page, SkeletonBlock } from '../components/Page.tsx';
+import { TourPrompt } from '../components/tour/TourPrompt.tsx';
 import { api } from '../lib/api.ts';
 import { formatRelative, formatScore } from '../lib/format.ts';
 import { useApi } from '../lib/hooks.ts';
+import { useOnDemand } from '../lib/onDemand.ts';
+import { usePractice } from '../lib/practice.ts';
 import '../styles/dashboard.css';
+
+// What sits below the first screen, or appears once the data has arrived, loads after the page has
+// painted, while the data is on its way, so it is usually ready when the data lands.
+const loadNextMission = () => import('../components/dashboard/NextMission.tsx');
+const loadMasteryStars = () => import('../components/mastery/MasteryStars.tsx');
+const reloadPage = () => window.location.reload();
+const loadFailure = new Error('A part of the page did not load.');
 
 const STEPS: { icon: IconName; title: string; text: string }[] = [
   {
@@ -32,23 +46,40 @@ const STEPS: { icon: IconName; title: string; text: string }[] = [
   },
 ];
 
+const NO_SESSIONS: SessionSummaryDTO[] = [];
+
 export default function Dashboard() {
   const demo = useApi((signal) => api.demo(signal), []);
-  const recent = useApi(
-    (signal) => api.listSessions({ limit: 4, includeSamples: false }, signal),
-    [],
-  );
-  const progress = useApi((signal) => api.progress(false, signal), []);
+  const { scenarios, sessions, progress } = usePractice();
+  const nextMissionCode = useOnDemand(loadNextMission);
+  const masteryStarsCode = useOnDemand(loadMasteryStars);
+  const NextMission = nextMissionCode.module?.NextMission;
+  const MasteryStars = masteryStarsCode.module?.MasteryStars;
 
-  const active = recent.data?.sessions.find((s) => s.status === 'active');
+  const list = sessions.data?.sessions ?? NO_SESSIONS;
+  const recent = list.slice(0, 4);
+  const active = list.find((s) => s.status === 'active');
   const spotlight = demo.data?.spotlightScenarioId;
+
+  const mastery = useMemo(() => assessMastery(list), [list]);
+  const lit = mastery.filter((m) => m.tierIndex > 0).length;
+  const recommendation = useMemo(
+    () =>
+      scenarios.data
+        ? recommendMission({ scenarios: scenarios.data, sessions: list, progress: progress.data })
+        : null,
+    [scenarios.data, list, progress.data],
+  );
+  const ready = !scenarios.loading && !sessions.loading;
 
   return (
     <Page title="Home">
+      <TourPrompt />
+
       <section className="hero" aria-labelledby="hero-title">
         <div className="hero-copy stack" style={{ ['--stack-gap' as string]: 'var(--sp-5)' }}>
           <p className="t-label">Customer call simulator</p>
-          <h1 id="hero-title" className="t-display">
+          <h1 id="hero-title" className="t-display hero-title">
             Practice difficult customer conversations before they become real ones.
           </h1>
           <p className="t-lead">
@@ -82,24 +113,23 @@ export default function Dashboard() {
           </ul>
         </div>
         <div className="hero-visual">
-          <Beacon />
+          <div className="hero-core" aria-hidden="true">
+            <FireflyCore signals={{ total: 6, lit }} />
+          </div>
+          <p className="hero-caption t-meta">
+            {lit === 0
+              ? 'Six skills orbit the core. They light up as you practise.'
+              : `${lit} of 6 skills lit so far. Each one comes on from your own completed calls.`}
+          </p>
         </div>
       </section>
 
       {active ? (
-        <section
-          aria-label="Resume your call"
-          className="glass card resume row between"
-          style={{ marginBottom: 'var(--sp-6)' }}
-        >
-          <div className="row" style={{ ['--row-gap' as string]: 'var(--sp-4)' }}>
-            <span className="state-icon">
-              <Icon name="phone" size={24} />
-            </span>
-            <div>
-              <p className="t-label">Call in progress</p>
-              <p className="t-section">{active.scenarioTitle}</p>
-            </div>
+        <section aria-label="Resume your call" className="resume">
+          <span className="resume-pulse" aria-hidden="true" />
+          <div className="resume-text">
+            <p className="t-label">Call in progress</p>
+            <p className="resume-title">{active.scenarioTitle}</p>
           </div>
           <Link to={`/calls/${active.id}`} className="btn btn-primary">
             Resume call <Icon name="arrow-right" size={18} />
@@ -107,30 +137,48 @@ export default function Dashboard() {
         </section>
       ) : null}
 
-      <section aria-labelledby="how-title" style={{ marginBottom: 'var(--sp-7)' }}>
-        <h2 id="how-title" className="t-section" style={{ marginBottom: 'var(--sp-4)' }}>
+      {!ready ? (
+        <div className="dash-block" role="status" aria-label="Loading your next mission">
+          <SkeletonBlock height={190} />
+        </div>
+      ) : recommendation ? (
+        <div className="dash-block">
+          {NextMission ? (
+            <NextMission recommendation={recommendation} />
+          ) : nextMissionCode.failed ? (
+            <ErrorState
+              error={loadFailure}
+              onRetry={reloadPage}
+              title="We couldn’t load your next mission"
+            />
+          ) : (
+            <SkeletonBlock height={190} />
+          )}
+        </div>
+      ) : null}
+
+      <section aria-labelledby="how-title" className="dash-block">
+        <h2 id="how-title" className="t-section dash-heading">
           How practice works
         </h2>
-        <ol role="list" className="steps">
+        <ol role="list" className="path">
           {STEPS.map((step, index) => (
-            <li key={step.title} className="glass card step">
-              <span className="step-number" aria-hidden="true">
-                {index + 1}
+            <li key={step.title} className="path-step">
+              <span className="path-node" aria-hidden="true">
+                <span className="path-number">{index + 1}</span>
               </span>
-              <span className="state-icon" style={{ width: '2.6rem', height: '2.6rem' }}>
-                <Icon name={step.icon} />
+              <span className="path-icon" aria-hidden="true">
+                <Icon name={step.icon} size={20} />
               </span>
-              <h3 className="t-body" style={{ fontWeight: 650 }}>
-                {step.title}
-              </h3>
+              <h3 className="path-title">{step.title}</h3>
               <p className="t-small t-muted">{step.text}</p>
             </li>
           ))}
         </ol>
       </section>
 
-      <div className="grid-2 dash-columns">
-        <section className="glass card stack" aria-labelledby="recent-title">
+      <div className="dash-columns">
+        <section className="dash-panel stack" aria-labelledby="recent-title">
           <div className="row between">
             <h2 id="recent-title" className="t-section">
               Recent practice
@@ -139,20 +187,20 @@ export default function Dashboard() {
               View all
             </Link>
           </div>
-          {recent.loading ? (
+          {sessions.loading ? (
             <div className="stack" role="status" aria-label="Loading recent sessions">
               <SkeletonBlock height={52} />
               <SkeletonBlock height={52} />
             </div>
-          ) : recent.error ? (
+          ) : sessions.error ? (
             <ErrorState
-              error={recent.error}
-              onRetry={recent.reload}
+              error={sessions.error}
+              onRetry={sessions.reload}
               title="Could not load recent practice"
             />
-          ) : recent.data && recent.data.sessions.length > 0 ? (
-            <ul role="list" className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-2)' }}>
-              {recent.data.sessions.map((s) => (
+          ) : recent.length > 0 ? (
+            <ul role="list" className="recent-list">
+              {recent.map((s) => (
                 <li key={s.id}>
                   <Link
                     to={s.status === 'active' ? `/calls/${s.id}` : `/sessions/${s.id}/report`}
@@ -163,16 +211,18 @@ export default function Dashboard() {
                       <span className="recent-title">{s.scenarioTitle}</span>
                       <span className="t-meta">{formatRelative(s.startedAt)}</span>
                     </span>
-                    <DifficultyChip difficulty={s.difficulty} />
-                    <span
-                      className="tabular recent-score"
-                      aria-label={
-                        s.overallScore === null
-                          ? 'No score'
-                          : `Overall ${formatScore(s.overallScore)} out of 5`
-                      }
-                    >
-                      {s.status === 'active' ? 'In progress' : formatScore(s.overallScore)}
+                    <span className="recent-end">
+                      <DifficultyChip difficulty={s.difficulty} />
+                      <span
+                        className="tabular recent-score"
+                        aria-label={
+                          s.overallScore === null
+                            ? 'No score'
+                            : `Overall ${formatScore(s.overallScore)} out of 5`
+                        }
+                      >
+                        {s.status === 'active' ? 'In progress' : formatScore(s.overallScore)}
+                      </span>
                     </span>
                   </Link>
                 </li>
@@ -193,7 +243,7 @@ export default function Dashboard() {
           )}
         </section>
 
-        <section className="glass card stack" aria-labelledby="focus-title">
+        <section className="dash-panel stack" aria-labelledby="focus-title">
           <h2 id="focus-title" className="t-section">
             Your practice focus
           </h2>
@@ -204,9 +254,7 @@ export default function Dashboard() {
             </div>
           ) : progress.data?.focus ? (
             <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
-              <p className="t-title" style={{ fontSize: '1.5rem' }}>
-                {DIMENSIONS[progress.data.focus].label}
-              </p>
+              <p className="focus-skill">{DIMENSIONS[progress.data.focus].label}</p>
               <p className="t-muted">{progress.data.focusReason}</p>
               <p className="t-small t-muted">{DIMENSIONS[progress.data.focus].description}</p>
               <div>
@@ -221,6 +269,15 @@ export default function Dashboard() {
               the evidence from your own conversations.
             </p>
           )}
+          {lit > 0 ? (
+            <div className="focus-stars">
+              {MasteryStars ? (
+                <MasteryStars mastery={mastery} />
+              ) : (
+                <div className="ms" aria-hidden="true" />
+              )}
+            </div>
+          ) : null}
         </section>
       </div>
     </Page>

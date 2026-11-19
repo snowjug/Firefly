@@ -51,7 +51,7 @@ export interface EvaluationInput {
   finalState: CustomerState;
   endedEarly: boolean; // the trainee ended before a natural close (no wrap-up)
   durationSeconds: number;
-  provider: { kind: 'mock' | 'azure-openai' | 'openai-compatible'; label: string };
+  provider: { kind: 'mock' | 'azure-openai' | 'openai-compatible' | 'gemini'; label: string };
   // Library summary used to suggest what to practise next.
   library: {
     id: string;

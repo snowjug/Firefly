@@ -47,6 +47,16 @@ const compatible = (
   ...extra,
 });
 
+const gemini = (extra: Partial<Extract<LiveConfig, { kind: 'gemini' }>> = {}): LiveConfig => ({
+  kind: 'gemini',
+  baseUrl: llm.baseUrl,
+  apiKey: KEY,
+  model: 'gemini-test',
+  timeoutMs: 2000,
+  maxRetries: 2,
+  ...extra,
+});
+
 /** A sleep that records the wait instead of waiting. */
 function recordedSleep() {
   const waits: number[] = [];
@@ -105,6 +115,23 @@ describe('request shape', () => {
     expect(sent?.headers['api-key']).toBeUndefined();
     expect(sent?.body?.model).toBe('test-model');
     expect(sent?.body?.messages).toEqual(request.messages);
+    // Gemini-only settings are not sent to other endpoints.
+    expect(sent?.body?.reasoning_effort).toBeUndefined();
+    expect(sent?.body?.max_tokens).toBe(50);
+  });
+
+  it('calls Gemini with a bearer token, the lowest reasoning effort and room to think', async () => {
+    llm.enqueue({ reply: 'hello' });
+    await createChatClient(gemini()).complete(request);
+
+    const sent = llm.requests[0];
+    expect(sent?.path).toBe('/v1/chat/completions');
+    expect(sent?.headers.authorization).toBe(`Bearer ${KEY}`);
+    expect(sent?.headers['x-goog-api-key']).toBeUndefined();
+    expect(sent?.body?.model).toBe('gemini-test');
+    expect(sent?.body?.reasoning_effort).toBe('minimal');
+    // Thinking counts against the limit, so the visible reply keeps its own budget.
+    expect(sent?.body?.max_tokens).toBeGreaterThan(request.maxTokens);
   });
 
   it('asks for a JSON object only when the request wants one', async () => {
@@ -363,6 +390,17 @@ describe('error mapping', () => {
     ['HTTP 503', { status: 503, json: {} }, 'provider_unavailable', true],
     ['HTTP 400 with an unknown cause', { status: 400, json: {} }, 'provider_unavailable', false],
     [
+      'Google rejecting an API key with HTTP 400',
+      {
+        status: 400,
+        json: {
+          error: { code: 400, message: 'Please pass a valid API key', status: 'INVALID_ARGUMENT' },
+        },
+      },
+      'provider_not_configured',
+      false,
+    ],
+    [
       'finish_reason content_filter',
       { reply: '', finishReason: 'content_filter' },
       'provider_content_filtered',
@@ -413,6 +451,45 @@ describe('error mapping', () => {
     const error = await providerErrorOf(createChatClient(azure()).complete(request));
     expect(error.message).toMatch(/rejected the credentials/i);
     expect(error.message).toMatch(/configuration/i);
+  });
+
+  describe('a rate limit that says how long to wait', () => {
+    const limited = (retryDelay: string) =>
+      ({
+        status: 429,
+        json: {
+          error: {
+            code: 429,
+            message: `Quota exceeded for ${TRANSCRIPT}. Please retry in 39.6s.`,
+            status: 'RESOURCE_EXHAUSTED',
+            details: [
+              { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [] },
+              { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay },
+            ],
+          },
+        },
+      }) satisfies Step;
+
+    it('passes the wait on, in whole seconds, and nothing else from the error', async () => {
+      llm.enqueue(limited('39.651720051s'));
+      const error = await providerErrorOf(
+        createChatClient(gemini({ maxRetries: 0 })).complete(request),
+      );
+      expect(error.code).toBe('provider_rate_limited');
+      expect(error.retryable).toBe(true);
+      expect(error.message).toBe(
+        "The AI provider's rate limit was reached. Please try again in about 40 seconds.",
+      );
+      expect(error.message).not.toContain(TRANSCRIPT);
+    });
+
+    it.each(['86400s', '0s', 'soon'])('falls back to the general message for %s', async (delay) => {
+      llm.enqueue(limited(delay));
+      const error = await providerErrorOf(
+        createChatClient(gemini({ maxRetries: 0 })).complete(request),
+      );
+      expect(error.message).toMatch(/busy right now/i);
+    });
   });
 
   it('returns an empty reply as empty content for the caller to judge', async () => {
@@ -566,5 +643,37 @@ describe('compatibility fallbacks', () => {
     );
     await providerErrorOf(createChatClient(compatible()).complete(request));
     expect(llm.requests).toHaveLength(1);
+  });
+
+  describe('a Gemini model that does not take a reasoning effort', () => {
+    const googleError = (message: string) =>
+      ({
+        status: 400,
+        json: { error: { code: 400, message, status: 'INVALID_ARGUMENT' } },
+      }) satisfies Step;
+
+    it.each([
+      ['a bad value', 'Invalid reasoning_effort: minimal. Valid values are: high, low, medium'],
+      [
+        'an unknown field',
+        'Invalid JSON payload received. Unknown name "reasoning_effort": Cannot find field.',
+      ],
+    ])('retries without it for %s, and remembers that', async (_name, message) => {
+      llm.enqueue(googleError(message), { reply: 'one' }, { reply: 'two' });
+      const client = createChatClient(gemini({ maxRetries: 0 }));
+      expect((await client.complete(request)).content).toBe('one');
+      expect((await client.complete(request)).content).toBe('two');
+
+      expect(llm.requests[0]?.body?.reasoning_effort).toBe('minimal');
+      expect(llm.requests[1]?.body?.reasoning_effort).toBeUndefined();
+      expect(llm.requests[2]?.body?.reasoning_effort).toBeUndefined();
+      expect(llm.requests).toHaveLength(3);
+    });
+
+    it('does not mistake an unrelated Google 400 for that', async () => {
+      llm.respondWith(() => googleError('temperature must be in the range [0.0, 2.0] but was 9'));
+      await providerErrorOf(createChatClient(gemini({ maxRetries: 0 })).complete(request));
+      expect(llm.requests).toHaveLength(1);
+    });
   });
 });

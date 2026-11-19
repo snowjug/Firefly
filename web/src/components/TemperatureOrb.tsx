@@ -1,5 +1,6 @@
 import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 import { TEMPERATURE_BANDS } from '#shared/domain/vocab.ts';
+import '../styles/temperature-orb.css';
 
 export function bandLabel(id: TemperatureBandId): string {
   return TEMPERATURE_BANDS.find((b) => b.id === id)?.label ?? id;
