@@ -69,7 +69,6 @@ export default function Calibration() {
   return (
     <Page title="Calibration">
       <PageHeader
-        eyebrow="AI and mentor scoring"
         title="Calibration"
         lead={
           review

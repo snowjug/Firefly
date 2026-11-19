@@ -8,7 +8,7 @@ export interface ScenarioOption {
   title: string;
 }
 
-/** Difficulty, scenario and status filters plus the sample toggle. Every control has a visible label. */
+/** Scenario, difficulty and status filters plus the sample toggle. Every control has a visible label. */
 export function HistoryFilterBar({
   filters,
   scenarios,
@@ -20,12 +20,29 @@ export function HistoryFilterBar({
 }) {
   return (
     <form
-      className="surface hs-filters"
+      className="hs-filters"
       onSubmit={(event) => event.preventDefault()}
       role="search"
-      aria-label="Filter sessions"
+      aria-label="Filter calls"
     >
-      {' '}
+      <div className="field hs-field-wide">
+        <label className="label" htmlFor="hs-scenario">
+          Scenario
+        </label>
+        <select
+          id="hs-scenario"
+          className="select"
+          value={filters.scenarioId}
+          onChange={(event) => onChange({ ...filters, scenarioId: event.target.value })}
+        >
+          <option value="">All scenarios</option>
+          {scenarios.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.title}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="field">
         <label className="label" htmlFor="hs-difficulty">
           Difficulty
@@ -40,24 +57,6 @@ export function HistoryFilterBar({
           {DIFFICULTIES.map((d) => (
             <option key={d} value={d}>
               {DIFFICULTY_PROFILES[d].label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="field">
-        <label className="label" htmlFor="hs-scenario">
-          Scenario
-        </label>
-        <select
-          id="hs-scenario"
-          className="select"
-          value={filters.scenarioId}
-          onChange={(event) => onChange({ ...filters, scenarioId: event.target.value })}
-        >
-          <option value="">All scenarios</option>
-          {scenarios.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.title}
             </option>
           ))}
         </select>
@@ -81,11 +80,10 @@ export function HistoryFilterBar({
       </div>
       <div className="hs-filter-end">
         <Switch
-          className="hs-samples"
           checked={filters.includeSamples}
           onChange={(includeSamples) => onChange({ ...filters, includeSamples })}
         >
-          Show sample sessions
+          Show sample calls
         </Switch>
       </div>
     </form>

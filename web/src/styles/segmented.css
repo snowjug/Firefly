@@ -1,0 +1,5 @@
+/* A labelled radio group drawn as the design system's segmented control, with full-size targets. */
+
+.seg-choice .segmented label {
+  min-height: var(--tap);
+}

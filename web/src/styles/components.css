@@ -1036,7 +1036,7 @@
 .table tbody tr:hover {
   background: color-mix(in srgb, var(--primary-soft) 55%, transparent);
 }
-.table tr:last-child td {
+.table tbody tr:last-child :is(td, th) {
   border-bottom: 0;
 }
 

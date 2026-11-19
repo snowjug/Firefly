@@ -1,4 +1,5 @@
-/* Trainer */
+/* Trainer: provider status, the demo spotlight banner, quick start, checklist and demo data.
+   Tokens only, so both themes work. */
 
 .tr-layout {
   display: grid;
@@ -6,7 +7,7 @@
   gap: var(--sp-5);
 }
 
-/* Provider status */
+/* ------------------------------------------------------------------ Provider status */
 .tr-provider {
   display: grid;
   gap: var(--sp-4);
@@ -17,21 +18,16 @@
   align-items: center;
   gap: var(--sp-3);
 }
-.tr-provider-head .state-icon {
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 14px;
-}
 .tr-provider-label {
-  font-family: var(--font-display);
+  font-family: var(--font-heading);
   font-size: clamp(1.2rem, 1.05rem + 0.6vw, 1.55rem);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: -0.015em;
   line-height: var(--lh-snug);
   overflow-wrap: anywhere;
 }
 
-/* Demo spotlight */
+/* ------------------------------------------------------------------ Layout of the main block */
 .tr-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
@@ -64,43 +60,35 @@
     grid-template-rows: none;
   }
 }
+
+/* ------------------------------------------------------------------ Demo spotlight */
 .tr-spotlight {
   display: grid;
-  gap: var(--sp-5);
-  padding: var(--sp-6);
-  border-radius: var(--r-panel);
-  overflow: hidden;
-}
-.tr-spotlight::after {
-  content: '';
-  position: absolute;
-  top: -40%;
-  left: -12%;
-  width: 30rem;
-  height: 24rem;
-  background: radial-gradient(
-    closest-side,
-    color-mix(in srgb, var(--glow) 18%, transparent),
-    transparent
-  );
-  pointer-events: none;
-}
-.tr-spotlight > * {
-  position: relative;
-  z-index: 1;
+  gap: var(--sp-4);
 }
 .tr-spotlight-loading {
   padding: var(--sp-6);
 }
-.tr-spotlight-main {
+.tr-banner {
+  padding: var(--sp-6);
+}
+.tr-banner-copy {
   display: grid;
   gap: var(--sp-3);
-  align-content: start;
+  align-content: center;
+  justify-items: start;
   min-width: 0;
+}
+.tr-banner-label {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
 }
 .tr-spotlight-title {
   font-size: clamp(1.5rem, 1.2rem + 1.1vw, 2.1rem);
-  font-weight: 650;
+  font-weight: 740;
   letter-spacing: -0.022em;
   line-height: var(--lh-tight);
   overflow-wrap: anywhere;
@@ -117,7 +105,16 @@
   align-items: center;
   gap: 0.35rem;
   font-size: var(--fs-meta);
-  color: var(--text-3);
+}
+.tr-banner-summary {
+  max-width: 54ch;
+  font-size: 1.02rem;
+}
+/* The settings read as white pills on the gradient, with a darker fill so the words stay clear. */
+.tr-banner .chip {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(8, 18, 56, 0.34);
+  color: #fff;
 }
 .tr-actions {
   display: flex;
@@ -125,13 +122,39 @@
   gap: var(--sp-3);
   margin-top: var(--sp-2);
 }
-.tr-shows {
-  min-width: 0;
-  padding-top: var(--sp-5);
-  border-top: 1px solid var(--border);
+.tr-banner-error {
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-control);
+  background: rgba(8, 18, 56, 0.45);
+  color: #fff;
+  font-weight: 600;
 }
-.tr-shows h3 {
-  margin-bottom: var(--sp-4);
+.tr-banner-art {
+  --ill-radius: var(--r-card);
+  align-self: end;
+  width: 11rem;
+  aspect-ratio: 400 / 480;
+  overflow: hidden;
+  border-radius: var(--r-card);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+@media (max-width: 900px) {
+  .tr-banner-art {
+    width: 8.5rem;
+  }
+}
+@media (max-width: 720px) {
+  .tr-banner {
+    padding: var(--sp-5);
+  }
+  .tr-actions .btn {
+    width: 100%;
+  }
+}
+.tr-shows {
+  display: grid;
+  gap: var(--sp-4);
+  min-width: 0;
 }
 .tr-shows-list {
   display: grid;
@@ -146,40 +169,29 @@
   gap: var(--sp-3);
   align-items: start;
 }
-.tr-shows-icon {
-  display: grid;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
+.tr-shows-list .tone-icon {
+  width: 38px;
+  height: 38px;
 }
 .tr-shows-title {
   display: block;
   margin-bottom: 2px;
-  font-weight: 620;
+  font-weight: 650;
 }
 @media (max-width: 640px) {
-  .tr-spotlight {
-    padding: var(--sp-5);
-  }
   .tr-shows-list {
     grid-template-columns: minmax(0, 1fr);
   }
-  .tr-actions .btn {
-    width: 100%;
-  }
 }
 
-/* Quick start and checklist */
+/* ------------------------------------------------------------------ Quick start and checklist */
 .tr-preview {
   display: grid;
   gap: var(--sp-2);
   padding: var(--sp-4);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  background: var(--surface-2);
 }
 .tr-preview-title {
   font-size: var(--fs-body);
@@ -217,15 +229,14 @@
   height: 1.75rem;
   margin-top: 1px;
   border-radius: 50%;
-  border: 1px solid var(--border-strong);
-  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
-  color: var(--text-2);
+  background: var(--primary-soft);
+  color: var(--accent-strong);
   font-size: var(--fs-meta);
-  font-weight: 650;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .tr-step-title {
-  font-weight: 620;
+  font-weight: 650;
 }
 .tr-step-links {
   display: flex;
@@ -239,7 +250,7 @@
   min-height: 36px;
 }
 
-/* Demo data */
+/* ------------------------------------------------------------------ Demo data */
 .tr-data-head {
   display: flex;
   flex-wrap: wrap;
@@ -262,21 +273,21 @@
 .tr-counts > div {
   min-width: 0;
   padding: var(--sp-3) var(--sp-4);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  background: var(--surface-2);
 }
 .tr-counts dt {
   font-size: var(--fs-label);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-3);
 }
 .tr-counts dd {
-  font-family: var(--font-display);
+  font-family: var(--font-heading);
   font-size: 1.75rem;
-  font-weight: 650;
+  font-weight: 740;
   line-height: 1.2;
 }
 .tr-data-actions {
@@ -286,7 +297,7 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--r-card);
-  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  background: var(--surface);
 }
 .tr-action {
   display: grid;
@@ -300,7 +311,7 @@
   border-top: 0;
 }
 .tr-action-title {
-  font-weight: 620;
+  font-weight: 650;
 }
 .tr-action .btn {
   white-space: nowrap;
@@ -322,12 +333,12 @@
 .tr-status:not(:empty) {
   margin-top: var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
-  border-radius: 12px;
+  border-radius: var(--r-control);
   border: 1px solid color-mix(in srgb, var(--info) 35%, transparent);
   background: var(--info-bg);
 }
 
-/* Confirmation dialogs */
+/* ------------------------------------------------------------------ Confirmation dialogs */
 .tr-consequences {
   display: grid;
   gap: var(--sp-2);
@@ -348,7 +359,7 @@
   }
 }
 
-/* Related pages */
+/* ------------------------------------------------------------------ Related pages */
 .tr-links {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -371,12 +382,9 @@
 }
 .tr-link-icon {
   flex: none;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 12px;
 }
 .tr-link-title {
   display: block;
-  font-weight: 620;
+  font-weight: 650;
   color: var(--text);
 }

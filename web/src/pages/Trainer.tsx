@@ -22,7 +22,6 @@ export default function Trainer() {
   return (
     <Page title="Trainer">
       <PageHeader
-        eyebrow="Demo and facilitation"
         title="Trainer"
         lead="Run a clean, unscripted demo in a few minutes. Everything on this page is real, and anything pre-generated is labelled."
       />
