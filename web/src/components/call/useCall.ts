@@ -24,6 +24,16 @@ export interface ChatTurn {
   error?: string;
 }
 
+export interface ChatShift {
+  /** The customer turn after which this change appeared. */
+  afterKey: string;
+  kind: 'band' | 'silent';
+  /** For a band change: the customer's mood before and after. */
+  from?: { id: PublicStateDTO['band']['id']; label: string };
+  to?: { id: PublicStateDTO['band']['id']; label: string };
+  direction?: 'tenser' | 'calmer';
+}
+
 export interface CallState {
   turns: ChatTurn[];
   state: PublicStateDTO;
@@ -31,9 +41,17 @@ export interface CallState {
   pending: boolean;
   announcement: string;
   limitReached: boolean;
+  /** How many customer replies have arrived since the call was opened. Drives a gentle pulse. */
+  replies: number;
+  /** How many times a new signal was found since the call was opened. */
+  discoveries: number;
+  /** Customer turns whose reply brought a signal to light. Used in guided practice only. */
+  signalKeys: string[];
+  /** Changes in the customer's mood or silence, in order. Used in guided practice only. */
+  shifts: ChatShift[];
 }
 
-type Action =
+export type CallAction =
   | { type: 'sending'; turn: ChatTurn }
   | { type: 'retrying'; key: string }
   | { type: 'sent'; key: string; response: SendMessageResponse; announcement: string }
@@ -76,10 +94,39 @@ export function initialCallState(session: SessionDTO, maxTurns: number | null): 
     pending: false,
     announcement: '',
     limitReached: maxTurns !== null && session.traineeTurns >= maxTurns,
+    replies: 0,
+    discoveries: 0,
+    signalKeys: [],
+    shifts: [],
   };
 }
 
-function reducer(current: CallState, action: Action): CallState {
+const BAND_ORDER = ['calm', 'concerned', 'frustrated', 'angry', 'escalating'] as const;
+
+/** What changed in the customer's visible state between two replies. */
+function shiftsBetween(
+  before: PublicStateDTO,
+  after: PublicStateDTO,
+  afterKey: string,
+): ChatShift[] {
+  const shifts: ChatShift[] = [];
+  if (before.band.id !== after.band.id) {
+    shifts.push({
+      afterKey,
+      kind: 'band',
+      from: before.band,
+      to: after.band,
+      direction:
+        BAND_ORDER.indexOf(after.band.id) > BAND_ORDER.indexOf(before.band.id)
+          ? 'tenser'
+          : 'calmer',
+    });
+  }
+  if (!before.silent && after.silent) shifts.push({ afterKey, kind: 'silent' });
+  return shifts;
+}
+
+export function callReducer(current: CallState, action: CallAction): CallState {
   switch (action.type) {
     case 'sending':
       return { ...current, turns: [...current.turns, action.turn], pending: true };
@@ -98,13 +145,19 @@ function reducer(current: CallState, action: Action): CallState {
           ? { ...fromServer(response.traineeTurn), key: t.key, clientMessageId: t.clientMessageId }
           : t,
       );
+      const customer = fromServer(response.customerTurn);
+      const found = response.state.discoveredCount > current.state.discoveredCount;
       return {
-        turns: [...turns, fromServer(response.customerTurn)],
+        turns: [...turns, customer],
         state: response.state,
         turnsRemaining: response.turnsRemaining,
         pending: false,
         announcement: action.announcement,
         limitReached: response.turnsRemaining <= 0,
+        replies: current.replies + 1,
+        discoveries: found ? current.discoveries + 1 : current.discoveries,
+        signalKeys: found ? [...current.signalKeys, customer.key] : current.signalKeys,
+        shifts: [...current.shifts, ...shiftsBetween(current.state, response.state, customer.key)],
       };
     }
     case 'failed':
@@ -138,7 +191,7 @@ export function useCall(
   options: { maxTurns: number | null; onEnded(): void },
 ) {
   const { maxTurns, onEnded } = options;
-  const [chat, dispatch] = useReducer(reducer, undefined, () =>
+  const [chat, dispatch] = useReducer(callReducer, undefined, () =>
     initialCallState(session, maxTurns),
   );
   const sessionId = session.id;

@@ -1,8 +1,19 @@
-/* Live call: header, conversation, composer, context panel and the end-of-call wrap-up. */
+/* The live call: a conversation chamber. The environment follows the customer's state (guided
+   practice only; immersive practice stays neutral), the transcript is calm and readable, and the
+   presence region holds the Firefly Core. Motion is short and never blocks typing. */
+
+/* Registered so the chamber tint can ease between moods instead of snapping. Browsers without
+   @property simply change tint at once. */
+@property --chamber-tint {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #f6bd5e;
+}
 
 /* The call fills the visible screen. Only the conversation scrolls, so the composer is always in
    reach, including above a mobile keyboard (--vvh follows the visual viewport). */
 .call {
+  --chamber-tint: var(--glow);
   position: fixed;
   inset: 0 0 auto 0;
   z-index: 1;
@@ -12,8 +23,44 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
+  transition: --chamber-tint 1400ms var(--ease-settle);
+}
+.call[data-band='calm'] {
+  --chamber-tint: var(--temp-calm);
+}
+.call[data-band='concerned'] {
+  --chamber-tint: var(--temp-concerned);
+}
+.call[data-band='frustrated'] {
+  --chamber-tint: var(--temp-frustrated);
+}
+.call[data-band='angry'] {
+  --chamber-tint: var(--temp-angry);
+}
+.call[data-band='escalating'] {
+  --chamber-tint: var(--temp-escalating);
+}
+/* The environment: a lantern glow from above and a soft haze from below, in the state's colour. */
+.call::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      58rem 36rem at 80% -6%,
+      color-mix(in srgb, var(--chamber-tint) 18%, transparent),
+      transparent 66%
+    ),
+    radial-gradient(
+      50rem 32rem at 6% 110%,
+      color-mix(in srgb, var(--chamber-tint) 10%, transparent),
+      transparent 70%
+    );
 }
 
+/* ------------------------------------------------------------------ HUD */
 .call-header {
   display: flex;
   align-items: center;
@@ -30,10 +77,11 @@
   min-width: 0;
 }
 .call-heading {
-  font-size: var(--fs-body);
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-weight: 600;
   line-height: 1.25;
-  letter-spacing: 0;
+  letter-spacing: -0.005em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -69,6 +117,9 @@
 .call-header .btn {
   white-space: nowrap;
 }
+.call-sound[aria-pressed='true'] {
+  color: var(--glow);
+}
 @media (max-width: 560px) {
   .call-heading {
     display: -webkit-box;
@@ -92,7 +143,7 @@
 }
 @media (min-width: 1000px) {
   .call-body {
-    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) 380px;
   }
 }
 @media (max-width: 720px) {
@@ -110,8 +161,137 @@
 .call-aside {
   min-height: 0;
   overflow-y: auto;
-  padding: var(--sp-5);
+  padding: 0 var(--sp-5) var(--sp-5);
   border-radius: var(--r-panel);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-1);
+}
+
+/* ------------------------------------------------------------------ Presence */
+.presence {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+  margin: 0 calc(var(--sp-5) * -1) var(--sp-4);
+  padding: var(--sp-5) var(--sp-5) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  background: radial-gradient(
+    ellipse 80% 70% at 50% 38%,
+    color-mix(in srgb, var(--chamber-tint) 12%, transparent),
+    transparent 75%
+  );
+}
+.presence-core {
+  --core-size: min(100%, 270px);
+  display: grid;
+  place-items: center;
+  width: 100%;
+  margin-block: calc(var(--sp-3) * -1);
+}
+.presence-line {
+  margin: 0;
+  letter-spacing: 0.03em;
+}
+.presence-signals {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: var(--sp-2);
+  min-height: 44px;
+}
+.signal-row {
+  display: flex;
+  gap: 11px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.signal-dot {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--star-0);
+  border-radius: 50%;
+  background: transparent;
+  transition:
+    background var(--dur-4) var(--ease-settle),
+    border-color var(--dur-4) var(--ease-settle),
+    box-shadow var(--dur-5) var(--ease-settle),
+    transform var(--dur-5) var(--ease-spring);
+}
+.signal-dot[data-lit='true'] {
+  border-color: var(--glow);
+  background: var(--glow);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--glow) 18%, transparent),
+    0 0 14px var(--glow-soft);
+  transform: scale(1.18);
+}
+.signal-found {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.2rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--glow) 50%, transparent);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--glow) 12%, transparent);
+  color: var(--glow);
+  font-size: var(--fs-meta);
+  font-weight: 650;
+  animation: signal-in var(--dur-5) var(--ease-spring) both;
+}
+.signal-found-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+}
+@keyframes signal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+}
+
+/* A compact version above the conversation on narrow screens. */
+.presence-strip {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  justify-items: stretch;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-1);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-card);
+  background: var(--glass-bg);
+}
+.presence-strip .presence-core {
+  --core-size: 56px;
+  width: 56px;
+  margin: 0;
+}
+.presence-strip .presence-signals {
+  min-height: 0;
+  justify-items: end;
+}
+.presence-strip .signal-row {
+  gap: 8px;
+}
+.presence-text {
+  min-width: 0;
+}
+.presence-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.presence-note {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ------------------------------------------------------------------ Conversation */
@@ -174,8 +354,9 @@
 }
 .msg-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--sp-2);
+  gap: 0 var(--sp-2);
   padding-inline: var(--sp-1);
   font-size: var(--fs-label);
   color: var(--text-3);
@@ -186,21 +367,24 @@
 }
 .bubble {
   margin: 0;
-  padding: 0.7rem 0.95rem;
+  padding: 0.75rem 1rem;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: var(--surface-2);
-  line-height: 1.5;
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-1);
+  line-height: 1.6;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 .msg-customer .bubble {
   border-bottom-left-radius: 6px;
+  border-left: 2px solid color-mix(in srgb, var(--chamber-tint) 60%, var(--border));
 }
 .msg-trainee .bubble {
   border-bottom-right-radius: 6px;
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface-2));
+  box-shadow: none;
 }
 .msg[data-status='sending'] .bubble {
   opacity: 0.72;
@@ -208,6 +392,39 @@
 .msg[data-status='failed'] .bubble {
   border-style: dashed;
   border-color: var(--negative);
+}
+/* Only messages that arrive after the call opened get an entrance, so opening a long call is calm. */
+.msg[data-fresh='true'] {
+  animation: msg-in var(--dur-4) var(--ease-settle) both;
+}
+.msg-customer[data-fresh='true'] {
+  animation-delay: 60ms;
+}
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+.msg[data-signal='true'] .bubble {
+  border-color: color-mix(in srgb, var(--glow) 50%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--glow) 28%, transparent),
+    0 14px 34px -20px var(--glow-soft);
+}
+.msg-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--glow);
+  font-weight: 650;
+}
+.msg-signal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
 }
 .avatar {
   flex: none;
@@ -234,6 +451,37 @@
   gap: var(--sp-2);
   color: var(--text);
 }
+
+/* A change in the conversation: a quiet rule and one line, never an alert. */
+.shift {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-1) 0;
+  animation: msg-in var(--dur-5) var(--ease-settle) both;
+}
+.shift-rule {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--chamber-tint) 65%, transparent)
+  );
+}
+.shift-rule:last-child {
+  transform: scaleX(-1);
+}
+.shift-text {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
 .typing-dots {
   display: inline-flex;
   gap: 5px;
@@ -243,7 +491,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--text-3);
+  background: var(--chamber-tint);
   opacity: 0.7;
   animation: typing 1.2s infinite ease-in-out;
 }
@@ -281,6 +529,14 @@
   gap: var(--sp-2);
   padding: var(--sp-3);
   border-radius: var(--r-card);
+  border-color: color-mix(in srgb, var(--chamber-tint) 24%, var(--glass-border));
+  transition: border-color var(--dur-4) var(--ease-settle);
+}
+.composer:focus-within {
+  border-color: color-mix(in srgb, var(--glow) 55%, var(--glass-border));
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 3px color-mix(in srgb, var(--glow) 14%, transparent);
 }
 .composer-row {
   display: flex;
@@ -334,7 +590,7 @@
 .ctx-name {
   font-family: var(--font-display);
   font-size: var(--fs-section);
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.2;
 }
 .ctx-list {
@@ -386,7 +642,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  width: min(100%, 580px);
+  width: min(100%, 620px);
   padding: var(--sp-6);
   border-radius: var(--r-panel);
 }
@@ -397,7 +653,15 @@
 .ending-card h1:focus {
   outline: none;
 }
+.ending-core {
+  --core-size: 200px;
+  display: grid;
+  place-items: center;
+  margin: calc(var(--sp-5) * -1) auto calc(var(--sp-4) * -1);
+}
+/* The stages are a short chain of lights: each one comes on only when the server reports it. */
 .stages {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
@@ -406,10 +670,26 @@
   list-style: none;
 }
 .stage {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: var(--sp-3);
   color: var(--text-3);
+  transition: color var(--dur-3) var(--ease-out);
+}
+.stage:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 28px;
+  bottom: calc(var(--sp-3) * -1 - 2px);
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background var(--dur-4) var(--ease-settle);
+}
+.stage[data-state='done']:not(:last-child)::before {
+  background: linear-gradient(var(--glow), color-mix(in srgb, var(--glow) 40%, transparent));
 }
 .stage[data-state='done'] {
   color: var(--text-2);
@@ -418,6 +698,7 @@
   color: var(--text);
 }
 .stage-mark {
+  position: relative;
   flex: none;
   display: grid;
   place-items: center;
@@ -425,11 +706,17 @@
   height: 26px;
   border: 1.5px solid var(--border-strong);
   border-radius: 50%;
+  background: var(--surface);
+  transition:
+    border-color var(--dur-4) var(--ease-settle),
+    box-shadow var(--dur-5) var(--ease-settle),
+    background var(--dur-4) var(--ease-settle);
 }
 .stage[data-state='done'] .stage-mark {
-  border-color: var(--positive);
-  background: var(--positive-bg);
-  color: var(--positive);
+  border-color: var(--glow);
+  background: color-mix(in srgb, var(--glow) 16%, var(--surface));
+  box-shadow: 0 0 16px -2px var(--glow-soft);
+  color: var(--glow);
 }
 .stage[data-state='current'] .stage-mark {
   border-color: var(--accent);

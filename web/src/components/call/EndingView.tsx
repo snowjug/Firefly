@@ -5,6 +5,7 @@ import { EVALUATION_PHASES, type EvaluationPhase } from '#shared/domain/vocab.ts
 import { api, errorMessage } from '../../lib/api.ts';
 import { useDocumentTitle, useInterval } from '../../lib/hooks.ts';
 import { Icon } from '../Icon.tsx';
+import { FireflyCore } from '../core/FireflyCore.tsx';
 
 // What the end of a call really does, in order. Each step is shown only because the server has
 // reported reaching it, so the progress is never an animation pretending to be work.
@@ -168,6 +169,12 @@ export function EndingView({ session: initial }: { session: SessionDTO }) {
   return (
     <div className="ending">
       <section className="ending-card glass glass-strong" aria-labelledby="ending-title">
+        <div className="ending-core">
+          <FireflyCore
+            thinking={!complete}
+            signals={{ total: STAGES.length, lit: complete ? STAGES.length : activeIndex }}
+          />
+        </div>
         <p className="t-label">Call ended</p>
         <h1 id="ending-title" className="t-title" ref={heading} tabIndex={-1}>
           {complete ? 'Your report is ready' : 'Wrapping up your call'}

@@ -4,6 +4,7 @@ import type { SessionDTO } from '#shared/domain/api.ts';
 import { CALL_STAGE_LABELS, PRACTICE_MODE_LABELS } from '#shared/domain/vocab.ts';
 import { formatClock } from '../../lib/format.ts';
 import { useInterval } from '../../lib/hooks.ts';
+import { useSound } from '../../lib/sound.ts';
 import { DifficultyChip } from '../Chips.tsx';
 import { Icon } from '../Icon.tsx';
 import { ProviderBadge } from '../ProviderBadge.tsx';
@@ -30,6 +31,7 @@ export function CallHeader({
   onEnd(): void;
 }) {
   const { scenario } = session;
+  const [soundOn, setSound] = useSound();
   return (
     <header className="call-header glass glass-strong">
       <Link
@@ -53,6 +55,16 @@ export function CallHeader({
         <ProviderBadge compact />
       </div>
       <ElapsedTimer startedAt={session.startedAt} />
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm btn-icon call-sound"
+        aria-pressed={soundOn}
+        aria-label="Sound effects"
+        title={soundOn ? 'Sound effects are on' : 'Sound effects are off'}
+        onClick={() => setSound(!soundOn)}
+      >
+        <Icon name={soundOn ? 'volume' : 'volume-off'} size={18} />
+      </button>
       <button
         type="button"
         className="btn btn-secondary btn-sm call-details-button"

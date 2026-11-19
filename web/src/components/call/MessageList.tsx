@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../Icon.tsx';
 import { formatTime } from '../../lib/format.ts';
-import type { ChatTurn } from './useCall.ts';
+import type { ChatShift, ChatTurn } from './useCall.ts';
 
 interface Persona {
   name: string;
@@ -28,14 +28,25 @@ function Message({
   turn,
   persona,
   onRetry,
+  fresh,
+  signal,
 }: {
   turn: ChatTurn;
   persona: Persona;
   onRetry(key: string): void;
+  /** Arrived after the call was opened, so it gets the short entrance. */
+  fresh: boolean;
+  /** A signal came to light in this reply (guided practice only). */
+  signal: boolean;
 }) {
   const mine = turn.role === 'trainee';
   return (
-    <li className={`msg ${mine ? 'msg-trainee' : 'msg-customer'}`} data-status={turn.status}>
+    <li
+      className={`msg ${mine ? 'msg-trainee' : 'msg-customer'}`}
+      data-status={turn.status}
+      data-fresh={fresh || undefined}
+      data-signal={signal || undefined}
+    >
       {mine ? null : (
         <span className="avatar" aria-hidden="true">
           {initials(persona.name)}
@@ -45,6 +56,12 @@ function Message({
         <p className="msg-meta">
           <span className="msg-who">{mine ? 'You' : persona.name}</span>
           <time dateTime={turn.createdAt}>{formatTime(turn.createdAt)}</time>
+          {signal ? (
+            <span className="msg-signal">
+              <span className="msg-signal-dot" aria-hidden="true" />
+              Signal found in this reply
+            </span>
+          ) : null}
         </p>
         <p className="bubble">{turn.text}</p>
         {turn.status === 'sending' ? <p className="msg-status">Sending…</p> : null}
@@ -67,6 +84,22 @@ function Message({
   );
 }
 
+function shiftText(shift: ChatShift, name: string): string {
+  if (shift.kind === 'silent') return `${name} has gone quiet.`;
+  return `${name}'s mood shifted from ${shift.from?.label ?? 'one state'} to ${shift.to?.label ?? 'another'}.`;
+}
+
+/** A quiet marker in the transcript: the conversation changed. It never suggests what to say. */
+function Shift({ shift, name }: { shift: ChatShift; name: string }) {
+  return (
+    <li className="shift" data-kind={shift.kind} data-direction={shift.direction}>
+      <span className="shift-rule" aria-hidden="true" />
+      <p className="shift-text">{shiftText(shift, name)}</p>
+      <span className="shift-rule" aria-hidden="true" />
+    </li>
+  );
+}
+
 /**
  * The conversation. It follows new messages while the reader is at the bottom, and offers a
  * "Jump to latest" control when they have scrolled up to re-read something.
@@ -76,18 +109,26 @@ export function MessageList({
   persona,
   typing,
   onRetry,
+  guided = false,
+  signalKeys = [],
+  shifts = [],
 }: {
   turns: ChatTurn[];
   persona: Persona;
   typing: boolean;
   onRetry(key: string): void;
+  /** Guided practice shows mood shifts and signal markers; immersive practice shows neither. */
+  guided?: boolean;
+  signalKeys?: string[];
+  shifts?: ChatShift[];
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
   const hasOpened = useRef(false);
   const [atBottom, setAtBottom] = useState(true);
   const [seen, setSeen] = useState(turns.length);
-  const count = turns.length + (typing ? 1 : 0);
+  const [openingKeys] = useState(() => new Set(turns.map((turn) => turn.key)));
+  const count = turns.length + (typing ? 1 : 0) + (guided ? shifts.length : 0);
   const lastRole = turns[turns.length - 1]?.role;
 
   const scrollToEnd = useCallback((smooth: boolean) => {
@@ -134,7 +175,26 @@ export function MessageList({
           </p>
           <ol role="list" className="msg-list">
             {turns.map((turn) => (
-              <Message key={turn.key} turn={turn} persona={persona} onRetry={onRetry} />
+              <Fragment key={turn.key}>
+                <Message
+                  turn={turn}
+                  persona={persona}
+                  onRetry={onRetry}
+                  fresh={!openingKeys.has(turn.key)}
+                  signal={guided && signalKeys.includes(turn.key)}
+                />
+                {guided
+                  ? shifts
+                      .filter((shift) => shift.afterKey === turn.key)
+                      .map((shift) => (
+                        <Shift
+                          key={`${shift.afterKey}-${shift.kind}`}
+                          shift={shift}
+                          name={persona.name}
+                        />
+                      ))
+                  : null}
+              </Fragment>
             ))}
             {typing ? (
               <li className="msg msg-customer msg-typing" aria-hidden="true">

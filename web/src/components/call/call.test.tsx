@@ -6,7 +6,9 @@ import { Composer } from './Composer.tsx';
 import { ContextPanel } from './ContextPanel.tsx';
 import { EndCallDialog } from './EndCallDialog.tsx';
 import { MessageList } from './MessageList.tsx';
-import { initialCallState, type ChatTurn } from './useCall.ts';
+import { Presence, presenceFor } from './Presence.tsx';
+import { callReducer, initialCallState, type ChatTurn } from './useCall.ts';
+import { ThemeProvider } from '../../lib/theme.tsx';
 
 vi.mock('../ProviderBadge.tsx', () => ({
   ProviderBadge: () => <span>Demo mode</span>,
@@ -137,6 +139,120 @@ describe('conversation state', () => {
     });
     expect(state.turnsRemaining).toBe(59);
     expect(initialCallState(makeSession(), 60).turns.every((t) => t.status === 'sent')).toBe(true);
+  });
+
+  const reply = (over: Partial<SessionDTO['state']>, text = 'Maya says something') => ({
+    traineeTurn: {
+      index: 3,
+      role: 'trainee' as const,
+      text: 'Hello',
+      createdAt: '2025-01-01T10:00:10.000Z',
+      source: 'trainee' as const,
+    },
+    customerTurn: {
+      index: 4,
+      role: 'customer' as const,
+      text,
+      createdAt: '2025-01-01T10:00:12.000Z',
+      source: 'live' as const,
+    },
+    state: { ...makeSession().state, ...over },
+    redactions: [],
+    turnsRemaining: 50,
+  });
+  const sending: ChatTurn = turn({ key: 'k1', index: null, role: 'trainee', status: 'sending' });
+
+  it('notes when a reply lights a signal, and when the customer changes mood or goes quiet', () => {
+    const before = { ...initialCallState(makeSession(), 60), turns: [sending] };
+
+    const found = callReducer(before, {
+      type: 'sent',
+      key: 'k1',
+      response: reply({ discoveredCount: 3 }),
+      announcement: '',
+    });
+    expect(found.discoveries).toBe(1);
+    expect(found.signalKeys).toEqual(['t4']);
+    expect(found.replies).toBe(1);
+    expect(found.shifts).toEqual([]);
+
+    const tenser = callReducer(before, {
+      type: 'sent',
+      key: 'k1',
+      response: reply({ band: { id: 'frustrated', label: 'Frustrated' }, silent: true }),
+      announcement: '',
+    });
+    expect(tenser.discoveries).toBe(0);
+    expect(tenser.signalKeys).toEqual([]);
+    expect(tenser.shifts).toMatchObject([
+      { kind: 'band', direction: 'tenser', from: { id: 'concerned' }, to: { id: 'frustrated' } },
+      { kind: 'silent' },
+    ]);
+
+    const calmer = callReducer(before, {
+      type: 'sent',
+      key: 'k1',
+      response: reply({ band: { id: 'calm', label: 'Calm' } }),
+      announcement: '',
+    });
+    expect(calmer.shifts).toMatchObject([{ kind: 'band', direction: 'calmer' }]);
+  });
+});
+
+describe('customer presence', () => {
+  const guided = makeSession();
+  const immersive = makeSession({
+    scenario: { ...guided.scenario, config: { ...guided.scenario.config, mode: 'immersive' } },
+  });
+
+  it('follows the customer state in guided practice and keeps a couple of signals dormant', () => {
+    const view = presenceFor(guided, guided.state);
+    expect(view).toMatchObject({ guided: true, mood: 'concerned', tone: 'falling', found: 2 });
+    expect(view.signals).toEqual({ total: 4, lit: 2 });
+    expect(presenceFor(guided, { ...guided.state, discoveredCount: 20 }).signals?.total).toBe(8);
+  });
+
+  it('shows nothing about the customer in immersive practice', () => {
+    const view = presenceFor(immersive, immersive.state);
+    expect(view).toMatchObject({ guided: false, mood: 'neutral', tone: 'steady', signals: null });
+  });
+
+  it('renders signal points in guided practice only, and never as readable text', () => {
+    const props = { pending: false, replies: 0, discoveries: 0 };
+    const { container, rerender } = render(
+      <ThemeProvider>
+        <Presence session={guided} state={guided.state} {...props} />
+      </ThemeProvider>,
+    );
+    const dots = container.querySelectorAll('.signal-dot');
+    expect(dots).toHaveLength(4);
+    expect(container.querySelectorAll('.signal-dot[data-lit="true"]')).toHaveLength(2);
+    expect(container.querySelector('.signal-row')).toHaveAttribute('aria-hidden', 'true');
+
+    rerender(
+      <ThemeProvider>
+        <Presence session={immersive} state={immersive.state} {...props} />
+      </ThemeProvider>,
+    );
+    expect(container.querySelector('.signal-row')).toBeNull();
+    expect(container.querySelector('.core')).toHaveAttribute('data-mood', 'neutral');
+    expect(container.textContent).not.toMatch(/concerned|calm|frustrated/i);
+  });
+
+  it('acknowledges a new signal once, without saying what it was', () => {
+    const props = { pending: false, replies: 0 };
+    const { rerender } = render(
+      <ThemeProvider>
+        <Presence session={guided} state={guided.state} discoveries={0} {...props} />
+      </ThemeProvider>,
+    );
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    rerender(
+      <ThemeProvider>
+        <Presence session={guided} state={guided.state} discoveries={1} {...props} />
+      </ThemeProvider>,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(/^Signal found$/);
   });
 });
 
@@ -276,6 +392,69 @@ describe('MessageList', () => {
     );
     const typing = container.querySelector('.msg-typing');
     expect(typing).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('shows mood shifts and signal markers in guided practice, and none of it in immersive', () => {
+    const turns = [
+      turn({ key: 't1', index: 1 }),
+      turn({ key: 't2', index: 2, role: 'trainee', text: 'Hi' }),
+      turn({ key: 't3', index: 3, text: 'Something useful' }),
+    ];
+    const shifts = [
+      {
+        afterKey: 't3',
+        kind: 'band' as const,
+        from: { id: 'calm' as const, label: 'Calm' },
+        to: { id: 'frustrated' as const, label: 'Frustrated' },
+        direction: 'tenser' as const,
+      },
+      { afterKey: 't3', kind: 'silent' as const },
+    ];
+    const { container, rerender } = render(
+      <MessageList
+        persona={persona}
+        typing={false}
+        onRetry={vi.fn()}
+        turns={turns}
+        guided
+        signalKeys={['t3']}
+        shifts={shifts}
+      />,
+    );
+    expect(screen.getByText(/Maya Okafor's mood shifted from Calm to Frustrated/)).toBeVisible();
+    expect(screen.getByText('Maya Okafor has gone quiet.')).toBeVisible();
+    expect(screen.getByText('Signal found in this reply')).toBeVisible();
+
+    rerender(
+      <MessageList
+        persona={persona}
+        typing={false}
+        onRetry={vi.fn()}
+        turns={turns}
+        signalKeys={['t3']}
+        shifts={shifts}
+      />,
+    );
+    expect(container.querySelector('.shift')).toBeNull();
+    expect(screen.queryByText(/signal found/i)).not.toBeInTheDocument();
+    expect(container.querySelector('[data-signal]')).toBeNull();
+  });
+
+  it('only gives messages that arrive later an entrance, never the ones the call opened with', () => {
+    const opening = [turn({ key: 't1', index: 1 }), turn({ key: 't2', index: 2, role: 'trainee' })];
+    const { container, rerender } = render(
+      <MessageList persona={persona} typing={false} onRetry={vi.fn()} turns={opening} />,
+    );
+    expect(container.querySelectorAll('[data-fresh]')).toHaveLength(0);
+    rerender(
+      <MessageList
+        persona={persona}
+        typing={false}
+        onRetry={vi.fn()}
+        turns={[...opening, turn({ key: 't3', index: 3 })]}
+      />,
+    );
+    expect(container.querySelectorAll('[data-fresh="true"]')).toHaveLength(1);
   });
 
   it('opens at the latest message at once, then scrolls smoothly for a new one', () => {
