@@ -2,10 +2,16 @@ import { useId } from 'react';
 import { Link } from 'react-router';
 import type { DemoStatusDTO, PublicScenarioDTO } from '#shared/domain/api.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
-import { CURVEBALL_LABELS, IMPACT_LABELS, START_TEMPERATURE_LABELS } from '#shared/domain/vocab.ts';
-import type { AsyncState } from '../../lib/hooks.ts';
+import {
+  CURVEBALL_LABELS,
+  IMPACT_LABELS,
+  START_TEMPERATURE_LABELS,
+  temperatureBand,
+} from '#shared/domain/vocab.ts';
+import { useMediaQuery, type AsyncState } from '../../lib/hooks.ts';
 import { SettingChips } from '../Chips.tsx';
 import { Icon, type IconName } from '../Icon.tsx';
+import { CustomerAvatar } from '../illustration/index.ts';
 import { EmptyState, ErrorState, SkeletonBlock } from '../Page.tsx';
 import { useStartCall } from './useStartCall.ts';
 
@@ -80,56 +86,65 @@ function SpotlightSkeleton() {
 
 function SpotlightCard({ scenario }: { scenario: PublicScenarioDTO }) {
   const titleId = useId();
+  const withArt = useMediaQuery('(min-width: 721px)');
   const { start, error } = useStartCall();
   const { persona } = scenario;
+  const mood = temperatureBand(START_TEMPERATURE_LABELS[scenario.startingTemperature].startValue);
 
   return (
-    <section id="spotlight" className="glass glass-strong tr-spotlight" aria-labelledby={titleId}>
-      <div className="tr-spotlight-main">
-        <p className="t-label">Demo spotlight</p>
-        <h2 id={titleId} className="tr-spotlight-title">
-          {scenario.title}
-        </h2>
-        <p className="t-muted tr-persona">
-          {persona.name}, {persona.role} at {persona.organisation}
-          <span className="tr-persona-time">
-            <Icon name="clock" size={14} /> About {scenario.estimatedMinutes} min
-          </span>
-        </p>
-        <p className="t-lead">{scenario.summary}</p>
-        <SettingChips
-          settings={scenario}
-          only={['difficulty', 'impact', 'startingTemperature', 'style', 'callStage']}
-        />
-        <div className="tr-actions">
-          <button
-            type="button"
-            className="btn btn-primary btn-lg"
-            onClick={() => start(scenario.id, {})}
-          >
-            Start the spotlight call <Icon name="arrow-right" size={18} />
-          </button>
-          <Link
-            to={`/scenarios/${encodeURIComponent(scenario.id)}/setup`}
-            className="btn btn-secondary btn-lg"
-            viewTransition
-          >
-            Customise first
-          </Link>
-        </div>
-        {error ? (
-          <p role="alert" className="field-error">
-            {error}
+    <section id="spotlight" className="tr-spotlight" aria-labelledby={titleId}>
+      <div className="banner tr-banner">
+        <div className="tr-banner-copy">
+          <p className="tr-banner-label">Demo spotlight</p>
+          <h2 id={titleId} className="tr-spotlight-title">
+            {scenario.title}
+          </h2>
+          <p className="tr-persona">
+            {persona.name}, {persona.role} at {persona.organisation}
+            <span className="tr-persona-time">
+              <Icon name="clock" size={14} /> About {scenario.estimatedMinutes} min
+            </span>
           </p>
+          <p className="tr-banner-summary">{scenario.summary}</p>
+          <SettingChips
+            settings={scenario}
+            only={['difficulty', 'impact', 'startingTemperature', 'style', 'callStage']}
+          />
+          <div className="tr-actions">
+            <button
+              type="button"
+              className="btn btn-light btn-lg"
+              onClick={() => start(scenario.id, {})}
+            >
+              Start the spotlight call <Icon name="arrow-right" size={18} />
+            </button>
+            <Link
+              to={`/scenarios/${encodeURIComponent(scenario.id)}/setup`}
+              className="btn btn-outline-light btn-lg"
+              viewTransition
+            >
+              Customise first
+            </Link>
+          </div>
+          {error ? (
+            <p role="alert" className="tr-banner-error">
+              {error}
+            </p>
+          ) : null}
+        </div>
+        {withArt ? (
+          <div className="tr-banner-art">
+            <CustomerAvatar seed={persona.name} mood={mood.id} />
+          </div>
         ) : null}
       </div>
 
-      <div className="tr-shows">
+      <div className="glass card tr-shows">
         <h3 className="t-label">What this scenario shows</h3>
         <ul role="list" className="tr-shows-list">
           {spotlightHighlights(scenario).map((item) => (
             <li key={item.title}>
-              <span className="tr-shows-icon" aria-hidden="true">
+              <span className="tone-icon" data-tone="blue" aria-hidden="true">
                 <Icon name={item.icon} size={18} />
               </span>
               <span>

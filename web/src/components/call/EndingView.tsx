@@ -3,16 +3,16 @@ import { Link, useNavigate } from 'react-router';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { EVALUATION_PHASES, type EvaluationPhase } from '#shared/domain/vocab.ts';
 import { api, errorMessage } from '../../lib/api.ts';
+import { plural } from '../../lib/format.ts';
 import { useDocumentTitle, useInterval } from '../../lib/hooks.ts';
 import { Icon } from '../Icon.tsx';
-import { FireflyCore } from '../core/FireflyCore.tsx';
 
 // What the end of a call really does, in order. Each step is shown only because the server has
 // reported reaching it, so the progress is never an animation pretending to be work.
-const STAGES: { phase: EvaluationPhase; title: string; detail: string }[] = [
+const STEPS: { phase: EvaluationPhase; title: string; detail: string }[] = [
   {
     phase: 'transcript_locked',
-    title: 'Transcript secured',
+    title: 'Transcript saved',
     detail: 'Your conversation is saved and can no longer change.',
   },
   {
@@ -34,14 +34,25 @@ const STAGES: { phase: EvaluationPhase; title: string; detail: string }[] = [
 ];
 
 const SLOW_AFTER_SECONDS = 25;
+// Fewer replies than this give the report limited evidence to work from.
+const FIRM_COACHING_TURNS = 5;
 
-function stageState(
-  index: number,
-  current: number,
-  complete: boolean,
-): 'done' | 'current' | 'todo' {
+function stepState(index: number, current: number, complete: boolean): 'done' | 'current' | 'todo' {
   if (complete || index < current) return 'done';
   return index === current ? 'current' : 'todo';
+}
+
+/** One honest sentence about a short call, before the report says it in detail. */
+function shortCallNote(session: SessionDTO): string | null {
+  if (session.completion === 'ended-early') {
+    return 'You ended this call early, so the report will be a first look at what was said rather than a full review.';
+  }
+  if (session.traineeTurns < FIRM_COACHING_TURNS) {
+    // The report decides whether a short call counts as ended early (it depends on whether there was
+    // a wrap-up), so this says what may happen rather than what will.
+    return `This was a short call (${plural(session.traineeTurns, 'reply', 'replies')}), so the report will rest on limited evidence. If it stopped before a wrap-up, it will be marked as ended early.`;
+  }
+  return null;
 }
 
 export function EndingView({ session: initial }: { session: SessionDTO }) {
@@ -112,20 +123,17 @@ export function EndingView({ session: initial }: { session: SessionDTO }) {
   const phaseIndex = session.evaluationPhase
     ? EVALUATION_PHASES.indexOf(session.evaluationPhase)
     : 0;
-  const current = STAGES[Math.min(Math.max(phaseIndex, 0), STAGES.length - 1)];
+  const note = shortCallNote(session);
 
   if (failed) {
     const retryable = session.evaluationError?.retryable ?? true;
     return (
-      <div className="ending">
-        <section
-          className="ending-card glass glass-strong state-negative"
-          aria-labelledby="ending-title"
-        >
-          <span className="state-icon">
+      <div className="wrap">
+        <section className="wrap-card glass" aria-labelledby="wrap-title" data-state="failed">
+          <span className="tone-icon wrap-icon" data-tone="red">
             <Icon name="alert" size={26} />
           </span>
-          <h1 id="ending-title" className="t-title" ref={heading} tabIndex={-1}>
+          <h1 id="wrap-title" className="t-title" ref={heading} tabIndex={-1}>
             We could not finish your report
           </h1>
           <p className="t-lead">
@@ -142,7 +150,7 @@ export function EndingView({ session: initial }: { session: SessionDTO }) {
               <span>{retryError}</span>
             </p>
           ) : null}
-          <div className="cluster" style={{ justifyContent: 'center' }}>
+          <div className="wrap-actions">
             {retryable ? (
               <button type="button" className="btn btn-primary" onClick={retry} disabled={retrying}>
                 {retrying ? (
@@ -156,8 +164,8 @@ export function EndingView({ session: initial }: { session: SessionDTO }) {
             <Link className="btn btn-secondary" to={`/sessions/${id}/transcript`}>
               View transcript
             </Link>
-            <Link className="btn btn-ghost" to="/history">
-              Back to history
+            <Link className="btn btn-ghost" to="/home">
+              Back to home
             </Link>
           </div>
         </section>
@@ -165,31 +173,36 @@ export function EndingView({ session: initial }: { session: SessionDTO }) {
     );
   }
 
-  const activeIndex = complete ? STAGES.length - 1 : Math.max(phaseIndex, 0);
+  const activeIndex = complete
+    ? STEPS.length - 1
+    : Math.min(Math.max(phaseIndex, 0), STEPS.length - 1);
+  const currentStep = STEPS[activeIndex];
   return (
-    <div className="ending">
-      <section className="ending-card glass glass-strong" aria-labelledby="ending-title">
-        <div className="ending-core">
-          <FireflyCore
-            thinking={!complete}
-            signals={{ total: STAGES.length, lit: complete ? STAGES.length : activeIndex }}
-          />
-        </div>
+    <div className="wrap">
+      <section className="wrap-card glass" aria-labelledby="wrap-title" data-state="working">
+        <span className="tone-icon wrap-icon" data-tone={complete ? 'green' : 'blue'}>
+          {complete ? (
+            <Icon name="check" size={26} />
+          ) : (
+            <Icon name="phone" size={26} className="call-end-icon" />
+          )}
+        </span>
         <p className="t-label">Call ended</p>
-        <h1 id="ending-title" className="t-title" ref={heading} tabIndex={-1}>
+        <h1 id="wrap-title" className="t-title" ref={heading} tabIndex={-1}>
           {complete ? 'Your report is ready' : 'Wrapping up your call'}
         </h1>
         <p className="t-lead">
           {complete
             ? 'Opening your coaching report.'
-            : 'Firefly is turning your conversation into coaching that points to what you actually said.'}
+            : 'Firefly is turning your conversation into coaching that points to what you actually said. Scores are for practice, not performance assessment.'}
         </p>
-        <ol className="stages" role="list" aria-label="Progress">
-          {STAGES.map((stage, index) => {
-            const state = stageState(index, activeIndex, complete);
+        {note && !complete ? <p className="wrap-note t-small">{note}</p> : null}
+        <ol className="wrap-steps" role="list" aria-label="Progress">
+          {STEPS.map((step, index) => {
+            const state = stepState(index, activeIndex, complete);
             return (
-              <li key={stage.phase} className="stage" data-state={state}>
-                <span className="stage-mark" aria-hidden="true">
+              <li key={step.phase} className="wrap-step" data-state={state}>
+                <span className="wrap-mark" aria-hidden="true">
                   {state === 'done' ? (
                     <Icon name="check" size={16} />
                   ) : state === 'current' ? (
@@ -197,9 +210,9 @@ export function EndingView({ session: initial }: { session: SessionDTO }) {
                   ) : null}
                 </span>
                 <span>
-                  <span className="stage-title">{stage.title}</span>
+                  <span className="wrap-step-title">{step.title}</span>
                   {state === 'current' ? (
-                    <span className="t-meta stage-detail">{stage.detail}</span>
+                    <span className="t-meta wrap-step-detail">{step.detail}</span>
                   ) : null}
                   <span className="sr-only">
                     {state === 'done'
@@ -214,7 +227,7 @@ export function EndingView({ session: initial }: { session: SessionDTO }) {
           })}
         </ol>
         <p className="sr-only" role="status" aria-live="polite">
-          {complete ? 'Your report is ready.' : `${current?.title ?? 'Working'}.`}
+          {complete ? 'Your report is ready.' : `${currentStep?.title ?? 'Working'}.`}
         </p>
         {waited >= SLOW_AFTER_SECONDS && !complete ? (
           <p className="callout callout-caution">

@@ -1,61 +1,73 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
+import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 import { play, useSound } from '../../lib/sound.ts';
 import { setTourState, useTourState } from '../../lib/tour.ts';
 import { Dialog } from '../Dialog.tsx';
 import { Icon } from '../Icon.tsx';
-import { FireflyCore } from '../core/FireflyCore.tsx';
-import type { CoreMood, CoreTone } from '../core/engine.ts';
+import { CustomerAvatar } from '../illustration/index.ts';
+import { Switch } from '../report/Switch.tsx';
+import { SegmentedChoice } from '../trainer/SegmentedChoice.tsx';
+import { ProgressBar } from '../ui/ProgressBar.tsx';
+import '../../styles/tour.css';
 
 const STEP_COUNT = 5;
 
-const MISSIONS = [
+// Every customer in the tour is the same invented person, so the face stays put and only the mood
+// changes.
+const SEED = 'tour customer';
+
+function Customer({ mood }: { mood: TemperatureBandId }) {
+  return (
+    <div className="tour-art" aria-hidden="true">
+      <CustomerAvatar seed={SEED} mood={mood} />
+    </div>
+  );
+}
+
+type Level = 'starter' | 'standard' | 'challenge';
+
+const LEVELS: { value: Level; label: string; mood: TemperatureBandId; text: string }[] = [
   {
-    id: 'starter',
+    value: 'starter',
     label: 'Starter',
-    mood: 'calm' as CoreMood,
+    mood: 'calm',
     text: 'Calm and cooperative, with clear clues. A good first call.',
   },
   {
-    id: 'standard',
+    value: 'standard',
     label: 'Standard',
-    mood: 'frustrated' as CoreMood,
+    mood: 'frustrated',
     text: 'Short on patience. You need to ask good questions to get the full picture.',
   },
   {
-    id: 'challenge',
+    value: 'challenge',
     label: 'Challenge',
-    mood: 'angry' as CoreMood,
+    mood: 'angry',
     text: 'High pressure and sure it is not their fault. Expect surprises mid-call.',
   },
 ];
 
-function StepMission() {
-  const [chosen, setChosen] = useState('starter');
-  const mission = MISSIONS.find((m) => m.id === chosen) ?? MISSIONS[0];
+function StepPick() {
+  const [chosen, setChosen] = useState<Level>('starter');
+  const level = LEVELS.find((item) => item.value === chosen) ?? LEVELS[0];
   return (
     <div className="tour-demo">
-      <div className="tour-core" aria-hidden="true">
-        <FireflyCore mood={mission?.mood ?? 'calm'} quality="low" />
-      </div>
+      <Customer mood={level?.mood ?? 'calm'} />
       <div className="tour-demo-body">
-        <p className="t-label">Example missions</p>
-        <div role="radiogroup" aria-label="Choose an example mission" className="tour-choices">
-          {MISSIONS.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="radio"
-              aria-checked={m.id === chosen}
-              className="tour-choice"
-              onClick={() => setChosen(m.id)}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <p className="t-label">Example calls</p>
+        <SegmentedChoice<Level>
+          legend="Choose an example difficulty"
+          value={chosen}
+          options={LEVELS}
+          onChange={setChosen}
+        />
         <p className="tour-note" aria-live="polite">
-          {mission?.text}
+          {level?.text}
+        </p>
+        <p className="tour-note">
+          You will find real scenarios under <strong>Practice</strong> in the sidebar. Pick one,
+          then adjust the customer before you start.
         </p>
       </div>
     </div>
@@ -77,27 +89,20 @@ const QUESTIONS = [
   },
 ];
 
-function StepSignal() {
+function StepHidden() {
   const [asked, setAsked] = useState<string[]>([]);
-  const [discoveries, setDiscoveries] = useState(0);
+  const [found, setFound] = useState(false);
   const ask = (id: string) => {
     if (asked.includes(id)) return;
     setAsked((current) => [...current, id]);
     if (QUESTIONS.find((q) => q.id === id)?.found) {
-      setDiscoveries((n) => n + 1);
+      setFound(true);
       play('discovery');
     }
   };
   return (
     <div className="tour-demo">
-      <div className="tour-core" aria-hidden="true">
-        <FireflyCore
-          mood="neutral"
-          signals={{ total: 3, lit: discoveries }}
-          discoveryKey={discoveries}
-          quality="low"
-        />
-      </div>
+      <Customer mood="concerned" />
       <div className="tour-demo-body">
         <p className="t-label">Example call, fictional customer</p>
         <p className="tour-line" data-who="customer">
@@ -113,9 +118,9 @@ function StepSignal() {
             </p>
           </div>
         ))}
-        {discoveries > 0 ? (
-          <p className="tour-found" role="status">
-            <span className="signal-found-dot" aria-hidden="true" /> Signal found
+        {found ? (
+          <p className="chip chip-positive" role="status" style={{ justifySelf: 'start' }}>
+            <Icon name="check-circle" size={14} /> Hidden fact found
           </p>
         ) : null}
         <div className="tour-choices tour-choices-stack">
@@ -133,50 +138,41 @@ function StepSignal() {
         </div>
         <p className="tour-note">
           Customers do not volunteer everything. A good question brings out a fact they would not
-          have offered. Firefly shows that a signal was found, never what it was.
+          have offered, and your report shows which hidden facts you found and which you missed.
         </p>
       </div>
     </div>
   );
 }
 
-const RESPONSES: { id: string; say: string; mood: CoreMood; tone: CoreTone; result: string }[] = [
+const REPLIES: { id: string; say: string; mood: TemperatureBandId; result: string }[] = [
   {
     id: 'ack',
     say: 'I can hear how frustrating this is. Let me take this on and update you by three.',
     mood: 'calm',
-    tone: 'falling',
     result: 'The customer settles.',
   },
   {
     id: 'dismiss',
     say: 'That is not how it works.',
-    mood: 'frustrated',
-    tone: 'rising',
+    mood: 'angry',
     result: 'The customer gets more tense.',
   },
 ];
 
 function StepReaction() {
   const [chosen, setChosen] = useState<string | null>(null);
-  const response = RESPONSES.find((r) => r.id === chosen);
+  const reply = REPLIES.find((r) => r.id === chosen);
   return (
     <div className="tour-demo">
-      <div className="tour-core" aria-hidden="true">
-        <FireflyCore
-          mood={response?.mood ?? 'concerned'}
-          tone={response?.tone ?? 'steady'}
-          pulseKey={chosen}
-          quality="low"
-        />
-      </div>
+      <Customer mood={reply?.mood ?? 'frustrated'} />
       <div className="tour-demo-body">
         <p className="t-label">Example call, fictional customer</p>
         <p className="tour-line" data-who="customer">
           This is the third time I have had to chase this. I need it fixed today.
         </p>
         <div className="tour-choices tour-choices-stack">
-          {RESPONSES.map((r) => (
+          {REPLIES.map((r) => (
             <button
               key={r.id}
               type="button"
@@ -189,8 +185,8 @@ function StepReaction() {
           ))}
         </div>
         <p className="tour-note" aria-live="polite">
-          {response
-            ? `${response.result} In guided practice you see the mood on screen; in immersive practice you have to read it from what they say.`
+          {reply
+            ? `${reply.result} In guided practice you see the mood on screen; in immersive practice you have to read it from what they say.`
             : 'Choose a reply to see how the customer reacts.'}
         </p>
       </div>
@@ -205,10 +201,10 @@ function StepFeedback() {
         <p className="t-label">Example of evidence in a report</p>
         <figure className="tour-quote">
           <figcaption>
-            <span className="tour-pill">Turn 4</span> You said
+            <span className="chip">Turn 4</span> You said
           </figcaption>
           <blockquote>&ldquo;When did it start, and did anything change?&rdquo;</blockquote>
-          <p className="t-meta">A critical fact came out because of this question.</p>
+          <p className="t-meta">A hidden fact came out because of this question.</p>
         </figure>
         <p className="tour-note">
           After the call, every score and every piece of advice points to the exact words you used.
@@ -226,22 +222,19 @@ function StepReady({ onDone }: { onDone(): void }) {
     <div className="tour-demo tour-demo-single">
       <div className="tour-demo-body">
         <p className="tour-note">
-          Start with a short Starter call. Nothing here uses real customer data, and you can replay
-          this tour any time from Settings.
+          Start with a short Starter call. Nothing here uses real customer data. Points reward
+          practising, and nobody is ranked. You can replay this tour from Settings, and{' '}
+          <Link to="/help" onClick={onDone}>
+            Help
+          </Link>{' '}
+          answers the common questions.
         </p>
-        <label className="tour-toggle">
-          <input
-            type="checkbox"
-            checked={soundOn}
-            onChange={(event) => setSound(event.target.checked)}
-          />
-          <span>
-            Sound effects <span className="t-meta">(optional, off by default)</span>
-          </span>
-        </label>
+        <Switch checked={soundOn} onChange={setSound}>
+          Sound effects (optional, off by default)
+        </Switch>
         <div className="cluster">
-          <Link to="/scenarios" className="btn btn-primary btn-lg" onClick={onDone}>
-            Choose a mission <Icon name="arrow-right" size={18} />
+          <Link to="/practice" className="btn btn-primary btn-lg" onClick={onDone}>
+            Start practising <Icon name="arrow-right" size={18} />
           </Link>
         </div>
       </div>
@@ -250,7 +243,7 @@ function StepReady({ onDone }: { onDone(): void }) {
 }
 
 const TITLES = [
-  'Pick a mission',
+  'Pick a practice call',
   'Some things stay hidden',
   'The customer reacts to you',
   'Feedback in your own words',
@@ -286,14 +279,17 @@ export function FirstRunTour({ open, onClose }: { open: boolean; onClose(): void
       description="Five small examples, under a minute. Skip any time."
     >
       <div className="tour">
-        <p className="t-meta tour-progress">
-          Step {step + 1} of {STEP_COUNT}
-        </p>
+        <div className="tour-progress">
+          <p className="t-meta tour-progress-text">
+            Step {step + 1} of {STEP_COUNT}
+          </p>
+          <ProgressBar value={step + 1} max={STEP_COUNT} label="Tour progress" />
+        </div>
         <h3 className="tour-title" tabIndex={-1} ref={heading}>
           {TITLES[step]}
         </h3>
-        {step === 0 ? <StepMission /> : null}
-        {step === 1 ? <StepSignal /> : null}
+        {step === 0 ? <StepPick /> : null}
+        {step === 1 ? <StepHidden /> : null}
         {step === 2 ? <StepReaction /> : null}
         {step === 3 ? <StepFeedback /> : null}
         {step === 4 ? <StepReady onDone={() => finish('done')} /> : null}

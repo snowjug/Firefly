@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react';
+import '../../styles/segmented.css';
 
 interface Choice<T extends string> {
   value: T;
@@ -23,6 +24,7 @@ export function SegmentedChoice<T extends string>({
   const hintId = useId();
   return (
     <fieldset
+      className="seg-choice"
       style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}
       aria-describedby={hint ? hintId : undefined}
     >

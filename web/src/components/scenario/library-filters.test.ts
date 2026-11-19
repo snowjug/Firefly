@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_QUERY,
-  activeFilters,
-  durationBand,
   facetCounts,
   filterScenarios,
+  isFiltered,
+  orderScenarios,
   parseQuery,
-  sortScenarios,
   toSearchParams,
+  withFacet,
   type LibraryQuery,
 } from './library-filters.ts';
 import { makeScenario } from './scenario-fixtures.ts';
@@ -19,9 +19,6 @@ const starter = makeScenario({
   tags: ['sign-in', 'password'],
   difficulty: 'starter',
   impact: 'low',
-  style: 'talkative',
-  estimatedMinutes: 12,
-  coachingFocus: ['scoping-discovery', 'clarity'],
   persona: {
     name: 'Carmen Fraser',
     role: 'Accounts assistant',
@@ -33,7 +30,6 @@ const spotlight = makeScenario({
   title: 'Team cannot open the shared workspace',
   difficulty: 'standard',
   spotlight: true,
-  estimatedMinutes: 10,
 });
 const standard = makeScenario({
   id: 'standard',
@@ -41,8 +37,6 @@ const standard = makeScenario({
   tags: ['missing data'],
   issueType: 'data-missing',
   difficulty: 'standard',
-  callStage: 'follow-up',
-  estimatedMinutes: 8,
 });
 const challenge = makeScenario({
   id: 'challenge',
@@ -51,9 +45,6 @@ const challenge = makeScenario({
   issueType: 'billing-licence',
   difficulty: 'challenge',
   impact: 'high',
-  callStage: 'escalated',
-  estimatedMinutes: 16,
-  coachingFocus: ['empathy-deescalation', 'ownership-next-steps'],
 });
 const library = [challenge, starter, spotlight, standard];
 
@@ -76,57 +67,43 @@ describe('searching', () => {
 });
 
 describe('filters', () => {
-  it('combine, and coaching focus matches any of a scenario focus areas', () => {
+  it('narrow by issue type, difficulty and impact, and combine with the search', () => {
+    expect(run({ facets: { issue: 'sign-in-access' } })).toEqual(['starter', 'spotlight']);
     expect(run({ facets: { difficulty: 'standard' } })).toEqual(['spotlight', 'standard']);
-    expect(run({ facets: { difficulty: 'standard', stage: 'follow-up' } })).toEqual(['standard']);
-    expect(run({ facets: { focus: 'clarity' } })).toEqual(['starter']);
+    expect(run({ facets: { difficulty: 'standard', issue: 'data-missing' } })).toEqual([
+      'standard',
+    ]);
     expect(run({ facets: { impact: 'high' }, q: 'invoice' })).toEqual(['challenge']);
-  });
-
-  it('group duration into up to 10, 11 to 15 and over 15 minutes', () => {
-    expect([10, 11, 15, 16].map(durationBand)).toEqual(['short', 'medium', 'medium', 'long']);
-    expect(run({ facets: { duration: 'short' } })).toEqual(['spotlight', 'standard']);
-    expect(run({ facets: { duration: 'medium' } })).toEqual(['starter']);
-    expect(run({ facets: { duration: 'long' } })).toEqual(['challenge']);
+    expect(run({ facets: { impact: 'high' }, q: 'password' })).toEqual([]);
   });
 });
 
 describe('order', () => {
-  const order = (sort: LibraryQuery['sort']) => sortScenarios(library, sort).map((s) => s.id);
-
-  it('recommends the spotlight first, then easiest to hardest', () => {
-    expect(order('recommended')).toEqual(['spotlight', 'starter', 'standard', 'challenge']);
-  });
-  it('can put the shortest first or the easiest first', () => {
-    expect(order('shortest')).toEqual(['standard', 'spotlight', 'starter', 'challenge']);
-    expect(order('difficulty')).toEqual(['starter', 'standard', 'spotlight', 'challenge']);
+  it('puts the suggestion first, then the spotlight, then easiest to hardest', () => {
+    const order = (recommended: string | null) =>
+      orderScenarios(library, recommended).map((s) => s.id);
+    expect(order(null)).toEqual(['spotlight', 'starter', 'standard', 'challenge']);
+    expect(order('challenge')).toEqual(['challenge', 'spotlight', 'starter', 'standard']);
   });
 });
 
 describe('the address', () => {
-  it('is read safely and written without defaults', () => {
+  it('is read safely and written without what is empty', () => {
     const query = parseQuery(
-      new URLSearchParams('q=mail&difficulty=starter&impact=bogus&sort=shortest&duration=long'),
+      new URLSearchParams('q=mail&difficulty=starter&impact=bogus&issue=how-to&view=map'),
     );
-    expect(query).toEqual({
-      q: 'mail',
-      facets: { difficulty: 'starter', duration: 'long' },
-      sort: 'shortest',
-    });
-    expect(toSearchParams(query).toString()).toBe(
-      'q=mail&difficulty=starter&duration=long&sort=shortest',
-    );
+    expect(query).toEqual({ q: 'mail', facets: { difficulty: 'starter', issue: 'how-to' } });
+    expect(toSearchParams(query).toString()).toBe('q=mail&issue=how-to&difficulty=starter');
     expect(toSearchParams(EMPTY_QUERY).toString()).toBe('');
-    expect(parseQuery(new URLSearchParams('sort=nonsense')).sort).toBe('recommended');
   });
 
-  it('turns the active view into removable filters', () => {
-    expect(
-      activeFilters({ q: ' billing ', facets: { impact: 'high' }, sort: 'recommended' }),
-    ).toEqual([
-      { key: 'q', label: 'Search', value: 'billing' },
-      { key: 'impact', label: 'Business impact', value: 'High' },
-    ]);
+  it('knows when anything narrows the list and can drop a filter again', () => {
+    expect(isFiltered(EMPTY_QUERY)).toBe(false);
+    expect(isFiltered({ q: '  ', facets: {} })).toBe(false);
+    expect(isFiltered({ q: 'a', facets: {} })).toBe(true);
+    const narrowed = withFacet(EMPTY_QUERY, 'impact', 'high');
+    expect(isFiltered(narrowed)).toBe(true);
+    expect(withFacet(narrowed, 'impact', '')).toEqual(EMPTY_QUERY);
   });
 });
 
@@ -142,6 +119,6 @@ describe('option counts', () => {
     expect(available.impact).toEqual({ medium: 2 });
     // Totals ignore every filter; an option with no scenario at all never appears.
     expect(totals.impact).toEqual({ low: 1, medium: 2, high: 1 });
-    expect(totals.duration).toEqual({ short: 2, medium: 1, long: 1 });
+    expect(totals.issue).toEqual({ 'sign-in-access': 2, 'data-missing': 1, 'billing-licence': 1 });
   });
 });

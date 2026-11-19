@@ -1,29 +1,42 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { REDACTION_LABELS, looksSensitive } from '#shared/domain/text.ts';
 import { useMediaQuery } from '../../lib/hooks.ts';
 import { Icon } from '../Icon.tsx';
 
-const MAX_HEIGHT = 176;
+const MAX_HEIGHT = 160;
 
 /**
  * The message box. Enter sends on desktop (Shift+Enter adds a line); on touch devices Enter adds a
- * line and the Send button sends, which is what people expect from a phone keyboard.
+ * line and the Send button sends, which is what people expect from a phone keyboard. The text is
+ * owned by the call screen, so a starter phrase or recognised speech can be put into the box.
  */
 export function Composer({
+  value,
+  onChange,
+  inputRef,
   maxChars,
   busy,
   blockedMessage,
   turnsRemaining,
   onSend,
+  voiceBar,
+  footerExtra,
 }: {
+  value: string;
+  onChange(next: string): void;
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
   maxChars: number;
   busy: boolean;
   blockedMessage: string | null;
   turnsRemaining: number | null;
   onSend(text: string): Promise<unknown>;
+  /** The voice controls, shown inside the box above the text. */
+  voiceBar?: ReactNode;
+  /** Small extras at the end of the line under the text, such as the way to turn on voice. */
+  footerExtra?: ReactNode;
 }) {
-  const [value, setValue] = useState('');
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const ownRef = useRef<HTMLTextAreaElement>(null);
+  const ref = inputRef ?? ownRef;
   const coarse = useMediaQuery('(pointer: coarse)');
   const trimmed = value.trim();
   const over = value.length > maxChars;
@@ -36,11 +49,11 @@ export function Composer({
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`;
-  }, [value]);
+  }, [value, ref]);
 
   const submit = async () => {
     if (!canSend) return;
-    setValue('');
+    onChange('');
     await onSend(trimmed);
     ref.current?.focus();
   };
@@ -53,11 +66,13 @@ export function Composer({
   };
 
   const hintId = 'composer-hint';
+  const countId = 'composer-count';
+  const showCount = value.length > maxChars * 0.85;
   const lowOnTurns = turnsRemaining !== null && turnsRemaining > 0 && turnsRemaining <= 5;
 
   return (
     <form
-      className="composer glass glass-strong"
+      className="composer"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
@@ -69,6 +84,7 @@ export function Composer({
           <span>{blockedMessage}</span>
         </p>
       ) : null}
+      {voiceBar}
       <div className="composer-row">
         <div className="composer-field">
           <label htmlFor="reply" className="sr-only">
@@ -80,11 +96,11 @@ export function Composer({
             className="textarea composer-input"
             rows={1}
             value={value}
-            placeholder="Type what you would say to the customer…"
-            onChange={(event) => setValue(event.target.value)}
+            placeholder="Type your response…"
+            onChange={(event) => onChange(event.target.value)}
             onKeyDown={onKeyDown}
             disabled={blocked}
-            aria-describedby={hintId}
+            aria-describedby={showCount ? `${hintId} ${countId}` : hintId}
             aria-invalid={over || undefined}
             autoComplete="off"
             spellCheck
@@ -96,12 +112,11 @@ export function Composer({
           disabled={!canSend}
           aria-label="Send message"
         >
-          <span className="hide-sm">Send</span>
-          <Icon name="send" size={18} />
+          <Icon name="send" size={20} />
         </button>
       </div>
-      <div className="composer-foot t-meta" id={hintId}>
-        <span>
+      <div className="composer-foot t-meta">
+        <span id={hintId} className="composer-keys">
           {coarse ? (
             'Tap Send to reply.'
           ) : (
@@ -111,8 +126,8 @@ export function Composer({
             </>
           )}
         </span>
-        {value.length > maxChars * 0.85 ? (
-          <span className={over ? 'composer-over' : undefined}>
+        {showCount ? (
+          <span id={countId} className={over ? 'composer-over' : undefined}>
             {over
               ? `${value.length - maxChars} characters over the ${maxChars} limit`
               : `${value.length} of ${maxChars}`}
@@ -123,6 +138,7 @@ export function Composer({
             {turnsRemaining} {turnsRemaining === 1 ? 'message' : 'messages'} left in this call
           </span>
         ) : null}
+        {footerExtra}
       </div>
       {sensitive.length > 0 ? (
         <p className="t-meta composer-warning">

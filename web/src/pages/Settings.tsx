@@ -1,243 +1,61 @@
-import { Link } from 'react-router';
-import { Icon } from '../components/Icon.tsx';
-import { Page, PageHeader, SkeletonBlock } from '../components/Page.tsx';
-import { Switch } from '../components/report/Switch.tsx';
-import { SegmentedChoice } from '../components/trainer/SegmentedChoice.tsx';
-import { api } from '../lib/api.ts';
-import { useAppConfig } from '../lib/config.tsx';
-import { useApi } from '../lib/hooks.ts';
-import { useSound } from '../lib/sound.ts';
-import { requestTour } from '../lib/tour.ts';
-import { useTheme, type MotionPreference, type ThemePreference } from '../lib/theme.tsx';
+import { useState } from 'react';
+import { Page, PageHeader } from '../components/Page.tsx';
+import { NotificationsPanel } from '../components/settings/NotificationsPanel.tsx';
+import { PreferencesPanel } from '../components/settings/PreferencesPanel.tsx';
+import { PrivacyPanel } from '../components/settings/PrivacyPanel.tsx';
+import { ProfileCard } from '../components/settings/ProfileCard.tsx';
+import { Tabs, panelId, tabId, type TabDef } from '../components/ui/Tabs.tsx';
 import '../styles/settings.css';
 
-const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
+const TABS: readonly TabDef[] = [
+  { id: 'preferences', label: 'Preferences' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'data', label: 'Data & privacy' },
 ];
 
-const MOTION_OPTIONS: { value: MotionPreference; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'reduce', label: 'On' },
-  { value: 'full', label: 'Off' },
-];
-
-const number = new Intl.NumberFormat();
-
-function themeStatus(theme: ThemePreference, resolved: 'light' | 'dark'): string {
-  return theme === 'system'
-    ? `Following your device: using the ${resolved} theme.`
-    : `Using the ${resolved} theme.`;
-}
-
-function motionStatus(motion: MotionPreference, reduced: boolean): string {
-  if (motion === 'reduce') return 'Animation and transitions are reduced.';
-  if (motion === 'full')
-    return 'Firefly uses its standard animation unless your device asks for less.';
-  return reduced
-    ? 'Your device asks for reduced motion, so animation is reduced.'
-    : 'Your device does not ask for reduced motion, so Firefly uses its standard animation.';
-}
+const PREFIX = 'st';
 
 export default function Settings() {
-  const { theme, setTheme, motion, setMotion, reducedMotion, resolvedTheme } = useTheme();
-  const [soundOn, setSoundOn] = useSound();
-  const { config, loading, error, reload } = useAppConfig();
-  const demo = useApi((signal) => api.demo(signal), []);
-  const countText = (value: number | undefined) =>
-    value !== undefined ? number.format(value) : demo.error ? 'Unavailable' : 'Loading\u2026';
+  const [tab, setTab] = useState(TABS[0]?.id ?? 'preferences');
 
   return (
-    <Page title="Settings" width="narrow">
-      <PageHeader
-        eyebrow="Preferences"
-        title="Settings"
-        lead="Display preferences for this browser, and a read-only view of how this Firefly server is set up."
-      />
+    <Page title="Settings" className="st-root">
+      <PageHeader title="Profile & settings" lead="Manage your profile and preferences." />
 
-      <div className="st-layout">
-        <section className="glass card st-card" aria-labelledby="st-appearance">
-          <div>
-            <h2 id="st-appearance" className="t-section">
-              Appearance
-            </h2>
-            <p className="t-small t-muted">
-              Saved in this browser and applied straight away. No reload needed.
-            </p>
-          </div>
-          <div className="st-group">
-            <SegmentedChoice<ThemePreference>
-              legend="Theme"
-              value={theme}
-              options={THEME_OPTIONS}
-              onChange={(next) => setTheme(next)}
-              hint="System follows your device. Light and Dark stay as you set them."
+      <div className="st-grid">
+        <ProfileCard />
+
+        <section className="glass st-settings" aria-labelledby="st-settings-title">
+          <h2 id="st-settings-title" className="sr-only">
+            Settings
+          </h2>
+          <div className="st-tabs">
+            <Tabs
+              tabs={TABS}
+              value={tab}
+              onChange={setTab}
+              label="Settings sections"
+              prefix={PREFIX}
             />
-            <p role="status" className="st-status">
-              {themeStatus(theme, resolvedTheme)}
-            </p>
           </div>
-          <div className="st-group">
-            <SegmentedChoice<MotionPreference>
-              legend="Reduce motion"
-              value={motion}
-              options={MOTION_OPTIONS}
-              onChange={(next) => setMotion(next)}
-              hint="System follows your device. On turns off most animation and transitions. Off keeps Firefly's standard motion unless your device asks apps to reduce it."
-            />
-            <p role="status" className="st-status">
-              {motionStatus(motion, reducedMotion)}
-            </p>
-          </div>
-        </section>
-
-        <section className="glass card st-card" aria-labelledby="st-experience">
-          <div>
-            <h2 id="st-experience" className="t-section">
-              Sound and tour
-            </h2>
-            <p className="t-small t-muted">Both are optional and saved only in this browser.</p>
-          </div>
-          <div className="st-group">
-            <Switch checked={soundOn} onChange={setSoundOn} describedBy="st-sound-hint">
-              Sound effects
-            </Switch>
-            <p id="st-sound-hint" className="t-meta st-hint">
-              Short, soft tones when a customer reveals something, a call connects or a report
-              opens. Nothing plays unless you turn this on, and the tones are made in your browser,
-              so no audio files are loaded.
-            </p>
-            <p role="status" className="st-status">
-              {soundOn ? 'Sound effects are on.' : 'Sound effects are off.'}
-            </p>
-          </div>
-          <div className="st-group">
-            <p className="st-label">Quick tour</p>
-            <p className="t-small t-muted">
-              Five small working examples of a mission, a hidden signal, a customer reacting and
-              feedback in your own words. It takes under a minute and can be skipped at any step.
-            </p>
-            <div>
-              <button type="button" className="btn btn-secondary" onClick={requestTour}>
-                <Icon name="compass" size={16} /> Replay the quick tour
-              </button>
+          {TABS.map((item) => (
+            <div
+              key={item.id}
+              role="tabpanel"
+              id={panelId(PREFIX, item.id)}
+              aria-labelledby={tabId(PREFIX, item.id)}
+              hidden={item.id !== tab}
+              className="st-panel"
+            >
+              {item.id !== tab ? null : item.id === 'preferences' ? (
+                <PreferencesPanel />
+              ) : item.id === 'notifications' ? (
+                <NotificationsPanel />
+              ) : (
+                <PrivacyPanel />
+              )}
             </div>
-          </div>
-        </section>
-
-        <section className="glass card st-card" aria-labelledby="st-data">
-          <div>
-            <h2 id="st-data" className="t-section">
-              Your data
-            </h2>
-            <p className="t-small t-muted">
-              Practice data is stored in a database file on the machine that runs Firefly&rsquo;s
-              server, not in this browser. This browser keeps only your display preferences, the
-              call you are setting up, and an anonymous cookie that links it to its sessions.
-            </p>
-          </div>
-          <dl className="st-list">
-            <div>
-              <dt>Practice sessions</dt>
-              <dd className="tabular">{countText(demo.data?.practiceSessions)}</dd>
-            </div>
-            <div>
-              <dt>Sample sessions</dt>
-              <dd className="tabular">{countText(demo.data?.sampleSessions)}</dd>
-            </div>
-          </dl>
-          <div>
-            <Link to="/trainer" className="btn btn-secondary" viewTransition>
-              Delete or reset data on the Trainer page
-            </Link>
-          </div>
-        </section>
-
-        <section className="glass card st-card" aria-labelledby="st-system">
-          <div>
-            <h2 id="st-system" className="t-section">
-              System
-            </h2>
-            <p className="t-small t-muted">
-              Set by whoever runs the server. These values are read-only here.
-            </p>
-          </div>
-          {loading ? (
-            <div className="stack" role="status" aria-label="Loading system details">
-              <SkeletonBlock height={20} />
-              <SkeletonBlock height={20} width="70%" />
-              <SkeletonBlock height={20} width="85%" />
-            </div>
-          ) : error || !config ? (
-            <div className="callout callout-negative" role="alert">
-              <Icon name="alert" size={18} />
-              <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
-                <p>
-                  Firefly could not read the server&rsquo;s settings. Check that the server is
-                  running, then try again.
-                </p>
-                <div>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={reload}>
-                    <Icon name="refresh" size={16} /> Try again
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              <dl className="st-list">
-                <div>
-                  <dt>Version</dt>
-                  <dd>{config.app.version}</dd>
-                </div>
-                <div>
-                  <dt>Mode</dt>
-                  <dd>{config.provider.demo ? 'Demo mode' : 'Live model'}</dd>
-                </div>
-                <div>
-                  <dt>Provider</dt>
-                  <dd>{config.provider.label}</dd>
-                </div>
-                <div>
-                  <dt>Provider type</dt>
-                  <dd className="mono">{config.provider.kind}</dd>
-                </div>
-                {config.provider.notice ? (
-                  <div>
-                    <dt>Notice</dt>
-                    <dd>{config.provider.notice}</dd>
-                  </div>
-                ) : null}
-                <div>
-                  <dt>Longest message</dt>
-                  <dd className="tabular">
-                    {number.format(config.limits.maxMessageChars)} characters
-                  </dd>
-                </div>
-                <div>
-                  <dt>Messages per call</dt>
-                  <dd className="tabular">Up to {number.format(config.limits.maxTraineeTurns)}</dd>
-                </div>
-              </dl>
-              {config.features.devDiagnostics || config.features.testHooks ? (
-                <div className="callout callout-caution">
-                  <Icon name="alert" size={18} />
-                  <p>
-                    Developer features are switched on for this server (
-                    {[
-                      config.features.devDiagnostics ? 'diagnostics' : null,
-                      config.features.testHooks ? 'test hooks' : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' and ')}
-                    ). They are for development and automated tests only, and diagnostics can reveal
-                    what a scenario holds back, so keep them off for a real demo.
-                  </p>
-                </div>
-              ) : null}
-            </>
-          )}
+          ))}
         </section>
       </div>
     </Page>

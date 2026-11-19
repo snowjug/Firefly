@@ -13,7 +13,7 @@ const DIFFICULTY_OPTIONS = DIFFICULTIES.map((value) => ({
   label: DIFFICULTY_PROFILES[value].label,
 }));
 
-/** Start any scenario at a chosen difficulty: pick, choose, go to the pre-call brief. */
+/** Start any scenario at a chosen difficulty: pick, choose, then open its setup page. */
 export function QuickStart({
   scenarios,
   defaultScenarioId,
@@ -44,7 +44,8 @@ export function QuickStart({
           Quick start
         </h2>
         <p className="t-small t-muted">
-          Pick a scenario and a difficulty, then go straight to the pre-call brief.
+          Pick a scenario and a difficulty, then open its setup page, where you can change anything
+          before the call starts.
         </p>
       </div>
 

@@ -3,7 +3,8 @@ import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-r
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { DifficultyChip } from '../components/Chips.tsx';
 import { Icon } from '../components/Icon.tsx';
-import { ErrorState, Page, PageHeader, SkeletonBlock } from '../components/Page.tsx';
+import { CustomerAvatar } from '../components/illustration/index.ts';
+import { ErrorState, Page, SkeletonBlock } from '../components/Page.tsx';
 import { citedTurns, linkedTurn } from '../components/report/citations.ts';
 import { reportHref } from '../components/report/labels.ts';
 import { Switch } from '../components/report/Switch.tsx';
@@ -39,12 +40,12 @@ function TranscriptScreen({ id }: { id: string }) {
   if (!session) {
     if (loading) {
       return (
-        <Page title="Loading transcript" width="narrow" className="tx-root">
+        <Page title="Loading transcript" className="tx-root">
           <h1 className="sr-only">Transcript</h1>
           <div className="stack" role="status" aria-label="Loading the transcript">
-            <SkeletonBlock height={28} width="60%" />
+            <SkeletonBlock height={32} width="min(14rem, 60%)" />
             {Array.from({ length: 5 }, (_, i) => (
-              <SkeletonBlock key={i} height={72} width={i % 2 ? '85%' : '92%'} />
+              <SkeletonBlock key={i} height={72} width={i % 2 ? '70%' : '82%'} />
             ))}
           </div>
         </Page>
@@ -52,13 +53,13 @@ function TranscriptScreen({ id }: { id: string }) {
     }
     return (
       <Page title="Transcript not found" width="narrow" className="tx-root">
-        <h1 className="sr-only">Transcript</h1>
         <ErrorState
+          level={1}
           error={error}
           onRetry={reload}
           title={'We couldn\u2019t open this transcript'}
         />
-        <p className="center-text" style={{ marginTop: 'var(--sp-4)' }}>
+        <p className="center-text">
           <Link to="/history" className="btn btn-secondary">
             Back to history
           </Link>
@@ -74,31 +75,12 @@ function TranscriptScreen({ id }: { id: string }) {
   const completed = session.status === 'completed';
   const customerName = session.scenario.persona.name;
   return (
-    <Page title={`Transcript \u00b7 ${session.scenarioTitle}`} width="narrow" className="tx-root">
-      <PageHeader eyebrow="Transcript" title={session.scenarioTitle} lead={LEAD[session.status]} />
-
-      <div className="tx-subbar">
-        <ul role="list" className="tx-meta">
-          <li>
-            <time dateTime={session.startedAt}>{formatDateTime(session.startedAt)}</time>
-          </li>
-          <li>
-            <DifficultyChip difficulty={session.difficulty} />
-          </li>
-          <li>
-            <Icon name="clock" size={15} />
-            <span>
-              <span className="sr-only">Duration: </span>
-              {formatDuration(session.durationSeconds)}
-            </span>
-          </li>
-          <li>{plural(session.turns.length, 'turn')}</li>
-          {session.isSample ? (
-            <li>
-              <span className="chip chip-accent">Sample session</span>
-            </li>
-          ) : null}
-        </ul>
+    <Page title={`Transcript \u00b7 ${session.scenarioTitle}`} className="tx-root">
+      <header className="tx-top">
+        <div className="tx-top-text">
+          <h1 className="t-title">Transcript</h1>
+          <p className="t-lead">{LEAD[session.status]}</p>
+        </div>
         <div className="cluster tx-actions">
           <Link to={reportHref(session.id)} className="btn btn-secondary" viewTransition>
             <Icon name="arrow-left" size={18} /> {BACK_LABEL[session.status]}
@@ -107,31 +89,77 @@ function TranscriptScreen({ id }: { id: string }) {
             <Icon name="print" size={18} /> Print
           </button>
         </div>
-      </div>
-      <div className="tx-toolbar">
-        {completed ? (
-          <Switch checked={showMarkers} onChange={setShowMarkers}>
-            Show analysis markers
-          </Switch>
-        ) : (
-          <p className="t-small t-muted" role="note">
-            Analysis markers appear once the report is ready.
-          </p>
-        )}
-        <p className="t-meta tx-toolbar-hint">
-          Markers show where the customer&rsquo;s mood moved, when a hidden fact came out and when a
-          curveball landed.
-        </p>
-      </div>
+      </header>
 
-      <TranscriptList
-        turns={session.turns}
-        customerName={customerName}
-        cited={cited}
-        showMarkers={showMarkers}
-        linked={linkedTurn(search, hash)}
-      />
-      <p className="t-meta tx-end">End of transcript.</p>
+      <div className="tx-layout">
+        <div className="tx-side">
+          <section className="glass card tx-call" aria-labelledby="tx-call-title">
+            <div className="tx-call-top">
+              <span className="tx-call-avatar" aria-hidden="true">
+                <CustomerAvatar seed={customerName} mood={session.state.band.id} />
+              </span>
+              <div className="tx-call-id">
+                <p className="t-label">Practice call</p>
+                <h2 id="tx-call-title" className="tx-scenario">
+                  {session.scenarioTitle}
+                </h2>
+              </div>
+            </div>
+            <ul role="list" className="tx-meta">
+              <li>
+                <Icon name="calendar" size={15} />
+                <time dateTime={session.startedAt}>{formatDateTime(session.startedAt)}</time>
+              </li>
+              <li>
+                <Icon name="clock" size={15} />
+                <span>
+                  <span className="sr-only">Duration: </span>
+                  {formatDuration(session.durationSeconds)}
+                </span>
+              </li>
+              <li>
+                <Icon name="message" size={15} />
+                {plural(session.turns.length, 'turn')}
+              </li>
+              <li>
+                <DifficultyChip difficulty={session.difficulty} />
+              </li>
+              {session.isSample ? (
+                <li>
+                  <span className="chip chip-accent">Sample session</span>
+                </li>
+              ) : null}
+            </ul>
+          </section>
+
+          <div className="glass card tx-toolbar">
+            {completed ? (
+              <Switch checked={showMarkers} onChange={setShowMarkers}>
+                Show analysis markers
+              </Switch>
+            ) : (
+              <p className="t-small t-muted" role="note">
+                Analysis markers appear once the report is ready.
+              </p>
+            )}
+            <p className="t-meta tx-toolbar-hint">
+              Markers show where the customer&rsquo;s mood moved, when a hidden fact came out and
+              when a curveball landed.
+            </p>
+          </div>
+        </div>
+
+        <div className="tx-main">
+          <TranscriptList
+            turns={session.turns}
+            customerName={customerName}
+            cited={cited}
+            showMarkers={showMarkers}
+            linked={linkedTurn(search, hash)}
+          />
+          <p className="t-meta tx-end">End of transcript.</p>
+        </div>
+      </div>
     </Page>
   );
 }

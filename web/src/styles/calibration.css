@@ -1,4 +1,5 @@
-/* Calibration */
+/* Calibration: why it matters, the figures, the review queue, a blind review and the comparison.
+   Tokens only, so both themes work. */
 
 .cal-layout {
   display: grid;
@@ -9,15 +10,15 @@
   max-width: 70ch;
 }
 .cal-subhead {
-  font-family: var(--font-display);
-  font-weight: 650;
+  font-family: var(--font-heading);
+  font-weight: 680;
 }
 .cal-section-head {
   flex-wrap: wrap;
   align-items: baseline;
 }
 
-/* Introduction */
+/* ------------------------------------------------------------------ Introduction */
 .cal-steps {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -40,9 +41,9 @@
   gap: var(--sp-1);
   align-content: start;
   padding: var(--sp-4);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  background: var(--surface-2);
 }
 .cal-step-number {
   display: grid;
@@ -51,17 +52,17 @@
   height: 1.75rem;
   margin-bottom: var(--sp-1);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
+  background: var(--primary-soft);
+  color: var(--accent-strong);
   font-size: var(--fs-meta);
-  font-weight: 650;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .cal-step-title {
-  font-weight: 620;
+  font-weight: 650;
 }
 
-/* Sample toggle */
+/* ------------------------------------------------------------------ Sample toggle */
 .cal-toggle {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -78,7 +79,7 @@
   grid-column: 2;
 }
 
-/* Results */
+/* ------------------------------------------------------------------ Results */
 .cal-empty {
   display: grid;
   justify-items: center;
@@ -116,13 +117,13 @@
   align-content: start;
   min-width: 0;
   padding: var(--sp-4);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  background: var(--surface-2);
 }
 .cal-stat dt {
   font-size: var(--fs-label);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-3);
@@ -131,9 +132,9 @@
   margin: 0;
 }
 .cal-stat-value {
-  font-family: var(--font-display);
+  font-family: var(--font-heading);
   font-size: 2rem;
-  font-weight: 650;
+  font-weight: 740;
   line-height: 1.1;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
@@ -155,21 +156,25 @@
   color: var(--text-3);
 }
 
-/* Tables */
+/* ------------------------------------------------------------------ Tables */
 .cal-table-wrap {
   position: relative; /* keeps visually hidden text inside the scroll area, so it cannot widen the page */
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  background: var(--surface);
 }
 .cal-table-wrap:focus-visible {
   outline-offset: 2px;
 }
 .cal-table th[scope='row'] {
   font-size: inherit;
-  font-weight: 620;
+  font-weight: 650;
   letter-spacing: 0;
   text-transform: none;
   color: var(--text);
+  background: transparent;
+}
+.cal-table tbody tr:last-child th {
+  border-bottom: 0;
 }
 .cal-skill {
   display: block;
@@ -206,7 +211,7 @@
   height: 8px;
   overflow: hidden;
   border-radius: 99px;
-  background: color-mix(in srgb, var(--text) 12%, transparent);
+  background: var(--surface-3);
 }
 .cal-bar > span {
   display: block;
@@ -228,7 +233,7 @@
 }
 .cal-records-title {
   display: block;
-  font-weight: 560;
+  font-weight: 600;
 }
 .cal-records-reviewer {
   overflow-wrap: anywhere;
@@ -259,7 +264,7 @@
   color: var(--caution);
 }
 
-/* Review queue */
+/* ------------------------------------------------------------------ Review queue */
 .cal-queue {
   display: grid;
   gap: var(--sp-3);
@@ -272,15 +277,15 @@
   justify-content: space-between;
   gap: var(--sp-4);
   padding: var(--sp-4);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  background: var(--surface-2);
 }
 .cal-queue-text {
   min-width: 0;
 }
 .cal-queue-title {
-  font-weight: 620;
+  font-weight: 650;
   overflow-wrap: anywhere;
 }
 .cal-queue-meta {
@@ -301,7 +306,7 @@
   }
 }
 
-/* Blind review */
+/* ------------------------------------------------------------------ Blind review */
 .cal-review {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -314,7 +319,7 @@
 }
 .cal-review-title {
   font-size: clamp(1.4rem, 1.15rem + 0.9vw, 1.85rem);
-  font-weight: 650;
+  font-weight: 740;
   line-height: var(--lh-tight);
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
@@ -390,9 +395,9 @@
   display: grid;
   gap: 2px;
   padding: var(--sp-3) var(--sp-4);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  background: var(--surface-2);
 }
 .cal-turn[data-role='trainee'] {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
@@ -401,7 +406,7 @@
 }
 .cal-turn-role {
   font-size: var(--fs-label);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-2);
@@ -423,9 +428,9 @@
   min-width: 0;
 }
 .cal-scale-guide {
-  border-radius: 14px;
+  border-radius: var(--r-card);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  background: var(--surface-2);
 }
 .cal-scale-guide summary {
   display: flex;
@@ -433,7 +438,7 @@
   min-height: var(--tap);
   padding: 0 var(--sp-4);
   font-size: var(--fs-small);
-  font-weight: 620;
+  font-weight: 650;
   cursor: pointer;
 }
 .cal-scale-guide dl {
@@ -444,7 +449,7 @@
 }
 .cal-scale-guide dt {
   font-size: var(--fs-small);
-  font-weight: 620;
+  font-weight: 650;
 }
 .cal-scale-guide dd {
   margin: 0;
@@ -464,6 +469,9 @@
   padding-left: 1.1rem;
 }
 .cal-problems a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
   color: var(--negative);
 }
 .cal-field {
@@ -478,9 +486,9 @@
   width: 100%;
   margin-bottom: var(--sp-1);
   padding: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-heading);
   font-size: var(--fs-body);
-  font-weight: 650;
+  font-weight: 680;
 }
 .cal-field-title + * {
   clear: both;
@@ -498,7 +506,7 @@
   gap: 2px;
   min-height: 4.25rem;
   padding: var(--sp-3) var(--sp-1);
-  border-radius: 12px;
+  border-radius: var(--r-control);
   text-align: center;
 }
 .cal-choice:hover {
@@ -513,9 +521,9 @@
   margin: 0;
 }
 .cal-choice-num {
-  font-family: var(--font-display);
+  font-family: var(--font-heading);
   font-size: 1.25rem;
-  font-weight: 650;
+  font-weight: 740;
   line-height: 1.1;
 }
 .cal-choice-name {
@@ -575,7 +583,7 @@
   }
 }
 
-/* After saving */
+/* ------------------------------------------------------------------ After saving */
 .cal-comparison {
   display: grid;
   gap: var(--sp-4);

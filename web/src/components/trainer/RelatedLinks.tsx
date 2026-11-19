@@ -29,7 +29,7 @@ export function RelatedLinks() {
               className="glass card card-tight card-interactive tr-link"
               viewTransition
             >
-              <span className="state-icon tr-link-icon" aria-hidden="true">
+              <span className="tone-icon tr-link-icon" data-tone="blue" aria-hidden="true">
                 <Icon name={link.icon} size={20} />
               </span>
               <span className="grow">

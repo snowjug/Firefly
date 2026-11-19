@@ -1,32 +1,37 @@
-/* History: filters, session cards, delete and compare dialogs. */
+/* History: the filter row, the calls table (stacked cards when its card is narrow) and the
+   delete and compare dialogs. Tokens only, so both themes work. */
 
+/* ------------------------------------------------------------------ Filters */
 .hs-filters {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) 13rem;
-  gap: var(--sp-4);
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3) var(--sp-4);
   margin-bottom: var(--sp-4);
-  padding: var(--sp-4) var(--sp-5);
 }
-@media (max-width: 960px) {
-  .hs-filters {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .hs-filter-end {
-    grid-column: 1 / -1;
-  }
+.hs-filters .field {
+  flex: 0 1 12rem;
+  min-width: 9rem;
 }
-@media (max-width: 560px) {
-  .hs-filters {
-    grid-template-columns: minmax(0, 1fr);
-    padding: var(--sp-4);
-  }
+.hs-filters .hs-field-wide {
+  flex: 1 1 14rem;
+  max-width: 22rem;
 }
 .hs-filter-end {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2) var(--sp-4);
+  margin-left: auto;
+  min-height: var(--tap);
+}
+@media (max-width: 640px) {
+  .hs-filters .field,
+  .hs-filters .hs-field-wide {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .hs-filter-end {
+    margin-left: 0;
+  }
 }
 
 .hs-comparebar {
@@ -36,8 +41,9 @@
   justify-content: space-between;
   gap: var(--sp-3) var(--sp-5);
   margin-bottom: var(--sp-4);
-  padding: var(--sp-3) var(--sp-5);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  padding: var(--sp-3) var(--sp-4);
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  background: var(--primary-soft);
 }
 
 .hs-status {
@@ -45,8 +51,13 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
-  min-height: 1.6rem;
-  margin: var(--sp-5) 0 var(--sp-3);
+  min-height: 2.25rem;
+  margin: 0 0 var(--sp-2);
+}
+.hs-status-text {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
 }
 .hs-status-end {
   display: inline-flex;
@@ -63,150 +74,166 @@
   height: 0.9rem;
 }
 
-.hs-list {
-  display: grid;
-  gap: var(--sp-3);
-  padding: 0;
-  margin: 0;
+/* ------------------------------------------------------------------ The table card */
+.hs-card {
+  /* The layout follows the width of the card, not the window, so it stacks the same way beside
+     the sidebar, below it and in a drawer layout. */
+  container: hs / inline-size;
+  overflow: hidden;
 }
-.hs-list[aria-busy='true'] {
+.hs-table-wrap[aria-busy='true'] {
   opacity: 0.72;
   transition: opacity var(--dur-2) var(--ease-out);
 }
-
-/* ------------------------------------------------------------------ Session card */
-.hs-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    'main score'
-    'actions actions';
-  gap: var(--sp-3) var(--sp-6);
-  padding: var(--sp-4) var(--sp-5);
+.hs-table th,
+.hs-table td {
+  padding: var(--sp-3) var(--sp-4);
 }
-.hs-main {
-  grid-area: main;
-  display: grid;
-  gap: var(--sp-2);
-  align-content: start;
-  min-width: 0;
+.hs-table tbody th {
+  font-size: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+  font-weight: inherit;
+  background: transparent;
+}
+.hs-table tbody tr:last-child th {
+  border-bottom: 0;
+}
+.hs-table .hs-c-pick {
+  width: 3.5rem;
+  padding-inline: var(--sp-2) 0;
+}
+.hs-c-date {
+  white-space: nowrap;
+}
+.hs-c-scenario {
+  min-width: 15rem;
+}
+.hs-c-score {
+  min-width: 10rem;
+}
+.hs-c-badges {
+  min-width: 8rem;
+}
+.hs-c-actions {
+  white-space: nowrap;
+}
+
+.hs-sub {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--fs-meta);
 }
 .hs-title {
-  font-size: 1.15rem;
+  display: block;
   font-weight: 650;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
-.hs-title:focus {
-  outline: none;
-}
-.hs-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-1) var(--sp-4);
-  color: var(--text-2);
-  font-size: var(--fs-small);
-}
-.hs-meta > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
 .hs-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2);
+  gap: var(--sp-1) var(--sp-2);
+  margin: var(--sp-2) 0 0;
   padding: 0;
-  margin: var(--sp-1) 0 0;
 }
-.hs-sample {
-  max-width: 62ch;
-}
-
-.hs-score {
-  grid-area: score;
-  display: grid;
-  justify-items: end;
-  align-content: start;
-  gap: 2px;
-  min-width: 7rem;
-  text-align: right;
-}
-.hs-score-num {
-  font-family: var(--font-display);
-  font-size: 1.9rem;
-  font-weight: 650;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-}
-.hs-score-of {
-  color: var(--text-2);
-  font-family: var(--font-sans);
-  font-size: var(--fs-small);
-  font-weight: 500;
-  letter-spacing: 0;
-}
-.hs-bars {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 28px;
-  margin-top: var(--sp-2);
-}
-.hs-bar {
+.hs-facts {
   display: flex;
-  align-items: flex-end;
-  width: 7px;
-  height: 100%;
-  overflow: hidden;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
+  flex-wrap: wrap;
+  gap: 0 var(--sp-3);
+  margin-top: var(--sp-2);
+  color: var(--text-3);
+  font-size: var(--fs-meta);
+  font-weight: 500;
 }
-.hs-bar > span {
+.hs-note {
   display: block;
-  width: 100%;
-  border-radius: 3px;
-  background: var(--accent-2);
+  max-width: 44ch;
+  margin-top: var(--sp-1);
+  color: var(--text-3);
+  font-size: var(--fs-meta);
+  font-weight: 500;
 }
 
-.hs-actions {
-  grid-area: actions;
+.hs-score-cell {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+}
+.hs-score {
+  min-width: 2.6rem;
+  justify-content: center;
+  font-size: var(--fs-small);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.hs-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  margin: 0;
+  padding: 0;
+}
+
+/* The compare tick box: a 44px target in the table, a labelled box in the stacked card. */
+.hs-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: var(--sp-2);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--border);
+  min-width: var(--tap);
+  min-height: var(--tap);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+.hs-pick input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.hs-pick input:disabled {
+  cursor: not-allowed;
+}
+.hs-pick-text {
+  display: none;
+}
+
+.hs-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.hs-actions .btn {
+  min-height: var(--tap);
+}
+.hs-primary {
+  min-width: 4.5rem;
+}
+.hs-soft {
+  --btn-fg: var(--accent-strong);
+  --btn-border: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--primary-soft);
+}
+.hs-soft:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+.hs-act-text {
+  display: none;
 }
 .hs-delete {
-  margin-left: auto;
   color: var(--text-2);
 }
 .hs-delete:hover {
   color: var(--negative);
+  background: var(--negative-bg);
 }
-.hs-compare {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 36px;
-  padding: 0 var(--sp-2);
-  color: var(--text-2);
-  font-size: var(--fs-meta);
-  font-weight: 600;
-  cursor: pointer;
-}
-.hs-compare input {
-  width: 1.15rem;
-  height: 1.15rem;
-  margin: 0;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-.hs-compare input:disabled {
-  cursor: not-allowed;
-}
+
 .hs-more {
   display: grid;
   justify-items: center;
@@ -214,30 +241,105 @@
   margin-top: var(--sp-5);
 }
 
-@media (max-width: 640px) {
-  .hs-row {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      'main'
-      'score'
-      'actions';
+/* ------------------------------------------------------------------ Loading */
+.hs-skeleton {
+  display: grid;
+}
+.hs-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+}
+.hs-skeleton-row:last-child {
+  border-bottom: 0;
+}
+
+/* ------------------------------------------------------------------ Stacked cards (narrow card) */
+@container hs (max-width: 56rem) {
+  .hs-table,
+  .hs-table tbody {
+    display: block;
+  }
+  .hs-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .hs-table tbody tr {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+    align-items: start;
+    gap: var(--sp-3) var(--sp-4);
     padding: var(--sp-4);
+    border-bottom: 1px solid var(--border);
   }
-  .hs-score {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-items: start;
-    gap: var(--sp-1) var(--sp-3);
+  .hs-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .hs-table tbody th,
+  .hs-table tbody td {
+    display: block;
     min-width: 0;
-    text-align: left;
+    padding: 0;
+    border: 0;
   }
-  .hs-bars {
-    margin-top: 0;
-    align-self: center;
+  .hs-table tbody td[data-label]::before {
+    content: attr(data-label);
+    content: attr(data-label) / '';
+    display: block;
+    margin-bottom: 2px;
+    color: var(--text-3);
+    font-size: var(--fs-label);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .hs-table .chip {
+    white-space: normal;
+  }
+  .hs-c-scenario {
+    grid-column: 1 / -1;
+    order: -1;
+    min-width: 0;
+  }
+  .hs-c-date,
+  .hs-c-actions {
+    white-space: normal;
+  }
+  .hs-c-actions {
+    grid-column: 1 / -1;
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border);
+  }
+  .hs-table tbody tr:has(.hs-pick) .hs-c-scenario {
+    padding-right: 6rem;
+  }
+  .hs-table .hs-c-pick {
+    position: absolute;
+    top: var(--sp-2);
+    right: var(--sp-2);
+    width: auto;
+    padding: 0;
+  }
+  .hs-pick-text {
+    display: inline;
+  }
+  .hs-actions {
+    flex-wrap: wrap;
+  }
+  .hs-actions .hs-act-text {
+    display: inline;
+  }
+  .hs-actions .hs-icon-btn {
+    padding-inline: 0.75rem;
   }
   .hs-delete {
-    margin-left: 0;
+    margin-left: auto;
   }
 }
 
@@ -246,9 +348,9 @@
   display: grid;
   gap: 2px;
   padding: var(--sp-3) var(--sp-4);
-  border-radius: 12px;
+  border-radius: var(--r-control);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  background: var(--surface-2);
   overflow-wrap: anywhere;
 }
 .hs-compare-who {
@@ -272,6 +374,14 @@
 .hs-compare-table td {
   padding: 0.55rem 0.6rem;
 }
+.hs-compare-table tbody th {
+  font-size: inherit;
+  font-weight: 620;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+  background: transparent;
+}
 .hs-compare-table td:nth-child(2),
 .hs-compare-table td:nth-child(3) {
   text-align: center;
@@ -280,4 +390,7 @@
 .hs-compare-overall td {
   font-weight: 650;
   border-top: 1px solid var(--border-strong);
+}
+.hs-compare-table tbody tr:last-child th {
+  border-bottom: 0;
 }

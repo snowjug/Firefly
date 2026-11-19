@@ -1,116 +1,57 @@
-/* Library: header, filters, scenario cards and the preview dialog. */
+/* Scenario library: the search and filters, and a grid of cards. Built from the shared tokens, so
+   both themes work. */
 
-.lib-header {
-  display: grid;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-5);
-}
-.lib-header .t-lead {
-  max-width: 62ch;
-}
-.lib-note {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-2);
-  margin-top: var(--sp-1);
-  font-size: var(--fs-small);
-  color: var(--text-2);
-}
-.lib-note svg {
-  flex: none;
-  margin-top: 0.2em;
-  color: var(--accent);
-}
-
-/* ------------------------------------------------------------------ Toolbar */
+/* ------------------------------------------------------------------ Search and filters */
 .lib-toolbar {
   display: grid;
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-5);
+  gap: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-4);
 }
 .lib-search-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--sp-3);
 }
-.lib-search-field {
-  position: relative;
+.lib-search {
   flex: 1 1 auto;
   min-width: 0;
 }
-.lib-search-field > svg {
-  position: absolute;
-  inset-block: 0;
-  left: 0.95rem;
-  margin-block: auto;
-  color: var(--text-3);
-  pointer-events: none;
-}
-.lib-search-input {
-  padding-left: 2.75rem;
-  padding-right: 0.9rem;
-}
-.lib-search-input:not(:placeholder-shown) {
-  padding-right: 3.1rem;
-}
-.lib-search-input::-webkit-search-cancel-button,
-.lib-search-input::-webkit-search-decoration {
-  -webkit-appearance: none;
-  appearance: none;
-}
-.lib-search-clear {
-  position: absolute;
-  inset-block: 0;
-  right: 4px;
-  margin-block: auto;
-}
-.lib-filters-toggle {
+.lib-toggle {
   display: none;
 }
-.lib-filter-count {
-  padding-block: 0.1rem;
-}
-
 .lib-facets {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: var(--sp-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-3) var(--sp-4);
 }
-.lib-facets .label {
-  font-size: var(--fs-meta);
-  color: var(--text-2);
-}
-.lib-facets .select[data-active='true'] {
+.lib-toolbar .select[data-active='true'] {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  background-color: var(--primary-soft);
 }
-@media (max-width: 1100px) {
-  .lib-facets {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@media (min-width: 1100px) {
+  .lib-toolbar {
+    grid-template-columns: minmax(14rem, 1.6fr) minmax(0, 3fr);
+    align-items: end;
   }
 }
-@media (max-width: 720px) {
+/* On a phone the selects wait behind a Filters button, so the scenarios start higher up the screen. */
+@media (max-width: 639px) {
   .lib-search-row {
     flex-direction: column;
     align-items: stretch;
   }
-  .lib-filters-toggle {
+  .lib-toggle {
     display: inline-flex;
     justify-content: flex-start;
   }
-  .lib-filters-toggle > svg:last-child {
+  .lib-toggle > svg:last-child {
     margin-left: auto;
   }
   .lib-facets {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
   .lib-facets[data-open='false'] {
     display: none;
-  }
-}
-@media (max-width: 520px) {
-  .lib-facets {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -118,59 +59,22 @@
 .lib-results {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--sp-3) var(--sp-5);
+  gap: var(--sp-2) var(--sp-4);
+  min-height: var(--tap);
   margin-bottom: var(--sp-3);
 }
 .lib-count {
-  min-height: var(--tap);
-  display: flex;
-  align-items: center;
-  font-weight: 620;
-}
-.lib-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--sp-3) var(--sp-5);
-}
-.lib-sort {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--sp-3);
-}
-.lib-sort .select {
-  width: auto;
-  min-width: 11.5rem;
-}
-.lib-sort .label {
-  white-space: nowrap;
-}
-.lib-active {
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-4);
-}
-.lib-chip {
-  min-height: 36px;
-  padding-inline: 0.85rem;
-  color: var(--text);
-  cursor: pointer;
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  transition:
-    border-color var(--dur-2) var(--ease-out),
-    background var(--dur-2) var(--ease-out);
-}
-.lib-chip:hover {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-.lib-chip strong {
   font-weight: 650;
 }
-.lib-chip svg {
-  color: var(--text-2);
+.lib-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 .lib-grid > li {
   display: grid;
@@ -178,184 +82,116 @@
 }
 
 /* ------------------------------------------------------------------ Scenario card */
-.scn-card {
+.lib-card {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   min-width: 0;
+  padding: var(--sp-4) var(--sp-5);
   overflow-wrap: anywhere;
 }
-.scn-card[data-spotlight='true'] {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--glass-border));
+.lib-card[data-recommended='true'] {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
   box-shadow:
     var(--shadow-1),
-    0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent);
 }
-.scn-card-top {
+.lib-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.lib-card-head {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+}
+.lib-card-flags {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
+  gap: var(--sp-1) var(--sp-2);
+  margin: 0 0 var(--sp-1);
 }
-.scn-minutes {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  white-space: nowrap;
-}
-.scn-spotlight {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin: 0;
-}
-.scn-card[data-recommended='true'] {
-  border-color: color-mix(in srgb, var(--glow) 55%, var(--glass-border));
-  box-shadow:
-    var(--shadow-1),
-    0 0 0 1px color-mix(in srgb, var(--glow) 18%, transparent);
-}
-.scn-practice {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-}
-.scn-practice-dot {
-  flex: none;
-  width: 0.6rem;
-  height: 0.6rem;
-  border: 1.5px solid var(--star-0);
-  border-radius: 50%;
-}
-.scn-card[data-practice='practised'] .scn-practice-dot {
-  border-color: var(--glow);
-  background: var(--glow);
-  box-shadow: 0 0 8px var(--glow-soft);
-}
-.scn-card[data-practice='in-progress'] .scn-practice-dot {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-.scn-card-title {
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 600;
-  line-height: 1.25;
+.lib-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
   letter-spacing: -0.01em;
 }
-.scn-card-summary {
+.lib-card-issue {
+  font-size: var(--fs-meta);
+  font-weight: 620;
+  color: var(--text-2);
+}
+.lib-card-summary {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   font-size: var(--fs-small);
   line-height: 1.5;
   color: var(--text-2);
 }
-.scn-persona {
-  display: flex;
-  align-items: flex-start;
+.lib-card-chips {
   gap: var(--sp-2);
-  font-size: var(--fs-small);
-  color: var(--text-2);
 }
-.scn-persona svg {
-  flex: none;
-  margin-top: 0.15em;
-  color: var(--text-3);
+.lib-card-chips .chip {
+  white-space: normal;
 }
-.scn-persona strong {
-  font-weight: 620;
-  color: var(--text);
+.lib-card-chips .temp-orb {
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--orb) 45%, transparent);
 }
-.scn-focus {
-  font-size: var(--fs-meta);
-  color: var(--text-2);
-}
-.scn-focus-label {
-  color: var(--text-3);
-  letter-spacing: 0.04em;
-}
-.scn-card-actions {
+.lib-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2);
-  margin-top: auto;
-  padding-top: var(--sp-2);
-}
-.scn-card-actions .btn-primary {
-  margin-left: auto;
-}
-
-/* ------------------------------------------------------------------ Preview dialog */
-.dialog:has(.scn-preview) {
-  --scn-pad: var(--sp-6);
-  width: min(720px, 100%);
-  padding-bottom: 0;
-  overflow-wrap: anywhere;
-}
-.sheet:has(.scn-preview) {
-  --scn-pad: var(--sp-5);
-  padding-bottom: 0;
-  overflow-wrap: anywhere;
-}
-/* Long reading text sits on a solid surface, as the design system advises, not on blurred glass. */
-.dialog:has(.scn-preview),
-.sheet:has(.scn-preview) {
-  background: var(--glass-fallback);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-.scn-preview {
-  display: grid;
-  gap: var(--sp-5);
-}
-.scn-preview h3 {
-  margin-bottom: var(--sp-2);
-  font-size: var(--fs-label);
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-.scn-preview p,
-.scn-list {
-  color: var(--text-2);
-}
-.scn-preview p strong,
-.scn-list strong {
-  color: var(--text);
-  font-weight: 620;
-}
-.scn-list {
-  display: grid;
-  gap: var(--sp-2);
+  gap: var(--sp-1) var(--sp-4);
   margin: 0;
-  padding-left: 1.2rem;
+  font-size: var(--fs-meta);
+  font-weight: 620;
+  color: var(--text-2);
 }
-.scn-list li::marker {
-  color: var(--accent);
+.lib-card-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
-.scn-preview-actions {
-  position: sticky;
-  bottom: 0;
+.lib-practice-dot {
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 1.5px solid var(--text-3);
+  border-radius: 50%;
+}
+[data-practice='practised'] > .lib-practice-dot {
+  border-color: var(--positive);
+  background: var(--positive);
+}
+[data-practice='in-progress'] > .lib-practice-dot {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+.lib-card-reason {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-control);
+  background: var(--primary-soft);
+  font-size: var(--fs-meta);
+  line-height: 1.45;
+}
+.lib-card-foot {
   display: flex;
-  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: var(--sp-3);
-  margin: var(--sp-5) calc(var(--scn-pad) * -1) 0;
-  padding: var(--sp-4) var(--scn-pad);
-  border-top: 1px solid var(--border);
-  background: var(--surface-2);
+  margin-top: auto;
+  padding-top: var(--sp-1);
 }
-.scn-preview-actions .btn {
-  flex: 1 1 11rem;
-}
-@media (min-width: 641px) {
-  .scn-preview-actions .btn {
-    flex: 0 1 auto;
-  }
+/* The one link on a card reaches over the whole card, so the card is a single target. */
+.lib-card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-card);
 }

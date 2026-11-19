@@ -2,12 +2,14 @@ import { Link } from 'react-router';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { DIMENSIONS, SCORE_DESCRIPTIONS, SCORE_LABELS } from '#shared/domain/vocab.ts';
+import { saveDraft } from '../../lib/draft.ts';
 import { formatDateTime } from '../../lib/format.ts';
 import { DifficultyChip } from '../Chips.tsx';
 import { Icon } from '../Icon.tsx';
-import { FireflyCore } from '../core/FireflyCore.tsx';
 import { Disclosure } from './Disclosure.tsx';
-import { AUTOMATIC_FEEDBACK_NOTE, transcriptHref } from './labels.ts';
+import { ReportFeedbackButton } from './ReportFeedbackDialog.tsx';
+import { SectionHead } from './SectionHead.tsx';
+import { AUTOMATIC_FEEDBACK_NOTE, TRAINING_AID_NOTE, transcriptHref } from './labels.ts';
 
 export function NextPracticeSection({
   session,
@@ -20,42 +22,46 @@ export function NextPracticeSection({
   const suggested = next.suggestedScenarioId;
   return (
     <section id="next" className="rp-section" aria-labelledby="next-title">
-      <div className="rp-section-head">
-        <h2 id="next-title" className="t-section">
-          Next practice target
-        </h2>
-        <p className="rp-lead">One thing to work on in your next call, not a list of everything.</p>
-      </div>
-      <div className="surface rp-card rp-next">
-        <div className="rp-next-core" aria-hidden="true">
-          <FireflyCore signals={{ total: 6, lit: 0 }} quality="low" />
-        </div>
+      <SectionHead id="next-title" title="Next practice target">
+        One thing to work on in your next call, not a list of everything.
+      </SectionHead>
+      <div className="glass card rp-next">
         <div className="rp-next-focus">
-          <p className="t-label">Focus skill</p>
-          <p className="rp-next-skill">{focus.label}</p>
-          <p className="t-small t-muted">{focus.description}</p>
+          <span className="tone-icon" data-tone="violet" aria-hidden="true">
+            <Icon name="target" size={22} />
+          </span>
+          <div>
+            <p className="t-label">Focus skill</p>
+            <p className="rp-next-skill">{focus.label}</p>
+            <p className="t-small t-muted">{focus.description}</p>
+          </div>
         </div>
         <p className="rp-next-reco">{next.recommendation}</p>
 
         {suggested ? (
-          <div className="rp-next-suggest">
-            <div className="row between rp-next-suggest-head">
+          <div className="banner rp-next-banner">
+            <div className="rp-next-suggest">
               <p className="t-label">Suggested next call</p>
-              <span className="row" style={{ ['--row-gap' as string]: 'var(--sp-2)' }}>
-                <span className="t-meta">Difficulty</span>
+              <p className="rp-next-title">{next.suggestedScenarioTitle ?? 'Suggested scenario'}</p>
+              <p className="rp-next-level">
+                <span>Difficulty</span>
                 <DifficultyChip difficulty={next.suggestedDifficulty} />
-              </span>
+              </p>
             </div>
-            <p className="rp-next-title">{next.suggestedScenarioTitle ?? 'Suggested scenario'}</p>
-            <div>
-              <Link
-                to={`/scenarios/${encodeURIComponent(suggested)}/setup`}
-                className="btn btn-primary btn-lg"
-                viewTransition
-              >
-                Practise this next <Icon name="arrow-right" size={18} />
-              </Link>
-            </div>
+            <Link
+              to={`/scenarios/${encodeURIComponent(suggested)}/setup`}
+              className="btn btn-light btn-lg"
+              // Open the setup at the suggested difficulty rather than the scenario's own.
+              onClick={() =>
+                saveDraft({
+                  scenarioId: suggested,
+                  overrides: { difficulty: next.suggestedDifficulty },
+                })
+              }
+              viewTransition
+            >
+              Practise this next <Icon name="arrow-right" size={18} />
+            </Link>
           </div>
         ) : (
           <p className="t-small t-muted">
@@ -67,13 +73,13 @@ export function NextPracticeSection({
         <div className="cluster rp-next-actions">
           <Link
             to={`/scenarios/${encodeURIComponent(session.scenarioId)}/setup`}
-            className={suggested ? 'btn btn-secondary' : 'btn btn-primary btn-lg'}
+            className={suggested ? 'btn btn-secondary' : 'btn btn-primary'}
             viewTransition
           >
             Practise this scenario again
           </Link>
           <Link to={transcriptHref(session.id)} className="btn btn-secondary" viewTransition>
-            Review transcript
+            <Icon name="notes" size={18} /> Review transcript
           </Link>
           <Link to="/history" className="btn btn-ghost" viewTransition>
             Back to history
@@ -84,16 +90,18 @@ export function NextPracticeSection({
   );
 }
 
-export function AboutSection({ report }: { report: CoachingReport }) {
+export function AboutSection({
+  session,
+  report,
+}: {
+  session: Pick<SessionDTO, 'id' | 'turns'>;
+  report: CoachingReport;
+}) {
   const { evaluator } = report;
   return (
     <section id="about" className="rp-section rp-about" aria-labelledby="about-title">
-      <div className="rp-section-head">
-        <h2 id="about-title" className="t-section">
-          About this report
-        </h2>
-      </div>
-      <div className="surface rp-card stack" style={{ ['--stack-gap' as string]: 'var(--sp-4)' }}>
+      <SectionHead id="about-title" title="About this report" />
+      <div className="glass card stack" style={{ ['--stack-gap' as string]: 'var(--sp-4)' }}>
         <p className="rp-training-note">{report.trainingNote}</p>
         <p className="t-small t-muted">{AUTOMATIC_FEEDBACK_NOTE}</p>
         <Disclosure summary="Report details and scoring rubric">
@@ -139,6 +147,14 @@ export function AboutSection({ report }: { report: CoachingReport }) {
             </div>
           </dl>
         </Disclosure>
+        <div className="rp-about-foot">
+          <p className="t-meta">{TRAINING_AID_NOTE}</p>
+          <ReportFeedbackButton
+            sessionId={session.id}
+            evaluator={evaluator}
+            turnCount={session.turns.length}
+          />
+        </div>
       </div>
     </section>
   );

@@ -1,101 +1,164 @@
-/* App shell: navigation, page container, footer, route transitions. */
+/* App shell: sidebar, top bar, page container, footer and route transitions. */
 
 .app {
+  --topbar-h: 64px;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+}
+/* During a call the sidebar shrinks to an icon rail so the conversation gets the room. */
+.app[data-compact='true'] {
+  --sidebar-w: 76px;
+}
+.app-main {
+  min-width: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-.nav {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-nav);
-  height: var(--nav-height);
-  border-radius: 0;
-  border-width: 0 0 1px 0;
-  box-shadow: none;
-}
-.nav-inner {
-  max-width: var(--content-width);
-  height: 100%;
-  margin: 0 auto;
-  padding: 0 var(--sp-4);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
+/* ------------------------------------------------------------------ Brand */
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.65rem;
   color: var(--text);
   text-decoration: none;
-  font-family: var(--font-display);
-  font-weight: 700;
+  font-family: var(--font-heading);
+  font-weight: 760;
   font-size: 1.2rem;
   letter-spacing: -0.02em;
 }
+.brand:hover {
+  text-decoration: none;
+}
 .brand-mark {
-  position: relative;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  flex: none;
+  width: 34px;
+  height: 34px;
+}
+
+/* ------------------------------------------------------------------ Sidebar */
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-5) var(--sp-3) var(--sp-4);
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.sidebar .brand,
+.drawer .brand {
+  color: #fff;
+  padding: 0 var(--sp-3);
+  margin-bottom: var(--sp-5);
+}
+.side-nav {
   display: grid;
-  place-items: center;
-  background:
-    radial-gradient(circle at 50% 50%, var(--glow-soft) 0%, transparent 68%), var(--surface-2);
-  border: 1px solid var(--glass-border);
+  gap: 2px;
 }
-.brand-mark::before {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  border: 1px dashed color-mix(in srgb, var(--glow) 55%, transparent);
-  opacity: 0.7;
+.side-group {
+  margin-top: var(--sp-5);
 }
-.brand-mark::after {
-  content: '';
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #fff4d0;
-  box-shadow:
-    0 0 8px 2px var(--glow),
-    0 0 18px 4px var(--glow-soft);
+.side-label {
+  padding: 0 var(--sp-3) var(--sp-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sidebar-muted);
 }
-.nav-links {
+.side-link {
   display: flex;
   align-items: center;
-  gap: 2px;
-  margin-left: var(--sp-3);
-}
-.nav-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 40px;
-  padding: 0 0.85rem;
+  gap: 0.8rem;
+  min-height: 44px;
+  padding: 0 var(--sp-3);
   border-radius: 10px;
-  color: var(--text-2);
+  color: var(--sidebar-text);
   text-decoration: none;
   font-size: var(--fs-small);
-  font-weight: 600;
+  font-weight: 620;
   transition:
     background var(--dur-2) var(--ease-out),
     color var(--dur-2) var(--ease-out);
 }
-.nav-link:hover {
-  background: var(--surface-2);
-  color: var(--text);
+.side-link:hover {
+  background: var(--sidebar-hover-bg);
+  color: #fff;
+  text-decoration: none;
 }
-.nav-link[aria-current='page'] {
-  color: var(--text);
-  background: color-mix(in srgb, var(--glow) 12%, var(--surface-2));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--glow) 38%, transparent) inset,
-    0 8px 22px -14px var(--glow-soft);
+.side-link[aria-current='page'] {
+  background: var(--sidebar-active-bg);
+  color: #fff;
+  box-shadow: 0 10px 20px -12px rgba(29, 95, 224, 0.95);
 }
-.nav-end {
+.side-link:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.side-foot {
+  margin-top: auto;
+  padding-top: var(--sp-5);
+  display: grid;
+  gap: 2px;
+}
+.side-note {
+  margin: var(--sp-3) var(--sp-2) 0;
+  padding: var(--sp-3);
+  border-radius: 12px;
+  border: 1px solid var(--sidebar-border);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: var(--fs-label);
+  line-height: 1.45;
+  color: var(--sidebar-text);
+}
+.app[data-compact='true'] .sidebar {
+  padding-inline: var(--sp-2);
+  align-items: center;
+}
+.app[data-compact='true'] .sidebar .brand {
+  padding: 0;
+}
+.app[data-compact='true'] :is(.brand-text, .side-link-label, .side-label, .side-note) {
+  display: none;
+}
+.app[data-compact='true'] .side-nav,
+.app[data-compact='true'] .side-foot {
+  justify-items: center;
+}
+.app[data-compact='true'] .side-link {
+  width: 48px;
+  justify-content: center;
+  padding: 0;
+}
+.app[data-compact='true'] .side-group {
+  margin-top: var(--sp-3);
+}
+
+/* ------------------------------------------------------------------ Top bar */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--topbar-h);
+  padding: var(--sp-3) var(--sp-5);
+}
+.topbar-search {
+  position: relative;
+  width: min(100%, 340px);
+}
+.topbar-search .input {
+  min-height: 42px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.topbar-end {
   margin-left: auto;
   display: flex;
   align-items: center;
@@ -104,32 +167,82 @@
 .menu-button {
   display: none;
 }
-@media (max-width: 900px) {
-  .nav-links {
-    display: none;
-  }
-  .menu-button {
-    display: inline-flex;
-  }
+.topbar-brand {
+  display: none;
 }
-.menu-list {
-  display: grid;
-  gap: var(--sp-1);
+.icon-button-wrap {
+  position: relative;
 }
-.menu-list .nav-link {
-  min-height: 48px;
-  font-size: var(--fs-body);
+.badge-dot {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e5484d;
+  border: 2px solid var(--bg);
 }
 
+/* Popover menus (notifications, profile) */
+.popover {
+  position: absolute;
+  z-index: var(--z-sheet);
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, calc(100vw - 2rem));
+  max-height: min(70vh, 520px);
+  overflow: auto;
+  padding: var(--sp-2);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-2);
+  animation: pop-in var(--dur-3) var(--ease-settle);
+}
+.popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-2) var(--sp-3);
+}
+.popover-item {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  width: 100%;
+  padding: var(--sp-3);
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.popover-item:hover,
+.popover-item:focus-visible {
+  background: var(--surface-2);
+  text-decoration: none;
+}
+.popover-empty {
+  padding: var(--sp-5) var(--sp-4);
+  text-align: center;
+  color: var(--text-3);
+  font-size: var(--fs-small);
+}
+
+/* ------------------------------------------------------------------ Page container */
 .page {
   width: 100%;
   max-width: var(--content-width);
   margin: 0 auto;
-  padding: var(--sp-6) var(--sp-4) var(--sp-8);
+  padding: var(--sp-2) var(--sp-5) var(--sp-8);
   flex: 1 0 auto;
   /* A page is at least one screen tall, so the footer starts below the fold and is never seen
      jumping down out of view as the page's content arrives. */
-  min-height: calc(100vh - var(--nav-height));
+  min-height: calc(100vh - var(--topbar-h));
 }
 .page:focus {
   outline: none;
@@ -137,7 +250,7 @@
 .page-header {
   display: grid;
   gap: var(--sp-2);
-  margin-bottom: var(--sp-6);
+  margin-bottom: var(--sp-5);
 }
 .page-narrow {
   max-width: 820px;
@@ -145,15 +258,17 @@
 .page-wide {
   max-width: 1380px;
 }
-@media (max-width: 720px) {
-  .page {
-    padding-top: var(--sp-5);
-  }
+/* A title with its own sub-line, the way the app's pages open ("Practice history  /  Track your progress"). */
+.page-title {
+  font-size: var(--fs-title);
+  font-weight: 760;
+  letter-spacing: -0.022em;
+  line-height: 1.12;
 }
 
 .footer {
   border-top: 1px solid var(--border);
-  padding: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
 }
 .footer-inner {
   max-width: var(--content-width);
@@ -170,7 +285,7 @@
 .grid-cards {
   display: grid;
   gap: var(--sp-4);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
 }
 .grid-2 {
   display: grid;
@@ -182,6 +297,16 @@
   gap: var(--sp-4);
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.grid-4 {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+  .grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 @media (max-width: 900px) {
   .grid-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -189,8 +314,58 @@
 }
 @media (max-width: 640px) {
   .grid-2,
-  .grid-3 {
+  .grid-3,
+  .grid-4 {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------------ Small screens: the sidebar becomes a drawer */
+@media (max-width: 960px) {
+  .app {
+    --topbar-h: 60px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app[data-compact='true'] {
+    --sidebar-w: 0px;
+  }
+  .sidebar {
+    display: none;
+  }
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-nav);
+    height: var(--topbar-h);
+    padding: 0 var(--sp-3);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .menu-button,
+  .topbar-brand {
+    display: inline-flex;
+  }
+  .topbar-search {
+    display: none;
+  }
+  .page {
+    padding: var(--sp-4) var(--sp-4) var(--sp-7);
+  }
+  .footer {
+    padding-inline: var(--sp-4);
+  }
+}
+/* On the narrowest phones the name steps aside so the three action buttons still fit. */
+@media (max-width: 420px) {
+  .topbar {
+    gap: var(--sp-1);
+    padding-inline: var(--sp-2);
+  }
+  .topbar-brand span {
+    display: none;
+  }
+  .topbar-end {
+    gap: 0;
   }
 }
 

@@ -1,22 +1,21 @@
-/* About and Responsible AI */
+/* Help and responsible AI: a contents card beside one card per topic. Tokens only, so both themes work. */
 
 .ab-layout {
   display: grid;
-  grid-template-columns: 13.5rem minmax(0, 46rem);
-  gap: var(--sp-7);
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: var(--sp-5);
   align-items: start;
 }
 @media (max-width: 1000px) {
   .ab-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-5);
   }
 }
 
-/* Table of contents */
+/* ------------------------------------------------------------------ Contents */
 .ab-aside {
   position: sticky;
-  top: calc(var(--nav-height) + var(--sp-5));
+  top: calc(var(--nav-height) + var(--sp-4));
   min-width: 0;
 }
 @media (max-width: 1000px) {
@@ -26,48 +25,38 @@
 }
 .ab-toc {
   display: grid;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 .ab-toc ol {
   display: grid;
   gap: 2px;
   margin: 0;
   padding: 0;
-  border-left: 1px solid var(--border);
 }
 .ab-toc a {
   display: flex;
   align-items: center;
-  min-height: 36px;
+  min-height: 40px;
   padding: 0 var(--sp-3);
-  margin-left: -1px;
-  border-left: 2px solid transparent;
+  border-radius: var(--r-control);
   color: var(--text-2);
   font-size: var(--fs-small);
-  font-weight: 560;
+  font-weight: 600;
   text-decoration: none;
 }
 .ab-toc a:hover {
-  border-left-color: var(--accent);
-  color: var(--text);
+  background: var(--primary-soft);
+  color: var(--accent-strong);
 }
 @media (max-width: 1000px) {
-  .ab-toc {
-    padding: var(--sp-4);
-    border-radius: var(--r-card);
-    border: 1px solid var(--border);
-    background: color-mix(in srgb, var(--surface) 60%, transparent);
-  }
   .ab-toc ol {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    border-left: 0;
     gap: 0 var(--sp-4);
-  }
-  .ab-toc a {
-    margin-left: 0;
-    padding: 0;
-    border-left: 0;
-    color: var(--accent);
   }
 }
 @media (max-width: 560px) {
@@ -76,50 +65,76 @@
   }
 }
 
-/* Content */
+/* ------------------------------------------------------------------ Topic cards */
 .ab-content {
+  display: grid;
+  gap: var(--sp-4);
   min-width: 0;
 }
 .ab-section {
   display: grid;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   justify-items: start;
-  padding-bottom: var(--sp-6);
+  padding: var(--sp-5) var(--sp-6);
   scroll-margin-top: calc(var(--nav-height) + var(--sp-4));
 }
-.ab-section + .ab-section {
-  padding-top: var(--sp-6);
-  border-top: 1px solid var(--border);
+@media (max-width: 640px) {
+  .ab-section {
+    padding: var(--sp-4);
+  }
+}
+.ab-section:focus {
+  outline: none;
+}
+.ab-section:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 .ab-section > * {
   min-width: 0;
   max-width: 100%;
 }
+.ab-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-section);
+  font-weight: 700;
+}
+.ab-title .tone-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
 .ab-section p,
 .ab-points li,
-.ab-steps p {
-  max-width: 70ch;
+.ab-steps p,
+.ab-faq dd {
+  max-width: 72ch;
   color: var(--text-2);
   overflow-wrap: anywhere;
 }
-.ab-section strong {
+.ab-section strong,
+.ab-faq dt {
   color: var(--text);
   font-weight: 650;
 }
+.ab-section .link-more {
+  min-height: var(--tap);
+}
 .ab-section .callout {
-  max-width: 70ch;
+  max-width: 72ch;
 }
 .ab-section .callout p {
   color: var(--text);
 }
 .ab-subhead {
   margin-top: var(--sp-2);
-  font-family: var(--font-display);
   font-size: var(--fs-body);
-  font-weight: 650;
+  font-weight: 680;
 }
 
-/* Lists */
+/* ------------------------------------------------------------------ Lists */
 .ab-steps,
 .ab-points {
   display: grid;
@@ -140,24 +155,45 @@
   height: 1.75rem;
   margin-top: 1px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
+  background: var(--primary-soft);
+  color: var(--accent-strong);
   font-size: var(--fs-meta);
-  font-weight: 650;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.ab-points {
+.ab-section .ab-points {
   padding-left: 1.25rem;
+  list-style: disc;
+}
+.ab-points li::marker {
+  color: var(--text-3);
 }
 .ab-points li {
   padding-left: var(--sp-1);
 }
+.ab-faq {
+  display: grid;
+  gap: var(--sp-4);
+  width: 100%;
+  margin: 0;
+}
+.ab-faq > div {
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+.ab-faq > div:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.ab-faq dd {
+  margin: 2px 0 0;
+}
 
-/* Dimensions and scale */
+/* ------------------------------------------------------------------ Dimensions and scale */
 .ab-dimensions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-4);
+  gap: var(--sp-3);
   width: 100%;
   margin: 0;
   padding: 0;
@@ -172,9 +208,9 @@
   gap: var(--sp-2);
   align-content: start;
   padding: var(--sp-4);
-  border-radius: 14px;
+  border-radius: var(--r-card);
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  background: var(--surface-2);
 }
 .ab-dimension-head {
   display: flex;
@@ -182,14 +218,13 @@
   gap: var(--sp-3);
 }
 .ab-dimension-number {
-  font-family: var(--font-display);
-  font-weight: 650;
-  color: var(--accent);
+  color: var(--accent-strong);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .ab-dimension-title {
   font-size: var(--fs-body);
-  font-weight: 650;
+  font-weight: 680;
 }
 .ab-care {
   margin-top: var(--sp-1);
@@ -197,13 +232,14 @@
 .ab-care .chip {
   white-space: normal;
 }
-.ab-scale {
+.ab-scale,
+.ab-build {
   display: grid;
   width: 100%;
   margin: 0;
   border: 1px solid var(--border);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border-radius: var(--r-card);
+  background: var(--surface-2);
 }
 .ab-scale > div {
   display: grid;
@@ -212,11 +248,12 @@
   padding: var(--sp-3) var(--sp-4);
   border-top: 1px solid var(--border);
 }
-.ab-scale > div:first-child {
+.ab-scale > div:first-child,
+.ab-build > div:first-child {
   border-top: 0;
 }
 .ab-scale dt {
-  font-weight: 620;
+  font-weight: 650;
 }
 .ab-scale dd {
   margin: 0;
@@ -229,15 +266,9 @@
   }
 }
 
-/* Build details */
+/* ------------------------------------------------------------------ Build details */
 .ab-build {
-  display: grid;
-  width: 100%;
   max-width: 34rem;
-  margin: 0;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
 }
 .ab-build > div {
   display: grid;
@@ -245,9 +276,6 @@
   gap: var(--sp-4);
   padding: var(--sp-3) var(--sp-4);
   border-top: 1px solid var(--border);
-}
-.ab-build > div:first-child {
-  border-top: 0;
 }
 .ab-build dt {
   color: var(--text-3);

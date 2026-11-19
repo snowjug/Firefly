@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 import { play } from '../../lib/sound.ts';
-import { FireflyCore } from '../core/FireflyCore.tsx';
-import type { CoreMood } from '../core/engine.ts';
+import { CustomerAvatar } from '../illustration/index.ts';
 
 /** How long "scenario locked" shows before the customer connects. */
 export const CONNECT_AFTER_MS = 450;
@@ -12,8 +12,8 @@ export const HOLD_OPEN_MS = 600;
 interface LaunchSequenceProps {
   title: string;
   persona: { name: string; role: string; organisation: string };
-  /** How the customer starts: the core takes this colour. */
-  mood: CoreMood;
+  /** How the customer starts: the portrait and the glow behind it take this mood. */
+  mood: TemperatureBandId;
   /** The call really exists on the server. "Line open" is only ever shown once this is true. */
   ready: boolean;
   /** Called once, when it is time to show the call. */
@@ -88,8 +88,8 @@ export function LaunchSequence({ title, persona, mood, ready, onDone }: LaunchSe
       data-stage={stage}
       onClick={() => setSkipped(true)}
     >
-      <div className="launch-core" aria-hidden="true">
-        <FireflyCore mood={mood} thinking={stage < 2} pulseKey={stage} />
+      <div className="launch-avatar" aria-hidden="true">
+        <CustomerAvatar seed={persona.name} mood={mood} />
       </div>
       <div className="launch-text">
         <h2 id={titleId} className="sr-only">
@@ -127,7 +127,7 @@ export function LaunchSequence({ title, persona, mood, ready, onDone }: LaunchSe
       <button
         ref={skipButton}
         type="button"
-        className="btn btn-ghost launch-skip"
+        className="btn btn-secondary launch-skip"
         onClick={(event) => {
           event.stopPropagation();
           setSkipped(true);

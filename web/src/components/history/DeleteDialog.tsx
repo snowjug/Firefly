@@ -51,7 +51,7 @@ function DeleteBody({
         </button>
         <button type="button" className="btn btn-danger-solid" onClick={confirm} disabled={busy}>
           {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="trash" size={16} />}
-          Delete session
+          Delete call
         </button>
       </div>
     </div>
@@ -72,8 +72,8 @@ export function DeleteDialog({
     <Dialog
       open={session !== null}
       onClose={onCancel}
-      title="Delete this session?"
-      description="This permanently deletes the transcript and the coaching report for this session. It can’t be undone."
+      title="Delete this call?"
+      description="This permanently deletes the transcript and the coaching report for this call. It can’t be undone."
     >
       {session ? <DeleteBody session={session} onCancel={onCancel} onDeleted={onDeleted} /> : null}
     </Dialog>

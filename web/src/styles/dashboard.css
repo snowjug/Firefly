@@ -1,276 +1,398 @@
-/* Dashboard: mission control. A single composition rather than a grid of equal cards: the Firefly
-   Core and the headline, then the line you may have open, the one mission worth doing next, the
-   training loop as a path, and a quiet recent/focus pair. */
+/* Home: a greeting, four real numbers, an invitation to practise, a few scenarios to try and the
+   last few calls. Everything is built from the shared tokens, so both themes work.
 
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  align-items: center;
-  gap: var(--sp-6);
-  padding: var(--sp-5) 0 var(--sp-7);
-}
-.hero-copy {
-  max-width: 42rem;
-}
-.hero-title {
-  font-size: clamp(2.2rem, 1rem + 3vw, 3.5rem);
-}
-.hero-notes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2) var(--sp-5);
-  padding: 0;
-  margin: 0;
-}
-.hero-notes li {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.hero-visual {
-  display: grid;
-  justify-items: center;
-  gap: var(--sp-2);
-  min-width: 0;
-}
-.hero-core {
-  --core-size: min(100%, 32rem);
-  display: grid;
-  place-items: center;
-  width: 100%;
-  margin-block: -1.5rem;
-}
-.hero-caption {
-  max-width: 32ch;
-  margin: 0;
-  text-align: center;
-}
-@media (max-width: 900px) {
-  .hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .hero-visual {
-    order: -1;
-  }
-  .hero-core {
-    --core-size: min(78%, 19rem);
-    margin-block: -0.5rem;
-  }
-}
+   The sidebar takes a quarter of a laptop screen, so layouts follow the width of the page itself
+   (the `dash` container), not the width of the window. */
 
-/* ------------------------------------------------------------------ The line is open */
-.resume {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-6);
-  padding: var(--sp-4) var(--sp-5);
-  border: 1px solid color-mix(in srgb, var(--glow) 40%, var(--border));
-  border-radius: var(--r-card);
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--glow) 11%, transparent), transparent 70%),
-    var(--glass-bg);
+.dash-body {
+  container: dash / inline-size;
 }
-.resume-pulse {
-  flex: none;
-  width: 0.8rem;
-  height: 0.8rem;
-  border-radius: 50%;
-  background: var(--glow);
-  animation: resume-pulse 2.4s ease-out infinite;
-}
-@keyframes resume-pulse {
-  0% {
-    box-shadow: 0 0 0 0 var(--glow-soft);
-  }
-  70%,
-  100% {
-    box-shadow: 0 0 0 0.9rem transparent;
-  }
-}
-.resume-text {
-  flex: 1 1 14rem;
-  min-width: 0;
-}
-.resume-title {
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
 .dash-block {
-  margin-bottom: var(--sp-7);
+  margin-bottom: var(--sp-6);
 }
-.dash-heading {
-  margin-bottom: var(--sp-5);
+.dash-partial {
+  margin-top: var(--sp-2);
 }
 
-/* ------------------------------------------------------------------ The training loop as a path */
-.path {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-5);
-  padding: 0;
-  margin: 0;
-  list-style: none;
+/* ------------------------------------------------------------------ Optional first-run tour */
+.dash-tour {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: var(--r-card);
+  background: var(--primary-soft);
 }
-.path-step {
-  position: relative;
+.dash-tour-text {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+.dash-tour-title {
+  font-size: var(--fs-body);
+  font-weight: 680;
+}
+.dash-tour-actions {
+  flex: none;
+}
+
+/* ------------------------------------------------------------------ The four numbers */
+.dash-stats .stat {
+  height: 100%;
+  min-width: 0;
+}
+.dash-stats .stat-label {
+  overflow-wrap: anywhere;
+}
+.dash-stat-skeleton {
+  min-height: 76px;
+}
+.dash-stat-skeleton .skeleton,
+.dash-scn-skeleton .skeleton {
+  display: block;
+}
+.dash-stat-skeleton-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.dash-stat-skeleton-text {
   display: grid;
   gap: var(--sp-2);
-  align-content: start;
-  padding-top: var(--sp-7);
 }
-.path-node {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 1;
+/* Two to a row, and four once there is room. On a phone the icon sits above the words so nothing
+   has to squeeze. These rules are more specific than the shared .grid-4 ones on purpose. */
+.dash-stats.grid-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+@container dash (min-width: 800px) {
+  .dash-stats.grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-4);
+  }
+}
+@container dash (max-width: 479px) {
+  .dash-stats .stat {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+  }
+}
+
+/* ------------------------------------------------------------------ The invitation */
+.dash-banner {
+  align-items: stretch;
+  gap: var(--sp-4);
+  min-height: 12.5rem;
+  padding: 0;
+}
+.dash-banner-copy {
   display: grid;
-  place-items: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  border: 1.5px solid color-mix(in srgb, var(--glow) 55%, transparent);
-  border-radius: 50%;
-  background: var(--surface);
-  box-shadow: 0 0 18px -4px var(--glow-soft);
+  gap: var(--sp-3);
+  align-content: center;
+  max-width: 38rem;
+  padding: var(--sp-6) var(--sp-4) var(--sp-6) var(--sp-7);
 }
-.path-number {
-  color: var(--glow-text);
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  font-weight: 600;
+.dash-banner-title {
+  font-size: clamp(1.4rem, 1.1rem + 1vw, 1.9rem);
+  font-weight: 740;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
-.path-step:not(:last-child)::before {
+.dash-banner-text {
+  max-width: 44ch;
+  font-size: var(--fs-body);
+}
+.dash-banner-actions {
+  margin-top: var(--sp-2);
+  --cluster-gap: var(--sp-3);
+}
+/* The figure sits flush with the bottom edge of the banner, like a person at a desk. */
+.dash-banner-side {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding-right: var(--sp-6);
+}
+.dash-banner-art {
+  flex: none;
+  align-self: stretch;
+  width: clamp(9rem, 17vw, 14rem);
+  min-height: 11rem;
+}
+/* A speech bubble beside the figure: the loop the app is built around, in three words. It is a
+   darker tint of the banner, not a lighter one, so its white words keep a strong contrast. */
+.dash-banner .dash-banner-loop {
+  position: relative;
+  align-self: center;
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0 0 0 var(--sp-1);
+  padding: var(--sp-4) var(--sp-5);
+  list-style: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--r-card);
+  background: rgba(8, 16, 70, 0.3);
+  color: #fff;
+  font-size: var(--fs-body);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.dash-banner-loop::before {
   content: '';
   position: absolute;
-  top: 1.2rem;
-  left: 2.4rem;
-  right: calc(var(--sp-5) * -1);
-  height: 1.5px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--glow) 60%, transparent),
-    color-mix(in srgb, var(--glow) 8%, transparent)
-  );
+  top: 50%;
+  left: -7px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-width: 0 0 1px 1px;
+  background: rgba(8, 16, 70, 0.3);
+  transform: translateY(-50%) rotate(45deg);
 }
-.path-icon {
-  position: absolute;
-  top: 0.55rem;
-  right: 0;
-  color: var(--text-3);
+.dash-banner-loop li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
-.path-title {
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 600;
+.dash-banner-loop li::before {
+  content: '';
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
 }
-@media (max-width: 1000px) {
-  .path {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-6);
+.dash-banner-skeleton .skeleton {
+  height: 15.5rem;
+  border-radius: var(--r-panel);
+}
+@media (max-width: 720px) {
+  .dash-banner-skeleton .skeleton {
+    height: 11.5rem;
   }
-  .path-step {
-    padding: 0 0 0 3.4rem;
+}
+@container dash (max-width: 899px) {
+  .dash-banner .dash-banner-loop {
+    display: none;
   }
-  .path-step:not(:last-child)::before {
-    top: 2.6rem;
-    bottom: calc(var(--sp-6) * -1 + 0.2rem);
-    left: 1.2rem;
-    right: auto;
-    width: 1.5px;
-    height: auto;
-    background: linear-gradient(
-      color-mix(in srgb, var(--glow) 60%, transparent),
-      color-mix(in srgb, var(--glow) 8%, transparent)
-    );
+}
+@media (max-width: 900px) {
+  .dash-banner-copy {
+    padding-left: var(--sp-6);
   }
-  .path-icon {
-    top: 0.4rem;
+  .dash-banner-side {
+    padding-right: var(--sp-4);
+  }
+}
+@media (max-width: 720px) {
+  .dash-banner {
+    min-height: 0;
+  }
+  .dash-banner-copy {
+    padding: var(--sp-5);
   }
 }
 
-/* ------------------------------------------------------------------ Recent practice and focus */
-.dash-columns {
+/* ------------------------------------------------------------------ Scenarios to try */
+.dash-reco {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: var(--sp-7);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-@media (max-width: 900px) {
-  .dash-columns {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-6);
+.dash-reco > li {
+  display: grid;
+  min-width: 0;
+}
+@container dash (min-width: 560px) {
+  .dash-reco {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-.dash-panel {
-  padding-top: var(--sp-5);
-  border-top: 1px solid var(--border);
+@container dash (min-width: 940px) {
+  .dash-reco {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
-.recent-list {
+.dash-scn {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+  min-width: 0;
+  padding: var(--sp-4);
+}
+.dash-scn-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.dash-scn-head {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+}
+.dash-scn-head .chip {
+  margin-bottom: var(--sp-1);
+}
+.dash-scn-title {
+  font-size: var(--fs-body);
+  font-weight: 680;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.dash-scn-link {
+  color: var(--text);
+  text-decoration: none;
+}
+.dash-scn-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+/* The link covers the whole card; its focus ring is drawn around the card instead of the words. */
+.dash-scn-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-card);
+}
+.dash-scn-link:focus-visible {
+  outline: none;
+}
+.dash-scn:has(.dash-scn-link:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.dash-scn-meta {
+  color: var(--text-2);
+  font-size: var(--fs-meta);
+  font-weight: 620;
+}
+.dash-scn-reason {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.dash-scn-skeleton {
+  gap: var(--sp-3);
+  min-height: 9.5rem;
+}
+
+/* ------------------------------------------------------------------ Recent practice and next skill */
+.dash-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: stretch;
+}
+@container dash (min-width: 860px) {
+  .dash-lower {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+}
+.dash-recent {
   display: grid;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-/* Rows may shrink below their content, so a long title is cut with an ellipsis rather than
-   pushing the page wider than the screen. When the title would get cramped, the difficulty and
-   score drop to their own line instead. */
-.recent-list > li {
-  min-width: 0;
+.dash-recent-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border);
 }
-.recent-item {
+.dash-recent-item:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.dash-recent-item:last-child {
+  padding-bottom: 0;
+}
+.dash-recent-title {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.dash-recent-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-1) var(--sp-3);
-  min-width: 0;
-  padding: var(--sp-3) var(--sp-2);
-  border-bottom: 1px solid var(--border);
-  border-radius: 10px;
-  color: inherit;
-  text-decoration: none;
-  transition: background var(--dur-2) var(--ease-out);
+  gap: var(--sp-1) var(--sp-2);
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: var(--fs-meta);
 }
-.recent-item:hover {
-  background: color-mix(in srgb, var(--glow) 7%, transparent);
-}
-.recent-item > .grow {
-  flex: 1 1 9rem;
-}
-.recent-end {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--sp-3);
-  margin-left: auto;
-}
-.recent-title {
-  display: block;
-  font-weight: 620;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.recent-score {
-  min-width: 3.2ch;
-  color: var(--glow-text);
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 600;
+.dash-recent-score {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
   text-align: right;
   white-space: nowrap;
 }
-.focus-skill {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
+.dash-recent-of {
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-meta);
   font-weight: 600;
-  line-height: 1.15;
+  letter-spacing: 0;
 }
-.focus-stars {
-  --ms-size: 17rem;
-  padding-top: var(--sp-3);
+@container dash (max-width: 560px) {
+  .dash-recent-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .dash-recent-item .btn {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+.dash-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+}
+.dash-empty-title {
+  font-weight: 650;
+}
+.dash-next-skill {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  font-weight: 740;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+.dash-next {
+  display: flex;
+  flex-direction: column;
+}
+.dash-next > h2 {
+  margin-bottom: var(--sp-3);
+}
+.dash-next-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.dash-next-link {
+  margin-top: auto;
+  padding-top: var(--sp-2);
+}
+
+/* On a touch screen every control is at least 44px tall, like the rest of the app. */
+@media (pointer: coarse) {
+  .dash .btn-sm,
+  .dash .link-more {
+    min-height: var(--tap);
+  }
 }

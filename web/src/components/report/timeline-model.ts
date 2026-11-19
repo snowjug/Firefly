@@ -168,6 +168,15 @@ export function journeyAriaLabel(moments: readonly Moment[]): string {
   return `Customer mood timeline: ${summariseJourney(moments)}.`;
 }
 
+/** The mood from the first recorded point to the last, for example "Calm to Concerned". */
+export function moodRange(points: readonly JourneyPoint[]): string | null {
+  const moments = buildMoments(points);
+  const first = moments[0]?.band.label;
+  const last = moments[moments.length - 1]?.band.label;
+  if (!first || !last) return null;
+  return first === last ? `Stayed ${first}` : `${first} to ${last}`;
+}
+
 /** The point to show first: where the customer's mood moved most, otherwise the last point. */
 export function defaultSelection(moments: readonly Moment[]): number {
   let best = -1;
@@ -200,6 +209,8 @@ export interface ChartLayout {
   step: number;
   markerSize: number;
   tickY: number;
+  /** Where the "Start" and "End" words sit, under the turn numbers. */
+  edgeY: number;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -211,7 +222,7 @@ export function layoutChart(moments: readonly Moment[], width: number): ChartLay
   const top = 14;
   const plotHeight = bandHeight * BAND_COUNT;
   const left = gutter;
-  const right = width - (compact ? 14 : 22);
+  const right = Math.max(left + 48, width - (compact ? 14 : 22));
   const pad = compact ? 10 : 18;
   const x0 = left + pad;
   const x1 = Math.max(x0, right - pad);
@@ -220,7 +231,7 @@ export function layoutChart(moments: readonly Moment[], width: number): ChartLay
   const bottom = top + plotHeight;
   return {
     width,
-    height: bottom + 36,
+    height: bottom + 54,
     compact,
     dense: count > 1 && step < 22,
     plot: { left, right, top, bottom },
@@ -230,6 +241,7 @@ export function layoutChart(moments: readonly Moment[], width: number): ChartLay
     step,
     markerSize: count > 1 && step < 14 ? 4 : count > 1 && step < 26 ? 5 : 6,
     tickY: bottom + 22,
+    edgeY: bottom + 42,
   };
 }
 

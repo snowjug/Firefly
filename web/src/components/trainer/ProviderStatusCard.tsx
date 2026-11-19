@@ -12,8 +12,8 @@ export function ProviderStatusCard() {
   return (
     <section className="glass card tr-provider" aria-labelledby={titleId}>
       <div className="tr-provider-head">
-        <span className="state-icon" aria-hidden="true">
-          <Icon name="layers" size={24} />
+        <span className="tone-icon" data-tone="blue" aria-hidden="true">
+          <Icon name="layers" size={22} />
         </span>
         <h2 id={titleId} className="t-section grow">
           Provider status

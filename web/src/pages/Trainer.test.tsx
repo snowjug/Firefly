@@ -92,7 +92,7 @@ function renderTrainer() {
           <MemoryRouter initialEntries={['/trainer']}>
             <Routes>
               <Route path="/trainer" element={<Trainer />} />
-              <Route path="/scenarios/:id/brief" element={<BriefProbe />} />
+              <Route path="/scenarios/:id/setup" element={<BriefProbe />} />
             </Routes>
           </MemoryRouter>
         </ToastProvider>
@@ -270,7 +270,7 @@ describe('Trainer starting a call', () => {
 
     expect(
       await screen.findByText(
-        `Brief opened at /scenarios/${SPOTLIGHT.id}/brief with draft ${JSON.stringify({ scenarioId: SPOTLIGHT.id, overrides: {} })}`,
+        `Brief opened at /scenarios/${SPOTLIGHT.id}/setup with draft ${JSON.stringify({ scenarioId: SPOTLIGHT.id, overrides: {} })}`,
       ),
     ).toBeInTheDocument();
   });
@@ -286,7 +286,7 @@ describe('Trainer starting a call', () => {
 
     expect(
       await screen.findByText(
-        `Brief opened at /scenarios/${STARTER.id}/brief with draft ${JSON.stringify({ scenarioId: STARTER.id, overrides: { difficulty: 'challenge' } })}`,
+        `Brief opened at /scenarios/${STARTER.id}/setup with draft ${JSON.stringify({ scenarioId: STARTER.id, overrides: { difficulty: 'challenge' } })}`,
       ),
     ).toBeInTheDocument();
   });

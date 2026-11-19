@@ -34,7 +34,7 @@ flowchart LR
 | Simulation engine  | `server/engine/`                       | Classifies what the trainee did, decides which hidden facts may be revealed, updates the customer's state, fires curveballs and writes the reply (demo mode). Deterministic for a given seed.        |
 | Model provider     | `server/providers/`, `server/prompts/` | One interface with a demo implementation and a live one for Azure OpenAI, Google's Gemini API or any OpenAI-compatible endpoint. See [ai-providers.md](ai-providers.md).                             |
 | Coaching evaluator | `server/evaluator/`                    | Scores the six coaching dimensions from the transcript and the engine's records, verifies every quote, and builds the report. See [evaluation-rubric.md](evaluation-rubric.md).                      |
-| Services           | `server/services/`                     | Session lifecycle, idempotency, evaluation jobs, progress and calibration, sample data.                                                                                                              |
+| Services           | `server/services/`                     | Session lifecycle, idempotency, evaluation jobs, progress, calibration and rewards, sample data.                                                                                                     |
 | Persistence        | `server/db/`                           | SQLite through `node:sqlite`, versioned migrations, profile-scoped queries.                                                                                                                          |
 | HTTP layer         | `server/http/`                         | A small router with validation, security headers, rate limits and static file serving. No web framework.                                                                                             |
 | Web app            | `web/`                                 | React 19 and React Router 7, built with Vite. Every page is a separate lazy chunk. Styling is plain CSS built on design tokens. See [design-system.md](design-system.md).                            |
@@ -109,19 +109,20 @@ There are no accounts. Each browser gets an anonymous `firefly_profile` cookie (
 
 All routes are under `/api`. Writes accept JSON only, up to 64 KB.
 
-| Method and path                                         | Purpose                                                             |
-| ------------------------------------------------------- | ------------------------------------------------------------------- |
-| `GET /health`, `GET /config`                            | Liveness and non-secret configuration (provider label, limits)      |
-| `GET /scenarios`, `GET /scenarios/:id`                  | Public scenario details (never hidden facts)                        |
-| `POST /sessions`, `GET /sessions`                       | Start a call (idempotent with `clientRequestId`); list with filters |
-| `GET /sessions/:id`, `DELETE /sessions/:id`             | One session with transcript, state and report; delete               |
-| `POST /sessions/:id/messages`                           | Send a trainee message                                              |
-| `POST /sessions/:id/end`, `POST /sessions/:id/evaluate` | End the call; run or retry evaluation                               |
-| `GET /sessions/:id/report`                              | The coaching report                                                 |
-| `GET /sessions/:id/transcript`                          | The conversation only, with no report, scores or customer state     |
-| `POST /sessions/:id/mentor-score`                       | Record a mentor review for calibration                              |
-| `GET /progress`, `GET /calibration`                     | Progress and calibration; the review queue carries no AI scores     |
-| `GET /demo`, `POST /demo/samples`, `POST /demo/reset`   | Trainer tools: labelled sample sessions and safe resets             |
+| Method and path                                         | Purpose                                                                                                                                       |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`, `GET /config`                            | Liveness and non-secret configuration (provider label, limits)                                                                                |
+| `GET /scenarios`, `GET /scenarios/:id`                  | Public scenario details (never hidden facts)                                                                                                  |
+| `POST /sessions`, `GET /sessions`                       | Start a call (idempotent with `clientRequestId`); list with filters                                                                           |
+| `GET /sessions/:id`, `DELETE /sessions/:id`             | One session with transcript, state and report; delete                                                                                         |
+| `POST /sessions/:id/messages`                           | Send a trainee message                                                                                                                        |
+| `POST /sessions/:id/end`, `POST /sessions/:id/evaluate` | End the call; run or retry evaluation                                                                                                         |
+| `GET /sessions/:id/report`                              | The coaching report                                                                                                                           |
+| `GET /sessions/:id/transcript`                          | The conversation only, with no report, scores or customer state                                                                               |
+| `POST /sessions/:id/mentor-score`                       | Record a mentor review for calibration                                                                                                        |
+| `GET /progress`, `GET /calibration`                     | Progress and calibration; the review queue carries no AI scores                                                                               |
+| `GET /rewards?tzOffset=<minutes>`                       | Points, level, streak, badges, challenges and the points history, worked out from saved calls on every request (see [rewards.md](rewards.md)) |
+| `GET /demo`, `POST /demo/samples`, `POST /demo/reset`   | Trainer tools: labelled sample sessions and safe resets                                                                                       |
 
 Errors are always JSON with a stable `code`, a message that is safe to show, and a `retryable` flag. Two groups of extra routes exist only when an environment flag is set: `/api/test/*` (failure injection for automated tests) and `/api/dev/*` (diagnostics that expose internal state). Both are off by default and must never be enabled on a shared host.
 
@@ -136,31 +137,36 @@ Errors are always JSON with a stable `code`, a message that is safe to show, and
 
 ## Web app
 
-A single-page app with one route per screen: Start, Scenarios, Setup, Brief, the live Call, Report, Transcript, History, Progress, Calibration, Trainer, About and Settings. Each page is its own chunk and loads on demand; the Firefly Core, the first-run tour and the report are separate chunks too, so none of them is part of the first download.
+A single-page app with a public frame and an app frame. The public frame holds the landing page (`/`) and the local sign-in (`/sign-in`). The app frame (a navy sidebar, a top bar and the page) holds Home (`/home`), Practice setup (`/practice` and `/scenarios/:id/setup`), Scenarios, the live Call, the coaching report ("Call feedback"), the Transcript, History, Rewards, My progress, Settings, Help, and the two mentor pages (Calibration and Trainer). Each page is its own chunk and loads on demand; the first-run tour is a separate chunk too, so neither is part of the first download.
 
 ```mermaid
 flowchart TD
-  subgraph Pages["Pages: lazy route chunks"]
-    ST[Start] ~~~ LI["Scenarios: mission map or list"] ~~~ SB["Setup and Brief: launch sequence"] ~~~ CA["Call: conversation chamber"] ~~~ RE["Report: debrief"] ~~~ PR["Progress: mastery journey"]
+  subgraph Frames["Route frames"]
+    PUB["Public frame: Landing, Sign-in"] ~~~ APP["App frame: sidebar, top bar, footer"]
   end
-  Pages --> Data["Data hooks<br/>useApi, usePractice, useCall, useMilestones"]
-  Data -->|"JSON over HTTP (unchanged API)"| API[(Server)]
-  Pages --> Domain["Pure domain logic in shared/domain<br/>mastery, achievements, recommend"]
+  subgraph Pages["Pages: lazy route chunks"]
+    HO[Home] ~~~ SE["Practice setup"] ~~~ CA["Call: stage, chat, voice"] ~~~ RE["Call feedback: report"] ~~~ RW["Rewards"] ~~~ PR["My progress"]
+  end
+  Frames --> Pages
+  Pages --> Data["Data hooks<br/>useApi, usePractice, useCall, useVoiceCall"]
+  Data -->|"JSON over HTTP"| API[(Server)]
+  Pages --> Domain["Pure domain logic in shared/domain<br/>recommend, rewards, report"]
   Data --> Domain
-  Pages --> Visuals["Visual layer<br/>tokens and CSS, Firefly Core (Canvas 2D),<br/>MasteryStars, motion and sound helpers"]
+  Pages --> Local["This browser only<br/>profile and preferences, theme, notices seen, voice-call ids"]
+  Pages --> Visuals["Visual layer<br/>design tokens and CSS, 2D SVG illustrations,<br/>sound and voice helpers"]
 ```
 
-- **The API did not change for the redesign.** Everything new on screen is derived in the browser from data the app already loads: the saved call summaries, the progress summary and the coaching reports. `PublicStateDTO` (the call state the browser sees) still carries only what a trainee may know.
-- **Gamification is pure functions.** `shared/domain/mastery.ts` turns completed calls into skill tiers (and says what the next tier needs), `achievements.ts` derives milestones from a coaching report and its quoted turns, and `recommend.ts` chooses the next mission and says why. They have no I/O and are covered by tests. See [experience-design.md](experience-design.md#gamification).
-- **Live call.** Messages appear immediately and are confirmed by the server; a failed message keeps its id so Retry is safe. The conversation follows new messages only while the reader is at the bottom, with one list item per message. New customer replies are announced politely once, as a whole. In immersive practice the customer's presence shows no mood, signals or counts; guided practice shows them.
-- **Report.** Quotes link to their turn in the transcript, and each quoted moment can be shown with the turns around it. Entrance motion never fades text in.
-- **Progress.** Calls come from `GET /sessions` (at most 100 summaries), the tier and recommendation logic runs in the browser, and milestones are derived from the latest eight completed calls' reports (`GET /sessions/:id`), so a milestone can never disagree with the report that earned it. Sample sessions count only while the page's switch is on, and the page says so.
+- **The API change for rewards is additive.** `GET /api/rewards` is the only new route; everything else on screen is derived in the browser from data the app already loads. `PublicStateDTO` (the call state the browser sees) still carries only what a trainee may know.
+- **Rewards are pure functions.** `shared/domain/rewards.ts` works out points, levels, the streak, badges and challenges from the saved calls, their coaching reports and any mentor reviews, every time it is asked. Nothing is stored, so asking twice can never pay twice and deleting a call takes back exactly what it earned. `recommend.ts` chooses the recommended scenario and says why. They have no I/O and are covered by tests. See [rewards.md](rewards.md).
+- **Identity is local.** `web/src/lib/profile.ts` keeps a name, an optional role and location and a few preferences in `localStorage`. There is no account and no password. The anonymous profile cookie on the server is what separates one browser's practice from another's.
+- **Live call.** Messages appear immediately and are confirmed by the server; a failed message keeps its id so Retry is safe. The conversation follows new messages only while the reader is at the bottom, with one list item per message. New customer replies are announced politely once, as a whole. In immersive practice the call shows no mood, hints or counts; guided practice shows them. The customer's portrait is a 2D SVG whose expression follows the customer's mood.
+- **Voice (Beta).** An opt-in layer over the same call: speech input and output come from the browser's own speech features (`web/src/lib/voice/`), call tones are generated with Web Audio, and only the recognised text is sent, through the same path as typed text. Firefly never records or stores audio. See [voice.md](voice.md).
+- **Call feedback.** The report opens with the overall score, the six skill scores and the facts found, then every evidence section: what went well, opportunities with a stronger way to say it, discovery, the customer temperature timeline, rewards from this call and the next practice target. Quotes link to their turn in the transcript, and each quoted moment can be shown with the turns around it. Entrance motion never fades text in.
 - **Temperature timeline.** An accessible SVG with a data-table alternative, drawn from the report's journey points.
-- **Firefly Core.** A hand-written Canvas 2D engine (`web/src/components/core`) with no dependency. It pauses when off screen, lowers its own quality on slow hardware, draws one still frame under reduced motion and leaves a CSS glow if a canvas cannot be created.
-- **Themes, motion and sound.** Two designed themes (dark and light), glass surfaces with solid fallbacks, reduced-motion support from both the system setting and Settings, and optional synthesised sound that is off until switched on.
+- **Themes, motion and sound.** Two designed themes (light and dark), solid card surfaces, reduced-motion support from both the system setting and Settings, and optional synthesised sound that is off until switched on.
 - **Connection.** An offline notice appears when the browser loses its connection; failed requests offer Try again, and a failed message is kept for Retry.
 
-The redesign added no runtime dependency: the product still depends only on React, React Router and zod.
+The web app still depends only on React, React Router and zod: the redesign, rewards and voice added no runtime dependency.
 
 ## Why these choices
 

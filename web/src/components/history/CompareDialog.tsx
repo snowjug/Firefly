@@ -30,7 +30,7 @@ function caution(a: SessionSummaryDTO, b: SessionSummaryDTO): string {
     : 'Both calls used the same scenario and difficulty. Scores can still vary from call to call, so treat the differences as a prompt for reflection.';
 }
 
-/** A side-by-side of two completed sessions: six skill scores, both overall scores and the change. */
+/** A side-by-side of two completed calls: six skill scores, both overall scores and the change. */
 export function CompareDialog({
   sessions,
   onClose,
@@ -44,7 +44,7 @@ export function CompareDialog({
   const earlier = ordered?.[0];
   const later = ordered?.[1];
   return (
-    <Dialog open={ordered !== null} onClose={onClose} title="Compare two sessions">
+    <Dialog open={ordered !== null} onClose={onClose} title="Compare two calls">
       {earlier && later ? (
         <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-4)' }}>
           <p className="callout callout-caution t-small" role="note">
@@ -68,7 +68,7 @@ export function CompareDialog({
             ))}
           </dl>
           <table className="table hs-compare-table">
-            <caption className="sr-only">Skill scores out of 5 for the two sessions</caption>
+            <caption className="sr-only">Skill scores out of 5 for the two calls</caption>
             <thead>
               <tr>
                 <th scope="col">Skill</th>

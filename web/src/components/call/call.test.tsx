@@ -1,39 +1,27 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDTO } from '#shared/domain/api.ts';
+import { immersive, makeReply, makeSession, persona, stubScreen } from './call-test-kit.ts';
 import { Composer } from './Composer.tsx';
 import { ContextPanel } from './ContextPanel.tsx';
 import { EndCallDialog } from './EndCallDialog.tsx';
+import { HintChips } from './HintChips.tsx';
+import { HINTS, hintIdsForAreas, hintsFor, withStarter } from './hints.ts';
 import { MessageList } from './MessageList.tsx';
-import { Presence, presenceFor } from './Presence.tsx';
+import { CustomerStage } from './StagePanel.tsx';
 import { callReducer, initialCallState, type ChatTurn } from './useCall.ts';
-import { ThemeProvider } from '../../lib/theme.tsx';
 
 vi.mock('../ProviderBadge.tsx', () => ({
   ProviderBadge: () => <span>Demo mode</span>,
 }));
 
-function mockPointer(coarse: boolean) {
-  vi.stubGlobal(
-    'matchMedia',
-    (query: string) =>
-      ({
-        matches: coarse && query.includes('pointer: coarse'),
-        media: query,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-      }) as unknown as MediaQueryList,
-  );
-}
-
 beforeEach(() => {
-  mockPointer(false);
+  stubScreen();
   Element.prototype.scrollTo = () => undefined;
 });
 afterEach(() => vi.unstubAllGlobals());
-
-const persona = { name: 'Maya Okafor', role: 'Receptionist', organisation: 'Northwind Clinic' };
 
 const turn = (over: Partial<ChatTurn>): ChatTurn => ({
   key: 't1',
@@ -45,93 +33,24 @@ const turn = (over: Partial<ChatTurn>): ChatTurn => ({
   ...over,
 });
 
-function makeSession(over: Partial<SessionDTO> = {}): SessionDTO {
-  return {
-    id: 'session-1',
-    scenarioId: 'demo',
-    scenarioTitle: 'Demo',
-    issueType: 'sign-in-access',
-    difficulty: 'starter',
-    startingTemperature: 'calm',
-    impact: 'low',
-    style: 'talkative',
-    mode: 'guided',
-    providerKind: 'mock',
-    providerLabel: 'Demo mode',
-    isSample: false,
-    status: 'active',
-    startedAt: '2025-01-01T10:00:00.000Z',
-    endedAt: null,
-    durationSeconds: null,
-    traineeTurns: 1,
-    completion: null,
-    overallScore: null,
-    dimensionScores: null,
-    mentorReviewed: false,
-    scenario: {
-      scenarioId: 'demo',
-      title: 'Demo',
-      summary: 'Summary',
-      issueType: 'sign-in-access',
-      tags: [],
-      estimatedMinutes: 10,
-      persona,
-      brief: {
-        situation: 'A customer cannot sign in.',
-        goal: 'Find out what is happening.',
-        groundRules: ['Everything is fictional.'],
-      },
-      config: {
-        impact: 'low',
-        startingTemperature: 'calm',
-        proficiency: 'novice',
-        style: 'talkative',
-        callStage: 'first-contact',
-        difficulty: 'starter',
-        mode: 'guided',
-        curveballsEnabled: false,
-      },
-      expectedDiscoveryAreas: ['When it started'],
-      coachingFocus: ['scoping-discovery'],
-    },
-    turns: [
-      {
-        index: 1,
-        role: 'customer',
-        text: 'Hi',
-        createdAt: '2025-01-01T10:00:00.000Z',
-        source: 'opening',
-      },
-      {
-        index: 2,
-        role: 'trainee',
-        text: 'Hello Maya',
-        createdAt: '2025-01-01T10:00:05.000Z',
-        source: 'trainee',
-      },
-    ],
-    state: {
-      band: { id: 'concerned', label: 'Concerned' },
-      trend: 'falling',
-      discoveredCount: 2,
-      silent: false,
-    },
-    awaitingReply: null,
-    evaluationPhase: null,
-    evaluationError: null,
-    report: null,
-    ...over,
-  };
-}
-
 describe('conversation state', () => {
   it('shows a saved message whose reply never arrived as retryable, with its original id', () => {
-    const state = initialCallState(
-      makeSession({ awaitingReply: { clientMessageId: 'abc12345', turnIndex: 2 } }),
-      60,
-    );
-    const last = state.turns[1];
-    expect(last).toMatchObject({
+    const base = makeSession();
+    const session = makeSession({
+      turns: [
+        ...base.turns,
+        {
+          index: 2,
+          role: 'trainee',
+          text: 'Hello Maya',
+          createdAt: '2025-01-01T10:00:05.000Z',
+          source: 'trainee',
+        },
+      ],
+      awaitingReply: { clientMessageId: 'abc12345', turnIndex: 2 },
+    });
+    const state = initialCallState(session, 60);
+    expect(state.turns[1]).toMatchObject({
       status: 'failed',
       saved: true,
       clientMessageId: 'abc12345',
@@ -141,25 +60,6 @@ describe('conversation state', () => {
     expect(initialCallState(makeSession(), 60).turns.every((t) => t.status === 'sent')).toBe(true);
   });
 
-  const reply = (over: Partial<SessionDTO['state']>, text = 'Maya says something') => ({
-    traineeTurn: {
-      index: 3,
-      role: 'trainee' as const,
-      text: 'Hello',
-      createdAt: '2025-01-01T10:00:10.000Z',
-      source: 'trainee' as const,
-    },
-    customerTurn: {
-      index: 4,
-      role: 'customer' as const,
-      text,
-      createdAt: '2025-01-01T10:00:12.000Z',
-      source: 'live' as const,
-    },
-    state: { ...makeSession().state, ...over },
-    redactions: [],
-    turnsRemaining: 50,
-  });
   const sending: ChatTurn = turn({ key: 'k1', index: null, role: 'trainee', status: 'sending' });
 
   it('notes when a reply lights a signal, and when the customer changes mood or goes quiet', () => {
@@ -168,128 +68,139 @@ describe('conversation state', () => {
     const found = callReducer(before, {
       type: 'sent',
       key: 'k1',
-      response: reply({ discoveredCount: 3 }),
+      response: makeReply('Something', { discoveredCount: 3 }),
       announcement: '',
     });
     expect(found.discoveries).toBe(1);
-    expect(found.signalKeys).toEqual(['t4']);
+    expect(found.signalKeys).toHaveLength(1);
     expect(found.replies).toBe(1);
     expect(found.shifts).toEqual([]);
 
     const tenser = callReducer(before, {
       type: 'sent',
       key: 'k1',
-      response: reply({ band: { id: 'frustrated', label: 'Frustrated' }, silent: true }),
+      response: makeReply('Hm.', { band: { id: 'angry', label: 'Angry' }, silent: true }),
       announcement: '',
     });
     expect(tenser.discoveries).toBe(0);
-    expect(tenser.signalKeys).toEqual([]);
     expect(tenser.shifts).toMatchObject([
-      { kind: 'band', direction: 'tenser', from: { id: 'concerned' }, to: { id: 'frustrated' } },
+      { kind: 'band', direction: 'tenser', from: { id: 'frustrated' }, to: { id: 'angry' } },
       { kind: 'silent' },
     ]);
 
     const calmer = callReducer(before, {
       type: 'sent',
       key: 'k1',
-      response: reply({ band: { id: 'calm', label: 'Calm' } }),
+      response: makeReply('Thanks', { band: { id: 'calm', label: 'Calm' } }),
       announcement: '',
     });
     expect(calmer.shifts).toMatchObject([{ kind: 'band', direction: 'calmer' }]);
   });
 });
 
-describe('customer presence', () => {
-  const guided = makeSession();
-  const immersive = makeSession({
-    scenario: { ...guided.scenario, config: { ...guided.scenario.config, mode: 'immersive' } },
+describe('starter phrases', () => {
+  const areas = [
+    'When it started',
+    'The exact message on screen',
+    'Who is affected and since when',
+  ];
+
+  it('are picked from the scenario areas, with the most useful first, and never more than three', () => {
+    expect(hintIdsForAreas(areas)).toEqual(['when', 'error', 'who']);
+    const early = hintsFor({ areas, band: 'calm', traineeTurns: 0 });
+    expect(early.map((hint) => hint.id)).toEqual(['acknowledge', 'when', 'error']);
+    // A calm customer later in the call needs no reminder to show empathy; a tense one does.
+    expect(hintsFor({ areas, band: 'calm', traineeTurns: 3 }).map((h) => h.id)).toEqual([
+      'when',
+      'error',
+      'who',
+    ]);
+    expect(hintsFor({ areas, band: 'angry', traineeTurns: 3 }).map((h) => h.id)[0]).toBe(
+      'acknowledge',
+    );
+    expect(hintsFor({ areas, band: 'calm', traineeTurns: 6 }).map((h) => h.id)[0]).toBe('next');
   });
 
-  it('follows the customer state in guided practice and keeps a couple of signals dormant', () => {
-    const view = presenceFor(guided, guided.state);
-    expect(view).toMatchObject({ guided: true, mood: 'concerned', tone: 'falling', found: 2 });
-    expect(view.signals).toEqual({ total: 4, lit: 2 });
-    expect(presenceFor(guided, { ...guided.state, discoveredCount: 20 }).signals?.total).toBe(8);
+  it('make way for the next ones once used, and fall back to general habits without areas', () => {
+    const used = hintsFor({ areas, band: 'angry', traineeTurns: 0, used: ['acknowledge', 'when'] });
+    expect(used.map((hint) => hint.id)).toEqual(['error', 'who', 'changed']);
+    expect(hintsFor({ areas: [], band: 'calm', traineeTurns: 0 })).toHaveLength(3);
   });
 
-  it('shows nothing about the customer in immersive practice', () => {
-    const view = presenceFor(immersive, immersive.state);
-    expect(view).toMatchObject({ guided: false, mood: 'neutral', tone: 'steady', signals: null });
+  it('never carry anything from the scenario into the words', () => {
+    const detail = 'Zebra-Helen-reorganised-the-access-groups';
+    const hints = hintsFor({ areas: [detail, ...areas], band: 'angry', traineeTurns: 6, max: 10 });
+    const text = hints.map((hint) => `${hint.label} ${hint.starter}`).join(' ');
+    expect(text).not.toMatch(/zebra|helen|reorganised/i);
+    expect(hints.every((hint) => HINTS[hint.id] === hint)).toBe(true);
   });
 
-  it('renders signal points in guided practice only, and never as readable text', () => {
-    const props = { pending: false, replies: 0, discoveries: 0 };
-    const { container, rerender } = render(
-      <ThemeProvider>
-        <Presence session={guided} state={guided.state} {...props} />
-      </ThemeProvider>,
-    );
-    const dots = container.querySelectorAll('.signal-dot');
-    expect(dots).toHaveLength(4);
-    expect(container.querySelectorAll('.signal-dot[data-lit="true"]')).toHaveLength(2);
-    expect(container.querySelector('.signal-row')).toHaveAttribute('aria-hidden', 'true');
-
-    rerender(
-      <ThemeProvider>
-        <Presence session={immersive} state={immersive.state} {...props} />
-      </ThemeProvider>,
-    );
-    expect(container.querySelector('.signal-row')).toBeNull();
-    expect(container.querySelector('.core')).toHaveAttribute('data-mood', 'neutral');
-    expect(container.textContent).not.toMatch(/concerned|calm|frustrated/i);
+  it('are added after what is already typed, ready for the next word', () => {
+    expect(withStarter('', 'Could you tell me more?')).toBe('Could you tell me more? ');
+    expect(withStarter('Thanks. ', 'What changed?')).toBe('Thanks. What changed? ');
+    expect(withStarter('Thanks', 'What changed?')).toBe('Thanks What changed? ');
   });
 
-  it('acknowledges a new signal once, without saying what it was', () => {
-    const props = { pending: false, replies: 0 };
-    const { rerender } = render(
-      <ThemeProvider>
-        <Presence session={guided} state={guided.state} discoveries={0} {...props} />
-      </ThemeProvider>,
+  it('are buttons that report which one was chosen', async () => {
+    const onPick = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <HintChips hints={hintsFor({ areas, band: 'calm', traineeTurns: 0 })} onPick={onPick} />,
     );
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    rerender(
-      <ThemeProvider>
-        <Presence session={guided} state={guided.state} discoveries={1} {...props} />
-      </ThemeProvider>,
-    );
-    expect(screen.getByRole('status')).toHaveTextContent(/^Signal found$/);
+    const group = screen.getByRole('group', { name: 'Ideas for what to say' });
+    await user.click(within(group).getByRole('button', { name: 'Acknowledge the impact' }));
+    expect(onPick).toHaveBeenCalledWith(HINTS.acknowledge);
+    expect(group).toHaveAccessibleDescription(/Nothing is sent until you press Send/);
   });
 });
 
 describe('Composer', () => {
+  function Box({
+    onSend = vi.fn().mockResolvedValue({ ok: true }),
+    maxChars = 100,
+    busy = false,
+    blockedMessage = null,
+    turnsRemaining = null,
+  }: {
+    onSend?: (text: string) => Promise<unknown>;
+    maxChars?: number;
+    busy?: boolean;
+    blockedMessage?: string | null;
+    turnsRemaining?: number | null;
+  }) {
+    const [value, setValue] = useState('');
+    return (
+      <Composer
+        value={value}
+        onChange={setValue}
+        maxChars={maxChars}
+        busy={busy}
+        blockedMessage={blockedMessage}
+        turnsRemaining={turnsRemaining}
+        onSend={onSend}
+      />
+    );
+  }
+
   it('sends with Enter on a desktop keyboard and adds a line with Shift+Enter', async () => {
     const onSend = vi.fn().mockResolvedValue({ ok: true });
     const user = userEvent.setup();
-    render(
-      <Composer
-        maxChars={100}
-        busy={false}
-        blockedMessage={null}
-        turnsRemaining={null}
-        onSend={onSend}
-      />,
-    );
+    render(<Box onSend={onSend} />);
     const box = screen.getByLabelText('Your reply to the customer');
+    expect(box).toHaveAttribute('placeholder', 'Type your response…');
     await user.type(box, 'First line{Shift>}{Enter}{/Shift}Second line');
     expect(box).toHaveValue('First line\nSecond line');
     await user.keyboard('{Enter}');
     expect(onSend).toHaveBeenCalledWith('First line\nSecond line');
     expect(box).toHaveValue('');
+    expect(box).toHaveFocus();
   });
 
   it('adds a line on Enter on a touch device and sends with the button', async () => {
-    mockPointer(true);
+    stubScreen({ coarse: true });
     const onSend = vi.fn().mockResolvedValue({ ok: true });
     const user = userEvent.setup();
-    render(
-      <Composer
-        maxChars={100}
-        busy={false}
-        blockedMessage={null}
-        turnsRemaining={null}
-        onSend={onSend}
-      />,
-    );
+    render(<Box onSend={onSend} />);
     const box = screen.getByLabelText('Your reply to the customer');
     await user.type(box, 'Hello{Enter}there');
     expect(onSend).not.toHaveBeenCalled();
@@ -299,58 +210,39 @@ describe('Composer', () => {
 
   it('does not send empty, over-long or while a reply is pending, and explains why', async () => {
     const user = userEvent.setup();
-    const { rerender } = render(
-      <Composer
-        maxChars={10}
-        busy={false}
-        blockedMessage={null}
-        turnsRemaining={null}
-        onSend={vi.fn()}
-      />,
-    );
+    const { rerender } = render(<Box maxChars={10} />);
     const send = screen.getByRole('button', { name: 'Send message' });
     expect(send).toBeDisabled();
     await user.type(screen.getByLabelText('Your reply to the customer'), 'This is far too long');
     expect(send).toBeDisabled();
     expect(screen.getByText(/characters over the 10 limit/)).toBeInTheDocument();
-    rerender(
-      <Composer
-        maxChars={100}
-        busy={true}
-        blockedMessage={null}
-        turnsRemaining={3}
-        onSend={vi.fn()}
-      />,
+    expect(screen.getByLabelText('Your reply to the customer')).toHaveAccessibleDescription(
+      /characters over the 10 limit/,
     );
+    rerender(<Box busy turnsRemaining={3} />);
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
     expect(screen.getByText('3 messages left in this call')).toBeInTheDocument();
   });
 
+  it('shows how much is left only near the limit', async () => {
+    const user = userEvent.setup();
+    render(<Box maxChars={20} />);
+    const box = screen.getByLabelText('Your reply to the customer');
+    await user.type(box, 'Short');
+    expect(screen.queryByText(/of 20/)).not.toBeInTheDocument();
+    await user.type(box, ' but getting.');
+    expect(screen.getByText('18 of 20')).toBeInTheDocument();
+  });
+
   it('warns about personal data before it is sent and blocks the box at the message limit', async () => {
     const user = userEvent.setup();
-    const { rerender } = render(
-      <Composer
-        maxChars={500}
-        busy={false}
-        blockedMessage={null}
-        turnsRemaining={null}
-        onSend={vi.fn()}
-      />,
-    );
+    const { rerender } = render(<Box maxChars={500} />);
     await user.type(
       screen.getByLabelText('Your reply to the customer'),
       'Mail me at jo@example.com',
     );
     expect(screen.getByText(/looks like it contains an email address/i)).toBeInTheDocument();
-    rerender(
-      <Composer
-        maxChars={500}
-        busy={false}
-        blockedMessage="This call has reached its message limit."
-        turnsRemaining={0}
-        onSend={vi.fn()}
-      />,
-    );
+    rerender(<Box maxChars={500} blockedMessage="This call has reached its message limit." />);
     expect(screen.getByLabelText('Your reply to the customer')).toBeDisabled();
     expect(screen.getByText('This call has reached its message limit.')).toBeInTheDocument();
   });
@@ -386,12 +278,40 @@ describe('MessageList', () => {
     expect(onRetry).toHaveBeenCalledWith('mine');
   });
 
-  it('shows a typing indicator without exposing it as text to assistive technology', () => {
+  it('shows who is typing, without exposing the indicator to assistive technology', () => {
     const { container } = render(
       <MessageList persona={persona} typing={true} onRetry={vi.fn()} turns={[turn({})]} />,
     );
     const typing = container.querySelector('.msg-typing');
     expect(typing).toHaveAttribute('aria-hidden', 'true');
+    expect(typing).toHaveTextContent('Maya Okafor is typing…');
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+  });
+
+  it('adds a Listen button to customer messages only when speech is available', async () => {
+    const onListen = vi.fn();
+    const user = userEvent.setup();
+    const turns = [
+      turn({ key: 't1', text: 'Hello' }),
+      turn({ key: 't2', index: 2, role: 'trainee' }),
+    ];
+    const { rerender } = render(
+      <MessageList persona={persona} typing={false} onRetry={vi.fn()} turns={turns} />,
+    );
+    expect(screen.queryByRole('button', { name: /listen/i })).not.toBeInTheDocument();
+    rerender(
+      <MessageList
+        persona={persona}
+        typing={false}
+        onRetry={vi.fn()}
+        turns={turns}
+        onListen={onListen}
+      />,
+    );
+    const buttons = screen.getAllByRole('button', { name: /^Listen to Maya Okafor/ });
+    expect(buttons).toHaveLength(1);
+    await user.click(buttons[0] as HTMLElement);
+    expect(onListen).toHaveBeenCalledWith('Hello');
   });
 
   it('shows mood shifts and signal markers in guided practice, and none of it in immersive', () => {
@@ -457,6 +377,26 @@ describe('MessageList', () => {
     expect(container.querySelectorAll('[data-fresh="true"]')).toHaveLength(1);
   });
 
+  it('keeps a message that did not get through, and its retry banner, in view', () => {
+    const scrollTo = vi.fn();
+    Element.prototype.scrollTo = scrollTo;
+    const opening = turn({ key: 't1', index: 1 });
+    const mine = turn({ key: 'mine', index: null, role: 'trainee', status: 'sending' });
+    const { rerender } = render(
+      <MessageList persona={persona} typing={false} onRetry={vi.fn()} turns={[opening, mine]} />,
+    );
+    scrollTo.mockClear();
+    rerender(
+      <MessageList
+        persona={persona}
+        typing={false}
+        onRetry={vi.fn()}
+        turns={[opening, { ...mine, status: 'failed', error: 'Not delivered.' }]}
+      />,
+    );
+    expect(scrollTo).toHaveBeenCalled();
+  });
+
   it('opens at the latest message at once, then scrolls smoothly for a new one', () => {
     const scrollTo = vi.fn();
     Element.prototype.scrollTo = scrollTo;
@@ -481,6 +421,97 @@ describe('MessageList', () => {
   });
 });
 
+describe('CustomerStage', () => {
+  const guided = makeSession();
+  const quiet = immersive(guided);
+  const stage = (session: SessionDTO, over: Partial<Parameters<typeof CustomerStage>[0]> = {}) => (
+    <CustomerStage
+      session={session}
+      state={session.state}
+      typing={false}
+      speaking={false}
+      latest="Nothing works and my whole team is waiting."
+      discoveries={0}
+      variant="panel"
+      {...over}
+    />
+  );
+  const face = (container: HTMLElement) => container.querySelector('svg.ill-customer');
+
+  it('shows who is calling, how much is at stake and what they said last', () => {
+    const { container } = render(stage(guided));
+    const region = screen.getByRole('region', { name: 'Maya Okafor, the customer' });
+    expect(within(region).getByText('Maya Okafor')).toBeVisible();
+    expect(within(region).getByText('Receptionist, Northwind Clinic')).toBeVisible();
+    expect(within(region).getByText('High impact')).toBeVisible();
+    // The speech bubble repeats the chat, so it stays out of the accessibility tree.
+    const bubble = within(region).getByText('Nothing works and my whole team is waiting.');
+    expect(bubble.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(face(container)).toHaveAttribute('data-mood', 'frustrated');
+  });
+
+  it('adds the mood label, the mood meter and the count of uncovered facts in guided practice', () => {
+    render(stage(guided));
+    expect(screen.getByText('Customer mood')).toBeVisible();
+    expect(screen.getByText('Getting more tense')).toBeVisible();
+    expect(screen.getByText(/uncovered so far/)).toHaveTextContent('2 facts uncovered so far');
+    // The mood is written, never only coloured: once in the caption and once in the meter.
+    expect(screen.getAllByText('Frustrated')).toHaveLength(2);
+  });
+
+  it('shows no mood label, meter or count in immersive practice, and the face stays calm', () => {
+    const { container } = render(stage(quiet));
+    expect(screen.queryByText('Customer mood')).not.toBeInTheDocument();
+    expect(screen.queryByText(/uncovered/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Frustrated')).not.toBeInTheDocument();
+    expect(container.querySelector('.mood')).toBeNull();
+    expect(screen.getByText('High impact')).toBeVisible();
+    // The mood is the one thing immersive practice keeps back, so not even the expression follows it.
+    expect(face(container)).toHaveAttribute('data-mood', 'calm');
+  });
+
+  it('moves the avatar\u2019s mouth while the customer is typing or speaking', () => {
+    const { container, rerender } = render(stage(guided));
+    expect(face(container)).toHaveAttribute('data-speaking', 'false');
+    rerender(stage(guided, { typing: true }));
+    expect(face(container)).toHaveAttribute('data-speaking', 'true');
+    rerender(stage(guided, { speaking: true }));
+    expect(face(container)).toHaveAttribute('data-speaking', 'true');
+  });
+
+  it('acknowledges a new signal once, without saying what it was', () => {
+    const { rerender } = render(stage(guided));
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    rerender(stage(guided, { discoveries: 1 }));
+    expect(screen.getByRole('status')).toHaveTextContent(/^Signal found$/);
+  });
+
+  it('acknowledges it on a narrow screen too, to a screen reader only', () => {
+    const { rerender } = render(stage(guided, { variant: 'strip' }));
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+    rerender(stage(guided, { variant: 'strip', discoveries: 1 }));
+    expect(screen.getByRole('status')).toHaveTextContent(/^Signal found$/);
+    expect(screen.getByRole('status')).toHaveClass('sr-only');
+  });
+
+  it('says nothing of signals in immersive practice', () => {
+    const { rerender } = render(stage(quiet));
+    rerender(stage(quiet, { discoveries: 1 }));
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('becomes a compact strip with the name and, in guided practice only, the mood', () => {
+    const { container, rerender } = render(stage(guided, { variant: 'strip', typing: true }));
+    const strip = screen.getByRole('region', { name: 'Maya Okafor, the customer' });
+    expect(within(strip).getByText('Maya Okafor is typing…')).toBeVisible();
+    expect(within(strip).getByText('Frustrated')).toBeVisible();
+    expect(container.querySelector('.cstage-bubble')).toBeNull();
+    rerender(stage(quiet, { variant: 'strip' }));
+    expect(screen.queryByText('Frustrated')).not.toBeInTheDocument();
+    expect(screen.getByText('Receptionist')).toBeVisible();
+  });
+});
+
 describe('EndCallDialog', () => {
   const baseProps = {
     open: true,
@@ -491,7 +522,7 @@ describe('EndCallDialog', () => {
     onDiscard: vi.fn(),
   };
 
-  it('only offers to discard a call with no messages', async () => {
+  it('only offers to discard a call with no messages', () => {
     render(<EndCallDialog {...baseProps} traineeTurns={0} replying={false} />);
     expect(
       screen.queryByRole('button', { name: /end call and get feedback/i }),
@@ -510,29 +541,31 @@ describe('EndCallDialog', () => {
 });
 
 describe('ContextPanel', () => {
-  it('shows light cues in guided mode', () => {
-    render(
-      <ContextPanel
-        session={makeSession()}
-        state={makeSession().state}
-        notes=""
-        onNotes={vi.fn()}
-      />,
-    );
-    expect(screen.getByText('Concerned')).toBeInTheDocument();
+  it('shows the briefing and light cues in guided mode', () => {
+    const session = makeSession();
+    render(<ContextPanel session={session} state={session.state} notes="" onNotes={vi.fn()} />);
+    expect(screen.getByText('A customer cannot sign in.')).toBeInTheDocument();
+    expect(screen.getByText('Find out what is happening.')).toBeInTheDocument();
+    expect(screen.getByText('Frustrated')).toBeInTheDocument();
     expect(screen.getByText(/uncovered so far/)).toBeInTheDocument();
     expect(screen.getByText('When it started')).toBeInTheDocument();
   });
 
   it('shows no mood, count or discovery areas in immersive mode', () => {
-    const base = makeSession();
-    const immersive = makeSession({
-      scenario: { ...base.scenario, config: { ...base.scenario.config, mode: 'immersive' } },
-    });
-    render(<ContextPanel session={immersive} state={immersive.state} notes="" onNotes={vi.fn()} />);
-    expect(screen.queryByText('Concerned')).not.toBeInTheDocument();
+    const session = immersive(makeSession());
+    render(<ContextPanel session={session} state={session.state} notes="" onNotes={vi.fn()} />);
+    expect(screen.queryByText('Frustrated')).not.toBeInTheDocument();
     expect(screen.queryByText(/uncovered so far/)).not.toBeInTheDocument();
     expect(screen.queryByText('When it started')).not.toBeInTheDocument();
     expect(screen.getByText(/No on-screen cues/)).toBeInTheDocument();
+  });
+
+  it('keeps private notes in the box the person types in', async () => {
+    const onNotes = vi.fn();
+    const session = makeSession();
+    const user = userEvent.setup();
+    render(<ContextPanel session={session} state={session.state} notes="" onNotes={onNotes} />);
+    await user.type(screen.getByLabelText('Private notes'), 'x');
+    expect(onNotes).toHaveBeenCalledWith('x');
   });
 });

@@ -1,11 +1,6 @@
+import type { SessionDTO } from '#shared/domain/api.ts';
 import type { CoachingReport } from '#shared/domain/report.ts';
-import {
-  CARE_LABELS,
-  DIMENSIONS,
-  scoreLabel,
-  type DimensionId,
-  type FactImportance,
-} from '#shared/domain/vocab.ts';
+import { DIMENSIONS, type DimensionId, type FactImportance } from '#shared/domain/vocab.ts';
 
 // Plain-language wording shared by the report, transcript, history and progress screens.
 
@@ -19,10 +14,6 @@ export function scoreText(score: number): string {
 }
 
 export const scoreOfFive = (score: number): string => `${scoreText(score)} of 5`;
-
-/** "4 of 5 \u2013 Strong": the text that always accompanies a score meter. */
-export const scoreWithLabel = (score: number): string =>
-  `${scoreOfFive(score)} \u2013 ${scoreLabel(score)}`;
 
 /** The badge shown when a skill rests on thin evidence (nothing for sufficient evidence). */
 export const SUFFICIENCY_BADGE: Record<Sufficiency, string | null> = {
@@ -54,11 +45,6 @@ export const CURVEBALL_STATUS: Record<
 
 export const dimensionLabel = (id: DimensionId): string => DIMENSIONS[id].label;
 
-/** The CARE behaviours a skill supports, for example "Communicate effectively, Be empathetic". */
-export function careHint(id: DimensionId): string {
-  return DIMENSIONS[id].care.map((behaviour) => CARE_LABELS[behaviour]).join(', ');
-}
-
 export const reportHref = (sessionId: string): string =>
   `/sessions/${encodeURIComponent(sessionId)}/report`;
 
@@ -80,3 +66,95 @@ export const SAMPLE_ROW_NOTE =
 /** Neutral explanation shown next to the "Ended early" status. */
 export const ENDED_EARLY_NOTE =
   'This call stopped before a wrap-up, so the Closing score rests on limited evidence.';
+
+/** Shown when the call used voice: recognition can mishear, and the quotes come from the transcript. */
+export const VOICE_NOTE =
+  'You used voice in this call. Speech recognition can mishear words, so check the quotes below against the transcript. Coaching reads the words only, not tone, accent or pace.';
+
+export const OVERALL_CAPTION =
+  'Across the six skills. A practice signal, not a grade or a ranking.';
+
+export const NO_STRENGTH_NOTE =
+  'No clear strength stood out in this call. The opportunities below are the best place to start.';
+
+export const PRINT_HINT = "Opens your browser's print dialog. Choose Save as PDF.";
+
+/** The reminder that closes the report. It is also on paper, where the app's own footer is not. */
+export const TRAINING_AID_NOTE =
+  'Firefly is a training aid. Scenarios are fictional; never enter real customer information. Scores are for practice, not performance assessment.';
+
+/**
+ * The line under "Call feedback". It describes this result and never praises by default: an early
+ * end or a thin call says so, and the tone follows the overall score otherwise.
+ */
+export function reportSubline(report: Pick<CoachingReport, 'completion' | 'summary'>): string {
+  const { completion, summary } = report;
+  if (completion.status === 'ended-early') {
+    return 'This call ended before a natural close, so treat the feedback below as a first look.';
+  }
+  const score = summary.overallScore;
+  if (score === null) {
+    return 'There was too little on this call for an overall score. Here is what it showed.';
+  }
+  if (score >= 4) return 'Here is how the call went, what worked well and what to build on next.';
+  if (score >= 3) {
+    return 'Here is how the call went, what worked and where a different choice could help.';
+  }
+  return 'Here is how the call went and the clearest places to improve next time.';
+}
+
+/** Why a call that earned nothing earned nothing, in the same terms the rewards rules use. */
+export function noPointsReason(
+  session: Pick<SessionDTO, 'isSample'>,
+  completion: CoachingReport['completion'],
+): string {
+  if (session.isSample) {
+    return 'Sample sessions are for demonstration, so they never earn points.';
+  }
+  if (completion.status === 'ended-early') {
+    return 'Calls that end early earn no points. Take a call all the way to a close, with enough said for real coaching, to earn points.';
+  }
+  if (completion.evidence === 'insufficient') {
+    return 'There was too little on this call to coach, so it earned no points. A fuller call can earn them.';
+  }
+  return 'No points were recorded for this call.';
+}
+
+export const ISSUE_URL = 'https://github.com/snowjug/Firefly/issues/new';
+
+export interface FeedbackNoteInput {
+  sessionId: string;
+  /** The skill the person is unsure about, or null for the whole report. */
+  skill: DimensionId | null;
+  turn: number | null;
+  evaluator: Pick<CoachingReport['evaluator'], 'name' | 'version'>;
+}
+
+/**
+ * A short note a learner can send to a mentor. It names the call, skill and turn and nothing else:
+ * never the words of the conversation, so there is nothing real to leak.
+ */
+export function feedbackNote({ sessionId, skill, turn, evaluator }: FeedbackNoteInput): string {
+  return [
+    'Firefly: note about incorrect feedback',
+    `Session: ${sessionId}`,
+    `Skill: ${skill ? DIMENSIONS[skill].label : 'Not sure (the whole report)'}`,
+    `Turn: ${turn ?? 'Not sure'}`,
+    `Coaching by: ${evaluator.name}, version ${evaluator.version}`,
+    'What looked wrong: ',
+  ].join('\n');
+}
+
+/** A new GitHub issue with the note filled in. The note holds no conversation text. */
+export function issueUrl(note: string): string {
+  const body = [
+    'Please do not add real customer information to this issue. It is public.',
+    '',
+    note,
+  ].join('\n');
+  const params = new URLSearchParams({
+    title: 'Incorrect feedback in a coaching report',
+    body,
+  });
+  return `${ISSUE_URL}?${params.toString()}`;
+}

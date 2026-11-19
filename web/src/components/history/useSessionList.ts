@@ -11,11 +11,21 @@ interface Overlay {
   base: SessionListDTO;
   more: SessionSummaryDTO[];
   removed: string[];
+  /** Calls whose summary changed since the page was fetched (a retried report, say). */
+  replaced: Record<string, SessionSummaryDTO>;
 }
+
+const emptyOverlay = (base: SessionListDTO): Overlay => ({
+  base,
+  more: [],
+  removed: [],
+  replaced: {},
+});
 
 /**
  * The history list: the first page comes from the filters (and the previous list stays on screen
- * while a new one loads); "Show more" appends pages; deleted sessions disappear immediately.
+ * while a new one loads); "Show more" appends pages; deleted calls disappear immediately and a
+ * call that changed (a retried report) is updated in place.
  */
 export function useSessionList(filters: HistoryFilters) {
   const apiStatus = STATUS_FILTERS.find((f) => f.value === filters.status)?.api;
@@ -36,8 +46,11 @@ export function useSessionList(filters: HistoryFilters) {
   const base = first.data;
   const live = overlay && overlay.base === base ? overlay : null;
   const removed = live?.removed ?? [];
+  const replaced = live?.replaced ?? {};
   const items = base
-    ? [...base.sessions, ...(live?.more ?? [])].filter((s) => !removed.includes(s.id))
+    ? [...base.sessions, ...(live?.more ?? [])]
+        .filter((s) => !removed.includes(s.id))
+        .map((s) => replaced[s.id] ?? s)
     : [];
   const total = base ? Math.max(0, base.total - removed.length) : 0;
 
@@ -50,7 +63,7 @@ export function useSessionList(filters: HistoryFilters) {
       const known = new Set(items.map((s) => s.id));
       const fresh = next.sessions.filter((s) => !known.has(s.id));
       setOverlay((current) => {
-        const own = current && current.base === base ? current : { base, more: [], removed: [] };
+        const own = current && current.base === base ? current : emptyOverlay(base);
         return { ...own, more: [...own.more, ...fresh] };
       });
       return fresh;
@@ -65,8 +78,16 @@ export function useSessionList(filters: HistoryFilters) {
   const remove = (id: string) => {
     if (!base) return;
     setOverlay((current) => {
-      const own = current && current.base === base ? current : { base, more: [], removed: [] };
+      const own = current && current.base === base ? current : emptyOverlay(base);
       return own.removed.includes(id) ? own : { ...own, removed: [...own.removed, id] };
+    });
+  };
+
+  const replace = (session: SessionSummaryDTO) => {
+    if (!base) return;
+    setOverlay((current) => {
+      const own = current && current.base === base ? current : emptyOverlay(base);
+      return { ...own, replaced: { ...own.replaced, [session.id]: session } };
     });
   };
 
@@ -82,5 +103,6 @@ export function useSessionList(filters: HistoryFilters) {
     loadingMore,
     moreError,
     remove,
+    replace,
   };
 }

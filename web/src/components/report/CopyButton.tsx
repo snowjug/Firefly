@@ -56,7 +56,7 @@ export function CopyButton({
   return (
     <span className="rp-copy">
       <button type="button" className="btn btn-secondary btn-sm" onClick={onClick}>
-        <Icon name={state === 'copied' ? 'check' : 'notes'} size={16} />
+        <Icon name={state === 'copied' ? 'check' : 'copy'} size={16} />
         {state === 'copied' ? 'Copied' : label}
       </button>
       <span role="status" className={state === 'failed' ? 't-meta' : 'sr-only'}>

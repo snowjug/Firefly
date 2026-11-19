@@ -1,5 +1,5 @@
-/* The short row of facts about how a customer starts (impact, mood, style, stage). Shared by the
-   library, the setup and brief pages, the start page and the progress page. */
+/* The short row of facts about how a customer starts (impact, mood, style, stage), shown in the
+   scenario preview on the setup page. */
 .scn-chips {
   gap: 0.4rem;
 }

@@ -1,7 +1,9 @@
 import type { CoachingReport, DiscoveryResult } from '#shared/domain/report.ts';
 import { FACT_IMPORTANCE } from '#shared/domain/vocab.ts';
+import { Icon } from '../Icon.tsx';
 import { Disclosure } from './Disclosure.tsx';
 import { EvidenceQuote } from './EvidenceQuote.tsx';
+import { SectionHead } from './SectionHead.tsx';
 import { DISCOVERY_STATUS, IMPORTANCE_LABEL, type DiscoveryStatus } from './labels.ts';
 
 const IMPORTANCE_TONE = {
@@ -10,34 +12,26 @@ const IMPORTANCE_TONE = {
   helpful: '',
 } as const;
 
-/** Shape plus text: a ticked circle, a half circle and an empty circle, never colour alone. */
-function StatusGlyph({ status }: { status: DiscoveryStatus }) {
+/** A tick, a half circle or a cross: shape plus the words beside it, never colour alone. */
+function StatusMark({ status }: { status: DiscoveryStatus }) {
+  if (status === 'discovered') {
+    return <Icon name="check-circle" size={20} className="rp-mark" data-status={status} />;
+  }
+  if (status === 'missed') {
+    return <Icon name="x-circle" size={20} className="rp-mark" data-status={status} />;
+  }
   return (
     <svg
       viewBox="0 0 20 20"
-      width={18}
-      height={18}
+      width={20}
+      height={20}
       aria-hidden="true"
       focusable="false"
-      className="rp-glyph"
+      className="rp-mark"
       data-status={status}
     >
-      {status === 'discovered' ? (
-        <>
-          <circle cx="10" cy="10" r="9" className="rp-glyph-fill" />
-          <path d="M5.8 10.4l2.9 2.9 5.6-6" className="rp-glyph-mark" />
-        </>
-      ) : status === 'partial' ? (
-        <>
-          <circle cx="10" cy="10" r="8.2" className="rp-glyph-ring" />
-          <path d="M10 1.8a8.2 8.2 0 010 16.4z" className="rp-glyph-half" />
-        </>
-      ) : (
-        <>
-          <circle cx="10" cy="10" r="8.2" className="rp-glyph-ring" />
-          <path d="M6.6 10h6.8" className="rp-glyph-dash" />
-        </>
-      )}
+      <circle cx="10" cy="10" r="8.2" className="rp-glyph-ring" />
+      <path d="M10 1.8a8.2 8.2 0 010 16.4z" className="rp-glyph-half" />
     </svg>
   );
 }
@@ -49,23 +43,24 @@ function FactCard({
   fact: DiscoveryResult;
   turnHref: (turn: number) => string;
 }) {
-  const missed = fact.status === 'missed';
-  const prominent = missed && fact.importance === 'critical';
-  const showBetter = fact.status !== 'discovered';
+  const found = fact.status === 'discovered';
+  const titleId = `fact-${fact.factId}-title`;
   return (
     <article
       id={`fact-${fact.factId}`}
-      className="surface rp-fact"
+      className="glass card rp-fact"
       data-status={fact.status}
       data-importance={fact.importance}
-      data-prominent={prominent ? 'true' : undefined}
+      aria-labelledby={titleId}
     >
       <header className="rp-fact-head">
         <span className="rp-fact-status">
-          <StatusGlyph status={fact.status} />
+          <StatusMark status={fact.status} />
           {DISCOVERY_STATUS[fact.status]}
         </span>
-        <h3 className="rp-fact-title">{fact.label}</h3>
+        <h3 id={titleId} className="rp-fact-title">
+          {fact.label}
+        </h3>
         <span className={`chip ${IMPORTANCE_TONE[fact.importance]}`.trim()}>
           <span className="sr-only">Importance: </span>
           {IMPORTANCE_LABEL[fact.importance]}
@@ -82,7 +77,7 @@ function FactCard({
             tone="positive"
           />
         ) : null}
-        {showBetter ? (
+        {!found ? (
           <div className="rp-better">
             <p className="t-label">A question worth asking</p>
             <p className="rp-better-text">{fact.betterQuestion}</p>
@@ -93,9 +88,12 @@ function FactCard({
       <Disclosure
         className="rp-fact-more"
         summary="What the customer had held back"
-        defaultOpen={missed && fact.importance !== 'helpful'}
+        defaultOpen={!found}
       >
-        <EvidenceQuote quote={fact.whatWasHidden} label="The customer would have said" />
+        <EvidenceQuote
+          quote={fact.whatWasHidden}
+          label={found ? 'The customer said' : 'The customer would have said'}
+        />
         <div>
           <p className="t-label">Why it mattered</p>
           <p>{fact.consequence}</p>
@@ -124,38 +122,29 @@ export function DiscoverySection({
         }`;
   return (
     <section id="discovery" className="rp-section" aria-labelledby="discovery-title">
-      <div className="rp-section-head">
-        <h2 id="discovery-title" className="t-section">
-          Discovery
-        </h2>
-        <p className="rp-lead">
-          Customers rarely volunteer everything. These are the facts this customer held back, and
-          whether your questions brought them out.
-        </p>
-      </div>
+      <SectionHead id="discovery-title" title="Discovery">
+        Customers rarely volunteer everything. These are the facts this customer held back, and
+        whether your questions brought them out.
+      </SectionHead>
 
-      <div className="surface rp-disc-summary">
+      <div className="glass card rp-disc-summary">
         <p className="rp-disc-headline">{headline}</p>
         {total > 0 ? (
           <>
-            <ol className="rp-trail" aria-hidden="true">
+            <ol className="rp-disc-bar" aria-hidden="true">
               {ordered.map((fact) => (
-                <li key={fact.factId} className="rp-trail-node" data-status={fact.status}>
-                  <a href={`#fact-${fact.factId}`} tabIndex={-1} aria-hidden="true">
-                    <span className="rp-trail-orb" data-importance={fact.importance} />
-                  </a>
-                </li>
+                <li key={fact.factId} data-status={fact.status} />
               ))}
             </ol>
             <ul role="list" className="rp-disc-counts">
               <li>
-                <StatusGlyph status="discovered" /> {found} found
+                <StatusMark status="discovered" /> {found} found
               </li>
               <li>
-                <StatusGlyph status="partial" /> {partial} partly found
+                <StatusMark status="partial" /> {partial} partly found
               </li>
               <li>
-                <StatusGlyph status="missed" /> {missed} missed
+                <StatusMark status="missed" /> {missed} missed
               </li>
             </ul>
           </>

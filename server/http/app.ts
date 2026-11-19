@@ -19,6 +19,7 @@ import type { ModelProvider } from '../providers/types.ts';
 import type { Repository } from '../db/repository.ts';
 import type { DemoService } from '../services/demo.ts';
 import type { InsightsService } from '../services/insights.ts';
+import type { RewardsService } from '../services/rewards.ts';
 import {
   CreateSessionSchema,
   EndSessionSchema,
@@ -42,6 +43,7 @@ export interface AppDeps {
   config: AppConfig;
   service: SessionService;
   insights: InsightsService;
+  rewards: RewardsService;
   demo: DemoService;
   provider: ModelProvider;
   repo: Repository;
@@ -101,8 +103,18 @@ const ListFilters = z.object({
   offset: z.coerce.number().int().min(0).max(10_000).optional(),
 });
 
+// `Date.getTimezoneOffset()` of the browser: whole minutes, UTC minus local time.
+const RewardsQuery = z.object({
+  tzOffset: z
+    .string()
+    .regex(/^-?\d{1,3}$/, 'tzOffset must be a whole number of minutes.')
+    .transform(Number)
+    .pipe(z.number().int().min(-840).max(840))
+    .optional(),
+});
+
 export function createApp(deps: AppDeps) {
-  const { config, service, insights, demo, provider, hooks, log } = deps;
+  const { config, service, insights, rewards, demo, provider, hooks, log } = deps;
   const limiter = createRateLimiter();
 
   const publicConfig = (): AppConfigDTO => ({
@@ -214,6 +226,11 @@ export function createApp(deps: AppDeps) {
     route('GET', '/api/calibration', (c) =>
       insights.calibration(c.profileId, c.url.searchParams.get('includeSamples') === '1'),
     ),
+    // Worked out from saved calls on every request, so asking twice never pays twice.
+    route('GET', '/api/rewards', (c) => {
+      const q = RewardsQuery.parse(Object.fromEntries(c.url.searchParams));
+      return rewards.rewards(c.profileId, { tzOffsetMinutes: q.tzOffset ?? 0 });
+    }),
 
     route('GET', '/api/demo', (c) => demo.status(c.profileId)),
     route('POST', '/api/demo/samples', async (c) => demo.loadSamples(c.profileId), {

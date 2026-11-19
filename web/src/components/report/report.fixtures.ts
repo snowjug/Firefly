@@ -1,4 +1,11 @@
-import type { SessionDTO, SessionSummaryDTO, TurnDTO } from '#shared/domain/api.ts';
+import type {
+  BadgeDTO,
+  LedgerEntryDTO,
+  RewardsDTO,
+  SessionDTO,
+  SessionSummaryDTO,
+  TurnDTO,
+} from '#shared/domain/api.ts';
 import type { CoachingReport, JourneyPoint } from '#shared/domain/report.ts';
 import { DIMENSION_IDS, scoreLabel, type DimensionId } from '#shared/domain/vocab.ts';
 
@@ -372,6 +379,331 @@ export function makeSummary(overrides: Partial<SessionSummaryDTO> = {}): Session
       closing: 3,
     },
     mentorReviewed: false,
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------------------
+// A call that ended early, modelled on a real coaching report: the trainee replied briefly and
+// curtly, none of the hidden facts came out and the evidence is thin. All of the wording is
+// invented; the trainee's lines are mild on purpose.
+
+const SPEC_TRAINEE: Record<number, string> = {
+  2: 'Hi how shall i help u',
+  4: "No, I can't help with that.",
+  6: 'Obvio',
+  8: 'No.',
+  10: 'No.',
+};
+const SPEC_CUSTOMER: Record<number, string> = {
+  1: "Hello, I'm Carmen. I can't find the Export button on the invoices page.",
+  3: 'I am trying to export my invoices, but I cannot find the button anywhere.',
+  5: 'Hello? Are you still there?',
+  7: 'Sorry, did I say something wrong?',
+  9: 'Right. I will try someone else.',
+};
+
+export function makeSpecTurns(): TurnDTO[] {
+  return Array.from({ length: 10 }, (_, i) => {
+    const index = i + 1;
+    const customer = index % 2 === 1;
+    return {
+      index,
+      role: customer ? 'customer' : 'trainee',
+      text: (customer ? SPEC_CUSTOMER[index] : SPEC_TRAINEE[index]) as string,
+      createdAt: iso(index),
+      source: index === 1 ? 'opening' : customer ? 'live' : 'trainee',
+      ...(index === 8
+        ? { markers: [{ kind: 'state' as const, label: 'Dismissed the concern', delta: 9 }] }
+        : {}),
+    };
+  });
+}
+
+const SPEC_FACTS: CoachingReport['discovery']['results'] = [
+  {
+    factId: 'hf-three-dots',
+    label: 'Three-dots icon she has not opened',
+    importance: 'critical',
+    status: 'missed',
+    revealedAtTurn: null,
+    revealingQuestion: null,
+    whatWasHidden:
+      "Across the top of the list I can see a search box, a filter icon and a small icon with three dots. I haven't clicked on the three dots.",
+    betterQuestion:
+      'Can you tell me what you can see across the top of the invoice list, from left to right?',
+    consequence:
+      'Without checking her screen, the engineer reads out steps that mention a menu she cannot see, and the call stalls while she searches for it.',
+  },
+  {
+    factId: 'hf-half-screen',
+    label: 'Browser window fills half the screen',
+    importance: 'important',
+    status: 'missed',
+    revealedAtTurn: null,
+    revealingQuestion: null,
+    whatWasHidden:
+      'The browser is only on half of my screen. I keep another program open on the other half.',
+    betterQuestion:
+      'How big is your browser window right now: is it full-screen, or sharing the screen with something else?',
+    consequence:
+      'The engineer never learns why the menu is hidden, and the same problem returns the next time her window is narrow.',
+  },
+  {
+    factId: 'hf-purpose',
+    label: "Last month's invoices for a 2 pm meeting",
+    importance: 'important',
+    status: 'missed',
+    revealedAtTurn: null,
+    revealingQuestion: null,
+    whatWasHidden:
+      'I need last month\u2019s invoices in a spreadsheet for a meeting at 2 pm. I only need last month, not the older ones.',
+    betterQuestion:
+      'What are you hoping to do with the export, and is there a time you need it by?',
+    consequence:
+      'Without the purpose, the engineer cannot suggest setting the list to last month first, so she may export every invoice and lose time before her meeting.',
+  },
+  {
+    factId: 'hf-old-guide',
+    label: 'Following an old training guide',
+    importance: 'helpful',
+    status: 'missed',
+    revealedAtTurn: null,
+    revealingQuestion: null,
+    whatWasHidden:
+      'I am following an old training guide that shows the Export button on the top left.',
+    betterQuestion:
+      'Where did you see the Export button before, and are you following a guide or written steps?',
+    consequence:
+      'The engineer keeps pointing at a button that has moved, so the customer wonders whether something is broken.',
+  },
+];
+
+const SPEC_DIMENSIONS: CoachingReport['dimensions'] = [
+  {
+    id: 'opening-rapport',
+    score: 1,
+    label: 'Not demonstrated',
+    rationale:
+      'The opening was a brief, loosely worded greeting ("Hi how shall i help u") with no name or team introduction, quickly followed by curt replies.',
+    evidence: [{ turnIndex: 2, quote: 'Hi how shall i help u' }],
+    sufficiency: 'sufficient',
+    guidance:
+      'Start every call by clearly stating your name, your team, and offering a warm, professional greeting to put the customer at ease.',
+  },
+  {
+    id: 'scoping-discovery',
+    score: 1,
+    label: 'Not demonstrated',
+    rationale:
+      "Zero out of four hidden facts were discovered. The trainee made no attempt to explore Carmen's screen, browser size, or the purpose of her export.",
+    evidence: [],
+    sufficiency: 'sufficient',
+    guidance:
+      'Ask targeted questions about what the customer can see on their screen and what they need to achieve before attempting to troubleshoot.',
+  },
+  {
+    id: 'empathy-deescalation',
+    score: 1,
+    label: 'Not demonstrated',
+    rationale:
+      'The trainee dismissed the customer with a direct refusal to help ("No, I can\'t help with that.") and a bare "No." later on.',
+    evidence: [{ turnIndex: 4, quote: "No, I can't help with that." }],
+    sufficiency: 'sufficient',
+    guidance:
+      'Maintain professional composure even when under pressure, and acknowledge the customer\u2019s needs instead of dismissing them.',
+  },
+  {
+    id: 'clarity',
+    score: 1,
+    label: 'Not demonstrated',
+    rationale:
+      'There were no explanations, summaries, or helpful instructions provided to assist the customer with finding the feature.',
+    evidence: [],
+    sufficiency: 'limited',
+    guidance:
+      'Use plain, courteous language to explain steps one at a time, checking for understanding along the way.',
+  },
+  {
+    id: 'ownership-next-steps',
+    score: 1,
+    label: 'Not demonstrated',
+    rationale:
+      'The trainee took no responsibility for the issue and refused to set any next steps or assist further.',
+    evidence: [],
+    sufficiency: 'limited',
+    guidance:
+      'Take ownership of the customer\u2019s request and agree on clear, actionable next steps to resolve their issue.',
+  },
+  {
+    id: 'closing',
+    score: 1,
+    label: 'Not demonstrated',
+    rationale:
+      'The call ended prematurely without any summary, confirmation, or professional close.',
+    evidence: [],
+    sufficiency: 'insufficient',
+    guidance:
+      'Always conclude calls by summarising the resolution, confirming next steps, and thanking the customer.',
+  },
+];
+
+export function makeSpecReport(overrides: Partial<CoachingReport> = {}): CoachingReport {
+  return makeReport({
+    generatedAt: iso(12),
+    evaluator: {
+      kind: 'model',
+      name: 'Firefly model evaluator',
+      version: 'model-1.0.0',
+      providerLabel: 'Gemini (model "gemini-test-model")',
+    },
+    completion: {
+      status: 'ended-early',
+      traineeTurns: 5,
+      evidence: 'limited',
+      note: 'The call was ended before a natural close. This report reflects only what was said up to that point. More turns would give firmer coaching.',
+    },
+    summary: {
+      overall:
+        'The call ended early after dismissive trainee replies, such as "No, I can\'t help with that." in turn 4 and "No." in turn 8. None of the critical discovery items were found, and the interaction deteriorated rapidly. The call was very short and evidence is severely limited.',
+      overallScore: 1,
+      coachingFocus: ['scoping-discovery', 'clarity'],
+    },
+    dimensions: SPEC_DIMENSIONS,
+    strengths: [],
+    improvements: [
+      {
+        dimension: 'empathy-deescalation',
+        title: 'A moment to rework: empathy',
+        turnIndex: 4,
+        quote: "No, I can't help with that.",
+        risk: 'Refusing to help and sounding dismissive damages customer trust and causes immediate distress.',
+        betterPhrasing:
+          "I completely understand that finding the export button is tricky. Let's look at the screen together to locate it.",
+        whyItWorks:
+          'A calm, empathetic response reassures the customer and keeps the conversation constructive.',
+      },
+    ],
+    discovery: { results: SPEC_FACTS, found: 0, partial: 0, missed: 4, total: 4 },
+    journey: {
+      points: [
+        point(1, 12, 'start', 0),
+        point(2, 8, 'turn', -4, {
+          reason: 'Opened with a greeting and an offer to help',
+          quote: 'Hi how shall i help u',
+        }),
+        point(4, 8, 'turn', 0, { reason: null, quote: null }),
+        point(6, 11, 'turn', 3, { reason: null, quote: null }),
+        point(8, 20, 'turning-point', 9, {
+          reason: 'Dismissed the customer\u2019s concern',
+          quote: null,
+        }),
+        point(10, 24, 'end', 4, { reason: null, quote: null }),
+      ],
+      start: 12,
+      end: 24,
+      peak: 24,
+      lowest: 8,
+    },
+    nextPractice: {
+      dimension: 'empathy-deescalation',
+      recommendation:
+        'Practise maintaining a calm, professional tone and acknowledging customer concerns, especially when handling simple queries or frustrated users.',
+      suggestedDifficulty: 'starter',
+      suggestedScenarioId: 'team-cannot-open-shared-workspace',
+      suggestedScenarioTitle: 'Team cannot open the shared project workspace',
+    },
+    trainingNote:
+      "This is practice coaching generated automatically (Firefly model evaluator), not an assessment of your performance; a mentor's review of the transcript would add what automatic coaching cannot.",
+    ...overrides,
+  });
+}
+
+export function makeSpecSession(overrides: Partial<SessionDTO> = {}): SessionDTO {
+  const report = overrides.report === undefined ? makeSpecReport() : overrides.report;
+  const base = makeSession({ report });
+  return {
+    ...base,
+    scenarioId: 'cannot-find-export-feature',
+    scenarioTitle: 'A user needs help finding a feature',
+    issueType: 'how-to',
+    difficulty: 'starter',
+    mode: 'guided',
+    providerKind: 'gemini',
+    providerLabel: 'Gemini (model "gemini-test-model")',
+    durationSeconds: 186,
+    traineeTurns: 5,
+    completion: 'ended-early',
+    overallScore: 1,
+    turns: makeSpecTurns(),
+    state: {
+      band: { id: 'concerned', label: 'Concerned' },
+      trend: 'rising',
+      discoveredCount: 0,
+      silent: false,
+    },
+    scenario: {
+      ...base.scenario,
+      scenarioId: 'cannot-find-export-feature',
+      title: 'A user needs help finding a feature',
+      persona: { name: 'Carmen Reyes', role: 'Finance assistant', organisation: 'Harbour Foods' },
+      config: { ...base.scenario.config, difficulty: 'starter', mode: 'guided' },
+    },
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------------------
+// Rewards
+
+export function makeLedgerEntry(overrides: Partial<LedgerEntryDTO> = {}): LedgerEntryDTO {
+  return {
+    id: 'complete-scenario:sess-1',
+    ruleId: 'complete-scenario',
+    points: 50,
+    at: iso(9),
+    sessionId: SESSION_ID,
+    scenarioTitle: 'Locked out after a password reset',
+    title: 'Completed a full scenario',
+    reason: 'Finished a full call in "Locked out after a password reset".',
+    evidence: null,
+    ...overrides,
+  };
+}
+
+export function makeBadge(overrides: Partial<BadgeDTO> = {}): BadgeDTO {
+  return {
+    id: 'first-practice',
+    title: 'First Practice',
+    criteria: 'Complete your first full scenario. A call that ends early does not count.',
+    earned: false,
+    earnedAt: null,
+    earnedInSessionId: null,
+    progress: { current: 0, target: 1, unit: 'scenarios' },
+    ...overrides,
+  };
+}
+
+export function makeRewards(overrides: Partial<RewardsDTO> = {}): RewardsDTO {
+  const foundation = {
+    id: 'foundation',
+    index: 1,
+    name: 'Foundation',
+    minPoints: 0,
+    minFamilies: 0,
+  };
+  return {
+    points: 0,
+    level: foundation as RewardsDTO['level'],
+    nextLevel: null,
+    levels: [foundation as RewardsDTO['level']],
+    families: { practised: [], total: 7 },
+    streak: { current: 0, best: 0, activeDays: 0, practisedToday: false },
+    badges: [],
+    challenges: [],
+    ledger: [],
+    rules: [],
+    note: 'Rewards are private to this browser profile. They are encouragement for practising, not an assessment, and they are never compared with anyone else.',
     ...overrides,
   };
 }

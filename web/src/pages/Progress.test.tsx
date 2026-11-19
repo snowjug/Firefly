@@ -1,11 +1,15 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { deriveAchievements } from '#shared/domain/achievements.ts';
-import type { DimensionTrendDTO, ProgressDTO, SessionSummaryDTO } from '#shared/domain/api.ts';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ProgressDTO } from '#shared/domain/api.ts';
 import { DIMENSION_IDS, type DimensionId } from '#shared/domain/vocab.ts';
-import { makeReport, makeSession, makeSummary } from '../components/report/report.fixtures.ts';
+import {
+  EMPTY_PROGRESS,
+  PROGRESS_NOTE,
+  PROGRESS_WITH_DATA,
+  trend,
+} from '../components/progress/progress.fixtures.ts';
 import { makeScenario } from '../components/scenario/scenario-fixtures.ts';
 import { api } from '../lib/api.ts';
 import type * as ApiModule from '../lib/api.ts';
@@ -13,70 +17,12 @@ import Progress from './Progress.tsx';
 
 vi.mock('../lib/api.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
-  return {
-    ...actual,
-    api: { progress: vi.fn(), scenarios: vi.fn(), listSessions: vi.fn(), getSession: vi.fn() },
-  };
+  return { ...actual, api: { progress: vi.fn(), scenarios: vi.fn(), listSessions: vi.fn() } };
 });
 
 const progress = vi.mocked(api.progress);
 const scenarios = vi.mocked(api.scenarios);
 const listSessions = vi.mocked(api.listSessions);
-const getSession = vi.mocked(api.getSession);
-
-const NOTE = 'Based only on your completed practice sessions. Scores are coaching feedback.';
-
-function trend(
-  dimension: DimensionId,
-  scores: number[],
-  change: DimensionTrendDTO['change'],
-): DimensionTrendDTO {
-  return {
-    dimension,
-    points: scores.map((score, i) => ({
-      sessionId: `s${i}`,
-      at: new Date(Date.UTC(2026, 10, 1 + i)).toISOString(),
-      score,
-    })),
-    average: scores.length
-      ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
-      : null,
-    latest: scores.length ? (scores[scores.length - 1] as number) : null,
-    change,
-  };
-}
-
-const EMPTY: ProgressDTO = {
-  totalSessions: 0,
-  completedSessions: 0,
-  dimensionTrends: DIMENSION_IDS.map((d) => trend(d, [], 'not-enough-data')),
-  strongest: null,
-  focus: null,
-  focusReason: null,
-  repeatedOpportunities: [],
-  recentChange: 'not-enough-data',
-  note: NOTE,
-};
-
-const WITH_DATA: ProgressDTO = {
-  totalSessions: 6,
-  completedSessions: 5,
-  dimensionTrends: DIMENSION_IDS.map((d, i) =>
-    trend(
-      d,
-      [2 + (i % 2), 3, 3 + (i % 3 === 0 ? 1 : 0), 4, 4],
-      i === 0 ? 'up' : i === 1 ? 'down' : 'steady',
-    ),
-  ),
-  strongest: 'closing',
-  focus: 'scoping-discovery',
-  focusReason: 'Scoping & Discovery averaged 2.5 across 5 sessions.',
-  repeatedOpportunities: [
-    { dimension: 'empathy-deescalation', sessions: 3, message: 'server message' },
-  ],
-  recentChange: 'improving',
-  note: NOTE,
-};
 
 function renderProgress() {
   return render(
@@ -86,346 +32,413 @@ function renderProgress() {
   );
 }
 
-// The journey views load on demand. Load them once up front so no test waits on the first import.
-beforeAll(async () => {
-  await import('../components/progress/ProgressBody.tsx');
-});
+/** Progress where each skill has the scores given (a skill left out has none). */
+function withScores(
+  scores: Partial<Record<DimensionId, number[]>>,
+  overrides: Partial<ProgressDTO> = {},
+): ProgressDTO {
+  return {
+    ...PROGRESS_WITH_DATA,
+    dimensionTrends: DIMENSION_IDS.map((id) => {
+      const list = scores[id] ?? [];
+      return trend(id, list, list.length >= 4 ? 'steady' : 'not-enough-data');
+    }),
+    ...overrides,
+  };
+}
+
+const skillCard = (name: string) =>
+  screen.getByRole('heading', { level: 3, name }).closest('article') as HTMLElement;
 
 beforeEach(() => {
   vi.resetAllMocks();
   scenarios.mockResolvedValue([]);
   listSessions.mockResolvedValue({ sessions: [], total: 0 });
-  getSession.mockRejectedValue(new Error('No saved session in this test.'));
 });
 
-describe('Progress page', () => {
-  it('explains what appears here when there is no completed practice, and never draws a chart', async () => {
-    progress.mockResolvedValue(EMPTY);
+describe('Progress: nothing completed yet', () => {
+  it('explains what appears here and how to get it, and never draws a chart', async () => {
+    progress.mockResolvedValue(EMPTY_PROGRESS);
     const { container } = renderProgress();
     expect(
       await screen.findByRole('heading', { name: 'No completed practice calls yet' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /start a simulation/i })).toHaveAttribute(
+    expect(screen.getByRole('heading', { level: 1, name: 'My progress' })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Start practice/ })).toHaveAttribute(
       'href',
-      '/scenarios',
+      '/practice',
     );
-    expect(screen.getByText(/sample sessions from the trainer page/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the Trainer page' })).toHaveAttribute(
+      'href',
+      '/trainer',
+    );
+    expect(screen.getByText(/sample sessions from the Trainer page/i)).toBeInTheDocument();
     expect(container.querySelector('svg.pg-spark')).toBeNull();
     expect(progress).toHaveBeenCalledWith(false, expect.anything());
+    // Nothing else is fetched for a page with nothing to show.
+    expect(scenarios).not.toHaveBeenCalled();
+    expect(listSessions).not.toHaveBeenCalled();
   });
 
-  it('leaves sample sessions out until the switch is turned on, and says when they are included', async () => {
+  it('shows a skeleton while loading, and can be retried when it fails', async () => {
     const user = userEvent.setup();
-    progress.mockResolvedValueOnce(EMPTY).mockResolvedValue(WITH_DATA);
+    progress.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(PROGRESS_WITH_DATA);
+    renderProgress();
+    const alert = await screen.findByRole('alert');
+    expect(
+      within(alert).getByRole('heading', { name: 'We couldn\u2019t load your progress' }),
+    ).toBeVisible();
+    await user.click(within(alert).getByRole('button', { name: /Try again/ }));
+    expect(await screen.findByRole('heading', { name: 'Skill by skill' })).toBeVisible();
+  });
+
+  it('keeps the header and the switch in place while loading', () => {
+    progress.mockReturnValue(new Promise(() => undefined));
+    renderProgress();
+    expect(screen.getByRole('heading', { level: 1, name: 'My progress' })).toBeVisible();
+    expect(screen.getByRole('switch', { name: 'Include sample sessions' })).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Loading your progress' })).toBeInTheDocument();
+  });
+});
+
+describe('Progress: sample sessions', () => {
+  it('leaves them out until the switch is turned on, and says when they are included', async () => {
+    const user = userEvent.setup();
+    progress.mockResolvedValueOnce(EMPTY_PROGRESS).mockResolvedValue(PROGRESS_WITH_DATA);
     renderProgress();
     await screen.findByRole('heading', { name: 'No completed practice calls yet' });
 
     const toggle = screen.getByRole('switch', { name: 'Include sample sessions' });
     expect(toggle).not.toBeChecked();
-    expect(screen.queryByText(/sample sessions are included/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Sample sessions are included.')).not.toBeInTheDocument();
 
     await user.click(toggle);
     await waitFor(() => expect(progress).toHaveBeenLastCalledWith(true, expect.anything()));
-    expect(await screen.findByText(/sample sessions are included/i)).toBeInTheDocument();
+    expect(await screen.findByText('Sample sessions are included.')).toBeInTheDocument();
     expect(screen.getByRole('note')).toHaveTextContent(/do not describe your own practice/i);
 
     await user.click(toggle);
     await waitFor(() => expect(progress).toHaveBeenLastCalledWith(false, expect.anything()));
+    await waitFor(() =>
+      expect(screen.queryByText('Sample sessions are included.')).not.toBeInTheDocument(),
+    );
   });
 
-  it('shows totals, a calm recent change with the API note, the strongest skill and the suggested focus', async () => {
-    progress.mockResolvedValue(WITH_DATA);
-    renderProgress();
-    expect(await screen.findByText('Improving')).toBeInTheDocument();
-    expect(screen.getByText(NOTE)).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
-    expect(screen.getByText(/6 sessions started in all/i)).toBeInTheDocument();
-    expect(
-      screen.getByText('Scoping & Discovery averaged 2.5 across 5 sessions.'),
-    ).toBeInTheDocument();
-    const trends = screen.getAllByRole('article');
-    expect(trends).toHaveLength(6);
-    const closing = screen
-      .getByRole('heading', { level: 3, name: 'Closing' })
-      .closest('article') as HTMLElement;
-    expect(within(closing).getByText('Strongest so far')).toBeInTheDocument();
-    const discovery = screen
-      .getByRole('heading', { level: 3, name: 'Scoping & Discovery' })
-      .closest('article') as HTMLElement;
-    expect(within(discovery).getByText('Suggested focus')).toBeInTheDocument();
-  });
-
-  it('gives every trend line a text alternative with all of its scores', async () => {
-    progress.mockResolvedValue(WITH_DATA);
-    renderProgress();
-    await screen.findByText('Improving');
-    const first = WITH_DATA.dimensionTrends[0] as DimensionTrendDTO;
-    expect(
-      screen.getByRole('img', {
-        name: `Opening & Rapport scores across 5 calls, oldest to newest: ${first.points.map((p) => p.score).join(', ')}.`,
+  it('dims the page and marks it busy while the other numbers load', async () => {
+    const user = userEvent.setup();
+    let release: (value: ProgressDTO) => void = () => undefined;
+    progress.mockResolvedValueOnce(PROGRESS_WITH_DATA).mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = resolve;
       }),
-    ).toBeInTheDocument();
-    const card = screen
-      .getByRole('heading', { level: 3, name: 'Opening & Rapport' })
-      .closest('article') as HTMLElement;
-    expect(within(card).getByText('Trending up')).toBeInTheDocument();
-    expect(within(card).getByText('4 of 5')).toBeInTheDocument();
-  });
-
-  it('offers the scores as a table', async () => {
-    const user = userEvent.setup();
-    progress.mockResolvedValue(WITH_DATA);
-    renderProgress();
-    await user.click(await screen.findByRole('button', { name: 'Show scores as a table' }));
-    const table = screen.getByRole('table', {
-      name: 'Skill scores out of 5 for each completed call',
-    });
-    expect(within(table).getAllByRole('row')).toHaveLength(6);
-  });
-
-  it('lists repeated opportunities and never ranks, compares people or counts streaks', async () => {
-    progress.mockResolvedValue(WITH_DATA);
+    );
     const { container } = renderProgress();
-    expect(
-      await screen.findByText(/came up as an improvement area in 3 of 5 completed calls/i),
-    ).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(
-      /leaderboard|\brank|streak|badge|\bXP\b|experience points|top performer/i,
-    );
-    expect(screen.getByText(/not an assessment of you/i)).toBeInTheDocument();
-  });
-
-  it('offers a retry when progress cannot be loaded', async () => {
-    const user = userEvent.setup();
-    progress.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(WITH_DATA);
-    renderProgress();
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByText('Improving')).toBeInTheDocument();
-  });
-});
-
-let created = 0;
-/** A completed practice call for the journey views. Later calls always finish later. */
-function call(overrides: Partial<SessionSummaryDTO> = {}): SessionSummaryDTO {
-  created += 1;
-  const minute = String(created).padStart(2, '0');
-  return makeSummary({
-    id: `call-${created}`,
-    scenarioId: `scenario-${created}`,
-    scenarioTitle: `Scenario ${created}`,
-    startedAt: `2026-11-10T10:${minute}:00.000Z`,
-    endedAt: `2026-11-10T10:${minute}:30.000Z`,
-    overallScore: 3.5,
-    dimensionScores: { clarity: 3, closing: 4 },
-    ...overrides,
-  });
-}
-
-describe('Progress page: the mastery journey', () => {
-  it('lights each constellation from completed calls and names the one to light next', async () => {
-    progress.mockResolvedValue(WITH_DATA);
-    listSessions.mockResolvedValue({ sessions: [call(), call()], total: 2 });
-    renderProgress();
-
-    const hero = await screen.findByRole('region', { name: 'Two of six skills are lit.' });
-    expect(within(hero).getByText(/The brightest is/)).toHaveTextContent(
-      'The brightest is Guide (Clarity), Glowing.',
-    );
-    expect(within(hero).getByRole('img', { name: /Guide, Clarity: Glowing/ })).toBeInTheDocument();
-    const next = within(hero).getByText('Next to light up').closest('div') as HTMLElement;
-    expect(within(next).getByText('Investigator')).toBeInTheDocument();
-    expect(within(next).getByText(/Dormant now\. To reach Kindling/)).toBeInTheDocument();
-    expect(within(next).getByText('a completed call that scores this skill')).toBeInTheDocument();
-  });
-
-  it('explains how skills light up in words', async () => {
-    const user = userEvent.setup();
-    progress.mockResolvedValue(WITH_DATA);
-    listSessions.mockResolvedValue({ sessions: [call()], total: 1 });
-    renderProgress();
-    await user.click(await screen.findByText('How skills light up'));
-    const legend = screen.getByText('How skills light up').closest('details') as HTMLElement;
-    for (const tier of ['Dormant', 'Kindling', 'Glowing', 'Radiant', 'Beacon']) {
-      expect(within(legend).getByText(tier, { selector: 'strong' })).toBeInTheDocument();
-    }
-    expect(
-      within(legend).getByText(/Time spent, message counts and other people do not change it/),
-    ).toBeInTheDocument();
-  });
-
-  it('counts sample calls only while the switch is on, and says so', async () => {
-    const user = userEvent.setup();
-    const own = call({ dimensionScores: { clarity: 3 } });
-    const sample = call({ isSample: true, dimensionScores: { closing: 4 } });
-    progress.mockResolvedValue(WITH_DATA);
-    listSessions.mockImplementation(async (params) => ({
-      sessions: params?.includeSamples === false ? [own] : [own, sample],
-      total: 2,
-    }));
-    renderProgress();
-
-    expect(await screen.findByRole('region', { name: 'One of six skills is lit.' })).toBeVisible();
-    expect(screen.getByText('Your practice, as light')).toBeInTheDocument();
+    await screen.findByRole('heading', { name: 'Skill by skill' });
+    expect(container.querySelector('.pg-content')).toHaveAttribute('aria-busy', 'false');
 
     await user.click(screen.getByRole('switch', { name: 'Include sample sessions' }));
-    expect(await screen.findByRole('region', { name: 'Two of six skills are lit.' })).toBeVisible();
-    expect(screen.getByText('Sample practice, as light')).toBeInTheDocument();
-    expect(listSessions).toHaveBeenLastCalledWith(
+    await waitFor(() =>
+      expect(container.querySelector('.pg-content')).toHaveAttribute('aria-busy', 'true'),
+    );
+    release(PROGRESS_WITH_DATA);
+    await waitFor(() =>
+      expect(container.querySelector('.pg-content')).toHaveAttribute('aria-busy', 'false'),
+    );
+  });
+
+  it('never lets sample calls steer which scenario is suggested', async () => {
+    const user = userEvent.setup();
+    progress.mockResolvedValue(PROGRESS_WITH_DATA);
+    renderProgress();
+    await screen.findByRole('heading', { name: 'Skill by skill' });
+    await user.click(screen.getByRole('switch', { name: 'Include sample sessions' }));
+    await screen.findByText('Sample sessions are included.');
+    expect(listSessions).toHaveBeenCalledWith(
+      expect.objectContaining({ includeSamples: false }),
+      expect.anything(),
+    );
+    expect(listSessions).not.toHaveBeenCalledWith(
       expect.objectContaining({ includeSamples: true }),
       expect.anything(),
     );
   });
+});
 
-  it('draws the completed calls as a path, newest first, each opening its report', async () => {
-    const older = call({ id: 'older', scenarioTitle: 'Older call', overallScore: 2.5 });
-    const open = call({ status: 'active', completion: null, endedAt: null, overallScore: null });
-    const early = call({ completion: 'ended-early' });
-    const newer = call({
-      id: 'newer',
-      scenarioTitle: 'Newer call',
-      overallScore: 4.5,
-      difficulty: 'challenge',
-    });
-    progress.mockResolvedValue(WITH_DATA);
-    listSessions.mockResolvedValue({ sessions: [older, open, early, newer], total: 4 });
+describe('Progress: at a glance', () => {
+  it('shows how many calls count, which way recent calls are heading and the strongest skill', async () => {
+    progress.mockResolvedValue(PROGRESS_WITH_DATA);
     renderProgress();
+    await screen.findByRole('heading', { name: 'Skill by skill' });
+    const summary = screen
+      .getByRole('heading', { name: 'Summary' })
+      .closest('section') as HTMLElement;
+    expect(within(summary).getByText('5')).toBeVisible();
+    expect(
+      within(summary).getByText('6 sessions started in all. Only completed calls are scored.'),
+    ).toBeVisible();
+    expect(within(summary).getByText('Improving')).toBeVisible();
+    expect(
+      within(summary).getByText(/Your most recent calls scored a little higher overall/),
+    ).toBeVisible();
+    expect(within(summary).getByText('Closing')).toBeVisible();
+    expect(
+      within(summary).getByText(/Summarising agreements, confirming the next contact/),
+    ).toBeVisible();
+    expect(screen.getByText(PROGRESS_NOTE)).toBeVisible();
+  });
 
-    const path = await screen.findByRole('list', { name: 'Completed calls, newest first' });
-    const items = within(path).getAllByRole('listitem');
-    expect(items).toHaveLength(2);
-    expect(items[0]).toHaveTextContent('Newer call');
-    expect(items[0]).toHaveTextContent('Challenge');
-    expect(within(items[0] as HTMLElement).getByLabelText('Overall 4.5 out of 5')).toBeVisible();
-    expect(within(items[0] as HTMLElement).getByRole('link')).toHaveAttribute(
-      'href',
-      '/sessions/newer/report',
+  it('is calm and honest when there is not enough to say yet', async () => {
+    progress.mockResolvedValue({
+      ...withScores({ clarity: [3] }),
+      totalSessions: 1,
+      completedSessions: 1,
+      strongest: null,
+      focus: 'clarity',
+      focusReason: 'Clarity averaged 3 across 1 session.',
+      recentChange: 'not-enough-data',
+    });
+    renderProgress();
+    await screen.findByRole('heading', { name: 'Skill by skill' });
+    const summary = screen
+      .getByRole('heading', { name: 'Summary' })
+      .closest('section') as HTMLElement;
+    expect(within(summary).getByText('Each one has a coaching report.')).toBeVisible();
+    expect(within(summary).getByText('Not enough data yet')).toBeVisible();
+    expect(within(summary).getByText('Not clear yet')).toBeVisible();
+    expect(
+      within(summary).getByText('This appears once you have two completed calls to compare.'),
+    ).toBeVisible();
+  });
+
+  it('puts a dip in calm words, not alarm ones', async () => {
+    progress.mockResolvedValue({ ...PROGRESS_WITH_DATA, recentChange: 'declining' });
+    renderProgress();
+    expect(await screen.findByText('A little lower')).toBeVisible();
+    expect(screen.getByText(/That can happen when you try a harder scenario/)).toBeVisible();
+  });
+});
+
+describe('Progress: the six skills', () => {
+  it('has one card per skill, in report order, each with a text summary and a described chart', async () => {
+    progress.mockResolvedValue(
+      withScores(
+        {
+          'opening-rapport': [2, 3, 4, 4, 4],
+          'scoping-discovery': [3, 3, 3, 2, 2],
+          'empathy-deescalation': [3, 3],
+          clarity: [4],
+          'ownership-next-steps': [4, 4, 5, 5],
+          closing: [],
+        },
+        { strongest: 'ownership-next-steps', focus: 'scoping-discovery' },
+      ),
     );
-    expect(items[1]).toHaveTextContent('Older call');
-  });
-
-  it('shows the latest twelve calls and points to History for the rest', async () => {
-    progress.mockResolvedValue(WITH_DATA);
-    const many = Array.from({ length: 14 }, () => call());
-    listSessions.mockResolvedValue({ sessions: many, total: 14 });
     renderProgress();
-    const path = await screen.findByRole('list', { name: 'Completed calls, newest first' });
-    expect(within(path).getAllByRole('listitem')).toHaveLength(12);
-    expect(screen.getByText(/Showing the latest 12 of 14 completed calls/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'History' })).toHaveAttribute('href', '/history');
-  });
-
-  it('reads milestones from saved reports and never awards one a report does not show', async () => {
-    progress.mockResolvedValue(WITH_DATA);
-    listSessions.mockResolvedValue({
-      sessions: [call({ id: 'readable' }), call({ id: 'unreadable' })],
-      total: 2,
-    });
-    getSession.mockImplementation(async (id) => {
-      if (id === 'readable') return makeSession({ id: 'readable' });
-      throw new Error('offline');
-    });
-    const earnedIds = deriveAchievements(makeReport(), { proficiency: 'novice' }).map((a) => a.id);
-    expect(earnedIds).toContain('complete-the-loop');
-
-    renderProgress();
-    const section = await screen.findByRole('region', { name: 'Milestones' });
+    await screen.findByRole('heading', { name: 'Skill by skill' });
+    const cards = screen.getAllByRole('article');
     expect(
-      await within(section).findByText(`${earnedIds.length} of 6 earned so far`),
-    ).toBeInTheDocument();
-
-    const loop = within(section)
-      .getByRole('heading', { level: 3, name: 'Complete the Loop' })
-      .closest('li') as HTMLElement;
-    expect(loop).toHaveAttribute('data-earned', 'true');
-    expect(within(loop).getByText(/Earned in 1 call/)).toBeInTheDocument();
-    expect(
-      within(loop).getByRole('link', { name: 'Locked out after a password reset' }),
-    ).toHaveAttribute('href', '/sessions/readable/report');
-    expect(within(loop).getByText(/Evidence quote for closing\./)).toBeInTheDocument();
-
-    const signal = within(section)
-      .getByRole('heading', { level: 3, name: 'Found the Signal' })
-      .closest('li') as HTMLElement;
-    expect(signal).toHaveAttribute('data-earned', 'false');
-    expect(within(signal).getByText('Not earned yet.')).toBeInTheDocument();
-    expect(
-      within(section).getByText(/1 report could not be read just now, so it was left out/),
-    ).toBeInTheDocument();
-    expect(getSession).toHaveBeenCalledTimes(2);
-  });
-
-  it('suggests the next mission from your own practice, and not from sample calls', async () => {
-    const user = userEvent.setup();
-    scenarios.mockResolvedValue([
-      makeScenario({ id: 'gentle-start', title: 'A gentle start', difficulty: 'starter' }),
-      makeScenario({ id: 'team-workspace', title: 'Team cannot open the workspace' }),
+      cards.map((card) => within(card).getByRole('heading', { level: 3 }).textContent),
+    ).toEqual([
+      'Opening & Rapport',
+      'Scoping & Discovery',
+      'Empathy & De-escalation',
+      'Clarity',
+      'Ownership & Next Steps',
+      'Closing',
     ]);
-    progress.mockResolvedValue(WITH_DATA);
-    listSessions.mockResolvedValue({
-      sessions: [call({ scenarioId: 'gentle-start', difficulty: 'starter' })],
-      total: 1,
-    });
-    renderProgress();
 
-    expect(await screen.findByRole('link', { name: /Set up this call/ })).toHaveAttribute(
-      'href',
-      '/scenarios/team-workspace/setup',
-    );
-    await user.click(screen.getByRole('switch', { name: 'Include sample sessions' }));
-    await screen.findByText(/sample sessions are included/i);
-    expect(screen.queryByRole('link', { name: /Set up this call/ })).not.toBeInTheDocument();
-  });
-
-  it('points each repeated opportunity at a scenario built to practise it', async () => {
-    scenarios.mockResolvedValue([
-      makeScenario({
-        id: 'calm-down',
-        title: 'Calming a tense call',
-        difficulty: 'starter',
-        coachingFocus: ['empathy-deescalation'],
+    const opening = skillCard('Opening & Rapport');
+    expect(
+      within(opening).getByRole('img', {
+        name: 'Opening & Rapport scores across 5 calls, oldest to newest: 2, 3, 4, 4, 4.',
       }),
-    ]);
-    progress.mockResolvedValue(WITH_DATA);
-    listSessions.mockResolvedValue({ sessions: [call()], total: 1 });
-    renderProgress();
-    const practise = await screen.findByRole('link', { name: /Practise it in/ });
-    expect(practise).toHaveTextContent('Calming a tense call');
-    expect(practise).toHaveAttribute('href', '/scenarios/calm-down/setup');
+    ).toBeInTheDocument();
+    expect(opening).toHaveTextContent('Latest 4 \u00b7 average 3.4 \u00b7 steady');
+    expect(opening.querySelectorAll('.pg-spark-dot')).toHaveLength(5);
+
+    // Highlights are written out as words, with an icon, never colour alone.
+    expect(within(skillCard('Ownership & Next Steps')).getByText('Strongest so far')).toBeVisible();
+    expect(within(skillCard('Scoping & Discovery')).getByText('Suggested focus')).toBeVisible();
+    expect(screen.getAllByText('Strongest so far')).toHaveLength(2); // the tile and the card
+    expect(screen.getAllByText('Suggested focus')).toHaveLength(1);
   });
 
-  it('does not rebuild the opportunities when the calls finish loading', async () => {
-    progress.mockResolvedValue(WITH_DATA);
-    let release: (answer: Awaited<ReturnType<typeof api.listSessions>>) => void = () => undefined;
-    listSessions.mockReturnValue(
+  it('names the direction in words, and only when there are enough calls to name it', async () => {
+    progress.mockResolvedValue({
+      ...PROGRESS_WITH_DATA,
+      dimensionTrends: [
+        trend('opening-rapport', [2, 3, 4, 5], 'up'),
+        trend('scoping-discovery', [4, 3, 2, 1], 'down'),
+        trend('empathy-deescalation', [3, 3, 3, 3], 'steady'),
+        trend('clarity', [3, 4], 'not-enough-data'),
+        trend('ownership-next-steps', [5], 'not-enough-data'),
+        trend('closing', [], 'not-enough-data'),
+      ],
+    });
+    renderProgress();
+    await screen.findByRole('heading', { name: 'Skill by skill' });
+    expect(skillCard('Opening & Rapport')).toHaveTextContent(
+      'Latest 5 \u00b7 average 3.5 \u00b7 rising',
+    );
+    expect(skillCard('Scoping & Discovery')).toHaveTextContent(
+      'Latest 1 \u00b7 average 2.5 \u00b7 lower lately',
+    );
+    expect(skillCard('Empathy & De-escalation')).toHaveTextContent(
+      'Latest 3 \u00b7 average 3.0 \u00b7 steady',
+    );
+    expect(skillCard('Clarity')).toHaveTextContent(
+      'Latest 4 \u00b7 average 3.5 \u00b7 a trend shows after 4 calls',
+    );
+    expect(skillCard('Ownership & Next Steps')).toHaveTextContent(
+      'Latest 5 \u00b7 Complete 2+ calls to see a trend',
+    );
+    const closing = skillCard('Closing');
+    expect(closing).toHaveTextContent('Not scored yet');
+    expect(within(closing).queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('keeps a long history legible by drawing only the line and its last point', async () => {
+    const long = Array.from({ length: 30 }, (_, index) => 2 + (index % 3));
+    progress.mockResolvedValue(withScores({ clarity: long }, { completedSessions: 30 }));
+    renderProgress();
+    await screen.findByRole('heading', { name: 'Skill by skill' });
+    const clarity = skillCard('Clarity');
+    expect(clarity.querySelectorAll('.pg-spark-dot')).toHaveLength(0);
+    expect(clarity.querySelectorAll('.pg-spark-last')).toHaveLength(1);
+    expect(clarity.querySelector('.pg-spark-line')).not.toBeNull();
+  });
+
+  it('offers the same scores as a table and puts it away again', async () => {
+    const user = userEvent.setup();
+    progress.mockResolvedValue(PROGRESS_WITH_DATA);
+    renderProgress();
+    const show = await screen.findByRole('button', { name: 'Show scores as a table' });
+    expect(show).toHaveAttribute('aria-expanded', 'false');
+    await user.click(show);
+    const table = screen.getByRole('table', {
+      name: 'Skill scores out of 5 for each completed call',
+    });
+    expect(within(table).getAllByRole('row')).toHaveLength(6);
+    expect(screen.getByRole('button', { name: 'Hide scores table' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    await user.click(screen.getByRole('button', { name: 'Hide scores table' }));
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
+describe('Progress: where to focus next', () => {
+  const discovery = makeScenario({
+    id: 'dig-deeper',
+    title: 'Digging for detail',
+    coachingFocus: ['scoping-discovery'],
+  });
+
+  it('names the skill, says why, and links to a scenario built to practise it', async () => {
+    progress.mockResolvedValue(PROGRESS_WITH_DATA);
+    scenarios.mockResolvedValue([discovery]);
+    renderProgress();
+    const card = (await screen.findByRole('heading', { name: 'Where to focus next' })).closest(
+      'section',
+    ) as HTMLElement;
+    expect(within(card).getByText('Scoping & Discovery')).toBeVisible();
+    expect(
+      within(card).getByText('Scoping & Discovery averaged 2.5 across 5 sessions.'),
+    ).toBeVisible();
+    expect(
+      within(card).getByText(/Asking focused questions to understand the problem/),
+    ).toBeVisible();
+    expect(
+      await within(card).findByRole('link', { name: /Practise it in .Digging for detail./ }),
+    ).toHaveAttribute('href', '/scenarios/dig-deeper/setup');
+    expect(within(card).getByRole('link', { name: 'Browse scenarios' })).toHaveAttribute(
+      'href',
+      '/scenarios',
+    );
+  });
+
+  it('holds the buttons back until the scenarios have arrived, so nothing shifts under the pointer', async () => {
+    progress.mockResolvedValue(PROGRESS_WITH_DATA);
+    let release: (list: ReturnType<typeof makeScenario>[]) => void = () => undefined;
+    scenarios.mockReturnValue(
       new Promise((resolve) => {
         release = resolve;
       }),
     );
     renderProgress();
-    const before = await screen.findByText(
-      /came up as an improvement area in 3 of 5 completed calls/i,
-    );
-
-    release({ sessions: [call()], total: 1 });
-    await screen.findByRole('region', { name: /skills? (is|are) lit/ });
-    // A rebuilt section would leave the old element detached from the page.
-    expect(before).toBeInTheDocument();
+    const card = (await screen.findByRole('heading', { name: 'Where to focus next' })).closest(
+      'section',
+    ) as HTMLElement;
+    expect(within(card).queryByRole('link')).not.toBeInTheDocument();
+    release([discovery]);
+    expect(await within(card).findByRole('link', { name: /Practise it in/ })).toBeVisible();
   });
 
-  it('keeps the rest of the page when the calls cannot be loaded, and can retry', async () => {
-    const user = userEvent.setup();
-    progress.mockResolvedValue(WITH_DATA);
-    listSessions
-      .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValue({ sessions: [call()], total: 1 });
+  it('falls back to the library when no scenario fits or the scenarios cannot be loaded', async () => {
+    progress.mockResolvedValue(PROGRESS_WITH_DATA);
+    scenarios.mockRejectedValue(new Error('boom'));
+    renderProgress();
+    const card = (await screen.findByRole('heading', { name: 'Where to focus next' })).closest(
+      'section',
+    ) as HTMLElement;
+    expect(
+      await within(card).findByRole('link', { name: /Find a scenario to practise/ }),
+    ).toHaveAttribute('href', '/scenarios');
+    expect(within(card).queryByRole('link', { name: 'Browse scenarios' })).not.toBeInTheDocument();
+  });
+
+  it('says what it is waiting for when no focus has been suggested yet', async () => {
+    progress.mockResolvedValue({ ...PROGRESS_WITH_DATA, focus: null, focusReason: null });
     renderProgress();
     expect(
-      await screen.findByText(/couldn.t load your calls to draw your constellations/i),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Skill by skill' })).toBeInTheDocument();
+      await screen.findByText('A focus is suggested after your first completed call.'),
+    ).toBeVisible();
+  });
+});
 
-    await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await screen.findByRole('region', { name: /skills? (is|are) lit/ })).toBeVisible();
+describe('Progress: opportunities that keep coming up', () => {
+  it('lists each skill with how often it came up and a scenario to practise it', async () => {
+    progress.mockResolvedValue(PROGRESS_WITH_DATA);
+    scenarios.mockResolvedValue([
+      makeScenario({
+        id: 'calm-down',
+        title: 'Calming a tense call',
+        coachingFocus: ['empathy-deescalation'],
+      }),
+    ]);
+    renderProgress();
+    const section = (
+      await screen.findByRole('heading', { name: 'Opportunities that keep coming up' })
+    ).closest('section') as HTMLElement;
+    expect(within(section).getByText('Empathy & De-escalation')).toBeVisible();
+    expect(
+      within(section).getByText('Came up as an improvement area in 3 of 5 completed calls.'),
+    ).toBeVisible();
+    expect(
+      await within(section).findByRole('link', { name: /Practise it in .Calming a tense call./ }),
+    ).toHaveAttribute('href', '/scenarios/calm-down/setup');
+  });
+
+  it('says so when nothing has come up more than once', async () => {
+    progress.mockResolvedValue({ ...PROGRESS_WITH_DATA, repeatedOpportunities: [] });
+    renderProgress();
+    expect(
+      await screen.findByText(
+        'No skill has come up as an improvement area in more than one call yet.',
+      ),
+    ).toBeVisible();
+  });
+});
+
+describe('Progress: wording', () => {
+  it('never ranks, compares people, counts streaks or talks about badges and experience points', async () => {
+    progress.mockResolvedValue(PROGRESS_WITH_DATA);
+    const { container } = renderProgress();
+    await screen.findByRole('heading', { name: 'Skill by skill' });
+    expect(container.textContent).not.toMatch(
+      /leaderboard|\brank|streak|badge|\bXP\b|experience points|top performer/i,
+    );
+    expect(screen.getByText(/not an assessment of you/i)).toBeInTheDocument();
   });
 });
