@@ -132,6 +132,8 @@
 }
 .st-panel-body {
   display: grid;
+  /* One wide item must not stretch every group beyond the screen. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-2);
 }
 .st-group {
@@ -278,4 +280,8 @@
 .st-group > .cluster,
 .st-group > div:not(.st-rows) {
   margin-top: var(--sp-1);
+}
+/* A long link wraps on a narrow screen rather than pushing the page sideways. */
+.st-group .link-more {
+  white-space: normal;
 }
