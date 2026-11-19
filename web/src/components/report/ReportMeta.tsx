@@ -2,11 +2,12 @@ import type { SessionDTO } from '#shared/domain/api.ts';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { PRACTICE_MODE_LABELS } from '#shared/domain/vocab.ts';
 import { formatDateTime, formatDuration } from '../../lib/format.ts';
+import { usedVoice } from '../../lib/voice-sessions.ts';
 import { DifficultyChip } from '../Chips.tsx';
 import { Icon } from '../Icon.tsx';
 import { CustomerAvatar } from '../illustration/index.ts';
 import { TemperatureOrb } from '../TemperatureOrb.tsx';
-import { ENDED_EARLY_NOTE, SAMPLE_NOTE, SUFFICIENCY_BADGE } from './labels.ts';
+import { ENDED_EARLY_NOTE, SAMPLE_NOTE, SUFFICIENCY_BADGE, VOICE_NOTE } from './labels.ts';
 
 /**
  * What this report is about: the call, how it ended, how the coaching was produced and what the
@@ -88,6 +89,12 @@ export function ReportMeta({ session, report }: { session: SessionDTO; report: C
         <p className="rp-ended-note t-small t-muted">
           <Icon name="info" size={16} />
           <span>{ENDED_EARLY_NOTE}</span>
+        </p>
+      ) : null}
+      {usedVoice(session.id) ? (
+        <p className="rp-ended-note t-small t-muted">
+          <Icon name="mic" size={16} />
+          <span>{VOICE_NOTE}</span>
         </p>
       ) : null}
 

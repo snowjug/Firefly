@@ -67,6 +67,10 @@ export const SAMPLE_ROW_NOTE =
 export const ENDED_EARLY_NOTE =
   'This call stopped before a wrap-up, so the Closing score rests on limited evidence.';
 
+/** Shown when the call used voice: recognition can mishear, and the quotes come from the transcript. */
+export const VOICE_NOTE =
+  'You used voice in this call. Speech recognition can mishear words, so check the quotes below against the transcript. Coaching reads the words only, not tone, accent or pace.';
+
 export const OVERALL_CAPTION =
   'Across the six skills. A practice signal, not a grade or a ranking.';
 
