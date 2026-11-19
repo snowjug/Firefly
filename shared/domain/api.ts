@@ -261,3 +261,92 @@ export interface DemoStatusDTO {
   sampleSessions: number;
   provider: { kind: ProviderKind; label: string; demo: boolean };
 }
+
+// ---- Rewards ------------------------------------------------------------------------------
+// Worked out from saved practice on every request. Nothing here is stored, ranked or compared.
+
+export type RewardRuleId =
+  | 'complete-scenario'
+  | 'hidden-fact'
+  | 'owner-and-update'
+  | 'skill-improvement'
+  | 'new-scenario-family'
+  | 'practice-day'
+  | 'mentor-confirmed';
+
+export interface RewardRuleDTO {
+  id: RewardRuleId;
+  title: string;
+  points: number;
+  detail: string;
+  safeguard: string;
+}
+
+export interface LedgerEntryDTO {
+  id: string;
+  ruleId: RewardRuleId;
+  points: number;
+  at: string;
+  sessionId: string | null;
+  scenarioTitle: string | null;
+  title: string; // e.g. "Completed a full scenario"
+  reason: string; // one plain sentence saying why it was awarded
+  evidence: { turnIndex: number | null; quote: string | null } | null;
+}
+
+export type BadgeId =
+  | 'first-practice'
+  | 'scope-detective'
+  | 'de-escalator'
+  | 'ownership-builder'
+  | 'scenario-explorer'
+  | 'consistency-streak';
+
+export interface BadgeDTO {
+  id: BadgeId;
+  title: string;
+  criteria: string;
+  earned: boolean;
+  earnedAt: string | null;
+  earnedInSessionId: string | null;
+  progress: { current: number; target: number; unit: string };
+}
+
+export type RewardLevelId = 'foundation' | 'builder' | 'practitioner' | 'confident-handler';
+
+export interface RewardLevelDTO {
+  id: RewardLevelId;
+  index: number;
+  name: string;
+  minPoints: number;
+  minFamilies: number;
+}
+
+export type ChallengeId = 'try-new-family' | 'find-every-fact' | 'lift-a-skill' | 'practise-again';
+
+export interface ChallengeDTO {
+  id: ChallengeId;
+  title: string;
+  detail: string;
+  reward: string;
+  progress: { current: number; target: number };
+  status: 'active' | 'completed';
+  scenarioId: string | null;
+  // Set when the challenge is only met at one difficulty (a skill is compared with your own recent
+  // calls at the same difficulty), so a screen can start the suggested scenario at that difficulty.
+  difficulty?: Difficulty | null;
+}
+
+export interface RewardsDTO {
+  points: number;
+  level: RewardLevelDTO;
+  nextLevel: (RewardLevelDTO & { pointsToGo: number; familiesToGo: number }) | null;
+  levels: RewardLevelDTO[];
+  families: { practised: IssueType[]; total: number };
+  streak: { current: number; best: number; activeDays: number; practisedToday: boolean };
+  badges: BadgeDTO[];
+  challenges: ChallengeDTO[];
+  ledger: LedgerEntryDTO[]; // newest first, at most 200 (totals always use all entries)
+  rules: RewardRuleDTO[]; // the seven rules: title, points, plain detail and the safeguard
+  note: string; // private to this browser profile, coaching not assessment, never compared
+}

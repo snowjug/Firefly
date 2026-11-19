@@ -7,6 +7,7 @@ import type {
   MentorScoreRequest,
   ProgressDTO,
   PublicScenarioDTO,
+  RewardsDTO,
   SendMessageRequest,
   SendMessageResponse,
   SessionDTO,
@@ -195,6 +196,9 @@ export const api = {
       undefined,
       signal,
     ),
+  // tzOffsetMinutes is Date.getTimezoneOffset() (UTC minus local), so "today" is the learner's.
+  rewards: (tzOffsetMinutes: number, signal?: AbortSignal) =>
+    request<RewardsDTO>('GET', `/rewards?tzOffset=${tzOffsetMinutes}`, undefined, signal),
 
   demo: (signal?: AbortSignal) => request<DemoStatusDTO>('GET', '/demo', undefined, signal),
   loadSamples: () => request<{ created: number; skipped: number }>('POST', '/demo/samples', {}),
