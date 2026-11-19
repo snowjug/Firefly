@@ -32,6 +32,7 @@ import {
 } from '#shared/domain/vocab.ts';
 import type { EvaluationInput } from '#server/engine/types.ts';
 import { describeTemperatureChange, isMoodKey, withoutRawMoodNumbers } from './mood.ts';
+import { cueMatches } from '#server/engine/textutil.ts';
 import {
   CURVEBALL_PHRASES,
   article,
@@ -450,7 +451,7 @@ function revealingQuote(turn: TraineeTurn, fact: HiddenFact): string | null {
     const lower = sentence.toLowerCase();
     const folded = fold(sentence);
     let score = 0;
-    if ((fact.cues ?? []).some((cue) => lower.includes(cue.toLowerCase()))) score += 3;
+    if ((fact.cues ?? []).some((cue) => cueMatches(lower, cue))) score += 3;
     if (recorded.some((q) => folded.includes(q) || q.includes(folded))) score += 2;
     if (/\?\s*$/.test(sentence)) score += 1;
     if (score > (best?.score ?? 0)) best = { sentence, score };

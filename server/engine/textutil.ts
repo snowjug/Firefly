@@ -66,6 +66,60 @@ export function capFirst(s: string): string {
   return s ? s[0]?.toUpperCase() + s.slice(1) : s;
 }
 
+// Words that make a cue a fixed phrase ("tell your", "who else", "the board"): such a cue only ever
+// matches as written, because letting other words in between would match "tell me your name".
+const CUE_FUNCTION_WORDS = new Set(
+  'the a an your you them it me my our we they their his her its this that these those and or of to for with who what when how'.split(
+    ' ',
+  ),
+);
+
+/**
+ * Does the lower-cased text mention the cue? A cue always matches as a plain substring. A cue made
+ * of several content words also matches when its words appear in order with at most two other
+ * words between them, so "roll back" is found in "roll that change back" and "other device" in
+ * "any other kind of device". Each word may continue ("revert" matches "reverting").
+ */
+export function cueMatches(textLower: string, cue: string): boolean {
+  const wanted = cue.trim().toLowerCase();
+  if (!wanted) return false;
+  if (textLower.includes(wanted)) return true;
+  const words = wanted.split(/\s+/);
+  if (words.length < 2 || words.some((word) => CUE_FUNCTION_WORDS.has(word))) return false;
+  const tokens = textLower.match(/[a-z0-9']+/g) ?? [];
+  const startsWithWord = (token: string | undefined, word: string | undefined) =>
+    token !== undefined && word !== undefined && token.startsWith(word);
+  for (let first = 0; first < tokens.length; first++) {
+    if (!startsWithWord(tokens[first], words[0])) continue;
+    let at = first;
+    let matched = true;
+    for (let next = 1; next < words.length && matched; next++) {
+      let found = -1;
+      for (let gap = 1; gap <= 3 && at + gap < tokens.length; gap++) {
+        if (startsWithWord(tokens[at + gap], words[next])) {
+          found = at + gap;
+          break;
+        }
+      }
+      if (found < 0) matched = false;
+      else at = found;
+    }
+    if (matched) return true;
+  }
+  return false;
+}
+
+/**
+ * Asking how to reach the customer ("your best phone number", "this phone call") is not asking
+ * about a phone or any other device, so it is removed before device cues are looked for.
+ */
+export function withoutContactTalk(textLower: string): string {
+  return textLower.replace(
+    /\b(?:phone|mobile|cell|telephone|contact|call-?back|direct)\s+(?:number|numbers|no\.?|details|line)\b|\b(?:phone|telephone)\s+(?:call|conversation)\b/g,
+    ' ',
+  );
+}
+
 const STOP_WORDS = new Set(
   'the and but for with that this our your you are was were have has had not can cannot will would just now its from they them then than into out all any too very'.split(
     ' ',

@@ -41,6 +41,55 @@ export const REQUEST_PHRASE =
   /\b(?:tell me|walk me through|talk me through|describe|explain (?:to me )?(?:what|how|when)|let me know|help me understand|i (?:need|want|would like|'d like|'m trying) to (?:know|understand|find out|ask|check|confirm|see|get)|read (?:me|it|that)|show me|share with me|i'?d like to (?:ask|know|understand)|could you (?:tell|share|describe|explain|confirm)|can you (?:tell|share|describe|explain|confirm|read))\b/;
 
 // ---------------------------------------------------------------------------------------
+// Housekeeping questions keep a call running without exploring the problem: asking for something
+// to be repeated, asking leave to hold or call back, taking identity or contact details, checking
+// the customer is happy to go on, and the closing "anything else?". They are never counted as
+// discovery questions, so "Could you say that again?" cannot reveal a hidden fact.
+
+const ID_NOUN =
+  '(?:your (?:(?:full |first |last |sur|family )?name|e-?mail(?: address)?|(?:phone|mobile|contact|telephone|call-?back|direct) (?:number|no\\.?)|account (?:number|name|id|reference)|(?:case|ticket|reference|customer|licen[cs]e|subscription|service) (?:number|id|reference)|date of birth|dob|post ?code|job title|role|department|username|user name|user id|company(?: name)?|organi[sz]ation(?: name)?|spelling)|(?:a|the best|the) (?:phone|mobile|contact|telephone|call-?back|direct) (?:number|no\\.?)|(?:a|the) e-?mail address|the (?:right )?spelling)';
+// What may follow a detail being asked for, as long as it does not start a second question.
+const NO_SECOND_QUESTION =
+  '(?:(?!\\b(?:when|what|which|who|how|why|where|did|has|have|had|is there|are there|since)\\b)[^?]){0,40}';
+
+const HOUSEKEEPING: RegExp[] = [
+  // Asking for something to be repeated or said more slowly
+  /^(?:(?:sorry|pardon|excuse me|apologies)[,.]? )?(?:could|can|would|will) you (?:please |just )?(?:say (?:that|it) (?:again|once more)|repeat (?:that|it|yourself|what you said)|speak (?:up|more (?:slowly|clearly)|a (?:bit|little) (?:louder|slower|more slowly))|slow down|spell\b)/,
+  /^(?:sorry|pardon|come again|say again|what was that)\s*\??$/,
+  // Audio, holding and waiting
+  /^(?:can|could) (?:you|everyone) (?:hear|see) me\b/,
+  /^(?:could|can|would|will) you (?:please |just )?(?:hold|bear with me|stay on the line|stay with me|wait|give me (?:a|one) (?:moment|minute|second|sec))\b/,
+  /^(?:are you|is it) (?:able|ok|okay|possible)(?: for you)? to (?:stay|hold|wait)\b/,
+  /^would it help if i (?:stayed|stay|held|hold)\b/,
+  /^is (?:now|this) (?:a|the) (?:good|bad|convenient|right) time\b/,
+  /^did (?:the|our) (?:earlier |last |previous )?(?:call|line|connection) (?:drop|cut|disconnect|go dead|fail)\w*/,
+  // Leave to act, and offers to explain
+  /^(?:do you mind if i|is it (?:ok|okay|alright|all right|fine)(?: with you)? (?:if i|to)|would it be (?:ok|okay|alright|all right|fine) (?:if i|to)|(?:shall|can|may|could|would) i) (?:just )?(?:put you on|place you on|phone|call|ring|email|text|send you|take your|get your|have your|record|open a|log a|raise a|go ahead and|confirm (?:your|that|i have|the (?:spelling|number|details)))\b/,
+  /^(?:would you (?:like|prefer) me to|do you want me to|shall i|should i) (?:phone|call|ring|email|text|send|explain|walk you|go through|stay|hold|open|log|raise)\b/,
+  /^would you (?:prefer|like) (?:an? )?(?:e-?mail|call ?back|phone call|call|text)\b/,
+  /^have you got a (?:pen|pencil|paper|notepad)\b/,
+  // Checking agreement, and the closing question
+  /^(?:does|do) (?:that|this|it|all of that|(?:that|this|the) plan) (?:make sense|work(?: for you)?|sound (?:good|right|okay|ok|fair|reasonable)|help)\b/,
+  /^(?:is|are) (?:that|this|everything|all of that) (?:ok|okay|alright|all right|fine|right|correct|clear|good|accurate)\b/,
+  /^are you (?:happy|ok|okay|comfortable|alright|all right|fine) with (?:that|this|it|the plan)\b/,
+  /^(?:is there )?anything (?:else )?(?:i|we) can (?:help|assist|do for you)\b/,
+  /^how (?:can|may|could) (?:i|we) (?:help|assist)\b/,
+  /^how (?:are you|is your (?:day|morning|afternoon))\b/,
+  // Identity and contact details
+  new RegExp(
+    `^(?:what(?:'s| is| are)|can you (?:please )?(?:tell me|give me|confirm|provide|spell)|could (?:i|you) (?:please )?(?:have|get|take|confirm|give me|tell me)|may i (?:have|take|get)|can i (?:please )?(?:have|take|get|confirm)|is (?:that|this)) [^?]{0,12}?\\b${ID_NOUN}\\b${NO_SECOND_QUESTION}\\??$`,
+  ),
+  /^(?:who am i (?:speaking|talking) (?:with|to)|how would you like me to address you|what should i call you|is this the (?:number|phone|line) you(?:'re| are) (?:calling|ringing) (?:from|on))\b/,
+];
+
+/** True for a question that is housekeeping, so it can be left out of discovery. */
+export function isHousekeepingQuestion(sentenceLower: string): boolean {
+  const text = sentenceLower.trim();
+  if (text.split(/\s+/).length > 18) return false;
+  return HOUSEKEEPING.some((pattern) => pattern.test(text));
+}
+
+// ---------------------------------------------------------------------------------------
 // Discovery intent topics
 
 /** Adverbs that add emphasis but not meaning ("what exactly happens" is "what happens"). */
@@ -51,7 +100,7 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
   problem_description: [
     /\bwhat(?:'s| is| are| has| have)?(?: been)? (?:happening|going on|the (?:issue|problem|trouble|situation)|wrong)\b/,
     /\b(?:tell|walk|talk|take) me (?:a (?:bit|little) )?(?:through|about|more)\b/,
-    /\bcan you (?:describe|explain|tell me|walk me|give me)\b/,
+    /\bcan you (?:describe|explain|walk me|(?:tell|give) me (?:a (?:bit|little) )?(?:more|about|what|how|exactly|everything|some (?:detail|background)|the (?:whole|full|story|details|background|situation)|an? (?:example|idea|summary|overview|description)))\b/,
     /\bwhat (?:are|were) you (?:trying|doing|hoping|attempting)\b/,
     /\bwhat you (?:are|were) (?:trying|doing|hoping|attempting)\b/,
     /\bwhat (?:seems|appears) to be\b/,
@@ -73,6 +122,10 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bwhat (?:do|did) you (?:see|get)\b/,
     /\bwhat (?:are|were) you (?:seeing|getting)\b/,
     /\bwhat (?:comes|shows) up\b/,
+    // "What do your customers see when they pay?" (the subject is someone other than the caller)
+    /\bwhat (?:do|does|did|are|were) (?!you\b)(?:your |the |any |all |those |these |each |every )?(?:[a-z-]+ ){0,2}[a-z-]+ (?:see|seeing|get|getting|come up|pop up|appear)\b/,
+    // "What does the sign-in page tell you?"
+    /\bwhat (?:do|does|did|will|would) (?:the |that |this |your |any )?(?:[a-z-]+ ){0,2}(?:screen|page|message|app|portal|system|site|form|dialog|prompt|window|banner|button|alert|logs?|error|notification|sign-?in|log-?in)(?: [a-z]+)? (?:say|tell|show|display|read|look like|give)\b/,
   ],
   timing_onset: [
     /\bwhen (?:did|was|has|does|do|is|were) (?:it|this|that|the (?:issue|problem)|you)?\s?(?:first |last |actually )?(?:start|begin|began|happen|occur|work|stop|notice|see|appear|change)/,
@@ -88,13 +141,25 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bwas (?:it|this|that) (?:working|fine|ok|okay|normal) (?:yesterday|before|earlier|last|this)\b/,
     /\bwhen did you (?:last|first)\b/,
     /\b(?:was|did|had) (?:it|this|that|everything) (?:work|working|worked|open|opened|fine|ok|okay|normal)\b/,
+    // "When did the failures begin?", "When was it that orders stopped?"
+    /\bwhen (?:did|was|were|has|have|do|does) [a-z' -]{1,30}? (?:start|started|begin|began|begun|stop|stopped|fail|failing|failed|break|broke|go wrong|went wrong|happen|happening|appear|show up|kick in)\b/,
+    /\bat what (?:point|time|moment|stage)\b/,
   ],
   recent_changes: [
     /\b(?:chang(?:e|ed|es|ing)|updat(?:e|ed|es|ing)|upgrad(?:e|ed|es|ing)|install(?:ed)?|deploy(?:ed|ment)?|migrat(?:e|ed|ion)|reset|reconfigur\w+|modif(?:y|ied)|rolled out|patch(?:ed)?|new (?:setting|policy|config\w*|version|release|process|rule|system))\b/,
     /\banything (?:new|different|else changed|happen|happened)\b/,
     /\bwhat happened (?:before|just before|between|right before)\b/,
     /\bbefore (?:it|this) (?:broke|stopped|started|began)\b/,
-    /\bdifferent(?:ly)?\b/,
+    // "Different from the others" compares places, not changes over time, so it is a scope question.
+    /\bdifferent(?:ly)?\b(?! (?:from|than) (?:the )?(?:others?|rest|other \w+|everyone|everybody)\b)/,
+    // Other ways of asking whether someone touched something: "Has your developer touched the settings?"
+    /\b(?:touch|tweak|adjust|edit|alter|releas|push|enabl|disabl|toggl|rotat|renew|replac|swap|renam)(?:ed|ing)\b/,
+    /\b(?:shipp(?:ed|ing)|flipp(?:ed|ing)|switch(?:ed|ing) (?:on|off|over|to)|turn(?:ed|ing) (?:on|off))\b/,
+    /\banything (?:you|anyone|anybody|someone|somebody|they|he|she|we)\b[^.?!]{0,25}\b(?:before|prior to|right before|recently|lately|beforehand)\b/,
+    /\b(?:just|right|shortly|immediately) (?:before|prior to)\b/,
+    // "Did anybody release or alter anything?", "Has someone touched the settings?"
+    /\b(?:did|has|have|had) (?:anyone|anybody|someone|somebody|you|your \w+|the \w+|they|he|she|we|everyone)(?: else)?(?: (?:on|at|in|within|from) (?:your|the) \w+)? (?:recently |also |possibly )?(?:touch|tweak|adjust|edit|alter|releas|push|enabl|disabl|toggl|rotat|renew|replac|swap|renam|ship|flip|switch|turn|reorgani[sz])\w*/,
+    /\bbefore (?:it|this|that|the [a-z-]+(?: [a-z-]+)?) (?:broke|stopped|started|began|failed|went wrong)\b/,
   ],
   affected_scope: [
     /\bhow many (?:people|users|staff|colleagues|team|machines|devices|locations|sites|offices|customers|accounts|of you)\b/,
@@ -117,6 +182,10 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\b(?:only|just) (?:this|that|the|one) (?:workspace|app|application|site|system|service|tool|page|file|folder|portal|account|project)\b/,
     /\bother (?:tools|apps|applications|sites|systems|services|features|files|folders|workspaces|projects)\b/,
     /\b(?:is|are) (?:your )?(?:email|e-mail|internet|everything else|the rest) (?:working|fine|okay|ok)\b/,
+    // "Is the Australian store behaving differently from the others?", "Is it every region or just one?"
+    /\b(?:store|storefront|shop|region|site|office|branch|location|market|country|team|group|department|server|cluster)s?\b[^.?!]{0,45}\b(?:affected|impacted|unaffected|still (?:working|up|running|taking|processing|fine|ok|okay)|differently|the others|the rest|any other)\b/,
+    /\b(?:every|each|all|any|some|only|just|one) (?:of (?:the |your )|your )?(?:region|store|storefront|shop|location|site|office|market|country|branch|environment|server|tenant)s?\b/,
+    /\b(?:all|every|just|only|some) (?:of (?:your|the) )?(?:customers|users|shoppers|visitors|clients|orders|payments|transactions|checkouts|devices|machines)\b/,
   ],
   business_impact: [
     /\b(?:impacts?|impacting|effects?|consequences?|knock-on)\b/,
@@ -128,6 +197,10 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\b(?:business|operations|revenue|customers|patients|bookings|orders) (?:impact|affected|are|is|can)\b/,
     /\b(?:depends?|depending|rel(?:y|ies|ying)) (?:on|upon)\b/,
     /\b(?:client|customer|stakeholder|boss|manager|board|investor)s? (?:is|are|expect\w*|waiting|need\w*|want\w*|chasing)\b/,
+    // "How much revenue do you lose for each hour this is down?"
+    /\bhow much (?:revenue|money|income|business|trade|sales|work|productivity)\b[^.?!]{0,40}\b(?:lose|losing|lost|loss|at risk|costing|cost|costs|affected|impacted)\b/,
+    /\b(?:revenue|sales|orders|income|transactions|money|business) (?:per|an|each|every|a) (?:hour|minute|day)\b/,
+    /\bhow many (?:orders|sales|transactions|bookings|customers|patients|payments|checkouts)\b[^.?!]{0,40}\b(?:lose|losing|lost|missed|miss|missing|failing|failed|blocked|affected)\b/,
   ],
   workaround: [
     /\bwork ?around\b/,
@@ -138,6 +211,12 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bworks? for (?:some|anyone|others|him|her|them|anybody)\b/,
     /\bin the meantime\b/,
     /\btemporary (?:fix|solution|way)\b/,
+    // Undoing or restoring: "Is it possible to roll that change back?", "Could you revert to the previous setup?"
+    /\broll(?:ing|ed)?\b[^.?!]{0,25}\bback\b|\brollback\b|\brevert(?:ed|ing)?\b|\brevers(?:e|ed|ing|al)\b|\bundo(?:ing)?\b|\bback(?:ing)? (?:it|that|this|those|them|the \w+) out\b|\bback out\b/,
+    /\b(?:restor(?:e|ing)|go(?:ing)? back to|return(?:ing)? to|switch(?:ing)? back to) (?:the |a |your )?(?:previous|prior|last|old|earlier|original|working|known|stable)\b/,
+    /\b(?:is|are) there (?:a|any|some) (?:way|option|alternative|means)\b/,
+    // A stop-gap copy of the work: "Does anyone have a saved copy you could work from?"
+    /\b(?:saved|offline|local|backup|cached|older|spare) (?:cop(?:y|ies)|version)\b|\bcopy of (?:the|your|those|that) (?:files?|folders?|reports?|documents?|data|work)\b/,
   ],
   already_tried: [
     /\bwhat (?:have|has|did|had) you (?:tried|try|done|do|attempted)\b/,
@@ -148,6 +227,10 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bhave you (?:asked|checked with|spoken|talked|contacted|told|reached out|messaged|emailed|called)\b/,
     /\b(?:tried|attempted) (?:to|any|anything|so far)\b/,
     /\bso far\b/,
+    // "Have you looked at the status page?", "Have you or a colleague had a go at resetting it?"
+    /\bhave you(?: or [^?.!,]{1,25}?)? (?:looked|checked|reviewed|searched|read|consulted|gone through|been through|compared|confirmed|tested|rebooted|restarted|cleared|reinstalled|had a (?:go|look|try|crack)|taken a look)\b/,
+    /\bwhat (?:have|has|did|had) (?:you|they|he|she|your \w+)\b[^.?!]{0,30}\b(?:tried|try|done|attempted|attempt)\b/,
+    /\b(?:has|have|had) (?:anyone|anybody|someone|somebody|your \w+|the \w+)(?: else)? (?:looked|checked|tried|reviewed|had a (?:go|look)|taken a look|investigated|confirmed)\b/,
   ],
   environment: [
     /\b(?:browser|device|computer|laptop|desktop|phone|mobile|tablet|operating system|windows|mac(?:book)?|linux|android|ios|iphone|version|network|wi-?fi|vpn|office|remote|location|environment|application|software|program)\b/,
@@ -179,6 +262,11 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bwho did you (?:speak|talk)\b/,
     /\b(?:been told|already (?:raised|logged|reported|contacted|spoken))\b/,
     /\bhistory\b/,
+    // "What have you been told so far?", "What did the chat team say?"
+    /\bwhat (?:have|has|had|were|was|did|do) (?:you|they|he|she|we|our [a-z]+|the [a-z]+)(?: been)? (?:told|said|say|tell you|advised|suggested|recommended)\b/,
+    // Who else knows: "Who else in your organisation knows?", "Has your leadership been told?"
+    /\bwho else (?:in|at|on|within) (?:your|the) (?:organi[sz]ation|company|business|team|office|department|firm|side)\b/,
+    /\b(?:has|have|had|did|does|is|are|was|were) (?:anyone|anybody|someone|somebody|everyone|leadership|management|your (?:boss|manager|ceo|cto|cio|director|leadership|executives?|board)|the (?:ceo|board|leadership|management))\b[^.?!]{0,30}\b(?:been )?(?:told|informed|aware|notified|briefed|updated|alerted|know|knows|knew|heard)\b/,
   ],
   urgency_deadline: [
     /\bdeadline\b/,
@@ -226,8 +314,13 @@ export const IMPACT_ACK: RegExp[] = [
   /\b(?:your|the) (?:team|business|customers|patients|operations|deadline|launch|event|orders|bookings|staff|clients|checkout) (?:can'?t|cannot|are (?:unable|stuck|waiting)|is (?:unable|stuck|waiting)|depend)\b/,
   /\b(?:treat|treating|treated) (?:this|it) (?:as )?(?:a |an )?(?:priority|urgent|high priority|top priority)\b/,
   /\b(?:this|that|it)(?:'s| is) (?:clearly |obviously )?(?:urgent|critical|a priority|a big deal|serious|important to you)\b/,
-  /\b(?:i )?(?:realise|realize|understand|appreciate) (?:the|your) (?:deadline|time pressure|urgency|stakes|impact|situation)\b/,
+  /\b(?:i |we )?(?:fully |completely |really )?(?<!\bto )(?:realise|realize|understand|appreciate) (?:the|your) (?:deadline|time pressure|urgency|stakes|impact|situation)\b/,
   /\bthat'?s (?:a lot|a big|a real) (?:to deal with|problem|concern|pressure)\b/,
+  // The trainee names the stakes in their own words: "I realise the CEO is presenting at eleven",
+  // "I know your whole business runs through that checkout", "I appreciate you can't take any sales".
+  /\b(?:i|we)(?:'m| am)? (?:(?:well|fully|completely|totally|really|truly|do|can|definitely) )*(?:realise|realize|understand|appreciate|know|see|recognise|recognize|get|hear|tell|aware)\b[^.?!]{0,70}\b(?:time-?critical|urgent\w*|deadline|presenting|presentation|investors?|ceo|every (?:minute|hour|second)|(?:costing|losing|lose|lost) (?:you )?(?:orders|sales|money|revenue|customers|business)|(?:can'?t|cannot|unable to) (?:take|process|accept|sell|serve|trade)|business (?:runs|relies|depends)|(?:runs|relies|depends) (?:on|through)|riding on|at stake|on the line|(?:whole|entire) (?:business|company|team|operation))\b/,
+  /\bevery (?:minute|hour|second) (?:counts|matters)\b/,
+  /\b(?:hurting|hitting|costing|damaging) (?:your|the) (?:sales|revenue|orders|business|income|trade|bookings|customers)\b/,
 ];
 
 export const OWNERSHIP_CLEAR =
@@ -238,23 +331,32 @@ export const OWNERSHIP_VAGUE =
 const TIME_PHRASE =
   /\b(?:(?:by|before|within|in|at|after|until|around) (?:the )?(?:end of (?:the )?(?:day|today|business|week)|eod|tomorrow|today|tonight|noon|midday|\d{1,2}(?::\d{2})?\s?(?:am|pm)?|\d+ ?(?:minutes?|mins?|hours?|hrs?|days?)|the next (?:hour|day|few hours|\d+)|(?:mon|tues|wednes|thurs|fri|satur|sun)day|this (?:morning|afternoon|evening))|next update|(?:call|email|update|contact|ring|message|check in with|get back to) you (?:back )?(?:at|by|in|within|before|tomorrow|today|this)|tomorrow (?:morning|afternoon)|\d{1,2}(?::\d{2})? ?(?:am|pm))\b/;
 const ACTION_COMMIT =
-  /\b(?:i(?:'ll| will| am going to|'m going to)|we(?:'ll| will)) (?:call|email|update|contact|ring|message|check|review|investigate|send|escalate|raise|look|follow|arrange|schedule|get|come back|speak|have|let|confirm|test|restore|unlock|reset)\b/;
+  /\b(?:(?:i(?:'ll| will| am going to|'m going to)|we(?:'ll| will)) (?:call|phone|text|ping|buzz|email|update|contact|ring|message|check|review|investigate|send|escalate|raise|look|follow|arrange|schedule|get|come back|be back|be in touch|report back|reach out|circle back|check back|touch base|speak|have|let|confirm|test|restore|unlock|reset)|(?:expect|you(?:'ll| will) (?:get|receive|hear)) (?:an? )?(?:update|call|email|message|reply|response|word|call ?back))\b/;
 // A callback at a stated time is itself a committed next step, even in "I'll take this on and call you back at 2pm".
 const CALLBACK_WITH_TIME =
-  /\b(?:call|email|update|contact|ring|message|check in with) you (?:back )?(?:at|by|in|within|before|tomorrow|today|this|on)\b/;
+  /\b(?:call|phone|text|ping|buzz|email|update|contact|ring|message|check in with) you (?:back )?(?:at|by|in|within|before|tomorrow|today|this|on)\b/;
 export const NEXT_STEPS_VAGUE =
   /\b(?:get back to you|follow up|be in touch|let you know|update you|keep you (?:posted|updated|in the loop)|shortly|soon|as soon as (?:possible|i can)|asap|in due course|sometime)\b/;
 
+// Durations people say aloud, which the numeric pattern above does not cover: "in half an hour",
+// "within a couple of hours", "in twenty minutes", "by ten o'clock".
+const TIME_PHRASE_SPOKEN =
+  /\b(?:(?:in|within|after|around|for the next) (?:about |roughly |around |just |only )?(?:half an hour|half hour|an hour|a quarter of an hour|a (?:couple|few) (?:of )?(?:minutes|hours)|(?:one|two|three|four|five|six|ten|fifteen|twenty|thirty|forty-?five|sixty) (?:minutes?|mins?|hours?|hrs?))|within the (?:hour|day)|(?:by|before) (?:lunch ?time|close of business|cob|close of play|end of play)|(?:at|by|around|before|until) (?:(?:quarter|half) (?:past|to) (?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)|(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) (?:o'?clock|am|pm|fifteen|thirty|forty-?five)))\b/;
+
+function hasTimePhrase(sentence: string): boolean {
+  return TIME_PHRASE.test(sentence) || TIME_PHRASE_SPOKEN.test(sentence);
+}
+
 export function hasSpecificNextSteps(sentence: string): boolean {
   return (
-    TIME_PHRASE.test(sentence) &&
+    hasTimePhrase(sentence) &&
     (ACTION_COMMIT.test(sentence) ||
       CALLBACK_WITH_TIME.test(sentence) ||
       /\bnext update\b/.test(sentence))
   );
 }
 export const NEXT_CONTACT =
-  /\b(?:next (?:update|contact|call|step|check ?in)|follow ?up|call (?:you )?back|speak (?:again )?(?:at|by|tomorrow|today)|touch base|i(?:'ll| will) (?:call|email|update|contact|ring|message|check in with) you (?:at|by|in|on|tomorrow|today|this))\b/;
+  /\b(?:next (?:update|contact|call|step|check ?in)|follow ?up|call (?:you )?back|speak (?:again )?(?:at|by|tomorrow|today)|touch base|i(?:'ll| will) (?:call|phone|text|ping|email|update|contact|ring|message|check in with) you (?:at|by|in|on|tomorrow|today|this))\b/;
 
 export const PROMISE_REALISTIC =
   /\b(?:(?:can'?t|cannot|can not|won'?t|not (?:able|going) to|don'?t want to|unable to|wouldn'?t want to) (?:promise|guarantee|commit)|(?:i|we) (?:can|will) commit to|what i can (?:promise|commit to|do is)|i don'?t want to (?:over ?promise|give you a (?:time|date) i can'?t))\b/;
@@ -268,7 +370,7 @@ export function isUnverifiedPromise(sentence: string): boolean {
   if (PROMISE_UNVERIFIED_PHRASE.test(sentence)) return true;
   return (
     RESOLUTION_WORD.test(sentence) &&
-    TIME_PHRASE.test(sentence) &&
+    hasTimePhrase(sentence) &&
     /\b(?:will|'ll|should|going to)\b/.test(sentence) &&
     !/\bupdate\b/.test(sentence)
   );
@@ -279,6 +381,38 @@ export const BLAME =
 
 export const DISMISSIVE =
   /\b(?:calm down|don'?t worry about it|no (?:big|great) deal|it'?s (?:just|only|simply) (?:a |an )?(?:minor|small|simple|little)|that'?s not (?:a |that |really )?(?:big|major|serious|an issue|a problem|an emergency)|(?:you'?re|you are) (?:over ?reacting|exaggerating)|that (?:shouldn'?t|can'?t|cannot|doesn'?t) (?:be|happen|possible|work that way)|(?:that'?s|it'?s) (?:impossible|not possible)|there'?s nothing (?:i|we) can (?:do|say)|that'?s (?:just|simply) how it (?:works|is)|as i (?:said|told you|already said)|like i (?:said|told you)|i (?:already|have already) (?:told|explained))\b/;
+
+// More ways of putting the fault on the customer, in everyday words ("a problem on your side",
+// "your developer broke it", "that's not something we did"). Statements only: the classifier does
+// not apply them to questions. Hedged wording ("could be", "if") is left alone.
+export const BLAME_MORE: RegExp[] = [
+  /^(?!.*\b(?:could|might|may be|maybe|perhaps|possibly|not sure|unsure|wondering|if)\b).*\b(?:problem|issue|fault|cause|bug|error|mistake|failure|outage)\b[^.?!]{0,40}\b(?:on|at|with|in|from) your (?:side|end|network|set-?up|config\w*|systems?|code|site|servers?|infrastructure)\b/,
+  /\b(?:you|your (?:team|developers?|devs?|admins?|engineers?|staff|colleagues?|people|it (?:team|department)))(?:'s)? (?:broke|caused|changed|misconfigured|mis-?configured|messed (?:it |this |that )?up|screwed (?:it |this |that )?up|got (?:it|this|that) wrong|did (?:this|that|it)|made (?:a |the )?(?:mistake|error|change))\b/,
+  /^(?!.*\b(?:could|might|may be|maybe|perhaps|possibly|not sure|unsure|wondering|if)\b).*\b(?:it'?s|that'?s|this is|this was|that was) (?:your|the customer'?s?) (?:team'?s? |developer'?s? |admin'?s? )?(?:change|config\w*|set-?up|code|settings?|doing|release|deployment)\b/,
+  /^(?!.*\b(?:could|might|may be|maybe|perhaps|possibly|not sure|unsure|wondering|if)\b).*\bcaused by (?:you|your|the customer)\b/,
+  /^(?!.*\b(?:could|might|may be|maybe|perhaps|possibly|not sure|unsure|wondering|if)\b).*\b(?:down to|due to|because of|a result of|thanks to) (?:you|your (?:team|developers?|devs?|admins?|engineers?|staff|colleagues?|people|set-?up|config\w*|changes?|settings?|code|network|mistake|error|release|deployment))\b/,
+  /\byou (?:really |definitely |clearly |obviously )?(?:should|ought to|needed to) have (?:tested|checked|read|told|known|backed|followed|asked|planned|warned|made sure|kept|saved|noticed|spotted|been more careful)\b/,
+  /\bif you(?:'d| had) (?:only |just )?(?:tested|checked|read|told|known|backed|followed|asked|planned|warned|made sure|kept|saved|noticed|spotted|been more careful)\b/,
+  /\byou(?:'ve| have|'d| had)? (?:configured|set|entered|typed|put|done|used|clicked|installed|deployed|pushed|applied|set up|filled)\b[^.?!]{0,40}\b(?:wrong|incorrectly|badly|improperly)\b/,
+  /\b(?:that'?s|this is|it'?s) not (?:something )?(?:we|i|our|my) (?:did|caused|broke|changed|control|are responsible for)\b/,
+  /\byou(?:'ll| will)? (?:need|have|want) to (?:look at|check|fix|sort(?: it| this| that)? out|deal with|investigate|resolve) (?:your own|it yourself|this yourself|that yourself|things yourself|yourselves)\b/,
+];
+
+// More ways of brushing off the customer's concern ("don't worry, it's probably just a glitch",
+// "it's not that big of a deal", "relax"). Plain reassurance such as "don't worry, I'll look into
+// it" is not matched.
+export const DISMISSIVE_MORE: RegExp[] = [
+  /\bdon'?t (?:worry|stress|panic|fret|sweat)\b[^.?!]{0,12}\b(?:it'?s|its|that'?s|this is|it is)\b[^.?!]{0,30}\b(?:just|only|probably|nothing|minor|small|simple|silly|common|normal|glitch)\b/,
+  /\b(?:i|we) wouldn'?t (?:stress|worry|panic|fret|get (?:upset|worked up)) (?:about|over)\b/,
+  /\b(?:it'?s|that'?s|this is)\b[^.?!]{0,25}\bnot (?:that |such |really |much )?(?:a )?(?:big|major|serious|huge|great|real)(?: of)?(?: a)? (?:deal|issue|problem|thing|emergency|crisis|worry|concern)\b/,
+  /\bnot the end of the world\b/,
+  /(?:^|[,;:] ?)(?:just |please |try to )?(?:relax|chill out|settle down|take it easy)\b/,
+  /\bnothing (?:to|for you to) (?:worry|be (?:upset|angry|worried|concerned|alarmed|anxious)|stress|panic|get (?:upset|worked up))/,
+  /\byou (?:don'?t|do not) (?:need|have) to (?:be |get )?(?:so |that |too )?(?:worried|upset|angry|stressed|anxious|concerned|panicked|alarmed|worry|stress|panic)\b/,
+  /\byou(?:'re| are) (?:making|causing|creating) (?:a |such a )?(?:bit of a |big |huge )?(?:fuss|scene|drama|big deal|mountain out of a molehill)\b/,
+  /\b(?:it|this|that|these things|things like this|problems like this) (?:usually|often|generally|normally|always|just) (?:sort|resolve|fix|clear|work)s? (?:themselves|itself) out\b/,
+  /\b(?:it'?s|that'?s|this is|it is)\b[^.?!]{0,25}\b(?:just|only|simply|merely)\b[^.?!]{0,15}\b(?:glitch|blip|hiccup)\b/,
+];
 
 export const SUMMARISES =
   /\b(?:(?:so|ok(?:ay)?|right|alright),? (?:just )?to (?:summaris|summariz|recap|confirm|make sure|check|clarify)\w*|let me (?:just )?(?:summaris|summariz|recap|repeat|play (?:it|that) back|confirm|make sure i)\w*|to (?:summaris|summariz|recap)\w*|if i(?:'ve| have)? (?:understood|got (?:this|that|it)|heard)|what i(?:'m| am) (?:hearing|understanding)|my understanding is|do i have (?:that|this|it) right|is that (?:right|correct|accurate|fair)|have i (?:got|understood)|so (?:what|if) you'?re saying|so (?:you|it)(?:'re| are| is| was| started|'s| have| had)|sounds like (?:you|it|the)|so (?:basically|essentially)|just so i(?:'m| am) (?:clear|sure|following))\b/;

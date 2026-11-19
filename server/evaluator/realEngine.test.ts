@@ -166,13 +166,15 @@ describe('the checkout outage call from the review', () => {
     );
     expect(report.improvements.length).toBeGreaterThanOrEqual(2);
     expect(report.improvements.map((i) => i.title)).toContain(
-      'Did not find out: one regional storefront still works',
+      'Did not find out: a rollback exists but he fears what it would cost',
     );
     const summary = outsideQuotes(report.summary.overall);
     expect(sentences(summary).length).toBeLessThanOrEqual(3);
-    expect(summary).toMatch(/The biggest opportunity is to ask whether every customer/);
     expect(summary).toMatch(
-      /You uncovered 2 of the 6 hidden facts; the biggest gap was an important fact \(one regional storefront still works\)\./,
+      /The biggest opportunity is to ask whether the customer can undo, revert or roll back/,
+    );
+    expect(summary).toMatch(
+      /You uncovered 3 of the 6 hidden facts; the biggest gap was an important fact \(a rollback exists but he fears what it would cost\)\./,
     );
     expect(summary).not.toMatch(/\ba important\b|missed:|:\s+[A-Z]/);
   });

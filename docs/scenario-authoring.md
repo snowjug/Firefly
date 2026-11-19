@@ -38,7 +38,8 @@ together so they behave the same in demo mode (rules) and live mode (model):
 - `revealWhen` is a plain-language description of the kind of question that should reveal it. A model
   classifier reads it. It describes the _question_ and must never contain the fact itself.
 - `cues` (rules mode) narrow a broad topic. If a fact has cues, the question must also contain one of
-  them (lower-case substrings). Use cues when the topic is broad but the fact is specific. For
+  them (lower-case substrings, in a question the trainee asks). Use cues when the topic is broad but the
+  fact is specific. For
   example, "environment" covers "what browser?" as well as "is it signed in on your phone?", so the
   phone fact carries cues like `phone` and `other device`. Without cues a broad topic would reveal it
   too early.
@@ -111,10 +112,16 @@ and does each line sound human?
 - **Curveballs are keyed by type.** Author at most one curveball per `type`. When a call does not choose
   curveballs, the default set for its difficulty is the first authored ones (in file order) that are
   allowed at that difficulty, so put the most representative curveball first.
-- **Cues are substrings.** A cue matches anywhere in the question, case-insensitively, after the text is
-  trimmed. Short stems cause false matches (`load` matches "upload", `test` matches "latest", `who`
-  matches "whole", `history` matches "order-history"). Prefer whole words and short phrases, and do not
-  rely on leading or trailing spaces.
+- **Cues are substrings that must appear in a question.** A cue matches inside a question the trainee
+  asks, case-insensitively, and not in a statement they make, so "your CEO is presenting" does not
+  reveal a fact whose cue is `ceo`. A cue of two or more content words, such as `roll back`, also matches
+  when up to two other words sit between them ("roll that change back"). A cue that contains a word like
+  `your`, `them` or `who` only matches as written, because stretching it would match "tell me your name".
+  Housekeeping questions (asking for something to be repeated, putting the customer on hold, taking a name
+  or phone number, "is there anything else I can help with?") never reveal a fact, whatever cues they
+  contain. Short or common stems cause false matches (`load` matches "upload", `test` matches "latest",
+  `late` matches "later", `history` matches "order-history") and so do everyday words (`again`, `who`,
+  `where`). Prefer specific whole words and short phrases, and do not rely on leading or trailing spaces.
 - **Keep time out of `openingCore`.** The call stage is configurable, so a first-contact story that says "this
   morning" will contradict a follow-up opening. Put time-specific details in hidden or known facts, and keep the
   opening statement of the problem timeless.

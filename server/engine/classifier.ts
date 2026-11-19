@@ -8,10 +8,12 @@ import { DISCOVERY_INTENTS, type DiscoveryIntent } from '#shared/domain/vocab.ts
 import {
   ANYTHING_ELSE,
   BLAME,
+  BLAME_MORE,
   clip,
   contentWords,
   CORRECTS_ASSUMPTION,
   DISMISSIVE,
+  DISMISSIVE_MORE,
   EMPATHY_GENERIC,
   EMPATHY_SPECIFIC_FRAME,
   GREETING,
@@ -20,6 +22,7 @@ import {
   IMPACT_ACK,
   INJECTION,
   INTENT_PATTERNS,
+  isHousekeepingQuestion,
   isUnverifiedPromise,
   JARGON_EXPLAINED,
   JARGON_TERMS,
@@ -42,6 +45,7 @@ import {
   TROUBLESHOOTING,
   WRAPS_UP,
 } from './lexicon.ts';
+import { cueMatches, withoutContactTalk } from './textutil.ts';
 
 // Demo-mode classifier: describes what the trainee did in one turn using bounded pattern rules.
 // It is an approximation of what a model classifier does in live mode, and it returns the same
@@ -128,6 +132,7 @@ export function classifyTurnRules(text: string, ctx: ClassifierContext): TurnCla
 
   const words = (lowerAll.match(/[a-z0-9']+/g) ?? []).length;
   const intents = new Set<DiscoveryIntent>();
+  const questionTexts: string[] = [];
   let empathy = 'none' as TurnClassification['empathy'];
   let ownership = 'none' as TurnClassification['ownership'];
   let nextSteps = 'none' as TurnClassification['nextSteps'];
@@ -140,10 +145,13 @@ export function classifyTurnRules(text: string, ctx: ClassifierContext): TurnCla
     const asking = sentence.trim().endsWith('?');
 
     if (question) {
-      const found = detectIntents(ls);
-      for (const intent of found) intents.add(intent);
-      if (found.length > 0) note('discovery-question', sentence);
       out.askedQuestion = true;
+      if (!isHousekeepingQuestion(ls)) {
+        questionTexts.push(ls);
+        const found = detectIntents(ls);
+        for (const intent of found) intents.add(intent);
+        if (found.length > 0) note('discovery-question', sentence);
+      }
     }
 
     if (GREETING.test(ls)) {
@@ -194,7 +202,11 @@ export function classifyTurnRules(text: string, ctx: ClassifierContext): TurnCla
     if (hasSpecificNextSteps(ls)) {
       nextSteps = 'specific';
       note('next-steps-specific', sentence);
-      if (/\b(?:call|email|update|contact|ring|message|check in|speak|get back)\b/.test(ls)) {
+      if (
+        /\b(?:call|phone|text|ping|email|update|contact|ring|message|check in|speak|get back)\b/.test(
+          ls,
+        )
+      ) {
         out.confirmsNextContact = true;
         note('next-contact', sentence);
       }
@@ -214,11 +226,11 @@ export function classifyTurnRules(text: string, ctx: ClassifierContext): TurnCla
       note('promise-unverified', sentence);
     }
 
-    if (!asking && BLAME.test(ls)) {
+    if (!asking && (BLAME.test(ls) || BLAME_MORE.some((p) => p.test(ls)))) {
       out.blame = true;
       note('blame', sentence);
     }
-    if (DISMISSIVE.test(ls)) {
+    if (DISMISSIVE.test(ls) || DISMISSIVE_MORE.some((p) => p.test(ls))) {
       out.dismissive = true;
       note('dismissive', sentence);
     }
@@ -271,10 +283,13 @@ export function classifyTurnRules(text: string, ctx: ClassifierContext): TurnCla
   if (out.lowEffort) note('low-effort', raw);
 
   // Hidden facts the question addressed: a topic match, narrowed by cues when the fact has them.
+  // Cues only count where the trainee is asking, so "your CEO is presenting" or "the best phone
+  // number to reach you" in a statement does not reveal a fact about the CEO or a phone.
+  const askedText = withoutContactTalk(questionTexts.join(' '));
   for (const fact of ctx.scenario.hiddenFacts) {
     const intentHit = fact.intents.some((intent) => intents.has(intent));
     const hasCues = (fact.cues?.length ?? 0) > 0;
-    const cueHit = (fact.cues ?? []).some((cue) => lowerAll.includes(cue.toLowerCase()));
+    const cueHit = (fact.cues ?? []).some((cue) => cueMatches(askedText, cue));
     if (out.askedQuestion && ((intentHit && (!hasCues || cueHit)) || cueHit)) {
       out.factTargets.push({ id: fact.id, strength: 'full' });
     } else if (

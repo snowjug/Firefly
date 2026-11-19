@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { quoteInText } from '#shared/domain/text.ts';
 import { classifyTurnRules } from './classifier.ts';
 import { makeScenario } from './testing.ts';
+import { cueMatches } from './textutil.ts';
 
 const scenario = makeScenario({ difficulty: 'standard' });
 const classify = (text: string, turn = 2) =>
@@ -266,5 +267,143 @@ describe('rules classifier: summaries, closing and clarity', () => {
     const c = classify(text);
     expect(c.evidence.length).toBeGreaterThan(3);
     for (const e of c.evidence) expect(quoteInText(text, e.quote)).toBe(true);
+  });
+});
+
+// Wording a trainee would naturally use that the first patterns missed, and ordinary call talk that
+// they wrongly treated as a probing question. Each phrase here is different from the ones the
+// patterns were written around.
+describe('rules classifier: everyday phrasing', () => {
+  it('recognises the topic of questions worded in everyday ways', () => {
+    const expectations: [string, string][] = [
+      ['What do your customers see when they press pay?', 'error_message'],
+      ['What does the sign-in page tell you when it refuses you?', 'error_message'],
+      ['When exactly did the failures begin?', 'timing_onset'],
+      ['At what point did it stop letting you in?', 'timing_onset'],
+      ['Has your developer touched the settings recently?', 'recent_changes'],
+      ['Did anybody on your side release or alter anything before it began?', 'recent_changes'],
+      ['Is it possible to roll that change back?', 'workaround'],
+      ['Could the change be reversed quickly?', 'workaround'],
+      ['Does anyone have a saved copy of the files you could work from?', 'workaround'],
+      ['Have you or a colleague had a go at resetting it already?', 'already_tried'],
+      ['What have you and your colleagues already attempted?', 'already_tried'],
+      ['What have you been told so far by our chat team?', 'previous_contact'],
+      ['Has your leadership team been told yet?', 'previous_contact'],
+      ['How much revenue do you lose for each hour this is down?', 'business_impact'],
+      ['Is the Australian store behaving differently from the others?', 'affected_scope'],
+      ['Has every market been hit or only a few of them?', 'affected_scope'],
+    ];
+    for (const [question, intent] of expectations) {
+      expect(classify(question).discoveryIntents, question).toContain(intent);
+    }
+  });
+
+  it('finds a fact when the cue is worded with a word or two in between', () => {
+    const c = classify('Is your work email also set up on any other kind of device?');
+    expect(c.factTargets).toContainEqual({ id: 'hf-phone-old-password', strength: 'full' });
+    expect(cueMatches('is it possible to roll that change back?', 'roll back')).toBe(true);
+    expect(cueMatches('could you switch that off?', 'switch off')).toBe(true);
+    expect(
+      cueMatches('did you roll the dice, then drive back across the field?', 'roll back'),
+    ).toBe(false);
+    // A cue that is a fixed phrase is never stretched: "tell your" is not "tell me your".
+    expect(cueMatches('can you tell me your name?', 'tell your')).toBe(false);
+  });
+
+  it('does not mistake housekeeping questions for discovery', () => {
+    for (const text of [
+      "What's the best phone number to reach you on?",
+      'Sorry, could you say that again?',
+      'Is it okay if I phone you back later?',
+      'Could you hold for a moment while I pull up your account?',
+      'Can you tell me your account number?',
+      'Is there anything else I can help with today?',
+      'Does that plan work for you?',
+    ]) {
+      const c = classify(text);
+      expect(c.askedQuestion, text).toBe(true);
+      expect(c.discoveryIntents, text).toEqual([]);
+      expect(c.factTargets, text).toEqual([]);
+    }
+  });
+
+  it('still counts a real question that sits beside a housekeeping one', () => {
+    expect(
+      classify('Can you tell me your name and when the problem started?').factTargets,
+    ).toContainEqual({ id: 'hf-reset-timing', strength: 'full' });
+    expect(
+      classify('Thanks for holding. Is your work email also on your phone?').factTargets,
+    ).toContainEqual({ id: 'hf-phone-old-password', strength: 'full' });
+  });
+
+  it('counts a cue only where the trainee is asking', () => {
+    const c = classify(
+      "I'll note the phone number on your account. What happened when you signed in?",
+    );
+    expect(c.askedQuestion).toBe(true);
+    expect(c.factTargets.find((t) => t.id === 'hf-phone-old-password')).toBeUndefined();
+  });
+
+  it('recognises blame and brushing off in everyday words, and leaves reassurance alone', () => {
+    for (const text of [
+      "I'm afraid that error is coming from your end, not ours.",
+      "That's down to your developer's change, I'm afraid.",
+      "If you'd tested the release first this wouldn't have happened.",
+      "I think you've configured the payment route wrong.",
+    ]) {
+      expect(classify(text).blame, text).toBe(true);
+    }
+    for (const text of [
+      "Don't sweat it, it's just a hiccup.",
+      'You do not need to be so worried about this.',
+      "It's really not the end of the world.",
+      "You're making a bit of a fuss over this.",
+    ]) {
+      expect(classify(text).dismissive, text).toBe(true);
+    }
+    for (const text of [
+      'Is the problem on your side or ours?',
+      "It could be a problem on your side, or it could be on ours, so let's check both.",
+      "Don't worry, I'll look into this right now.",
+      "It's not a problem at all, I'm happy to stay on the line.",
+    ]) {
+      const c = classify(text);
+      expect(c.blame, text).toBe(false);
+      expect(c.dismissive, text).toBe(false);
+    }
+  });
+
+  it('recognises the stakes when the trainee names them in their own words', () => {
+    for (const text of [
+      'I realise the CEO is presenting at eleven so this is time-critical.',
+      'I know your whole business runs through that checkout.',
+      "I appreciate that you can't take any sales while this is down.",
+      'Every minute counts here and I know that.',
+      "I'm aware you've got a deadline at eleven.",
+    ]) {
+      expect(classify(text).acknowledgesImpact, text).toBe(true);
+    }
+    for (const text of [
+      'I understand. Can you tell me what happened?',
+      'I need to understand the deadline first.',
+      "I don't know the deadline yet.",
+    ]) {
+      expect(classify(text).acknowledgesImpact, text).toBe(false);
+    }
+  });
+
+  it('reads spoken times and other ways of reaching the customer as a specific next step', () => {
+    for (const text of [
+      "I'll come back to you in half an hour with an update.",
+      "I'll ring you in around twenty minutes once I've spoken to the engineers.",
+      "I'll text you in about ten minutes with where we're at.",
+      "I'll be back in touch within the hour with what the engineers say.",
+      'Expect an update from me by quarter past ten.',
+    ]) {
+      expect(classify(text).nextSteps, text).toBe('specific');
+    }
+    for (const text of ["I'll look into it.", "I'll call you back soon."]) {
+      expect(classify(text).nextSteps, text).not.toBe('specific');
+    }
   });
 });

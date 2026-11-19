@@ -133,6 +133,42 @@ describe('scenario library', () => {
     }
   });
 
+  it('keeps hidden facts hidden through ordinary call housekeeping', async () => {
+    for (const scenario of library) {
+      for (const difficulty of DIFFICULTIES) {
+        const effective = applyConfig(scenario, { difficulty, curveballs: [] }, { seed: 5 });
+        const result = await simulate(effective, [
+          'Hello, thanks for calling, my name is Sam. How can I help you today?',
+          "Can I take your name, and what's the best phone number to reach you on?",
+          'Sorry, could you say that again?',
+          'Could you hold for a moment while I pull up your account?',
+          'Is it okay if I phone you back later?',
+          'Is there anything else I can help with today?',
+        ]);
+        expect(Object.keys(result.runtime.discovery), `${scenario.id} (${difficulty})`).toEqual([]);
+      }
+    }
+  });
+
+  it('finds the checkout rollback fact however the trainee words the question', async () => {
+    const scenario = library.find((s) => s.id === 'checkout-outage-before-investor-event');
+    if (!scenario) throw new Error('The checkout scenario is missing');
+    for (const question of [
+      'Is it possible to roll that change back?',
+      'Could the change be reversed quickly?',
+      'Is there a way to put things back how they were before the change?',
+      'Can you turn that setting off again?',
+    ]) {
+      const effective = applyConfig(
+        scenario,
+        { difficulty: 'challenge', curveballs: [] },
+        { seed: 11 },
+      );
+      const result = await simulate(effective, [...LEAD_IN, question]);
+      expect(result.runtime.discovery['hf-rollback-fear']?.status, question).toBe('discovered');
+    }
+  });
+
   it('keeps hidden facts hidden when the trainee never asks about them', async () => {
     for (const scenario of library) {
       for (const difficulty of DIFFICULTIES) {
