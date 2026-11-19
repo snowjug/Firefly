@@ -11,8 +11,8 @@ interface DialogProps {
   title: string;
   description?: string;
   children: ReactNode;
-  /** 'sheet' slides up from the bottom (used for mobile panels). */
-  variant?: 'dialog' | 'sheet';
+  /** 'sheet' slides up from the bottom and 'drawer' in from the left (used for mobile panels). */
+  variant?: 'dialog' | 'sheet' | 'drawer';
   /** Set false for confirmations that must be answered explicitly. */
   dismissible?: boolean;
 }
@@ -89,10 +89,22 @@ export function Dialog({
   }, [open, dismissible]);
 
   if (!open) return null;
+  const scrimClass =
+    variant === 'sheet'
+      ? 'scrim scrim-bottom'
+      : variant === 'drawer'
+        ? 'scrim scrim-start'
+        : 'scrim';
+  const panelClass =
+    variant === 'sheet'
+      ? 'glass glass-strong sheet'
+      : variant === 'drawer'
+        ? 'drawer'
+        : 'glass glass-strong dialog';
   return createPortal(
     <div
       role="presentation"
-      className={`scrim${variant === 'sheet' ? ' scrim-bottom' : ''}`}
+      className={scrimClass}
       onMouseDown={(event) => {
         if (dismissible && event.target === event.currentTarget) onClose();
       }}
@@ -104,7 +116,7 @@ export function Dialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
-        className={`glass glass-strong ${variant === 'sheet' ? 'sheet' : 'dialog'}`}
+        className={panelClass}
       >
         <div
           className="row between"

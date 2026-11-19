@@ -1,0 +1,524 @@
+/* Landing and sign-in. These two pages sit outside the app shell: the hero and the sign-in side panel
+   are always dark (they are brand moments), everything below follows the theme. */
+
+.public {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+/* ------------------------------------------------------------------ Landing: header */
+.lp {
+  position: relative;
+}
+.lp-dark,
+.lp-header {
+  --lp-text: #ffffff;
+  --lp-text-2: #c3cdf0;
+  --lp-line: rgba(255, 255, 255, 0.14);
+  --lp-card: rgba(255, 255, 255, 0.06);
+}
+.lp-dark {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-top: 76px;
+  color: var(--lp-text);
+  background:
+    radial-gradient(48rem 34rem at 78% 36%, rgba(96, 82, 255, 0.34), transparent 62%),
+    radial-gradient(30rem 22rem at 8% 100%, rgba(40, 110, 255, 0.22), transparent 70%),
+    linear-gradient(165deg, #040a28 0%, #08133f 52%, #0a1a5c 100%);
+}
+.lp-dark::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  background:
+    radial-gradient(circle at 12% 22%, rgba(255, 255, 255, 0.55) 0 1px, transparent 2px),
+    radial-gradient(circle at 31% 64%, rgba(255, 255, 255, 0.4) 0 1px, transparent 2px),
+    radial-gradient(circle at 47% 12%, rgba(255, 255, 255, 0.45) 0 1px, transparent 2px),
+    radial-gradient(circle at 64% 82%, rgba(255, 255, 255, 0.35) 0 1px, transparent 2px),
+    radial-gradient(circle at 88% 18%, rgba(255, 255, 255, 0.5) 0 1px, transparent 2px),
+    radial-gradient(circle at 93% 70%, rgba(255, 255, 255, 0.4) 0 1px, transparent 2px);
+}
+.lp-header {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 3;
+}
+.lp-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  width: min(100% - 2 * var(--sp-5), 1240px);
+  margin: 0 auto;
+  padding: var(--sp-4) 0;
+}
+.lp-nav .brand {
+  color: #fff;
+}
+.lp-nav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  margin-left: var(--sp-6);
+}
+.lp-nav-links a {
+  color: var(--lp-text-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  text-decoration: none;
+}
+.lp-nav-links a:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+.lp-nav-end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.lp-dark a:focus-visible,
+.lp-dark button:focus-visible,
+.lp-header a:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* ------------------------------------------------------------------ Landing: hero */
+.lp-hero {
+  width: min(100% - 2 * var(--sp-5), 1240px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  align-items: center;
+  gap: var(--sp-6);
+  padding: var(--sp-7) 0 var(--sp-6);
+}
+.lp-eyebrow {
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9fb4ff;
+}
+.lp-title {
+  font-size: clamp(2.4rem, 1.4rem + 3.6vw, 4.1rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  font-weight: 780;
+  color: #fff;
+}
+.lp-lead {
+  max-width: 52ch;
+  margin-top: var(--sp-4);
+  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
+  line-height: 1.55;
+  color: var(--lp-text-2);
+}
+.lp-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+}
+.lp-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  margin-top: var(--sp-5);
+  font-size: var(--fs-meta);
+  color: var(--lp-text-2);
+}
+.lp-trust span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.lp-orb {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+/* Keep the words inside the sphere: a little smaller than the artwork's default. */
+.lp-orb .ill-orb-slot {
+  font-size: clamp(14px, 5cqw, 28px);
+  padding: 0 24%;
+}
+
+/* ------------------------------------------------------------------ Landing: feature strip */
+.lp-strip {
+  width: min(100% - 2 * var(--sp-5), 1240px);
+  margin: 0 auto;
+  padding: 0 0 var(--sp-7);
+}
+.lp-strip ul {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-4);
+  list-style: none;
+  border-radius: var(--r-panel);
+  border: 1px solid var(--lp-line);
+  background: var(--lp-card);
+}
+.lp-strip li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+}
+.lp-strip-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: #bcd0ff;
+  background: rgba(96, 130, 255, 0.18);
+}
+.lp-strip strong {
+  display: block;
+  font-size: var(--fs-small);
+  color: #fff;
+}
+.lp-strip span {
+  font-size: var(--fs-meta);
+  color: var(--lp-text-2);
+}
+
+/* ------------------------------------------------------------------ Landing: sections */
+.lp-section {
+  width: min(100% - 2 * var(--sp-5), 1240px);
+  margin: 0 auto;
+  padding: var(--sp-8) 0 0;
+  scroll-margin-top: var(--sp-4);
+}
+.lp-section > header {
+  max-width: 62ch;
+  margin-bottom: var(--sp-5);
+}
+.lp-kicker {
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.lp-h2 {
+  font-size: clamp(1.5rem, 1.2rem + 1.1vw, 2.1rem);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  font-weight: 760;
+}
+.lp-section > header p:not(.lp-kicker) {
+  margin-top: var(--sp-3);
+  color: var(--text-2);
+}
+.lp-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+.lp-card {
+  padding: var(--sp-5);
+}
+.lp-card h3 {
+  margin: var(--sp-3) 0 var(--sp-2);
+  font-size: 1.05rem;
+}
+.lp-card p {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.lp-card ul {
+  margin: var(--sp-3) 0 0;
+  padding-left: 1.1rem;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+.lp-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.lp-steps li {
+  position: relative;
+  padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  border-radius: var(--r-card);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.lp-steps li::before {
+  counter-increment: step;
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-bottom: var(--sp-3);
+  border-radius: 50%;
+  font-weight: 750;
+  color: #fff;
+  background: var(--banner-bg);
+}
+.lp-steps h3 {
+  font-size: 1rem;
+  margin-bottom: var(--sp-1);
+}
+.lp-steps p {
+  font-size: var(--fs-small);
+  color: var(--text-2);
+}
+
+.lp-skills {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-skills li {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-4);
+  border-radius: var(--r-card);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.lp-skills strong {
+  display: block;
+  font-size: var(--fs-small);
+}
+.lp-skills span {
+  font-size: var(--fs-meta);
+  color: var(--text-2);
+}
+
+.lp-about {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+.lp-about ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--sp-3);
+}
+.lp-about li {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  font-size: var(--fs-small);
+}
+.lp-about li svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--positive);
+}
+
+.lp-final {
+  width: min(100% - 2 * var(--sp-5), 1240px);
+  margin: var(--sp-8) auto 0;
+}
+.lp-footer {
+  width: min(100% - 2 * var(--sp-5), 1240px);
+  margin: var(--sp-7) auto 0;
+  padding: var(--sp-5) 0 var(--sp-6);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-5);
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-meta);
+  color: var(--text-3);
+}
+
+@media (max-width: 1000px) {
+  .lp-hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: var(--sp-5);
+  }
+  .lp-orb {
+    order: -1;
+    max-width: 380px;
+    margin: 0 auto;
+  }
+  .lp-strip ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lp-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lp-cards,
+  .lp-skills {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lp-about {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .lp-nav-links {
+    display: none;
+  }
+  .lp-strip ul,
+  .lp-steps,
+  .lp-cards,
+  .lp-skills {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lp-section {
+    padding-top: var(--sp-7);
+  }
+}
+
+/* ------------------------------------------------------------------ Sign-in */
+.si {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+}
+.si-art {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  min-height: 420px;
+  padding: var(--sp-7) var(--sp-7) var(--sp-7);
+  color: #fff;
+  background: linear-gradient(170deg, #050c2e 0%, #0a1a5c 100%);
+}
+.si-art-visual {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+/* A dark wash behind the words, so they stay readable over the lit windows. */
+.si-art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    180deg,
+    rgba(4, 10, 40, 0) 38%,
+    rgba(4, 10, 40, 0.78) 72%,
+    rgba(4, 10, 40, 0.92) 100%
+  );
+}
+.si-art h2 {
+  max-width: 14ch;
+  font-size: clamp(2rem, 1.3rem + 2.4vw, 3.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 780;
+  color: #fff;
+}
+.si-art p {
+  max-width: 40ch;
+  color: #c3cdf0;
+}
+.si-art-rule {
+  width: 56px;
+  height: 3px;
+  border-radius: 3px;
+  background: #4d86ff;
+}
+.si-panel {
+  display: grid;
+  place-items: center;
+  padding: var(--sp-6) var(--sp-5);
+}
+.si-card {
+  width: min(100%, 460px);
+  padding: var(--sp-6);
+  display: grid;
+  gap: var(--sp-4);
+}
+.si-card .brand {
+  color: var(--text);
+}
+.si-card h1 {
+  font-size: 1.7rem;
+  letter-spacing: -0.025em;
+  font-weight: 760;
+}
+.si-or {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--text-3);
+  font-size: var(--fs-meta);
+}
+.si-or::before,
+.si-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.si-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-4) 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  text-align: center;
+}
+.si-facts li {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-meta);
+  color: var(--text-2);
+}
+.si-facts strong {
+  font-size: var(--fs-small);
+  color: var(--text);
+}
+@media (max-width: 900px) {
+  .si {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .si-art {
+    min-height: 260px;
+    padding: var(--sp-6) var(--sp-5);
+  }
+  .si-panel {
+    padding: var(--sp-5) var(--sp-4) var(--sp-7);
+  }
+}
+@media (max-width: 480px) {
+  .si-card {
+    padding: var(--sp-5) var(--sp-4);
+  }
+  .si-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

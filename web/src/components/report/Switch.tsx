@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import '../../styles/report.css';
 
 /** An on/off switch built on a native checkbox (role="switch"), with a visible label. */
 export function Switch({
