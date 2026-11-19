@@ -28,9 +28,10 @@ import {
 } from './output.ts';
 import type { ClassifyArgs, ModelProvider, PromptVersions } from './types.ts';
 
-// Live mode: a chat model behind Azure OpenAI or an OpenAI-compatible endpoint. It supplies the three
-// judgement calls (classify a trainee turn, write the customer's reply, draft the coaching) and
-// nothing else. Every output is validated before it is used, and every failure is a ProviderError.
+// Live mode: a chat model behind Azure OpenAI, an OpenAI-compatible endpoint or the Gemini API. It
+// supplies the three judgement calls (classify a trainee turn, write the customer's reply, draft the
+// coaching) and nothing else. Every output is validated before it is used, and every failure is a
+// ProviderError.
 
 export const LIVE_PROMPTS: PromptVersions = {
   customer: CUSTOMER_PROMPT_VERSION,
@@ -38,10 +39,11 @@ export const LIVE_PROMPTS: PromptVersions = {
   evaluator: EVALUATOR_PROMPT_VERSION,
 };
 
-const labelFor = (config: LiveConfig): string =>
-  config.kind === 'azure-openai'
-    ? `Azure OpenAI (deployment "${config.deployment}")`
-    : `OpenAI-compatible (model "${config.model}")`;
+function labelFor(config: LiveConfig): string {
+  if (config.kind === 'azure-openai') return `Azure OpenAI (deployment "${config.deployment}")`;
+  if (config.kind === 'gemini') return `Gemini (model "${config.model}")`;
+  return `OpenAI-compatible (model "${config.model}")`;
+}
 
 // ---------------------------------------------------------------------------------------
 // JSON answers (classifier and evaluator): one repair attempt, then give up

@@ -3,9 +3,9 @@
 Firefly runs in one of two modes.
 
 - **Demo mode** (the default) uses Firefly's built-in rules engine. It needs no credentials and makes no network calls. It is labelled "Demo mode" everywhere in the app and is never presented as a model.
-- **Live mode** uses a chat model for three judgement calls: classifying what the trainee did, writing the customer's replies, and drafting the coaching report. Two providers are supported: Azure OpenAI and any OpenAI-compatible chat-completions endpoint.
+- **Live mode** uses a chat model for three judgement calls: classifying what the trainee did, writing the customer's replies, and drafting the coaching report. Three providers are supported: Azure OpenAI, Google's Gemini API, and any OpenAI-compatible chat-completions endpoint.
 
-> **Verification status.** The live path has been verified only against a local fake OpenAI-compatible server (`server/providers/fake-llm-server.ts`) in automated tests. It has not been run against Azure OpenAI or any real OpenAI-compatible service, so anything that depends on a real service is unverified: the exact wording of error responses, content-filter payloads, JSON-mode support, token budgets for reasoning models, and the quality of the replies. Run the [smoke test](#optional-manual-smoke-test) with your own key before relying on it.
+> **Verification status.** The Gemini provider has been run end to end against the real Gemini API (see [Verified against the Gemini API](#verified-against-the-gemini-api)). Azure OpenAI and generic OpenAI-compatible services have been verified only against a local fake server (`server/providers/fake-llm-server.ts`) in automated tests. For those two, anything that depends on a real service is unverified: the exact wording of error responses, content-filter payloads, JSON-mode support, token budgets for reasoning models, and the quality of the replies. Run the [smoke test](#optional-manual-smoke-test) with your own key before relying on them.
 
 ## Configure a provider
 
@@ -31,6 +31,33 @@ AZURE_OPENAI_API_VERSION=<api-version>
 
 Firefly calls `POST {endpoint}/openai/deployments/{deployment}/chat/completions?api-version={version}` with the key in an `api-key` header. The deployment must be a chat model; it selects the model, so no `model` field is sent.
 
+### Gemini (Google AI Studio)
+
+A stand-in for Azure OpenAI that needs only an API key from [Google AI Studio](https://aistudio.google.com/apikey).
+
+```
+FIREFLY_PROVIDER=gemini
+GEMINI_API_KEY=<your-api-key>
+# Optional:
+GEMINI_MODEL=<model-name>
+GEMINI_BASE_URL=<https://generativelanguage.googleapis.com/v1beta/openai>
+```
+
+Only the key is required. Without `GEMINI_MODEL` Firefly uses `gemini-3.5-flash-lite`, a fast, low-cost model; without `GEMINI_BASE_URL` it uses Google's OpenAI-compatible endpoint. Firefly calls `POST {base-url}/chat/completions` with `Authorization: Bearer <key>` and the model name in the body. The provider label reads `Gemini (model "<name>")`.
+
+What Firefly does differently for Gemini:
+
+- Gemini models think before they answer, and that thinking counts against the completion limit. Firefly asks for the lowest reasoning effort (`reasoning_effort: "minimal"`) and adds token headroom so a reply is not cut off. A model that rejects the reasoning setting is retried once without it.
+- Google answers an invalid API key with HTTP 400 rather than 401. Firefly recognises that and reports "rejected the credentials".
+- When Google says how long to wait after a rate limit, Firefly passes that on ("Please try again in about 40 seconds") instead of a vague message.
+
+Things to know before relying on it:
+
+- **Rate limits.** Limits apply per Google project (not per key), per model, and depend on the project's usage tier. When this was tested on a free-tier project, `gemini-3.5-flash-lite` allowed 15 requests per minute, and a trainee message costs two requests, so a fast conversation can hit the limit. Firefly then shows the wait Google asked for, and a failed coaching report can be retried from the report page. Linking a billing account moves a project to a paid tier with higher limits; Google AI Studio shows your current limits, and Google's [rate limit documentation](https://ai.google.dev/gemini-api/docs/rate-limits) explains the tiers.
+- **Data use.** Google's [Gemini API terms](https://ai.google.dev/gemini-api/terms) (effective 2026-03-23 when this was checked) say that for unpaid services, which includes the unpaid quota of the Gemini API, Google uses what you submit and the responses to improve its products and human reviewers may read it, and they say not to submit sensitive, confidential or personal information. For paid services, Google does not use prompts and responses to improve its products. Firefly sends only fictional scenario text and redacted trainee messages, so keep it that way: never type real customer data, and read the current terms before using a key for anything else.
+- **Model availability.** Models change. During testing some larger models sometimes answered HTTP 503 ("high demand"), which Firefly reports as "not available right now"; choosing another model with `GEMINI_MODEL` fixes that. To list the models your key can use, run `curl -H "Authorization: Bearer $GEMINI_API_KEY" https://generativelanguage.googleapis.com/v1beta/openai/models`.
+- **Keep the key private.** It belongs only in your git-ignored `.env`. `npm run check:secrets` also looks for Google key shapes, but it is a safety net. If a key is ever pasted somewhere public or shared, delete it in Google AI Studio and create a new one.
+
 ### OpenAI-compatible endpoint
 
 ```
@@ -52,6 +79,10 @@ Firefly calls `POST {base-url}/chat/completions` with `Authorization: Bearer <ke
 ### If settings are incomplete
 
 If a live provider is requested but a required variable is missing, Firefly starts in demo mode instead. The startup console prints a notice naming the missing variables (never their values), and `GET /api/config` reports it as `provider.notice`. The provider label tells you which mode is really running.
+
+### Switching providers
+
+A call remembers the provider it started with. If you change `FIREFLY_PROVIDER` while a call is still in progress (for example from demo mode to Gemini), that call cannot take more messages and the app asks you to start a new one. Finished calls and their reports stay readable.
 
 ### Behind a proxy
 
@@ -104,17 +135,17 @@ This is a safety net, not a proof. It catches near-verbatim details; a model cou
 
 All provider failures are `ProviderError` with a fixed, user-safe message. The provider layer does not log, and its error messages never contain the API key, the endpoint, request or response bodies, or transcript text.
 
-| Situation                                     | Code                        | Retryable | Behaviour                                                                   |
-| --------------------------------------------- | --------------------------- | --------- | --------------------------------------------------------------------------- |
-| HTTP 401 or 403                               | `provider_not_configured`   | No        | "The AI provider rejected the credentials. Check ..."                       |
-| HTTP 404                                      | `provider_not_configured`   | No        | The model or deployment was not found.                                      |
-| HTTP 429                                      | `provider_rate_limited`     | Yes       | Retried up to the limit, waiting for `Retry-After` (at most 5 s).           |
-| HTTP 5xx, network error                       | `provider_unavailable`      | Yes       | Retried up to the limit with a short backoff (0.3 s, 0.6 s, ... up to 2 s). |
-| Timeout, HTTP 408                             | `provider_timeout`          | Yes       | Not retried automatically; the user can try again.                          |
-| Content filter (`finish_reason`, Azure error) | `provider_content_filtered` | No        | The user is asked to rephrase.                                              |
-| Unusable output after the repair attempt      | `provider_bad_output`       | Yes       | See above.                                                                  |
-| Other HTTP 4xx                                | `provider_unavailable`      | No        | Never retried. The status code is in the message.                           |
-| Cancelled by the caller                       | `AbortError`                | n/a       | Not a `ProviderError`; the request stops at once.                           |
+| Situation                                      | Code                        | Retryable | Behaviour                                                                                                  |
+| ---------------------------------------------- | --------------------------- | --------- | ---------------------------------------------------------------------------------------------------------- |
+| HTTP 401 or 403, or Google's 400 for a bad key | `provider_not_configured`   | No        | "The AI provider rejected the credentials. Check ..."                                                      |
+| HTTP 404                                       | `provider_not_configured`   | No        | The model or deployment was not found.                                                                     |
+| HTTP 429                                       | `provider_rate_limited`     | Yes       | Retried up to the limit, waiting for `Retry-After` (at most 5 s). Google's advised wait is shown if given. |
+| HTTP 5xx, network error                        | `provider_unavailable`      | Yes       | Retried up to the limit with a short backoff (0.3 s, 0.6 s, ... up to 2 s).                                |
+| Timeout, HTTP 408                              | `provider_timeout`          | Yes       | Not retried automatically; the user can try again.                                                         |
+| Content filter (`finish_reason`, Azure error)  | `provider_content_filtered` | No        | The user is asked to rephrase.                                                                             |
+| Unusable output after the repair attempt       | `provider_bad_output`       | Yes       | See above.                                                                                                 |
+| Other HTTP 4xx                                 | `provider_unavailable`      | No        | Never retried. The status code is in the message.                                                          |
+| Cancelled by the caller                        | `AbortError`                | n/a       | Not a `ProviderError`; the request stops at once.                                                          |
 
 ### Compatibility adjustments
 
@@ -123,6 +154,17 @@ Models differ in the parameters they accept. If a 400 response says so, Firefly 
 - `max_tokens` is rejected: use `max_completion_tokens` (and the reverse). With `max_completion_tokens`, Firefly adds headroom, because models that reason before answering count hidden reasoning against that limit.
 - `temperature` is rejected: send the request without it.
 - `response_format` is rejected: send the request without it. JSON is then read from the plain text reply.
+- `reasoning_effort` is rejected (Gemini only, the one provider that is sent it): send the request without it.
+
+## Verified against the Gemini API
+
+On 2026-11-19 the Gemini provider was run against the real Gemini API with the default model, `gemini-3.5-flash-lite`, through a running Firefly server. Each run created a call, sent four fictional trainee messages, ended the call and waited for the report.
+
+- Three calls (two on "Locked out after a password reset", one on "A new hire has no premium seat") completed. The customer replied in character each time, usually in 3 to 10 seconds, and the coaching was written by the model and then verified by the evaluator: the report records the evaluator as `model` with the Gemini label.
+- A fourth call (the Standard scenario "Team cannot open the shared project workspace") got its customer replies, but the coaching draft hit the free-tier rate limit (HTTP 429). Firefly showed it as a retryable failure with the transcript kept, as designed.
+- Separate requests confirmed that JSON mode (`response_format`) and `reasoning_effort: "minimal"` are accepted by `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`, and recorded the shape of Google's error responses for an invalid key, an unknown model, an unknown field and a rate limit. The tests for those cases use those shapes.
+
+This was a handful of scripted calls to show that the provider works. It says nothing about how the coaching compares with a mentor's; see [the evaluation rubric](evaluation-rubric.md) for how scores are checked.
 
 ## Prompt versions
 
@@ -132,7 +174,7 @@ Prompts are plain functions in `server/prompts/` with exported version constants
 
 This is for the maintainer and is not required. It needs your own key, makes two small model calls, and shows that the settings, the endpoint and the output handling work end to end.
 
-1. Put one provider block in `.env`, then start Firefly with `npm start`. The console should print `AI provider : Azure OpenAI (deployment "...")` or `OpenAI-compatible (model "...")`. If it prints a notice instead, a variable is missing.
+1. Put one provider block in `.env`, then start Firefly with `npm start`. The console should print `AI provider : Azure OpenAI (deployment "...")`, `Gemini (model "...")` or `OpenAI-compatible (model "...")`. If it prints a notice instead, a variable is missing.
 2. Optional script check: save the following as `smoke.ts` in the repository root, run `node --env-file=.env --disable-warning=ExperimentalWarning smoke.ts`, then delete it. It prints the label, one classification and one customer reply.
 
    ```ts

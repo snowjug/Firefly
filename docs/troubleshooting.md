@@ -29,7 +29,13 @@ Look at the server's startup output. If a required variable is missing or `FIREF
 A call keeps the provider it was started with. If you change `FIREFLY_PROVIDER` while a call is open, start a new call.
 
 **"The AI provider rejected the credentials", "could not find the model", or timeouts.**
-These come from your provider settings. [ai-providers.md](ai-providers.md#failure-behaviour) lists each message and what it means. The live path has been tested only against a local fake server, so use the manual smoke test in that document before relying on it.
+These come from your provider settings. [ai-providers.md](ai-providers.md#failure-behaviour) lists each message and what it means. Only Gemini has been run against a real service; Azure OpenAI and other OpenAI-compatible services have been tested only against a local fake server, so use the manual smoke test in that document before relying on them.
+
+**With Gemini: "The AI provider's rate limit was reached. Please try again in about N seconds."**
+A free-tier Gemini project allows a limited number of requests per minute for each model (15 for `gemini-3.5-flash-lite` when this was tested), and each message you send uses two. Wait the number of seconds shown, then choose Retry or "Try again". Linking a billing account to the Google project raises the limits (see [ai-providers.md](ai-providers.md#gemini-google-ai-studio)), or set `GEMINI_MODEL` to another model.
+
+**With Gemini: "The AI provider is not available right now."**
+Google answered with a server error. Larger models sometimes answer HTTP 503 ("high demand"). Try again in a moment, or set `GEMINI_MODEL` to another model (`gemini-3.5-flash-lite` is the default).
 
 **My network needs a proxy to reach the provider.**
 Node's built-in `fetch` ignores proxy variables unless you start the server with `NODE_OPTIONS=--use-env-proxy`.

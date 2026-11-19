@@ -20,7 +20,7 @@ import type {
 
 // The JSON contract between the Firefly server and the web app.
 
-export type ProviderKind = 'mock' | 'azure-openai' | 'openai-compatible';
+export type ProviderKind = 'mock' | 'azure-openai' | 'openai-compatible' | 'gemini';
 
 export type ApiErrorCode =
   | 'bad_request'

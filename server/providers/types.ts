@@ -80,6 +80,15 @@ export type ProviderConfig =
       model: string;
       timeoutMs: number;
       maxRetries: number;
+    }
+  | {
+      // Google's Gemini API, through its OpenAI-compatible chat-completions endpoint.
+      kind: 'gemini';
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      timeoutMs: number;
+      maxRetries: number;
     };
 
 export interface LoadedProviderConfig {
@@ -87,6 +96,11 @@ export interface LoadedProviderConfig {
   /** Set when a live provider was requested but could not be configured; demo mode is used. */
   problem: string | null;
 }
+
+/** Where Gemini's OpenAI-compatible chat completions live (Firefly adds `/chat/completions`). */
+export const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
+/** A fast, low-cost Gemini model that answered reliably in testing. Change it with GEMINI_MODEL. */
+export const GEMINI_DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
 const present = (v: string | undefined): v is string =>
   typeof v === 'string' && v.trim() !== '' && !/^<.*>$/.test(v.trim());
@@ -151,10 +165,33 @@ export function loadProviderConfig(env: NodeJS.ProcessEnv = process.env): Loaded
     };
   }
 
+  if (kind === 'gemini') {
+    // Only the key is required: the endpoint and a sensible model have defaults.
+    if (!present(env.GEMINI_API_KEY)) {
+      return {
+        config: { kind: 'mock', mockDelayMs },
+        problem: 'FIREFLY_PROVIDER=gemini but GEMINI_API_KEY is not set.',
+      };
+    }
+    return {
+      config: {
+        kind: 'gemini',
+        baseUrl: (present(env.GEMINI_BASE_URL) ? env.GEMINI_BASE_URL : GEMINI_BASE_URL)
+          .trim()
+          .replace(/\/+$/, ''),
+        apiKey: env.GEMINI_API_KEY.trim(),
+        model: (present(env.GEMINI_MODEL) ? env.GEMINI_MODEL : GEMINI_DEFAULT_MODEL).trim(),
+        timeoutMs,
+        maxRetries,
+      },
+      problem: null,
+    };
+  }
+
   if (kind !== 'mock') {
     return {
       config: { kind: 'mock', mockDelayMs },
-      problem: `FIREFLY_PROVIDER="${kind}" is not recognised. Use mock, azure-openai or openai-compatible.`,
+      problem: `FIREFLY_PROVIDER="${kind}" is not recognised. Use mock, azure-openai, openai-compatible or gemini.`,
     };
   }
   return { config: { kind: 'mock', mockDelayMs }, problem: null };
