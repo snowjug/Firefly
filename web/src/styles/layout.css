@@ -355,6 +355,19 @@
     padding-inline: var(--sp-4);
   }
 }
+/* On the narrowest phones the name steps aside so the three action buttons still fit. */
+@media (max-width: 420px) {
+  .topbar {
+    gap: var(--sp-1);
+    padding-inline: var(--sp-2);
+  }
+  .topbar-brand span {
+    display: none;
+  }
+  .topbar-end {
+    gap: 0;
+  }
+}
 
 /* Route transitions use the View Transitions API where available; the effect is a short crossfade. */
 @supports (view-transition-name: none) {

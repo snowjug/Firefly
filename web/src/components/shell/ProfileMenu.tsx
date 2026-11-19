@@ -17,7 +17,9 @@ export function ProfileMenu() {
         aria-haspopup="true"
         aria-expanded={open}
         aria-controls="profile-panel"
-        aria-label={profile ? `Account menu for ${profile.name}` : 'Account menu'}
+        aria-label={
+          profile ? `${initials(profile.name)}, account menu for ${profile.name}` : 'Account menu'
+        }
         onClick={toggle}
         style={{ padding: 0 }}
       >

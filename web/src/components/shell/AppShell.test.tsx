@@ -164,7 +164,10 @@ describe('AppShell navigation', () => {
   it('opens the library with the words that were searched for', async () => {
     const user = userEvent.setup();
     renderShell('/home');
-    await user.type(screen.getByRole('searchbox', { name: 'Search scenarios' }), 'sign in{Enter}');
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Search all scenarios' }),
+      'sign in{Enter}',
+    );
     expect(await screen.findByTestId('where')).toHaveTextContent('/scenarios?q=sign%20in');
   });
 
@@ -276,7 +279,7 @@ describe('account menu', () => {
     saveProfile({ name: 'Priya Raman', role: 'Apprentice' });
     const user = userEvent.setup();
     renderShell('/home');
-    await user.click(screen.getByRole('button', { name: 'Account menu for Priya Raman' }));
+    await user.click(screen.getByRole('button', { name: 'PR, account menu for Priya Raman' }));
     const panel = await screen.findByRole('region', { name: 'Account' });
     expect(panel).toHaveTextContent('Priya Raman');
     expect(panel).toHaveTextContent('Apprentice');

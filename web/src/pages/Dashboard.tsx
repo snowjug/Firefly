@@ -1,284 +1,198 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import type { SessionSummaryDTO } from '#shared/domain/api.ts';
-import { assessMastery } from '#shared/domain/mastery.ts';
 import { recommendMission } from '#shared/domain/recommend.ts';
-import { DIMENSIONS } from '#shared/domain/vocab.ts';
-import { FireflyCore } from '../components/core/FireflyCore.tsx';
-import { DifficultyChip } from '../components/Chips.tsx';
-import { Icon, type IconName } from '../components/Icon.tsx';
-import { ErrorState, Page, SkeletonBlock } from '../components/Page.tsx';
-import { TourPrompt } from '../components/tour/TourPrompt.tsx';
-import { api } from '../lib/api.ts';
-import { formatRelative, formatScore } from '../lib/format.ts';
+import {
+  activeCall,
+  pickScenarios,
+  practiceStats,
+  recentCalls,
+} from '../components/dashboard/dashboard-model.ts';
+import { NextSkill } from '../components/dashboard/NextSkill.tsx';
+import { PracticeBanner } from '../components/dashboard/PracticeBanner.tsx';
+import { NoRecentCalls, RecentCalls } from '../components/dashboard/RecentCalls.tsx';
+import { ScenarioCards, ScenarioCardsSkeleton } from '../components/dashboard/ScenarioCards.tsx';
+import { StatsRow } from '../components/dashboard/StatsRow.tsx';
+import { TourEntry } from '../components/dashboard/TourEntry.tsx';
+import { Icon } from '../components/Icon.tsx';
+import { EmptyState, ErrorState, Page, PageHeader, SkeletonBlock } from '../components/Page.tsx';
+import { earnedCount } from '../components/rewards/rewards-model.ts';
+import { api, errorMessage } from '../lib/api.ts';
 import { useApi } from '../lib/hooks.ts';
-import { useOnDemand } from '../lib/onDemand.ts';
 import { usePractice } from '../lib/practice.ts';
+import { firstName, greetingFor, useProfile } from '../lib/profile.ts';
 import '../styles/dashboard.css';
-
-// What sits below the first screen, or appears once the data has arrived, loads after the page has
-// painted, while the data is on its way, so it is usually ready when the data lands.
-const loadNextMission = () => import('../components/dashboard/NextMission.tsx');
-const loadMasteryStars = () => import('../components/mastery/MasteryStars.tsx');
-const reloadPage = () => window.location.reload();
-const loadFailure = new Error('A part of the page did not load.');
-
-const STEPS: { icon: IconName; title: string; text: string }[] = [
-  {
-    icon: 'sliders',
-    title: 'Configure',
-    text: 'Choose a scenario, then shape the issue, impact, customer mood, style and difficulty.',
-  },
-  {
-    icon: 'phone',
-    title: 'Practise and adapt',
-    text: 'Talk with a simulated customer. Ask the right questions to uncover what they have not said, and watch how they react.',
-  },
-  {
-    icon: 'target',
-    title: 'Reflect',
-    text: 'Get coaching on six skills, with quotes from your own call and better ways to say it.',
-  },
-  {
-    icon: 'chart',
-    title: 'Improve',
-    text: 'See what you found and missed, track your practice over time and pick your next focus.',
-  },
-];
 
 const NO_SESSIONS: SessionSummaryDTO[] = [];
 
 export default function Dashboard() {
-  const demo = useApi((signal) => api.demo(signal), []);
   const { scenarios, sessions, progress } = usePractice();
-  const nextMissionCode = useOnDemand(loadNextMission);
-  const masteryStarsCode = useOnDemand(loadMasteryStars);
-  const NextMission = nextMissionCode.module?.NextMission;
-  const MasteryStars = masteryStarsCode.module?.MasteryStars;
+  // One request for the badge count; "today" for a streak is the learner's own day.
+  const rewards = useApi((signal) => api.rewards(new Date().getTimezoneOffset(), signal), []);
+  const profile = useProfile();
+  const [greeting] = useState(() => greetingFor());
 
   const list = sessions.data?.sessions ?? NO_SESSIONS;
-  const recent = list.slice(0, 4);
-  const active = list.find((s) => s.status === 'active');
-  const spotlight = demo.data?.spotlightScenarioId;
+  const stats = useMemo(() => practiceStats(list), [list]);
+  const active = useMemo(() => activeCall(list), [list]);
+  const recent = useMemo(() => recentCalls(list), [list]);
+  // Only the latest calls are read, so a very long history says so rather than quietly under-counting.
+  const partial = (sessions.data?.total ?? 0) > list.length;
 
-  const mastery = useMemo(() => assessMastery(list), [list]);
-  const lit = mastery.filter((m) => m.tierIndex > 0).length;
+  const ready = !scenarios.loading && !sessions.loading && !progress.loading;
   const recommendation = useMemo(
     () =>
-      scenarios.data
+      ready && scenarios.data && sessions.data
         ? recommendMission({ scenarios: scenarios.data, sessions: list, progress: progress.data })
         : null,
-    [scenarios.data, list, progress.data],
+    [ready, scenarios.data, sessions.data, list, progress.data],
   );
-  const ready = !scenarios.loading && !sessions.loading;
+  const picks = useMemo(
+    () =>
+      ready && scenarios.data && sessions.data
+        ? pickScenarios({ scenarios: scenarios.data, sessions: list, recommendation })
+        : [],
+    [ready, scenarios.data, sessions.data, list, recommendation],
+  );
+
+  const retry = () => {
+    if (scenarios.error) scenarios.reload();
+    if (sessions.error) sessions.reload();
+    if (rewards.error) rewards.reload();
+  };
+  const unreachable = Boolean(sessions.error && scenarios.error);
+  const loadingSessions = sessions.loading && !sessions.data;
+
+  const title = profile ? `${greeting}, ${firstName(profile.name)}` : 'Welcome to Firefly';
+
+  let recommended;
+  if (scenarios.error || sessions.error) {
+    recommended = (
+      <ErrorState
+        error={scenarios.error ?? sessions.error}
+        onRetry={retry}
+        title="We could not load your recommendations"
+      />
+    );
+  } else if (!ready) {
+    recommended = <ScenarioCardsSkeleton />;
+  } else if (picks.length > 0) {
+    recommended = <ScenarioCards picks={picks} />;
+  } else {
+    recommended = (
+      <EmptyState icon="grid" title="No scenarios are available">
+        The scenario library is empty right now. Check back after the server has loaded its
+        scenarios.
+      </EmptyState>
+    );
+  }
+
+  let recentBody;
+  if (loadingSessions) {
+    recentBody = (
+      <div className="stack" role="status" aria-label="Loading recent practice">
+        <SkeletonBlock height={52} />
+        <SkeletonBlock height={52} />
+        <SkeletonBlock height={52} />
+      </div>
+    );
+  } else if (sessions.error) {
+    recentBody = (
+      <div className="stack" role="alert" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
+        <p className="t-small t-muted">{errorMessage(sessions.error)}</p>
+        <div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={sessions.reload}>
+            <Icon name="refresh" size={16} /> Try again
+          </button>
+        </div>
+      </div>
+    );
+  } else if (recent.length > 0) {
+    recentBody = <RecentCalls calls={recent} />;
+  } else {
+    recentBody = <NoRecentCalls />;
+  }
 
   return (
-    <Page title="Home">
-      <TourPrompt />
+    <Page title="Home" className="dash">
+      <PageHeader title={title} lead="Ready to practise a customer call?" />
 
-      <section className="hero" aria-labelledby="hero-title">
-        <div className="hero-copy stack" style={{ ['--stack-gap' as string]: 'var(--sp-5)' }}>
-          <p className="t-label">Customer call simulator</p>
-          <h1 id="hero-title" className="t-display hero-title">
-            Practice difficult customer conversations before they become real ones.
-          </h1>
-          <p className="t-lead">
-            Rehearse with a simulated customer who reacts to what you actually say, then get
-            coaching tied to your own words.
-          </p>
-          <div className="cluster" style={{ ['--cluster-gap' as string]: 'var(--sp-3)' }}>
-            <Link to="/scenarios" className="btn btn-primary btn-lg" viewTransition>
-              Start a simulation <Icon name="arrow-right" size={18} />
-            </Link>
-            {spotlight ? (
-              <Link
-                to={`/scenarios/${spotlight}/setup`}
-                className="btn btn-secondary btn-lg"
-                viewTransition
-              >
-                Try the demo scenario
-              </Link>
-            ) : null}
-          </div>
-          <ul role="list" className="hero-notes t-meta">
-            <li>
-              <Icon name="shield" size={16} /> Fictional customers only
-            </li>
-            <li>
-              <Icon name="lock" size={16} /> Stored on this machine
-            </li>
-            <li>
-              <Icon name="users" size={16} /> Coaching, not ranking
-            </li>
-          </ul>
-        </div>
-        <div className="hero-visual">
-          <div className="hero-core" aria-hidden="true">
-            <FireflyCore signals={{ total: 6, lit }} />
-          </div>
-          <p className="hero-caption t-meta">
-            {lit === 0
-              ? 'Six skills orbit the core. They light up as you practise.'
-              : `${lit} of 6 skills lit so far. Each one comes on from your own completed calls.`}
-          </p>
-        </div>
-      </section>
+      <div className="dash-body">
+        <TourEntry />
 
-      {active ? (
-        <section aria-label="Resume your call" className="resume">
-          <span className="resume-pulse" aria-hidden="true" />
-          <div className="resume-text">
-            <p className="t-label">Call in progress</p>
-            <p className="resume-title">{active.scenarioTitle}</p>
-          </div>
-          <Link to={`/calls/${active.id}`} className="btn btn-primary">
-            Resume call <Icon name="arrow-right" size={18} />
-          </Link>
-        </section>
-      ) : null}
-
-      {!ready ? (
-        <div className="dash-block" role="status" aria-label="Loading your next mission">
-          <SkeletonBlock height={190} />
-        </div>
-      ) : recommendation ? (
-        <div className="dash-block">
-          {NextMission ? (
-            <NextMission recommendation={recommendation} />
-          ) : nextMissionCode.failed ? (
-            <ErrorState
-              error={loadFailure}
-              onRetry={reloadPage}
-              title="We couldn’t load your next mission"
-            />
-          ) : (
-            <SkeletonBlock height={190} />
-          )}
-        </div>
-      ) : null}
-
-      <section aria-labelledby="how-title" className="dash-block">
-        <h2 id="how-title" className="t-section dash-heading">
-          How practice works
-        </h2>
-        <ol role="list" className="path">
-          {STEPS.map((step, index) => (
-            <li key={step.title} className="path-step">
-              <span className="path-node" aria-hidden="true">
-                <span className="path-number">{index + 1}</span>
-              </span>
-              <span className="path-icon" aria-hidden="true">
-                <Icon name={step.icon} size={20} />
-              </span>
-              <h3 className="path-title">{step.title}</h3>
-              <p className="t-small t-muted">{step.text}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <div className="dash-columns">
-        <section className="dash-panel stack" aria-labelledby="recent-title">
-          <div className="row between">
-            <h2 id="recent-title" className="t-section">
-              Recent practice
-            </h2>
-            <Link to="/history" className="t-small">
-              View all
-            </Link>
-          </div>
-          {sessions.loading ? (
-            <div className="stack" role="status" aria-label="Loading recent sessions">
-              <SkeletonBlock height={52} />
-              <SkeletonBlock height={52} />
-            </div>
-          ) : sessions.error ? (
+        {unreachable ? (
+          <div className="dash-block">
+            <PracticeBanner active={null} />
             <ErrorState
               error={sessions.error}
-              onRetry={sessions.reload}
-              title="Could not load recent practice"
+              onRetry={retry}
+              title="We could not load your home page"
             />
-          ) : recent.length > 0 ? (
-            <ul role="list" className="recent-list">
-              {recent.map((s) => (
-                <li key={s.id}>
-                  <Link
-                    to={s.status === 'active' ? `/calls/${s.id}` : `/sessions/${s.id}/report`}
-                    className="recent-item"
-                    viewTransition
-                  >
-                    <span className="grow" style={{ minWidth: 0 }}>
-                      <span className="recent-title">{s.scenarioTitle}</span>
-                      <span className="t-meta">{formatRelative(s.startedAt)}</span>
-                    </span>
-                    <span className="recent-end">
-                      <DifficultyChip difficulty={s.difficulty} />
-                      <span
-                        className="tabular recent-score"
-                        aria-label={
-                          s.overallScore === null
-                            ? 'No score'
-                            : `Overall ${formatScore(s.overallScore)} out of 5`
-                        }
-                      >
-                        {s.status === 'active' ? 'In progress' : formatScore(s.overallScore)}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
-              <p className="t-muted">
-                No practice yet. A Starter scenario is a gentle way to begin: the customer is
-                cooperative and gives clearer clues.
-              </p>
-              <div>
-                <Link to="/scenarios?difficulty=starter" className="btn btn-secondary">
-                  Browse Starter scenarios
-                </Link>
-              </div>
-            </div>
-          )}
-        </section>
+          </div>
+        ) : (
+          <>
+            <section className="dash-block" aria-labelledby="dash-stats-title">
+              <h2 id="dash-stats-title" className="sr-only">
+                Your practice so far
+              </h2>
+              <StatsRow
+                stats={sessions.data ? stats : sessions.error ? 'error' : 'loading'}
+                badges={
+                  rewards.data
+                    ? {
+                        earned: earnedCount(rewards.data.badges),
+                        total: rewards.data.badges.length,
+                      }
+                    : rewards.error
+                      ? 'error'
+                      : 'loading'
+                }
+              />
+              {partial ? (
+                <p className="t-meta dash-partial">
+                  These totals use your latest {list.length} calls.
+                </p>
+              ) : null}
+            </section>
 
-        <section className="dash-panel stack" aria-labelledby="focus-title">
-          <h2 id="focus-title" className="t-section">
-            Your practice focus
-          </h2>
-          {progress.loading ? (
-            <div className="stack" role="status" aria-label="Loading practice focus">
-              <SkeletonBlock height={20} width="60%" />
-              <SkeletonBlock height={48} />
-            </div>
-          ) : progress.data?.focus ? (
-            <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
-              <p className="focus-skill">{DIMENSIONS[progress.data.focus].label}</p>
-              <p className="t-muted">{progress.data.focusReason}</p>
-              <p className="t-small t-muted">{DIMENSIONS[progress.data.focus].description}</p>
-              <div>
-                <Link to="/progress" className="btn btn-secondary">
-                  See your progress
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <p className="t-muted">
-              Complete a practice call and Firefly will suggest one skill to work on next, based on
-              the evidence from your own conversations.
-            </p>
-          )}
-          {lit > 0 ? (
-            <div className="focus-stars">
-              {MasteryStars ? (
-                <MasteryStars mastery={mastery} />
+            <div className="dash-block">
+              {loadingSessions ? (
+                <div className="dash-banner-skeleton" role="status" aria-label="Loading">
+                  <div className="skeleton" aria-hidden="true" />
+                </div>
               ) : (
-                <div className="ms" aria-hidden="true" />
+                <PracticeBanner active={active} />
               )}
             </div>
-          ) : null}
-        </section>
+
+            <section className="dash-block" aria-labelledby="dash-reco-title">
+              <div className="section-head">
+                <h2 id="dash-reco-title" className="t-section">
+                  Recommended scenarios
+                </h2>
+                <Link to="/scenarios" className="link-more" viewTransition>
+                  View all <Icon name="arrow-right" size={16} />
+                </Link>
+              </div>
+              {recommended}
+            </section>
+
+            <div className="dash-lower">
+              <section className="glass card" aria-labelledby="dash-recent-title">
+                <div className="section-head">
+                  <h2 id="dash-recent-title" className="t-section">
+                    Recent practice
+                  </h2>
+                  <Link to="/history" className="link-more" viewTransition>
+                    View all <Icon name="arrow-right" size={16} />
+                  </Link>
+                </div>
+                {recentBody}
+              </section>
+              <NextSkill progress={progress} />
+            </div>
+          </>
+        )}
       </div>
     </Page>
   );

@@ -7,19 +7,22 @@ export function Switch({
   children,
   className = '',
   describedBy,
+  disabled = false,
 }: {
   checked: boolean;
   onChange(checked: boolean): void;
   children: ReactNode;
   className?: string;
   describedBy?: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className={`sw ${className}`.trim()}>
+    <label className={`sw ${className}`.trim()} aria-disabled={disabled || undefined}>
       <input
         type="checkbox"
         role="switch"
         checked={checked}
+        disabled={disabled}
         aria-describedby={describedBy}
         onChange={(event) => onChange(event.target.checked)}
       />

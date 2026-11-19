@@ -98,6 +98,7 @@ const PATHS = {
   repeat: 'M17 2l4 4-4 4M3 11V9a3 3 0 013-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 01-3 3H3',
   'file-text':
     'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6M8 13h8M8 17h8M8 9h2',
+  'trending-down': 'M3 7l6 6 4-4 8 8M15 17h6v-6',
 } as const;
 
 export type IconName = keyof typeof PATHS;

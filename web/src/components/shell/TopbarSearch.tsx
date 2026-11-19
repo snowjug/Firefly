@@ -18,7 +18,7 @@ export function TopbarSearch() {
       }}
     >
       <label className="sr-only" htmlFor="topbar-search">
-        Search scenarios
+        Search all scenarios
       </label>
       <span className="input-icon">
         <Icon name="search" size={18} />

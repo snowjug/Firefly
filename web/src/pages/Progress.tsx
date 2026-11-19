@@ -1,40 +1,19 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
-import { Icon } from '../components/Icon.tsx';
-import { EmptyState, ErrorState, Page, PageHeader, SkeletonBlock } from '../components/Page.tsx';
+import { ErrorState, Page, PageHeader } from '../components/Page.tsx';
+import { NothingYet } from '../components/progress/NothingYet.tsx';
+import { ProgressSkeleton } from '../components/progress/ProgressSkeleton.tsx';
+import { ProgressView } from '../components/progress/ProgressView.tsx';
 import { Switch } from '../components/report/Switch.tsx';
 import { api } from '../lib/api.ts';
 import { useApi } from '../lib/hooks.ts';
-import { useOnDemand } from '../lib/onDemand.ts';
 import '../styles/progress.css';
-import '../styles/report.css';
 
-// The journey views are fetched as soon as the page opens, in parallel with the progress summary,
-// so the page itself paints without waiting for them.
-const loadBody = () => import('../components/progress/ProgressBody.tsx');
-const reloadPage = () => window.location.reload();
-const loadFailure = new Error('A part of the page did not load.');
-
-function ProgressSkeleton() {
-  return (
-    <div className="stack" role="status" aria-label="Loading your progress">
-      <div className="pg-summary">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="surface pg-card">
-            <SkeletonBlock height={12} width="50%" />
-            <SkeletonBlock height={30} width="40%" />
-            <SkeletonBlock height={14} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
+/**
+ * How practice is going, skill by skill, and what to work on next. Sample sessions are left out
+ * unless asked for, and the page says so whenever they are in.
+ */
 export default function Progress() {
   const [includeSamples, setIncludeSamples] = useState(false);
-  const bodyCode = useOnDemand(loadBody);
-  const ProgressBody = bodyCode.module?.ProgressBody;
   // The answer carries the setting it was asked with, so sample numbers are never shown as your own.
   const state = useApi(
     async (signal) => ({ includeSamples, progress: await api.progress(includeSamples, signal) }),
@@ -55,47 +34,20 @@ export default function Progress() {
       <ProgressSkeleton />
     );
   } else if (data.progress.completedSessions === 0) {
-    body = (
-      <EmptyState
-        icon="chart"
-        title="No completed practice calls yet"
-        action={
-          <div className="cluster" style={{ justifyContent: 'center' }}>
-            <Link to="/scenarios" className="btn btn-primary" viewTransition>
-              Start a simulation <Icon name="arrow-right" size={16} />
-            </Link>
-            <Link to="/trainer" className="btn btn-secondary" viewTransition>
-              Open the Trainer page
-            </Link>
-          </div>
-        }
-      >
-        Once you finish a call and read its coaching report, your skill scores and practice focus
-        appear here. Nothing is shown until there is real practice to show. To preview this page
-        first, load sample sessions from the Trainer page and switch on &ldquo;Include sample
-        sessions&rdquo; above.
-      </EmptyState>
-    );
-  } else if (ProgressBody) {
-    body = (
-      <ProgressBody progress={data.progress} includeSamples={data.includeSamples} busy={stale} />
-    );
-  } else if (bodyCode.failed) {
-    body = (
-      <ErrorState error={loadFailure} onRetry={reloadPage} title="We couldn’t load your progress" />
-    );
+    body = <NothingYet includeSamples={data.includeSamples} />;
   } else {
-    body = <ProgressSkeleton />;
+    body = (
+      <ProgressView progress={data.progress} includeSamples={data.includeSamples} busy={stale} />
+    );
   }
 
   return (
-    <Page title="Progress" className="pg-root">
+    <Page title="My progress" className="pg-root">
       <PageHeader
-        eyebrow="Your practice"
-        title="Progress"
+        title="My progress"
         lead="A calm look at how your practice calls are going, to help you choose what to work on next."
       />
-      <div className="surface pg-controls">
+      <div className="surface-soft pg-controls">
         <Switch checked={includeSamples} onChange={setIncludeSamples} describedBy="pg-samples-hint">
           Include sample sessions
         </Switch>

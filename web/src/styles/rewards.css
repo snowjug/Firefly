@@ -1,0 +1,593 @@
+/* Rewards: level, badges and challenges, the rules for points and the history of every award.
+   Amber is kept for rewards, so it only appears here and on the home page's badge count.
+
+   Layouts follow the width of the page itself (the `rw` container), not the window, because the
+   sidebar takes a quarter of a laptop screen. */
+
+.rw-content {
+  container: rw / inline-size;
+  display: grid;
+  gap: var(--sp-6);
+}
+.rw-meta {
+  color: var(--text-3);
+  font-size: var(--fs-meta);
+}
+
+/* ------------------------------------------------------------------ First points */
+.rw-first {
+  align-items: flex-start;
+}
+.rw-first > svg {
+  color: var(--info);
+}
+.rw-first-body {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+/* ------------------------------------------------------------------ Level, badges, challenges, streak */
+.rw-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+}
+.rw-level,
+.rw-stat {
+  min-width: 0;
+  padding: var(--sp-4) var(--sp-5);
+}
+.rw-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.rw-stat-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.rw-level {
+  display: grid;
+  align-content: center;
+  gap: var(--sp-3);
+}
+.rw-level-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.stat-icon.rw-level-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+}
+.rw-level-name {
+  font-family: var(--font-heading);
+  font-size: 1.35rem;
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+.rw-level-points {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 650;
+}
+.rw-level-bar {
+  display: grid;
+  gap: var(--sp-2);
+}
+.rw-togo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+  color: var(--text-2);
+  font-size: var(--fs-meta);
+}
+.rw-togo strong {
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ Tabs */
+.rw-tabs {
+  display: grid;
+  gap: var(--sp-4);
+}
+.rw-panel:focus-visible {
+  outline-offset: 6px;
+  border-radius: var(--r-card);
+}
+@container rw (max-width: 479px) {
+  .rw-tabs .tabs {
+    gap: var(--sp-3);
+  }
+  .rw-tabs .tab-count {
+    margin-left: 0.3rem;
+    padding-inline: 0.35rem;
+  }
+}
+/* On the narrowest phones the three tabs still fit without scrolling. */
+@container rw (max-width: 359px) {
+  .rw-tabs .tabs {
+    gap: var(--sp-2);
+  }
+  .rw-tabs .tab {
+    font-size: var(--fs-meta);
+  }
+  .rw-tabs .tab-count {
+    margin-left: 0.2rem;
+    padding-inline: 0.3rem;
+  }
+}
+.rw-empty {
+  padding: var(--sp-6) var(--sp-5);
+  color: var(--text-2);
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------ Badges */
+.rw-badges,
+.rw-challenges {
+  display: grid;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-badges {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rw-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  text-align: center;
+}
+.rw-badge[data-earned='true'] {
+  border-color: color-mix(in srgb, var(--glow) 45%, var(--border));
+}
+.rw-badge-title {
+  font-size: 1.05rem;
+  font-weight: 720;
+  line-height: 1.25;
+}
+.rw-badge-state {
+  margin: 0;
+}
+.rw-badge-criteria {
+  max-width: 34ch;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.rw-badge-progress {
+  display: grid;
+  gap: var(--sp-1);
+  width: 100%;
+  margin-top: auto;
+  padding-top: var(--sp-3);
+}
+.rw-badge-progress .rw-meta {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+/* A shield: gold or violet once earned, grey while locked. Each badge also says so in words. */
+.rw-emblem {
+  --emb-top: var(--surface-3);
+  --emb-bottom: var(--surface-2);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 72px;
+  margin-bottom: var(--sp-1);
+}
+.rw-emblem svg {
+  width: 64px;
+  height: 72px;
+  overflow: visible;
+}
+.rw-emblem-top {
+  stop-color: var(--emb-top);
+}
+.rw-emblem-bottom {
+  stop-color: var(--emb-bottom);
+}
+.rw-emblem-inner {
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.4;
+}
+.rw-emblem-body {
+  stroke: transparent;
+  stroke-width: 1.5;
+}
+.rw-emblem-glyph {
+  position: absolute;
+  inset: 0 0 4px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  filter: drop-shadow(0 1px 1px rgba(60, 30, 0, 0.5));
+}
+.rw-emblem[data-earned='true'][data-tone='amber'] {
+  --emb-top: #f7b52e;
+  --emb-bottom: #c46500;
+}
+.rw-emblem[data-earned='true'][data-tone='violet'] {
+  --emb-top: #9d86f8;
+  --emb-bottom: #5535c8;
+}
+.rw-emblem[data-earned='true'] svg {
+  filter: drop-shadow(0 6px 8px color-mix(in srgb, var(--emb-bottom) 38%, transparent));
+}
+.rw-emblem[data-earned='false'] .rw-emblem-body {
+  stroke: var(--border-strong);
+}
+.rw-emblem[data-earned='false'] .rw-emblem-inner {
+  stroke: var(--border);
+}
+.rw-emblem[data-earned='false'] .rw-emblem-glyph {
+  color: var(--text-3);
+  filter: none;
+}
+
+/* ------------------------------------------------------------------ Challenges */
+.rw-challenges {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rw-challenge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-5);
+}
+.rw-challenge-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  width: 100%;
+}
+.rw-challenge-heading {
+  display: grid;
+  flex: 1;
+  gap: var(--sp-2);
+  justify-items: start;
+  min-width: 0;
+}
+.rw-challenge-title {
+  font-size: 1.05rem;
+  font-weight: 720;
+  line-height: 1.25;
+}
+.rw-challenge-reward {
+  margin: 0;
+}
+.rw-challenge-detail {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.rw-challenge .rw-badge-progress {
+  margin-top: auto;
+  padding-top: 0;
+}
+
+/* ------------------------------------------------------------------ How points work */
+.rw-section {
+  display: grid;
+  gap: var(--sp-3);
+}
+.rw-section-head {
+  display: grid;
+  gap: var(--sp-1);
+  max-width: 70ch;
+}
+.rw-subhead {
+  margin-top: var(--sp-3);
+  font-size: 1rem;
+  font-weight: 700;
+}
+.rw-levels-intro {
+  max-width: 70ch;
+}
+.rw-rules {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-rule {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+.rw-rule:first-child {
+  border-top: 0;
+}
+.rw-rule-points,
+.rw-entry-points {
+  color: var(--glow-text);
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.rw-rule-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-6);
+  align-items: start;
+}
+.rw-rule-title {
+  grid-column: 1;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.rw-rule-detail {
+  grid-column: 1;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.rw-rule-safeguard {
+  grid-column: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-meta);
+}
+.rw-rule-safeguard svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--positive);
+}
+.rw-rule-safeguard strong {
+  color: var(--text);
+}
+.rw-levels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-levels-item {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+.rw-levels-item[aria-current='step'] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.rw-levels-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ Points history */
+.rw-history {
+  overflow: hidden;
+}
+.rw-history-empty {
+  padding: var(--sp-6) var(--sp-5);
+  color: var(--text-2);
+  text-align: center;
+}
+.rw-entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-entry {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+.rw-entry:first-child {
+  border-top: 0;
+}
+.rw-entry:focus-visible {
+  outline-offset: -3px;
+  border-radius: var(--r-card);
+}
+.rw-entry-body {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.rw-entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 var(--sp-3);
+}
+.rw-entry-title {
+  font-weight: 680;
+}
+.rw-entry-reason {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.rw-quote {
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--glow);
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  background: var(--surface-2);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.rw-history-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.rw-history > .rw-meta {
+  padding: 0 var(--sp-5) var(--sp-3);
+  background: var(--surface-2);
+}
+
+.rw-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  max-width: 70ch;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.rw-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-3);
+}
+
+/* On a touch screen every control is at least 44px tall, like the rest of the app. */
+@media (pointer: coarse) {
+  .rw .btn-sm {
+    min-height: var(--tap);
+  }
+  .rw-badge .rw-meta a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+  }
+}
+
+/* ------------------------------------------------------------------ Loading */
+.rw-skel-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.rw-skel-text {
+  flex: 1;
+  gap: var(--sp-2);
+}
+.rw-skel-text .skeleton,
+.rw-skel-badge .skeleton {
+  display: block;
+}
+.rw-skel-badge {
+  min-height: 15rem;
+}
+.rw-skel-emblem {
+  width: 64px;
+  height: 72px;
+  border-radius: 18px;
+}
+
+/* ------------------------------------------------------------------ By width of the page */
+@container rw (min-width: 440px) {
+  .rw-levels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container rw (min-width: 560px) {
+  .rw-badges {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container rw (min-width: 700px) {
+  .rw-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .rw-level {
+    grid-column: 1 / -1;
+  }
+  .rw-challenges {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container rw (min-width: 720px) {
+  /* The rule on the left, the safeguard that keeps it fair on the right. */
+  .rw-rule-body {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  }
+  .rw-rule-safeguard {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin-top: 0;
+  }
+}
+@container rw (min-width: 760px) {
+  .rw-levels {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@container rw (min-width: 900px) {
+  .rw-badges {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container rw (min-width: 1000px) {
+  .rw-summary {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr);
+  }
+  .rw-level {
+    grid-column: auto;
+  }
+}
+@container rw (max-width: 559px) {
+  /* One badge per row, with the shield beside its words instead of above them. */
+  .rw-badge {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    column-gap: var(--sp-4);
+    row-gap: var(--sp-1);
+    align-items: start;
+    justify-items: start;
+    padding: var(--sp-4);
+    text-align: left;
+  }
+  .rw-badge > .rw-emblem {
+    grid-row: 1 / span 4;
+  }
+  .rw-badge > :not(.rw-emblem) {
+    grid-column: 2;
+  }
+  .rw-badge-progress {
+    padding-top: var(--sp-2);
+  }
+  .rw-history-foot {
+    padding-inline: var(--sp-4);
+  }
+}
+@container rw (max-width: 479px) {
+  .rw-rule,
+  .rw-entry {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-1);
+    padding: var(--sp-4);
+  }
+}

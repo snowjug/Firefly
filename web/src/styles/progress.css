@@ -1,33 +1,34 @@
-/* Progress: the skill constellations, each skill's history, the path of completed calls and the
-   milestones. It shows practice, never rankings, streaks or comparisons with other people. */
+/* My progress: three things to know at a glance, where to focus next, and each skill's small line of
+   scores. It shows practice, never rankings, streaks or comparisons with other people.
+
+   Layouts follow the width of the page itself (the `pg` container), not the window, because the
+   sidebar takes a quarter of a laptop screen. */
 
 .pg-controls {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--sp-5);
   margin-bottom: var(--sp-5);
-  padding: var(--sp-2) var(--sp-5) var(--sp-3);
+  padding: var(--sp-1) var(--sp-5);
 }
 .pg-controls .t-meta {
+  flex: 1 1 22rem;
   max-width: 62ch;
-  padding-left: calc(2.7rem + var(--sp-3));
-}
-@media (max-width: 480px) {
-  .pg-controls .t-meta {
-    padding-left: 0;
-  }
 }
 
 .pg-content {
+  container: pg / inline-size;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-7);
-}
-.pg-section {
-  min-width: 0;
+  gap: var(--sp-6);
 }
 .pg-content[aria-busy='true'] {
   opacity: 0.7;
   transition: opacity var(--dur-2) var(--ease-out);
+}
+.pg-section {
+  min-width: 0;
 }
 .pg-section-head {
   display: flex;
@@ -38,160 +39,256 @@
   margin-bottom: var(--sp-4);
 }
 .pg-lead {
-  max-width: 62ch;
+  max-width: 66ch;
   margin-top: var(--sp-1);
 }
 
-/* ------------------------------------------------------------------ Summary */
-.pg-summary {
+/* ------------------------------------------------------------------ At a glance */
+.pg-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-4);
 }
-@media (min-width: 1000px) {
-  .pg-summary {
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.1fr);
-  }
+.pg-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-4) var(--sp-5);
 }
-.pg-card {
+.pg-tile-body {
   display: grid;
-  gap: var(--sp-2);
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.pg-tile-value {
+  font-family: var(--font-heading);
+  font-size: 1.4rem;
+  font-weight: 760;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.pg-tile-text {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.pg-skel-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+.pg-tile .skeleton,
+.pg-focus .skeleton,
+.pg-skill .skeleton {
+  display: block;
+}
+
+/* ------------------------------------------------------------------ Where to focus next, opportunities */
+.pg-duo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: stretch;
+}
+.pg-focus,
+.pg-opps {
+  display: grid;
   align-content: start;
+  gap: var(--sp-3);
+  min-width: 0;
   padding: var(--sp-5);
 }
-.pg-big {
-  font-family: var(--font-display);
-  font-size: 2.7rem;
-  font-weight: 650;
-  line-height: 1;
-  letter-spacing: -0.03em;
-}
-.pg-word {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 650;
-  line-height: 1.2;
-}
-.pg-word svg {
-  flex: none;
-  color: var(--accent);
-}
-.pg-note {
-  margin-top: var(--sp-1);
-  padding-top: var(--sp-2);
-  border-top: 1px solid var(--border);
-}
-.pg-card-focus {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+.pg-focus {
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, var(--accent) 9%, var(--surface)),
+    color-mix(in srgb, var(--primary) 9%, var(--surface)),
     color-mix(in srgb, var(--accent-2) 6%, var(--surface))
   );
 }
-.pg-link {
-  display: inline-flex;
+.pg-focus-top,
+.pg-opps-top {
+  display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--sp-3);
+}
+.pg-opps-top {
+  align-items: flex-start;
+}
+.pg-focus-skill {
+  font-family: var(--font-heading);
+  font-size: 1.6rem;
+  font-weight: 760;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+.pg-focus-reason {
+  font-weight: 600;
+}
+.pg-focus-actions {
+  --cluster-gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+.pg-opps-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pg-opp {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-3) 0;
+  border-top: 1px solid var(--border);
+}
+.pg-opp:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.pg-opp:last-child {
+  padding-bottom: 0;
+}
+.pg-opp-name {
+  font-weight: 680;
+}
+.pg-opp .link-more {
   width: fit-content;
   margin-top: var(--sp-1);
+  white-space: normal;
+}
+.pg-opps-empty {
+  padding: var(--sp-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-card);
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+
+/* ------------------------------------------------------------------ Skill cards */
+.pg-skills {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+}
+.pg-skill {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+/* Cards in a row are the same height, with each line of scores sitting at the bottom of its card. */
+.pg-skill > .pg-spark-wrap,
+.pg-skill > .pg-spark-empty {
+  margin-top: auto;
+}
+.pg-skill-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.pg-skill-title {
+  font-size: 1.05rem;
+  font-weight: 720;
+  line-height: 1.25;
+}
+.pg-skill-score {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pg-skill-score strong {
+  color: var(--text);
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 780;
+  letter-spacing: -0.03em;
+}
+.pg-skill-flags {
+  margin-top: calc(var(--sp-1) * -1);
+}
+.pg-skill-desc {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+}
+.pg-skill-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  color: var(--text);
   font-size: var(--fs-small);
   font-weight: 620;
 }
+.pg-skill-line svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--primary);
+}
 
-/* ------------------------------------------------------------------ Trends */
-.pg-trends {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-4);
-}
-@media (max-width: 980px) {
-  .pg-trends {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 600px) {
-  .pg-trends {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .pg-card,
-  .pg-trend {
-    padding: var(--sp-4);
-  }
-}
-.pg-trend {
-  display: grid;
-  gap: var(--sp-3);
-  align-content: start;
-  padding: var(--sp-4) var(--sp-5) var(--sp-5);
-}
-.pg-trend-head {
+/* The line of scores: points are evenly spaced by call, and 5 is at the top. */
+.pg-spark-wrap {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: stretch;
   gap: var(--sp-2);
-}
-.pg-trend-title {
-  font-size: 1.05rem;
-  font-weight: 650;
-  line-height: 1.3;
 }
 .pg-spark {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: auto;
   overflow: visible;
+}
+.pg-spark-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-block: 4px;
+  color: var(--text-3);
+  font-size: var(--fs-label);
+  font-weight: 650;
+  line-height: 1;
 }
 .pg-spark-grid {
   stroke: var(--chart-grid);
   stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+.pg-spark-area {
+  fill: color-mix(in srgb, var(--primary) 12%, transparent);
+  stroke: none;
 }
 .pg-spark-line {
   fill: none;
-  stroke: var(--accent-2);
+  stroke: var(--primary);
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 .pg-spark-dot {
   fill: var(--surface);
-  stroke: var(--accent-2);
+  stroke: var(--primary);
   stroke-width: 1.8;
 }
 .pg-spark-last {
-  fill: var(--accent-2);
+  fill: var(--primary);
   stroke: var(--surface);
   stroke-width: 2;
 }
-.pg-facts {
-  display: grid;
-  gap: var(--sp-1);
-  margin: 0;
-  font-size: var(--fs-small);
+/* A skill with no scores keeps the room its line would take, so the cards stay level. */
+.pg-spark-empty {
+  min-height: 4rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
 }
-.pg-facts > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-.pg-facts dt {
-  color: var(--text-3);
-}
-.pg-facts dd {
-  margin: 0;
-  font-weight: 620;
-  text-align: right;
-}
-.pg-change {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
+
+/* ------------------------------------------------------------------ Scores as a table */
 .pg-table-box {
   margin-top: var(--sp-4);
 }
@@ -199,7 +296,7 @@
   max-height: 22rem;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-card);
   background: var(--surface);
 }
 .pg-table {
@@ -208,360 +305,84 @@
 .pg-table thead th {
   position: sticky;
   top: 0;
-  background: var(--surface);
 }
 .pg-table td {
   text-align: center;
 }
-
-/* ------------------------------------------------------------------ Repeated opportunities and reminder */
-.pg-repeat {
-  display: grid;
-  gap: var(--sp-3);
-  padding: 0;
-  margin: 0;
-}
-.pg-repeat-item {
-  display: grid;
-  gap: 2px;
-  padding: var(--sp-4) var(--sp-5);
-}
-.pg-repeat-name {
-  font-weight: 650;
-}
-.pg-empty {
-  padding: var(--sp-4) var(--sp-5);
-  border-radius: var(--r-card);
-  border: 1px dashed var(--border-strong);
-  color: var(--text-2);
-}
-.pg-reminder {
-  max-width: 62ch;
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--border);
-}
-.pg-repeat-item .pg-link {
-  margin-top: var(--sp-2);
-}
-
-/* ------------------------------------------------------------------ Constellation hero */
-.pg-hero {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-6);
-  align-items: center;
-  padding: var(--sp-5);
-  border: 1px solid color-mix(in srgb, var(--glow) 22%, var(--border));
-  border-radius: var(--r-panel);
-  background:
-    radial-gradient(
-      70% 90% at 24% 45%,
-      color-mix(in srgb, var(--glow) 13%, transparent),
-      transparent 72%
-    ),
-    radial-gradient(
-      50% 60% at 92% 8%,
-      color-mix(in srgb, var(--accent-2) 10%, transparent),
-      transparent 70%
-    ),
-    var(--surface);
-}
-@media (min-width: 900px) {
-  .pg-hero {
-    grid-template-columns: minmax(0, 25rem) minmax(0, 1fr);
-    gap: var(--sp-7);
-    padding: var(--sp-7);
-  }
-}
-.pg-hero-stars {
-  --ms-size: 25rem;
-  min-width: 0;
-}
-.pg-hero-text {
-  display: grid;
-  gap: var(--sp-3);
-  align-content: center;
-  min-width: 0;
-}
-.pg-hero-title {
-  font-family: var(--font-display);
-  font-size: var(--fs-title);
-  font-weight: 600;
-  line-height: var(--lh-tight);
-  letter-spacing: -0.02em;
-}
-.pg-hero-sub {
-  max-width: 54ch;
-  color: var(--text-2);
-}
-.pg-next-light {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--sp-3);
-  align-items: start;
-  padding: var(--sp-4);
-  border: 1px solid color-mix(in srgb, var(--glow) 32%, var(--border));
-  border-radius: var(--r-card);
-  background: color-mix(in srgb, var(--glow) 7%, var(--surface));
-}
-.pg-next-name {
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 600;
-  line-height: 1.2;
-}
-ul.pg-next-needs,
-.pg-needs ul[role='list'] {
-  margin: var(--sp-1) 0 0;
-  padding-left: 1.15rem;
-  list-style: disc;
-  font-size: var(--fs-small);
-}
-.pg-next-needs li,
-.pg-needs li {
-  padding-left: 0.15rem;
-}
-.pg-how {
-  font-size: var(--fs-small);
-}
-.pg-how summary {
-  width: fit-content;
-  cursor: pointer;
-  color: var(--text-2);
-  font-weight: 620;
-}
-.pg-how summary:hover {
+/* The first cell of a row names the call, so it reads as text rather than as a column label. */
+.pg-table tbody th {
   color: var(--text);
-}
-.pg-tiers {
-  display: grid;
-  gap: var(--sp-2);
-  margin: var(--sp-3) 0;
-  padding: 0;
-  list-style: none;
-}
-.pg-tiers li {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-}
-.pg-tier {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin: calc(var(--sp-1) * -1) 0 0;
-}
-.pg-needs {
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--border);
-}
-
-/* ------------------------------------------------------------------ Path and milestones */
-.pg-duo {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'path' 'ms' 'opp';
-  gap: var(--sp-7);
-  align-items: start;
-}
-@media (min-width: 1000px) {
-  .pg-duo {
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    grid-template-areas:
-      'path ms'
-      'opp ms';
-    grid-template-rows: auto 1fr;
-  }
-}
-.pg-area-path {
-  grid-area: path;
-  min-width: 0;
-}
-.pg-area-ms {
-  grid-area: ms;
-  min-width: 0;
-}
-.pg-area-opp {
-  grid-area: opp;
-  min-width: 0;
-}
-/* Before the calls have loaded only the opportunities are there, so they take the whole row. */
-.pg-duo-solo {
-  grid-template-areas: 'opp';
-}
-@media (min-width: 1000px) {
-  .pg-duo-solo {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'opp';
-    grid-template-rows: auto;
-  }
-}
-.pg-path {
-  display: grid;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.pg-path-item {
-  --size: 14px;
-  position: relative;
-}
-.pg-path-item[data-level='1'] {
-  --size: 20px;
-}
-.pg-path-item[data-level='2'] {
-  --size: 26px;
-}
-/* The line the lights hang on, trimmed so it begins and ends at the first and last light. */
-.pg-path-item::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--sp-2) + 13px);
-  width: 2px;
-  background: var(--border-strong);
-}
-.pg-path-item:first-child::before {
-  top: 50%;
-}
-.pg-path-item:last-child::before {
-  bottom: 50%;
-}
-.pg-path-item:only-child::before {
-  display: none;
-}
-.pg-path-link {
-  position: relative;
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-  gap: var(--sp-3);
-  align-items: center;
-  padding: var(--sp-3) var(--sp-2);
-  border-radius: 12px;
-  color: inherit;
-  text-decoration: none;
-  transition: background var(--dur-2) var(--ease-out);
-}
-.pg-path-link:hover {
-  background: color-mix(in srgb, var(--glow) 7%, transparent);
-}
-.pg-path-node {
-  justify-self: center;
-  width: var(--size);
-  height: var(--size);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--glow) calc(var(--lit) * 100%), var(--surface-3));
-  box-shadow:
-    0 0 0 3px var(--bg),
-    0 0 calc(var(--lit) * 18px) calc(var(--lit) * 3px)
-      color-mix(in srgb, var(--glow) 55%, transparent);
-}
-.pg-path-body {
-  display: grid;
-  min-width: 0;
-}
-.pg-path-title {
-  overflow: hidden;
-  font-weight: 620;
-  text-overflow: ellipsis;
+  font-size: var(--fs-small);
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
   white-space: nowrap;
 }
-.pg-path-score {
-  color: var(--glow-text);
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-.pg-path-more {
-  margin-top: var(--sp-3);
-}
-.pg-ms-count {
-  color: var(--text-2);
-}
-.pg-ms-list {
-  display: grid;
+
+.pg-note {
+  display: flex;
+  align-items: flex-start;
   gap: var(--sp-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.pg-ms {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: var(--sp-4);
-  padding: var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  background: var(--surface);
-}
-.pg-ms[data-earned='true'] {
-  border-color: color-mix(in srgb, var(--glow) 42%, var(--border));
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--glow) 10%, var(--surface)),
-    var(--surface)
-  );
-}
-.pg-ms-mark svg {
-  display: block;
-  width: 48px;
-  height: 48px;
-}
-.pg-ms-ring {
-  fill: none;
-  stroke: var(--border-strong);
-  stroke-width: 1.5;
-  stroke-dasharray: 2 5;
-}
-.pg-ms-star {
-  fill: none;
-  stroke: var(--text-3);
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-}
-.pg-ms[data-earned='true'] .pg-ms-ring {
-  stroke: var(--glow);
-  stroke-dasharray: none;
-}
-.pg-ms[data-earned='true'] .pg-ms-star {
-  fill: var(--glow);
-  stroke: var(--glow);
-}
-.pg-ms[data-earned='true'] .pg-ms-mark {
-  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--glow) 55%, transparent));
-}
-.pg-ms-body {
-  display: grid;
-  gap: var(--sp-1);
-  min-width: 0;
-}
-.pg-ms-title {
-  font-size: 1.05rem;
-  font-weight: 650;
-  line-height: 1.3;
-}
-.pg-ms-earned {
-  margin-top: var(--sp-1);
-}
-.pg-ms-quote {
-  margin: var(--sp-1) 0;
-  padding: var(--sp-2) var(--sp-3);
-  border-left: 3px solid var(--glow);
-  border-radius: 0 10px 10px 0;
-  background: color-mix(in srgb, var(--glow) 6%, transparent);
+  max-width: 70ch;
+  color: var(--text-2);
   font-size: var(--fs-small);
-  font-style: italic;
 }
-.pg-ms-note {
-  margin-top: var(--sp-3);
+.pg-note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-3);
 }
-@media (max-width: 480px) {
-  .pg-hero {
+
+/* On a touch screen every control is at least 44px tall, like the rest of the app. */
+@media (pointer: coarse) {
+  .pg-root .btn-sm,
+  .pg-opp .link-more {
+    min-height: var(--tap);
+  }
+}
+
+/* ------------------------------------------------------------------ By width of the page */
+@container pg (min-width: 560px) {
+  .pg-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* The third tile takes the whole second row rather than sitting alone beside nothing. */
+  .pg-tile:nth-child(3):last-child {
+    grid-column: 1 / -1;
+  }
+}
+@container pg (min-width: 600px) {
+  .pg-skills {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container pg (min-width: 820px) {
+  .pg-duo {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+}
+@container pg (min-width: 900px) {
+  .pg-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .pg-tile:nth-child(3):last-child {
+    grid-column: auto;
+  }
+}
+@container pg (min-width: 960px) {
+  .pg-skills {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container pg (max-width: 639px) {
+  .pg-focus,
+  .pg-opps,
+  .pg-skill {
     padding: var(--sp-4);
   }
-  .pg-ms {
-    grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 640px) {
+  .pg-controls {
+    padding-inline: var(--sp-4);
   }
 }
