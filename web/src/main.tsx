@@ -5,6 +5,7 @@ import { AppErrorBoundary } from './components/AppErrorBoundary.tsx';
 import { ConfigProvider } from './lib/config.tsx';
 import { AmbientProvider } from './lib/motion/ambient.tsx';
 import { installViewTransitionSkip } from './lib/motion/transitions.ts';
+import { PerfTierProvider } from './lib/PerfTierProvider.tsx';
 import { ThemeProvider } from './lib/theme.tsx';
 import { ToastProvider } from './lib/toast.tsx';
 import './styles/index.css';
@@ -21,13 +22,15 @@ function start() {
     <StrictMode>
       <ThemeProvider>
         <AmbientProvider>
-          <ConfigProvider>
-            <ToastProvider>
-              <AppErrorBoundary>
-                <App router={router} />
-              </AppErrorBoundary>
-            </ToastProvider>
-          </ConfigProvider>
+          <PerfTierProvider>
+            <ConfigProvider>
+              <ToastProvider>
+                <AppErrorBoundary>
+                  <App router={router} />
+                </AppErrorBoundary>
+              </ToastProvider>
+            </ConfigProvider>
+          </PerfTierProvider>
         </AmbientProvider>
       </ThemeProvider>
     </StrictMode>,
