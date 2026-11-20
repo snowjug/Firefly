@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import type { SessionSummaryDTO } from '#shared/domain/api.ts';
 import { api, errorMessage, isApiError } from '../../lib/api.ts';
-import { formatDateTime } from '../../lib/format.ts';
+import { formatWhen } from './trail-model.ts';
 import { Dialog } from '../Dialog.tsx';
 import { Icon } from '../Icon.tsx';
+import '../../styles/history.css';
 
 function DeleteBody({
   session,
@@ -35,22 +36,29 @@ function DeleteBody({
   };
 
   return (
-    <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-4)' }}>
-      <p className="hs-delete-target">
+    <div className="trail-dialog">
+      <p className="trail-delete-target">
         <strong>{session.scenarioTitle}</strong>
-        <span className="t-meta">{formatDateTime(session.startedAt)}</span>
+        <span>{formatWhen(session.startedAt)}</span>
       </p>
       {problem ? (
-        <p className="field-error" role="alert">
-          {errorMessage(problem)}
+        <p className="trail-dialog__problem" role="alert">
+          <Icon name="alert" size={16} />
+          <span>{errorMessage(problem)}</span>
         </p>
       ) : null}
-      <div className="cluster" style={{ justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-secondary" onClick={onCancel} data-autofocus>
+      <div className="action-row trail-dialog__actions">
+        <button type="button" className="action action--quiet" onClick={onCancel} data-autofocus>
           Cancel
         </button>
-        <button type="button" className="btn btn-danger-solid" onClick={confirm} disabled={busy}>
-          {busy ? <span className="spinner" aria-hidden="true" /> : <Icon name="trash" size={16} />}
+        <button
+          type="button"
+          className="action action--danger"
+          onClick={confirm}
+          disabled={busy}
+          aria-busy={busy || undefined}
+        >
+          <Icon name="trash" size={16} />
           Delete call
         </button>
       </div>

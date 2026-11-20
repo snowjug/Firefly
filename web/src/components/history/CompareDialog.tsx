@@ -1,7 +1,7 @@
 import { DIMENSION_IDS, DIMENSIONS } from '#shared/domain/vocab.ts';
 import type { SessionSummaryDTO } from '#shared/domain/api.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
-import { formatDateTime } from '../../lib/format.ts';
+import { formatWhen } from './trail-model.ts';
 import { Dialog } from '../Dialog.tsx';
 import { scoreText } from '../report/labels.ts';
 import '../../styles/history.css';
@@ -44,30 +44,30 @@ export function CompareDialog({
   const earlier = ordered?.[0];
   const later = ordered?.[1];
   return (
-    <Dialog open={ordered !== null} onClose={onClose} title="Compare two calls">
+    <Dialog open={ordered !== null} onClose={onClose} title="Compare two calls" eyebrow="History">
       {earlier && later ? (
-        <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-4)' }}>
-          <p className="callout callout-caution t-small" role="note">
+        <div className="trail-dialog">
+          <p className="trail-caution" role="note">
             {caution(earlier, later)}
           </p>
-          <dl className="hs-compare-who">
+          <dl className="trail-compare-who">
             {[
               { label: 'Earlier call', session: earlier },
               { label: 'Later call', session: later },
             ].map(({ label, session }) => (
               <div key={session.id}>
-                <dt className="t-label">{label}</dt>
+                <dt className="type-label">{label}</dt>
                 <dd>
                   <strong>{session.scenarioTitle}</strong>
-                  <span className="t-meta">
+                  <span>
                     {DIFFICULTY_PROFILES[session.difficulty].label} &middot;{' '}
-                    {formatDateTime(session.startedAt)}
+                    {formatWhen(session.startedAt)}
                   </span>
                 </dd>
               </div>
             ))}
           </dl>
-          <table className="table hs-compare-table">
+          <table className="trail-compare">
             <caption className="sr-only">Skill scores out of 5 for the two calls</caption>
             <thead>
               <tr>
@@ -81,21 +81,19 @@ export function CompareDialog({
               {DIMENSION_IDS.map((id) => (
                 <tr key={id}>
                   <th scope="row">{DIMENSIONS[id].short}</th>
-                  <td className="tabular">{earlier.dimensionScores?.[id] ?? '\u2013'}</td>
-                  <td className="tabular">{later.dimensionScores?.[id] ?? '\u2013'}</td>
+                  <td>{earlier.dimensionScores?.[id] ?? '\u2013'}</td>
+                  <td>{later.dimensionScores?.[id] ?? '\u2013'}</td>
                   <td>
                     {differenceText(earlier.dimensionScores?.[id], later.dimensionScores?.[id])}
                   </td>
                 </tr>
               ))}
-              <tr className="hs-compare-overall">
+              <tr className="trail-compare__overall">
                 <th scope="row">Overall</th>
-                <td className="tabular">
+                <td>
                   {earlier.overallScore === null ? '\u2013' : scoreText(earlier.overallScore)}
                 </td>
-                <td className="tabular">
-                  {later.overallScore === null ? '\u2013' : scoreText(later.overallScore)}
-                </td>
+                <td>{later.overallScore === null ? '\u2013' : scoreText(later.overallScore)}</td>
                 <td>
                   {differenceText(
                     earlier.overallScore ?? undefined,
@@ -105,8 +103,8 @@ export function CompareDialog({
               </tr>
             </tbody>
           </table>
-          <div className="cluster" style={{ justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose} data-autofocus>
+          <div className="action-row trail-dialog__actions">
+            <button type="button" className="action action--quiet" onClick={onClose} data-autofocus>
               Close
             </button>
           </div>
