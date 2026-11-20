@@ -10,6 +10,7 @@ import type {
 } from '#shared/domain/api.ts';
 import { computeCalibration, type CalibrationPair } from '#shared/domain/calibration.ts';
 import { DIMENSION_IDS, type DimensionId } from '#shared/domain/vocab.ts';
+import { ApiError } from '../lib/api.ts';
 import type * as ApiModule from '../lib/api.ts';
 import { ThemeProvider } from '../lib/theme.tsx';
 import { ToastProvider } from '../lib/toast.tsx';
@@ -144,6 +145,36 @@ beforeEach(() => {
   mocks.transcript.mockResolvedValue(TRANSCRIPT);
 });
 
+describe('Calibration studio frame', () => {
+  it('is the second of two studio tools, with a real link to the first', async () => {
+    renderCalibration();
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Calibration' }),
+    ).toBeInTheDocument();
+    const nav = screen.getByRole('navigation', { name: 'Studio' });
+    expect(within(nav).getByRole('link', { name: 'Calibration' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(within(nav).getByRole('link', { name: 'Trainer' })).toHaveAttribute('href', '/trainer');
+    expect(
+      screen.getByText(/Check whether the AI.s coaching scores roughly agree/),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the tabs out of the way in the middle of a review', async () => {
+    const user = userEvent.setup();
+    mocks.calibration.mockResolvedValue(dto([], { reviewable: [SUMMARY] }));
+    renderCalibration();
+    await user.click(await screen.findByRole('button', { name: /Score this session/ }));
+
+    expect(await screen.findByText('Blind review')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Studio' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Calibration' })).toBeInTheDocument();
+  });
+});
+
 describe('Calibration results', () => {
   it('explains how to begin when there are no reviews, without inventing figures', async () => {
     renderCalibration();
@@ -157,7 +188,8 @@ describe('Calibration results', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText('Sessions reviewed')).not.toBeInTheDocument();
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: /Include sample records/ })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: /Include sample records/ })).not.toBeChecked();
+    expect(screen.getByRole('link', { name: 'Trainer page' })).toHaveAttribute('href', '/trainer');
     expect(mocks.calibration).toHaveBeenCalledWith(false, expect.any(AbortSignal));
   });
 
@@ -210,12 +242,27 @@ describe('Calibration results', () => {
     renderCalibration();
 
     await screen.findByText('No mentor reviews yet');
-    await user.click(screen.getByRole('checkbox', { name: /Include sample records/ }));
+    await user.click(screen.getByRole('switch', { name: /Include sample records/ }));
 
     const records = await screen.findByRole('table', { name: /Calibration records/ });
     expect(mocks.calibration).toHaveBeenLastCalledWith(true, expect.any(AbortSignal));
     expect(within(records).getByText('Sample')).toBeInTheDocument();
     expect(screen.getByText(/Includes 1 sample record\./)).toBeInTheDocument();
+  });
+
+  it('says when the data cannot be loaded, and tries again on request', async () => {
+    const user = userEvent.setup();
+    mocks.calibration
+      .mockRejectedValueOnce(new ApiError(0, 'network', 'Cannot reach Firefly.', true))
+      .mockResolvedValue(dto([]));
+    renderCalibration();
+
+    expect(await screen.findByText('Could not load calibration data')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Cannot reach Firefly.');
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText('No mentor reviews yet')).toBeInTheDocument();
+    expect(mocks.calibration).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -262,6 +309,7 @@ describe('Calibration blind review', () => {
     const transcript = screen.getByRole('region', { name: 'Call transcript' });
     expect(within(transcript).getByText(/^Customer/)).toBeInTheDocument();
     expect(within(transcript).getByText(/^Trainee/)).toBeInTheDocument();
+    expect(screen.getByText('Maya Lindqvist, Receptionist, Northwind Clinic')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(String(AI_OVERALL));
     expect(
       screen.getByRole('heading', { name: 'Locked out after a password reset' }),
@@ -303,10 +351,29 @@ describe('Calibration blind review', () => {
 
     await user.click(within(alert).getByRole('link', { name: 'Choose a score for Clarity.' }));
     expect(within(clarity).getByRole('radio', { name: '1 \u2013 Not demonstrated' })).toHaveFocus();
+    await user.click(within(alert).getByRole('link', { name: 'Enter your name or initials.' }));
+    expect(reviewer).toHaveFocus();
 
     await user.click(within(clarity).getByRole('radio', { name: '3 \u2013 Developing' }));
     expect(clarity).toBeValid();
     expect(screen.getByRole('alert')).toHaveTextContent('6 things need attention');
+  });
+
+  it('names the one field that is missing when the mentor leaves only that one empty', async () => {
+    const user = userEvent.setup();
+    await review(user);
+
+    await user.type(screen.getByLabelText('Reviewer name or initials'), 'jt');
+    for (const group of screen.getAllByRole('radiogroup').slice(0, 5)) {
+      await user.click(within(group).getByRole('radio', { name: '3 \u2013 Developing' }));
+    }
+    await user.click(screen.getByRole('button', { name: 'Save review' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'One thing needs attention before you can save.',
+    );
+    expect(screen.getByRole('link', { name: 'Choose a score for Closing.' })).toBeInTheDocument();
+    expect(mocks.mentorScore).not.toHaveBeenCalled();
   });
 
   it('refuses reviewer names the server would reject', async () => {
@@ -321,6 +388,20 @@ describe('Calibration blind review', () => {
       /Use letters, numbers and simple punctuation only\./,
     );
     expect(mocks.mentorScore).not.toHaveBeenCalled();
+  });
+
+  it('scores with the keyboard: arrow keys move between the numerals and read the choice out', async () => {
+    const user = userEvent.setup();
+    await review(user);
+
+    const clarity = screen.getByRole('radiogroup', { name: 'Clarity' });
+    await user.click(within(clarity).getByRole('radio', { name: '2 \u2013 Emerging' }));
+    expect(clarity).toHaveAccessibleDescription(
+      /Emerging: Some attempt was made, but major gaps affected the conversation\./,
+    );
+    await user.keyboard('{ArrowRight}');
+    expect(within(clarity).getByRole('radio', { name: '3 \u2013 Developing' })).toBeChecked();
+    expect(clarity).toHaveAccessibleDescription(/Developing: Core behaviour/);
   });
 
   it('saves the scores, refreshes the metrics and then compares them with the AI', async () => {
@@ -349,7 +430,7 @@ describe('Calibration blind review', () => {
       await user.click(within(group).getByRole('radio', { name: '3 \u2013 Developing' }));
     }
     await user.type(screen.getByLabelText(/Notes/), 'Clear greeting. ');
-    expect(screen.getByText('16 of 500 characters')).toBeInTheDocument();
+    expect(screen.getByText('16 / 500')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save review' }));
 
     await waitFor(() => expect(mocks.mentorScore).toHaveBeenCalledTimes(1));
@@ -362,6 +443,7 @@ describe('Calibration blind review', () => {
       name: /AI and mentor scores for this session/,
     });
     expect(mocks.calibration).toHaveBeenCalledTimes(2);
+    expect(within(table).getByRole('columnheader', { name: 'Mentor (jt)' })).toBeInTheDocument();
     expect(within(table).getByRole('row', { name: /Scoping & Discovery/ })).toHaveTextContent(
       'AI 1 point lower',
     );
@@ -369,6 +451,60 @@ describe('Calibration blind review', () => {
     expect(within(table).getByRole('row', { name: /Closing/ })).toHaveTextContent(
       'AI 2 points lower',
     );
+    expect(
+      screen.getByText('Difference is the AI score minus the mentor score.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/On average they differ by 0\.5 points, and 5 of 6 skills are/),
+    ).toBeVisible();
+  });
+
+  it('reads identical scores as agreement', async () => {
+    const user = userEvent.setup();
+    const same = scoresOf(4);
+    const saved = { ...record(1, 'mentor', pair('session-1', same, same)), reviewer: 'jt' };
+    mocks.calibration
+      .mockResolvedValueOnce(dto([], { reviewable: [SUMMARY] }))
+      .mockResolvedValue(dto([pair('session-1', same, same)], { records: [saved] }));
+    mocks.mentorScore.mockResolvedValue({ saved: true });
+    renderCalibration();
+    await user.click(await screen.findByRole('button', { name: /Score this session/ }));
+    await screen.findByText('Hi Maya, thanks for calling. What does the sign-in screen say?');
+    await user.type(screen.getByLabelText('Reviewer name or initials'), 'jt');
+    for (const group of screen.getAllByRole('radiogroup')) {
+      await user.click(within(group).getByRole('radio', { name: '4 \u2013 Strong' }));
+    }
+    await user.click(screen.getByRole('button', { name: 'Save review' }));
+
+    const table = await screen.findByRole('table', { name: /AI and mentor scores/ });
+    expect(within(table).getAllByText('Same score')).toHaveLength(6);
+    expect(
+      screen.getByText(/On average they differ by 0\.0 points, and all six skills are/),
+    ).toBeVisible();
+    // Nothing is claimed beyond the numbers: the picture is hidden, the words say it all.
+    expect(table.querySelectorAll('.cal-pair[aria-hidden="true"]')).toHaveLength(6);
+  });
+
+  it('says so when the comparison cannot be loaded after saving, and keeps the review safe', async () => {
+    const user = userEvent.setup();
+    mocks.calibration
+      .mockResolvedValueOnce(dto([], { reviewable: [SUMMARY] }))
+      .mockRejectedValue(new Error('offline'));
+    mocks.mentorScore.mockResolvedValue({ saved: true });
+    renderCalibration();
+    await user.click(await screen.findByRole('button', { name: /Score this session/ }));
+    await screen.findByText('Hi Maya, thanks for calling. What does the sign-in screen say?');
+    await user.type(screen.getByLabelText('Reviewer name or initials'), 'jt');
+    for (const group of screen.getAllByRole('radiogroup')) {
+      await user.click(within(group).getByRole('radio', { name: '3 \u2013 Developing' }));
+    }
+    await user.click(screen.getByRole('button', { name: 'Save review' }));
+
+    expect(
+      await screen.findByText('Your review was saved, but the comparison could not be loaded.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(mocks.mentorScore).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the form and says so when saving fails', async () => {
@@ -415,5 +551,65 @@ describe('Calibration blind review', () => {
       await screen.findByRole('heading', { name: 'Sessions waiting for review' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Score this session/ })).toHaveFocus();
+  });
+
+  it('leaves at once when nothing has been entered', async () => {
+    const user = userEvent.setup();
+    await review(user);
+
+    await user.click(
+      screen.getAllByRole('button', { name: /Back to the queue/ })[0] as HTMLElement,
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Sessions waiting for review' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('Calibration records', () => {
+  const many = (n: number): CalibrationRecordDTO[] =>
+    Array.from({ length: n }, (_, i) => ({
+      ...record(i + 1, 'mentor', pair(`s${i}`, scoresOf(3, { clarity: 1 + (i % 5) }), scoresOf(3))),
+      scenarioTitle: `Scenario ${String(i + 1).padStart(3, '0')}`,
+      reviewer: i % 2 === 0 ? 'AB' : 'ZK',
+      createdAt: new Date(Date.UTC(2026, 10, 1 + (i % 28), 9, i % 60)).toISOString(),
+      notes: i === 0 ? 'A very long note. '.repeat(40).trim() : null,
+    }));
+
+  it('shows 200 records as a real table, newest first, and sorts when a heading is pressed', async () => {
+    const user = userEvent.setup();
+    const records = many(200);
+    mocks.calibration.mockResolvedValue(dto(clarityHigh(6), { records }));
+    renderCalibration();
+
+    const table = await screen.findByRole('table', { name: /Calibration records/ });
+    const rows = () => [...table.querySelectorAll('tbody tr')];
+    expect(rows()).toHaveLength(200);
+    expect(within(table).getByRole('columnheader', { name: /^Date/ })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    );
+
+    await user.click(within(table).getByRole('button', { name: 'Scenario' }));
+    const scenario = within(table).getByRole('columnheader', { name: /^Scenario/ });
+    expect(scenario).toHaveAttribute('aria-sort', 'ascending');
+    expect(rows()[0]).toHaveTextContent('Scenario 001');
+
+    await user.click(within(table).getByRole('button', { name: 'Scenario' }));
+    expect(scenario).toHaveAttribute('aria-sort', 'descending');
+    expect(rows()[0]).toHaveTextContent('Scenario 200');
+  }, 30_000);
+
+  it('says each skill in words for the one who cannot see the numerals, and the average gap', async () => {
+    const records = many(3);
+    mocks.calibration.mockResolvedValue(dto(clarityHigh(1), { records }));
+    renderCalibration();
+
+    const table = await screen.findByRole('table', { name: /Calibration records/ });
+    const first = within(table).getByRole('row', { name: /Scenario 001/ });
+    expect(first).toHaveTextContent('AI 1, mentor 3. AI 2 points lower.');
+    expect(first).toHaveTextContent('0.3');
+    expect(first).toHaveTextContent('A very long note.');
   });
 });

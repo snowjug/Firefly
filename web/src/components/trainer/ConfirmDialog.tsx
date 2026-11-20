@@ -1,7 +1,5 @@
-import type { ReactNode } from 'react';
-import { Dialog } from '../Dialog.tsx';
-
-export type ConfirmTone = 'danger' | 'primary';
+import { Dialog, Icon } from './bridge.tsx';
+import type { ConfirmTone } from './data-actions.ts';
 
 interface ConfirmDialogProps {
   title: string;
@@ -19,12 +17,10 @@ interface ConfirmDialogProps {
   onCancel(): void;
 }
 
-function Group({ heading, items }: { heading: string; items: string[] }): ReactNode {
+function Group({ heading, items }: { heading: string; items: string[] }) {
   return items.length === 0 ? null : (
-    <div>
-      <p className="t-label" style={{ marginBottom: 'var(--sp-2)' }}>
-        {heading}
-      </p>
+    <div className="tr-dialog__group">
+      <p className="tr-dialog__label type-label">{heading}</p>
       <ul className="tr-consequences">
         {items.map((item) => (
           <li key={item}>{item}</li>
@@ -35,8 +31,9 @@ function Group({ heading, items }: { heading: string; items: string[] }): ReactN
 }
 
 /**
- * A confirmation that states the consequence in full. Destructive styling is used on the confirm
- * button only, and focus starts on Cancel so Enter never deletes by accident.
+ * A confirmation that states the consequence in full. Danger styling is used on the confirm button
+ * only, and focus starts on Cancel so that Enter never deletes by accident. While the request runs,
+ * nothing can be pressed twice and the dialog cannot be dismissed.
  */
 export function ConfirmDialog({
   title,
@@ -52,22 +49,30 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   return (
-    <Dialog open onClose={onCancel} title={title} description={description} dismissible={!pending}>
-      <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-4)' }}>
+    <Dialog
+      open
+      onClose={onCancel}
+      eyebrow="Demo data"
+      title={title}
+      description={description}
+      dismissible={!pending}
+    >
+      <div className="tr-dialog">
         <Group heading="What happens" items={will} />
         <Group heading="What stays as it is" items={wont} />
         {error ? (
-          <p role="alert" className="field-error">
-            {error}
+          <p role="alert" className="tr-problem">
+            <Icon name="alert" size={16} />
+            <span>{error}</span>
           </p>
         ) : null}
         <span className="sr-only" role="status">
           {pending ? pendingLabel : ''}
         </span>
-        <div className="tr-dialog-actions">
+        <div className="action-row tr-dialog__actions">
           <button
             type="button"
-            className="btn btn-secondary"
+            className="action action--quiet"
             data-autofocus={tone === 'danger' ? '' : undefined}
             aria-disabled={pending || undefined}
             onClick={() => {
@@ -78,14 +83,14 @@ export function ConfirmDialog({
           </button>
           <button
             type="button"
-            className={`btn ${tone === 'danger' ? 'btn-danger-solid' : 'btn-primary'}`}
+            className={tone === 'danger' ? 'action action--danger' : 'action'}
             data-autofocus={tone === 'primary' ? '' : undefined}
             aria-disabled={pending || undefined}
+            aria-busy={pending || undefined}
             onClick={() => {
               if (!pending) onConfirm();
             }}
           >
-            {pending ? <span className="spinner" aria-hidden="true" /> : null}
             {pending ? pendingLabel : confirmLabel}
           </button>
         </div>

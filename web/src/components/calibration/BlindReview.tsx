@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { ReviewableSessionDTO } from '#shared/domain/api.ts';
+import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import {
   DIMENSION_IDS,
   DIMENSIONS,
@@ -10,13 +11,10 @@ import {
 import { api, errorMessage } from '../../lib/api.ts';
 import { formatDate, plural } from '../../lib/format.ts';
 import { useApi } from '../../lib/hooks.ts';
-import { DifficultyChip } from '../Chips.tsx';
-import { Dialog } from '../Dialog.tsx';
-import { Icon } from '../Icon.tsx';
-import { ENDED_EARLY_NOTE, EndedEarlyChip } from './EndedEarly.tsx';
+import { Dialog, Disclosure, Field, Icon, TextArea, TextInput } from '../trainer/bridge.tsx';
 import { ReviewTranscript } from './ReviewTranscript.tsx';
-import { SampleChip } from './SampleChip.tsx';
 import { firstScoreInputId, ScoreField, SCORES } from './ScoreField.tsx';
+import { ENDED_EARLY_NOTE, EndedEarlyTag, SampleTag } from './tags.tsx';
 
 export const NOTES_LIMIT = 500;
 export const REVIEWER_LIMIT = 40;
@@ -69,10 +67,16 @@ const hasErrors = (errors: ReviewErrors) =>
 const isComplete = (scores: Scores): scores is Record<DimensionId, number> =>
   DIMENSION_IDS.every((dimension) => typeof scores[dimension] === 'number');
 
+interface Problem {
+  key: 'reviewer' | DimensionId;
+  text: string;
+}
+
 /**
  * Scores one completed session without showing the AI's scores or the coaching report. Only the
  * transcript is requested, from an endpoint that carries no report, scores or markers, so none of
- * them can reach this view.
+ * them can reach this view. On a wide screen the transcript stays in view beside the form; on a
+ * narrow one it comes first and the form follows.
  */
 export function BlindReview({
   session,
@@ -88,16 +92,13 @@ export function BlindReview({
   const idBase = useId();
   const headingId = `${idBase}-heading`;
   const formId = `${idBase}-form`;
-  const reviewerId = `${idBase}-reviewer`;
-  const notesId = `${idBase}-notes`;
+  const formTitleId = `${idBase}-form-title`;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
+  const reviewerRef = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
 
-  const transcript = useApi(
-    (signal) => api.transcript(session.id, signal).then((dto) => dto.turns),
-    [session.id],
-  );
+  const transcript = useApi((signal) => api.transcript(session.id, signal), [session.id]);
 
   const [scores, setScores] = useState<Scores>({});
   const [reviewer, setReviewer] = useState(initialReviewer);
@@ -108,22 +109,23 @@ export function BlindReview({
   const [confirmLeave, setConfirmLeave] = useState(false);
 
   const errors: ReviewErrors = attempted ? validateReview(reviewer, scores) : { scores: {} };
-  const problems = [
-    ...(errors.reviewer ? [{ id: reviewerId, text: errors.reviewer }] : []),
+  const problems: Problem[] = [
+    ...(errors.reviewer ? [{ key: 'reviewer' as const, text: errors.reviewer }] : []),
     ...DIMENSION_IDS.flatMap((dimension) => {
       const text = errors.scores[dimension];
-      return text ? [{ id: firstScoreInputId(idBase, dimension), text }] : [];
+      return text ? [{ key: dimension, text }] : [];
     }),
   ];
   const dirty = Object.keys(scores).length > 0 || notes.trim() !== '';
 
+  function focusProblem(key: Problem['key']) {
+    if (key === 'reviewer') reviewerRef.current?.focus();
+    else document.getElementById(firstScoreInputId(idBase, key))?.focus();
+  }
+
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
-
-  function focusField(id: string) {
-    document.getElementById(id)?.focus();
-  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -154,44 +156,49 @@ export function BlindReview({
     }
   }
 
+  const leave = () => (dirty ? setConfirmLeave(true) : onBack());
+  const ended = session.completion === 'ended-early';
+
   return (
     <section className="cal-review" aria-labelledby={headingId}>
-      <header className="glass card cal-review-head">
-        <div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => (dirty ? setConfirmLeave(true) : onBack())}
-          >
-            <Icon name="arrow-left" size={16} /> Back to the queue
-          </button>
-        </div>
-        <p className="t-label">Blind review</p>
-        <h2 id={headingId} ref={headingRef} tabIndex={-1} className="cal-review-title">
+      <header className="cal-review__head">
+        <button type="button" className="text-link cal-back" onClick={leave}>
+          <Icon name="arrow-left" size={16} /> Back to the queue
+        </button>
+        <p className="cal-review__eyebrow type-label">Blind review</p>
+        <h2 id={headingId} ref={headingRef} tabIndex={-1} className="cal-review__title type-title">
           {session.scenarioTitle}
         </h2>
-        <p className="t-meta cal-review-meta">
-          <span>{formatDate(session.startedAt)}</span>
-          <DifficultyChip difficulty={session.difficulty} />
+        <p className="cal-facts type-label">
+          <span>
+            <time dateTime={session.startedAt}>{formatDate(session.startedAt)}</time>
+          </span>
+          <span>{DIFFICULTY_PROFILES[session.difficulty].label}</span>
           <span>{plural(session.traineeTurns, 'trainee message')}</span>
-          {session.completion === 'ended-early' ? <EndedEarlyChip /> : null}
-          {session.isSample ? <SampleChip /> : null}
+          {ended ? <EndedEarlyTag /> : null}
+          {session.isSample ? <SampleTag /> : null}
         </p>
-        {session.completion === 'ended-early' ? (
-          <p className="t-small t-muted">{ENDED_EARLY_NOTE}</p>
-        ) : null}
-        <p className="t-muted cal-review-lead">
+        {ended ? <p className="cal-review__note">{ENDED_EARLY_NOTE}</p> : null}
+        <p className="cal-review__lead">
           Read the transcript, then score each skill. The AI&rsquo;s scores and the coaching report
           stay hidden until you save, so your scores are independent.
         </p>
-        <a href={`#${formId}`} className="cal-skip t-small">
+        <a
+          href={`#${formId}`}
+          className="cal-skip text-link"
+          onClick={(event) => {
+            event.preventDefault();
+            reviewerRef.current?.focus();
+          }}
+        >
           Skip to the scoring form
         </a>
       </header>
 
-      <div className="cal-review-grid">
+      <div className="cal-review__grid">
         <ReviewTranscript
-          turns={transcript.data}
+          turns={transcript.data?.turns ?? null}
+          persona={transcript.data?.persona ?? null}
           loading={transcript.loading}
           error={transcript.error}
           onRetry={transcript.reload}
@@ -199,15 +206,17 @@ export function BlindReview({
 
         <form
           id={formId}
-          className="glass card cal-form"
+          className="cal-form"
+          aria-labelledby={formTitleId}
           onSubmit={(event) => void submit(event)}
           noValidate
         >
-          <h3 className="t-body cal-subhead">Your scores</h3>
+          <h3 id={formTitleId} className="cal-form__title type-heading">
+            Your scores
+          </h3>
 
-          <details className="cal-scale-guide">
-            <summary>How to read the 1 to 5 scale</summary>
-            <dl>
+          <Disclosure summary="How to read the 1 to 5 scale">
+            <dl className="cal-scale">
               {SCORES.map((score) => (
                 <div key={score}>
                   <dt>
@@ -217,115 +226,97 @@ export function BlindReview({
                 </div>
               ))}
             </dl>
-          </details>
+          </Disclosure>
 
           {problems.length > 0 ? (
-            <div
-              ref={summaryRef}
-              tabIndex={-1}
-              role="alert"
-              className="callout callout-negative cal-problems"
-            >
-              <Icon name="alert" size={18} />
-              <div>
-                <p className="cal-problems-title">
-                  {problems.length === 1
-                    ? 'One thing needs attention before you can save.'
-                    : `${problems.length} things need attention before you can save.`}
-                </p>
-                <ul>
-                  {problems.map((problem) => (
-                    <li key={problem.id}>
-                      <a
-                        href={`#${problem.id}`}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          focusField(problem.id);
-                        }}
-                      >
-                        {problem.text}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            <div ref={summaryRef} tabIndex={-1} role="alert" className="cal-problems">
+              <p className="cal-problems__title">
+                {problems.length === 1
+                  ? 'One thing needs attention before you can save.'
+                  : `${problems.length} things need attention before you can save.`}
+              </p>
+              <ul>
+                {problems.map((problem) => (
+                  <li key={problem.key}>
+                    <a
+                      href={`#${formId}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        focusProblem(problem.key);
+                      }}
+                    >
+                      {problem.text}
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
 
-          <div className="field">
-            <label className="label" htmlFor={reviewerId}>
-              Reviewer name or initials
-            </label>
-            <input
-              id={reviewerId}
-              className="input"
+          <Field
+            label="Reviewer name or initials"
+            hint="Use initials. Do not enter real customer information."
+            error={errors.reviewer}
+          >
+            <TextInput
+              ref={reviewerRef}
               value={reviewer}
               maxLength={REVIEWER_LIMIT}
+              counter={false}
               autoComplete="off"
               spellCheck={false}
-              aria-invalid={errors.reviewer ? true : undefined}
-              aria-describedby={`${reviewerId}-hint${errors.reviewer ? ` ${reviewerId}-error` : ''}`}
               onChange={(event) => setReviewer(event.target.value)}
             />
-            <p id={`${reviewerId}-hint`} className="hint">
-              Use initials. Do not enter real customer information.
-            </p>
-            {errors.reviewer ? (
-              <p id={`${reviewerId}-error`} className="field-error">
-                {errors.reviewer}
-              </p>
-            ) : null}
+          </Field>
+
+          <div className="cal-scores">
+            {DIMENSION_IDS.map((dimension) => (
+              <ScoreField
+                key={dimension}
+                idBase={idBase}
+                dimension={dimension}
+                value={scores[dimension]}
+                error={errors.scores[dimension]}
+                onChange={(score) => setScores((current) => ({ ...current, [dimension]: score }))}
+              />
+            ))}
           </div>
 
-          {DIMENSION_IDS.map((dimension) => (
-            <ScoreField
-              key={dimension}
-              idBase={idBase}
-              dimension={dimension}
-              value={scores[dimension]}
-              error={errors.scores[dimension]}
-              onChange={(score) => setScores((current) => ({ ...current, [dimension]: score }))}
-            />
-          ))}
-
-          <div className="field">
-            <label className="label" htmlFor={notesId}>
-              Notes <span className="t-meta">(optional)</span>
-            </label>
-            <textarea
-              id={notesId}
-              className="textarea"
+          <Field
+            label={
+              <>
+                Notes <span className="cal-optional">(optional)</span>
+              </>
+            }
+            hint="Why you scored as you did. Do not include real customer information."
+          >
+            <TextArea
+              serif
               rows={4}
               value={notes}
               maxLength={NOTES_LIMIT}
-              aria-describedby={`${notesId}-hint ${notesId}-count`}
               onChange={(event) => setNotes(event.target.value)}
             />
-            <p id={`${notesId}-hint`} className="hint">
-              Why you scored as you did. Do not include real customer information.
-            </p>
-            <p id={`${notesId}-count`} className="hint tabular">
-              {notes.length} of {NOTES_LIMIT} characters
-            </p>
-          </div>
+          </Field>
 
           {saveError ? (
-            <div className="callout callout-negative" role="alert">
-              <Icon name="alert" size={18} />
-              <p>{saveError}</p>
-            </div>
+            <p role="alert" className="cal-problem">
+              <Icon name="alert" size={16} />
+              <span>{saveError}</span>
+            </p>
           ) : null}
 
-          <div className="cal-form-actions">
-            <button type="submit" className="btn btn-primary" aria-disabled={saving || undefined}>
-              {saving ? <span className="spinner" aria-hidden="true" /> : null}
-              {saving ? 'Saving\u2026' : 'Save review'}
-            </button>
+          <div className="action-row cal-form__actions">
             <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => (dirty ? setConfirmLeave(true) : onBack())}
+              type="submit"
+              className="action"
+              aria-disabled={saving || undefined}
+              aria-busy={saving || undefined}
             >
+              {saving ? 'Saving\u2026' : 'Save review'}
+              {saving ? null : <Icon name="arrow-right" size={18} />}
+            </button>
+            <button type="button" className="action action--quiet" onClick={leave}>
               Back to the queue
             </button>
             <span className="sr-only" role="status">
@@ -338,13 +329,14 @@ export function BlindReview({
       <Dialog
         open={confirmLeave}
         onClose={() => setConfirmLeave(false)}
+        eyebrow="Blind review"
         title="Leave this review?"
         description="Your scores and notes have not been saved. If you leave now, they are discarded."
       >
-        <div className="cal-dialog-actions">
+        <div className="action-row cal-dialog__actions">
           <button
             type="button"
-            className="btn btn-secondary"
+            className="action action--quiet"
             data-autofocus=""
             onClick={() => setConfirmLeave(false)}
           >
@@ -352,7 +344,7 @@ export function BlindReview({
           </button>
           <button
             type="button"
-            className="btn btn-danger-solid"
+            className="action action--danger"
             onClick={() => {
               setConfirmLeave(false);
               onBack();

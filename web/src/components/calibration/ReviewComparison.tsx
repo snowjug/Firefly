@@ -1,12 +1,26 @@
 import { useEffect, useId, useRef } from 'react';
 import type { CalibrationRecordDTO } from '#shared/domain/api.ts';
 import { DIMENSION_IDS, DIMENSIONS, scoreLabel } from '#shared/domain/vocab.ts';
-import { plural } from '../../lib/format.ts';
-import { Icon } from '../Icon.tsx';
-import { SkeletonBlock } from '../Page.tsx';
+import { ApiError } from '../../lib/api.ts';
+import { Icon, LoadingNotice } from '../trainer/bridge.tsx';
+import { StudioError } from '../trainer/StudioFrame.tsx';
 import { differenceText, signed } from './bias.ts';
+import { comparisonSummary } from './records-model.ts';
+import { ScoreAxis, ScorePair } from './ScorePair.tsx';
 
-/** After a review is saved: the AI's scores beside the mentor's, skill by skill. */
+// The review is safe; only the comparison could not be fetched. Said that way, and retryable.
+const SAVED_BUT_NO_COMPARISON = new ApiError(
+  0,
+  'network',
+  'Your review was saved, but the comparison could not be loaded.',
+  true,
+);
+
+/**
+ * After a review is saved: the AI's scores beside the mentor's, skill by skill, as a ledger. Each
+ * row says it in words (the two scores and "AI 1 point higher") and draws it on a 1 to 5 scale, so
+ * the difference is a place and a length as well as a sentence.
+ */
 export function ReviewComparison({
   title,
   record,
@@ -32,40 +46,31 @@ export function ReviewComparison({
     headingRef.current?.focus();
   }, []);
 
-  const differences = record
-    ? DIMENSION_IDS.map((dimension) => record.ai[dimension] - record.mentor[dimension])
-    : [];
-  const averageGap =
-    differences.length > 0
-      ? differences.reduce((sum, d) => sum + Math.abs(d), 0) / differences.length
-      : 0;
-  const closeCount = differences.filter((d) => Math.abs(d) <= 1).length;
-
   return (
-    <section className="glass card cal-comparison" aria-labelledby={headingId}>
-      <p className="t-label">Review saved</p>
-      <h2 id={headingId} ref={headingRef} tabIndex={-1} className="cal-review-title">
-        {title}
-      </h2>
+    <section className="cal-comparison" aria-labelledby={headingId}>
+      <header className="cal-review__head">
+        <p className="cal-review__eyebrow type-label">Review saved</p>
+        <h2 id={headingId} ref={headingRef} tabIndex={-1} className="cal-review__title type-title">
+          {title}
+        </h2>
+        {record ? (
+          <p className="cal-review__lead">
+            Your scores are saved. Here is how they compare with the AI&rsquo;s for this session.{' '}
+            {comparisonSummary(record)}
+          </p>
+        ) : null}
+      </header>
 
       {record ? (
         <>
-          <p className="t-muted">
-            Your scores are saved. Here is how they compare with the AI&rsquo;s for this session. On
-            average they differ by {averageGap.toFixed(1)} points, and{' '}
-            {closeCount === DIMENSION_IDS.length
-              ? 'all six skills are'
-              : `${closeCount} of ${plural(DIMENSION_IDS.length, 'skill')} ${closeCount === 1 ? 'is' : 'are'}`}{' '}
-            within 1 point.
-          </p>
           <div
-            className="table-wrap cal-table-wrap"
+            className="cal-scroll"
             role="region"
             aria-label="AI and mentor scores for this session"
             // A scrolling region has to be reachable from the keyboard.
             tabIndex={0}
           >
-            <table className="table cal-table">
+            <table className="cal-table cal-compare">
               <caption className="sr-only">AI and mentor scores for this session</caption>
               <thead>
                 <tr>
@@ -73,6 +78,10 @@ export function ReviewComparison({
                   <th scope="col">AI</th>
                   <th scope="col">Mentor ({record.reviewer})</th>
                   <th scope="col">Difference</th>
+                  <th scope="col" className="cal-compare__scale">
+                    <span className="sr-only">Place on the 1 to 5 scale</span>
+                    <ScoreAxis />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -82,17 +91,22 @@ export function ReviewComparison({
                   return (
                     <tr key={dimension}>
                       <th scope="row">{DIMENSIONS[dimension].label}</th>
-                      <td>
-                        <span className="tabular">{ai}</span>{' '}
-                        <span className="t-meta">{scoreLabel(ai)}</span>
+                      <td data-label="AI">
+                        <span className="cal-num">{ai}</span>{' '}
+                        <span className="cal-word">{scoreLabel(ai)}</span>
                       </td>
-                      <td>
-                        <span className="tabular">{mentor}</span>{' '}
-                        <span className="t-meta">{scoreLabel(mentor)}</span>
+                      <td data-label={`Mentor (${record.reviewer})`}>
+                        <span className="cal-num">{mentor}</span>{' '}
+                        <span className="cal-word">{scoreLabel(mentor)}</span>
                       </td>
-                      <td>
-                        {differenceText(ai, mentor)}{' '}
-                        <span className="t-meta tabular">({signed(ai - mentor, 0)})</span>
+                      <td data-label="Difference">
+                        <span className="cal-diff" data-same={ai === mentor ? '' : undefined}>
+                          {differenceText(ai, mentor)}
+                        </span>{' '}
+                        <span className="cal-word cal-num">({signed(ai - mentor, 0)})</span>
+                      </td>
+                      <td className="cal-compare__scale">
+                        <ScorePair ai={ai} mentor={mentor} />
                       </td>
                     </tr>
                   );
@@ -100,40 +114,34 @@ export function ReviewComparison({
               </tbody>
             </table>
           </div>
-          <p className="t-meta">Difference is the AI score minus the mentor score.</p>
+          <p className="cal-key">
+            <span className="cal-key__ai" aria-hidden="true" /> AI
+            <span className="cal-key__mentor" aria-hidden="true" /> Mentor ({record.reviewer})
+            <span className="cal-key__link" aria-hidden="true" /> The difference
+          </p>
+          <p className="cal-foot">Difference is the AI score minus the mentor score.</p>
         </>
       ) : failed ? (
-        <div className="callout callout-negative" role="alert">
-          <Icon name="alert" size={18} />
-          <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
-            <p>Your review was saved, but the comparison could not be loaded.</p>
-            <div>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry}>
-                <Icon name="refresh" size={16} /> Try again
-              </button>
-            </div>
-          </div>
-        </div>
+        <StudioError
+          error={SAVED_BUT_NO_COMPARISON}
+          title="Could not load the comparison"
+          onRetry={onRetry}
+        />
       ) : loading ? (
-        <div className="stack" role="status" aria-label="Loading the comparison">
-          <SkeletonBlock height={20} width="60%" />
-          <SkeletonBlock height={180} />
-        </div>
+        <LoadingNotice label="Loading the comparison" lines={4} />
       ) : (
-        <p className="t-muted">Your review was saved. The comparison is not available yet.</p>
+        <p className="cal-review__lead">
+          Your review was saved. The comparison is not available yet.
+        </p>
       )}
 
-      <div className="cal-form-actions">
+      <div className="action-row cal-form__actions">
         {onNext ? (
-          <button type="button" className="btn btn-primary" onClick={onNext}>
-            Review another session
+          <button type="button" className="action" onClick={onNext}>
+            Review another session <Icon name="arrow-right" size={18} />
           </button>
         ) : null}
-        <button
-          type="button"
-          className={`btn ${onNext ? 'btn-secondary' : 'btn-primary'}`}
-          onClick={onBack}
-        >
+        <button type="button" className={onNext ? 'text-link' : 'action'} onClick={onBack}>
           Back to calibration
         </button>
       </div>
