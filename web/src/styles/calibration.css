@@ -159,7 +159,7 @@
     border-block-start: 0;
   }
 }
-.cal-note {
+.cal-caveat {
   max-width: var(--measure-read);
   margin: 0;
   padding-inline-start: var(--sp-4);
@@ -168,7 +168,7 @@
   font-size: var(--t-small);
   line-height: 1.55;
 }
-.cal-note strong {
+.cal-caveat strong {
   color: var(--ink-1);
   font-weight: 600;
 }
@@ -310,21 +310,21 @@
   gap: var(--sp-3);
 }
 /* The share of scores within a point, as a length on a hairline. The figure beside it is the fact. */
-.cal-bar {
+.cal-share {
   position: relative;
   display: block;
   width: 5rem;
   height: 9px;
   border-inline: 1px solid var(--line-3);
 }
-.cal-bar::before {
+.cal-share::before {
   content: '';
   position: absolute;
   inset-inline: 0;
   inset-block-start: 4px;
   border-block-start: 1px solid var(--line-3);
 }
-.cal-bar > span {
+.cal-share > span {
   position: absolute;
   inset-block-start: 3px;
   inset-inline-start: 0;
@@ -725,13 +725,13 @@ th[aria-sort] .cal-sort {
 }
 
 /* The form. */
-.cal-form {
+.cal-score-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-6);
   min-width: 0;
 }
-.cal-form__title {
+.cal-score-form__title {
   margin: 0;
 }
 .cal-scale {
@@ -779,7 +779,7 @@ th[aria-sort] .cal-sort {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
 }
-.cal-form__actions {
+.cal-score-form__actions {
   margin-block-start: var(--sp-2);
 }
 .cal-dialog__actions {
@@ -1128,7 +1128,7 @@ th[aria-sort] .cal-sort {
 
 /* ====================================================================== Higher contrast, forced colours */
 @media (prefers-contrast: more) {
-  .cal-note,
+  .cal-caveat,
   .cal-problems {
     border-inline-start-width: 3px;
   }
@@ -1149,7 +1149,7 @@ th[aria-sort] .cal-sort {
   }
   .cal-pair__link,
   .cal-key__link,
-  .cal-bar > span {
+  .cal-share > span {
     forced-color-adjust: none;
     background: Highlight;
   }
@@ -1175,7 +1175,7 @@ th[aria-sort] .cal-sort {
   .cal-scale > div,
   .cal-transcript__head,
   .cal-size,
-  .cal-note,
+  .cal-caveat,
   .cal-problems {
     border-color: CanvasText;
   }

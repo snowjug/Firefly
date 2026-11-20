@@ -135,7 +135,7 @@ export function ReviewComparison({
         </p>
       )}
 
-      <div className="action-row cal-form__actions">
+      <div className="action-row cal-score-form__actions">
         {onNext ? (
           <button type="button" className="action" onClick={onNext}>
             Review another session <Icon name="arrow-right" size={18} />

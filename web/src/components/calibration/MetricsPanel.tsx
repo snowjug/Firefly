@@ -111,7 +111,7 @@ export function MetricsPanel({
                       </td>
                       <td data-label="Within 1 point">
                         <span className="cal-within">
-                          <span className="cal-bar" aria-hidden="true">
+                          <span className="cal-share" aria-hidden="true">
                             <span style={{ width: `${Math.round(row.withinOne * 100)}%` }} />
                           </span>
                           <span className="cal-num">{percent(row.withinOne)}</span>

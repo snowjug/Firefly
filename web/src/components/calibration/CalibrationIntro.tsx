@@ -40,7 +40,7 @@ export function CalibrationIntro() {
             </li>
           ))}
         </ol>
-        <p className="cal-note">
+        <p className="cal-caveat">
           <strong>Small samples are indicative only.</strong> A handful of reviews can show where to
           look, but not how reliable the scoring is. Calibration is not certification: the scores
           are practice feedback, and human mentors should review and calibrate them.

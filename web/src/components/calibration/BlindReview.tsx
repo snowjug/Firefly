@@ -206,12 +206,12 @@ export function BlindReview({
 
         <form
           id={formId}
-          className="cal-form"
+          className="cal-score-form"
           aria-labelledby={formTitleId}
           onSubmit={(event) => void submit(event)}
           noValidate
         >
-          <h3 id={formTitleId} className="cal-form__title type-heading">
+          <h3 id={formTitleId} className="cal-score-form__title type-heading">
             Your scores
           </h3>
 
@@ -306,7 +306,7 @@ export function BlindReview({
             </p>
           ) : null}
 
-          <div className="action-row cal-form__actions">
+          <div className="action-row cal-score-form__actions">
             <button
               type="submit"
               className="action"
