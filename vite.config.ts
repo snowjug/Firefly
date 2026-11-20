@@ -15,7 +15,8 @@ export default defineConfig({
     target: 'es2022',
   },
   server: {
-    port: 5173,
+    // The port can be overridden so that several copies of the app can run side by side.
+    port: Number(process.env.FIREFLY_WEB_PORT ?? 5173),
     fs: { allow: ['..'] },
     strictPort: true,
     proxy: {

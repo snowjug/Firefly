@@ -14,6 +14,7 @@ describe('theme-init.js (display preferences applied before first paint)', () =>
     localStorage.clear();
     root().removeAttribute('data-theme');
     root().removeAttribute('data-motion');
+    root().removeAttribute('data-ambient');
   });
 
   it('applies the theme and motion preferences in the format the app saves them', () => {
@@ -22,6 +23,24 @@ describe('theme-init.js (display preferences applied before first paint)', () =>
     runInitScript();
     expect(root().getAttribute('data-theme')).toBe('dark');
     expect(root().getAttribute('data-motion')).toBe('reduce');
+  });
+
+  it('pauses ambient motion before first paint when it was paused, or when motion is reduced', () => {
+    writeStorage('firefly.ambient', 'paused');
+    runInitScript();
+    expect(root().getAttribute('data-ambient')).toBe('paused');
+
+    root().removeAttribute('data-ambient');
+    localStorage.clear();
+    writeStorage('firefly.motion', 'reduce');
+    runInitScript();
+    expect(root().getAttribute('data-ambient')).toBe('paused');
+
+    root().removeAttribute('data-ambient');
+    localStorage.clear();
+    writeStorage('firefly.ambient', 'on');
+    runInitScript();
+    expect(root().hasAttribute('data-ambient')).toBe(false);
   });
 
   it('also accepts a bare value', () => {

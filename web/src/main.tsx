@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { App, createAppRouter, preloadPage } from './App.tsx';
 import { AppErrorBoundary } from './components/AppErrorBoundary.tsx';
 import { ConfigProvider } from './lib/config.tsx';
+import { AmbientProvider } from './lib/motion/ambient.tsx';
+import { installViewTransitionSkip } from './lib/motion/transitions.ts';
 import { ThemeProvider } from './lib/theme.tsx';
 import { ToastProvider } from './lib/toast.tsx';
 import './styles/index.css';
@@ -12,17 +14,21 @@ import './styles/index.css';
 const FIRST_RENDER_WAIT_MS = 1500;
 
 function start() {
+  // A route animation must never get in the way: the first press or key skips it.
+  installViewTransitionSkip();
   const router = createAppRouter();
   createRoot(document.getElementById('root') as HTMLElement).render(
     <StrictMode>
       <ThemeProvider>
-        <ConfigProvider>
-          <ToastProvider>
-            <AppErrorBoundary>
-              <App router={router} />
-            </AppErrorBoundary>
-          </ToastProvider>
-        </ConfigProvider>
+        <AmbientProvider>
+          <ConfigProvider>
+            <ToastProvider>
+              <AppErrorBoundary>
+                <App router={router} />
+              </AppErrorBoundary>
+            </ToastProvider>
+          </ConfigProvider>
+        </AmbientProvider>
       </ThemeProvider>
     </StrictMode>,
   );
