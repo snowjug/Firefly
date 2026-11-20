@@ -643,6 +643,8 @@ html[data-perf='low'] .rp-const__star path {
   font-family: var(--font-mono);
   font-size: var(--t-micro);
   letter-spacing: 0.04em;
+  /* "1 of 5" is one reading: it never breaks across lines in a narrow label column. */
+  white-space: nowrap;
 }
 .rp-const__num {
   color: var(--ink-1);

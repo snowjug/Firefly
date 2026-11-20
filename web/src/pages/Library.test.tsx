@@ -141,7 +141,8 @@ describe('Missions: the field', () => {
     renderLibrary('/scenarios?view=list');
     await heading();
     const row = panel().getByRole('link', { name: titleOf(LOCKED_OUT) });
-    expect(row).toHaveTextContent('Maya Okafor');
+    // The link is the title, stretched over the row; the persona is in the same row beside it.
+    expect(row.closest('li')).toHaveTextContent('Maya Okafor');
     expect(row).toHaveAccessibleDescription(/Starter, low impact, customer starts calm/);
     expect(row).toHaveAccessibleDescription(/about 8 minutes\. Not tried yet\./);
   });

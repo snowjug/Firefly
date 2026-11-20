@@ -34,53 +34,52 @@ const Row = memo(function Row({
   const standing = standingText(mission, known);
   return (
     <li className="plate-row" data-recommended={mission.recommended ? 'true' : undefined}>
-      <Link
-        className="plate-row__link"
-        to={to}
-        state={{ from: backTo, status: mission.status }}
-        viewTransition={morph}
-        aria-labelledby={`${base}-title`}
-        aria-describedby={`${base}-about`}
+      <span
+        className="plate-row__glyph"
+        style={moving ? ({ viewTransitionName: 'signal-mission' } as CSSProperties) : undefined}
       >
-        <span
-          className="plate-row__glyph"
-          style={moving ? ({ viewTransitionName: 'signal-mission' } as CSSProperties) : undefined}
+        <SignalGlyph
+          traits={{
+            difficulty: mission.difficulty,
+            impact: mission.impact,
+            start: mission.start,
+            stage: mission.stage,
+            status: mission.status,
+            minutes: mission.minutes,
+            recommended: mission.recommended,
+          }}
+          size={GLYPH}
+        />
+      </span>
+      <span className="plate-row__main">
+        {/* The link is the title, so its name is exactly its visible text (WCAG 2.5.3); its box is
+            stretched over the whole row, so the row is the target. */}
+        <Link
+          className="plate-row__link"
+          to={to}
+          state={{ from: backTo, status: mission.status }}
+          viewTransition={morph}
+          aria-describedby={`${base}-about`}
         >
-          <SignalGlyph
-            traits={{
-              difficulty: mission.difficulty,
-              impact: mission.impact,
-              start: mission.start,
-              stage: mission.stage,
-              status: mission.status,
-              minutes: mission.minutes,
-              recommended: mission.recommended,
-            }}
-            size={GLYPH}
-          />
+          {mission.title}
+        </Link>
+        <span className="plate-row__who">
+          {persona.name}, {persona.role}, {persona.organisation}
         </span>
-        <span className="plate-row__main">
-          <span id={`${base}-title`} className="plate-row__title">
-            {mission.title}
+        {mission.recommended ? (
+          <span className="plate-row__why">
+            <Tag tone="amber">Suggested next</Tag>
+            {reason ? <span>{reason}</span> : null}
           </span>
-          <span className="plate-row__who">
-            {persona.name}, {persona.role}, {persona.organisation}
-          </span>
-          {mission.recommended ? (
-            <span className="plate-row__why">
-              <Tag tone="amber">Suggested next</Tag>
-              {reason ? <span>{reason}</span> : null}
-            </span>
-          ) : null}
+        ) : null}
+      </span>
+      <span className="plate-row__meta" aria-hidden="true">
+        <span className="plate-row__facts type-label">{factsText(mission)}</span>
+        <span className="plate-row__standing" data-status={mission.status}>
+          {standing}
         </span>
-        <span className="plate-row__meta" aria-hidden="true">
-          <span className="plate-row__facts type-label">{factsText(mission)}</span>
-          <span className="plate-row__standing" data-status={mission.status}>
-            {standing}
-          </span>
-        </span>
-        <Icon name="arrow-right" size={18} className="plate-row__go" />
-      </Link>
+      </span>
+      <Icon name="arrow-right" size={18} className="plate-row__go" />
       <span id={`${base}-about`} className="sr-only">
         {descriptionWithoutTitle(mission, known)}
       </span>
