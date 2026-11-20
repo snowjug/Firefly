@@ -9,7 +9,8 @@ export default defineConfig({
   root: 'web',
   plugins: [react()],
   build: {
-    outDir: '../dist/web',
+    // FIREFLY_OUT_DIR lets several builds exist side by side (paired with FIREFLY_WEB_DIR).
+    outDir: process.env.FIREFLY_OUT_DIR ?? '../dist/web',
     emptyOutDir: true,
     sourcemap: false,
     target: 'es2022',
