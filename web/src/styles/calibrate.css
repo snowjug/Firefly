@@ -443,6 +443,11 @@
     grid-column: 2;
   }
 }
+/* The bar covers the foot of the page, so a control focused from the keyboard is scrolled clear of it
+   as well as of the dock (WCAG 2.4.11). */
+html:has(.shell[data-shell='app'] .cal-bar) {
+  scroll-padding-bottom: calc(var(--dock-clear) + min(10rem, 35svh));
+}
 /* The ground under the bar fades out at the top and at both sides, so it never reads as a slab. */
 .cal-bar::before {
   content: '';
@@ -535,6 +540,12 @@
   }
 }
 @media (forced-colors: active) {
+  /* The ground under the bar is only a gradient, which forced colours do not paint. */
+  .cal-bar::before {
+    background: Canvas;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
   .cal-check__mark {
     forced-color-adjust: none;
     border-color: CanvasText;

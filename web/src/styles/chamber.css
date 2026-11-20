@@ -112,7 +112,7 @@
   min-height: var(--masthead-h, 3.5rem);
   padding: 0.6rem var(--gutter);
   border-bottom: 1px solid var(--line-1);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
   line-height: 1.4;
@@ -484,12 +484,13 @@ html[data-perf='low'] .ch-signals__dots i[data-lit] {
   scrollbar-color: var(--line-2) transparent;
   scrollbar-width: thin;
 }
-/* The top of the page fades into the strip. A mask on a scroller makes the whole page paint through
-   an extra surface on every scrolled frame, which a long call cannot afford on a modest GPU, so the
-   lowest tier keeps a plain edge. */
+/* The top of the page fades into the strip, over a short distance: the words that scroll under it are
+   the conversation, and a long fade would take the line just above the newest one below AA contrast.
+   A mask on a scroller makes the whole page paint through an extra surface on every scrolled frame,
+   which a long call cannot afford on a modest GPU, so the lowest tier keeps a plain edge. */
 html:not([data-perf='low']) .ch-conv__scroll {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 4rem, black 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, black 4rem, black 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 1.5rem, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, black 1.5rem, black 100%);
 }
 .ch-conv__scroll:focus-visible {
   outline-offset: -4px;
@@ -673,7 +674,7 @@ html[data-perf='low'] .ch-star {
   letter-spacing: -0.012em;
 }
 .ch-turn[data-emphasis='settled'] .ch-turn__text {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-weight: 360;
 }
 .ch-turn[data-role='trainee'] .ch-turn__body {
@@ -1851,10 +1852,10 @@ html[data-perf='low'] .ch-arrival {
   }
 }
 
-/* Short on room: a landscape phone, or the keyboard over most of the screen. Only the conversation
-   and the line stay, and the few buttons that matter on one row (a landscape phone has no other way
-   to end the call); the rest stays for a screen reader and is only taken out of sight. A portrait
-   phone this short is only ever the keyboard, which is about to go away, so the buttons wait. */
+/* Short on room: a landscape phone, a small window, or the keyboard over most of the screen. Only the
+   conversation and the line stay, and the few buttons that matter on one row (there must always be a
+   way to end the call); the rest stays for a screen reader and is only taken out of sight. With the
+   keyboard up on a narrow screen the buttons wait as well (see the end of this block). */
 .ch[data-short] .ch-ideas,
 .ch[data-short] .ch-objective {
   display: none;
@@ -1896,9 +1897,24 @@ html[data-perf='low'] .ch-arrival {
     --lead: var(--gutter);
   }
 }
+/* A phone held upright with the keyboard up keeps the strip, the conversation and the line, and its
+   buttons wait: the keyboard is about to go away. A window that is simply small (a desktop zoomed
+   to 400%, a small phone held sideways) has no keyboard to wait for. There the buttons stay, because
+   a person must always be able to end the call, and the page scrolls round a conversation of a
+   sensible height instead of squeezing it to a sliver. */
 @media (max-width: 599px) {
-  .ch[data-short] .ch-rail {
+  .ch[data-short][data-keyboard] .ch-rail {
     display: none;
+  }
+  .ch[data-short]:not([data-keyboard]) {
+    height: auto;
+    min-height: var(--vvh, 100dvh);
+    overflow: visible;
+  }
+  .ch[data-short]:not([data-keyboard]) .ch-conv {
+    /* What is left under the strip, the buttons and the line, and never less than a few turns. */
+    flex: none;
+    height: max(9rem, calc(var(--vvh, 100dvh) - 17rem));
   }
 }
 

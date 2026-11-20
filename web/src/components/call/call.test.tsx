@@ -14,6 +14,7 @@ import { HINTS, hintIdsForAreas, hintsFor, withStarter } from './hints.ts';
 import { PresenceRail } from './PresenceRail.tsx';
 import { callReducer, initialCallState, type ChatShift, type ChatTurn } from './useCall.ts';
 import { ThemeProvider } from '../../lib/theme.tsx';
+import { AmbientProvider } from '../../lib/motion/ambient.tsx';
 
 vi.mock('./ProviderNote.tsx', () => ({
   ProviderNote: () => <span>Demo mode</span>,
@@ -798,6 +799,29 @@ describe('PresenceRail', () => {
     expect(onEnd).toHaveBeenCalledTimes(1);
     expect(onSound).toHaveBeenCalledWith(true);
     expect(onOpenDetails).toHaveBeenCalledTimes(1);
+  });
+
+  it('has its own pause for ambient motion, because the page’s one is not on screen during a call', async () => {
+    const user = userEvent.setup();
+    localStorage.clear();
+    render(
+      <AmbientProvider>
+        <PresenceRail {...props(guided)} />
+      </AmbientProvider>,
+    );
+    const pause = screen.getByRole('button', { name: 'Pause motion' });
+    expect(pause).toHaveAttribute('aria-pressed', 'false');
+    await user.click(pause);
+    expect(pause).toHaveAttribute('aria-pressed', 'true');
+    expect(document.documentElement).toHaveAttribute('data-ambient', 'paused');
+    await user.click(pause);
+    expect(document.documentElement).not.toHaveAttribute('data-ambient');
+    localStorage.clear();
+  });
+
+  it('offers no pause where there is nowhere to keep the choice', () => {
+    render(<PresenceRail {...props(guided)} />);
+    expect(screen.queryByRole('button', { name: 'Pause motion' })).not.toBeInTheDocument();
   });
 });
 

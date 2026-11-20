@@ -227,6 +227,9 @@
   font-size: var(--t-small);
 }
 .plate-lens__panel {
+  /* In the row after the button that opens it (for the tab order), drawn on a line of its own below. */
+  order: 1;
+  flex: 1 0 100%;
   display: grid;
   gap: var(--sp-4);
   padding-block: var(--sp-4);

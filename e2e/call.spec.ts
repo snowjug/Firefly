@@ -104,6 +104,28 @@ test.describe('the live call', () => {
     expect(gone.status()).toBe(404);
   });
 
+  test('can still be ended, and read, on a screen as small as a desktop zoomed to 400%', async ({
+    page,
+  }) => {
+    const call = await createCall(page);
+    await sayViaApi(page, call.id, "I'm sorry you're locked out. What happens when you sign in?");
+    // 1280 x 1024 at 400% zoom is 320 x 256 CSS pixels (WCAG 1.4.10, reflow).
+    await page.setViewportSize({ width: 320, height: 256 });
+    await page.goto(`/calls/${call.id}`);
+    const endButton = page.getByRole('button', { name: 'End call', exact: true });
+    await expect(endButton).toBeVisible();
+    // The conversation keeps a usable height instead of being squeezed away, and nothing scrolls sideways.
+    const conversation = page.getByRole('region', { name: 'Conversation' });
+    expect((await conversation.boundingBox())?.height ?? 0).toBeGreaterThan(100);
+    const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }));
+    expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
+    await endButton.click();
+    await expect(page.getByRole('dialog', { name: 'End this call?' })).toBeVisible();
+  });
+
   test('keeps the draft private notes in the tab and passes automated accessibility checks', async ({
     page,
   }) => {

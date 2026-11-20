@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Outlet, useLocation, useMatch } from 'react-router';
+import { Outlet, useMatch } from 'react-router';
 import { useOnDemand } from '../../lib/onDemand.ts';
 import { useTourRequests } from '../../lib/tour.ts';
 import { OfflineBanner } from '../OfflineBanner.tsx';
@@ -8,6 +8,7 @@ import { WorldLayer } from '../world/WorldLayer.tsx';
 import { CommandDock } from './CommandDock.tsx';
 import { Colophon } from './Colophon.tsx';
 import { usePaletteShortcut } from './palette-shortcut.ts';
+import { usePageFocus } from './page-focus.ts';
 import { RouteProgress } from './RouteProgress.tsx';
 import { ShellModeContext, type ShellMode } from './shell-mode.ts';
 import { UtilityCluster } from './UtilityCluster.tsx';
@@ -38,11 +39,9 @@ function useScrolledAway(): boolean {
  * happens), leaving the call the whole screen.
  */
 export function AppShell() {
-  const location = useLocation();
   const onCall = Boolean(useMatch('/calls/:id'));
   const mode: ShellMode = onCall ? 'call' : 'app';
   const mainRef = useRef<HTMLElement>(null);
-  const settledPath = useRef(location.pathname);
   const scrolledAway = useScrolledAway();
 
   // The tour opens only when someone asks for it (from the home page or Settings), never by itself.
@@ -82,14 +81,8 @@ export function AppShell() {
   }, []);
 
   // Move focus to the page content when the route changes so keyboard and screen-reader users start
-  // at the top. Compared by address (not "is this the first run") so that React's double run of
-  // effects in development cannot move focus on load.
-  useEffect(() => {
-    if (settledPath.current === location.pathname) return;
-    settledPath.current = location.pathname;
-    mainRef.current?.focus({ preventScroll: true });
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
+  // at the top (see usePageFocus).
+  usePageFocus(() => mainRef.current);
 
   const Masthead = onCall ? 'div' : 'header';
   return (

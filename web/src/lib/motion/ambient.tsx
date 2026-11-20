@@ -70,6 +70,11 @@ export function useAmbient(): AmbientState {
   return ctx;
 }
 
+/** The control's state when there is a provider to keep it (always, in the app), and null when not. */
+export function useAmbientOptional(): AmbientState | null {
+  return useContext(AmbientContext);
+}
+
 /** For decorative parts that must still work outside the provider: not paused, unless forced. */
 export function useAmbientPaused(): boolean {
   const ctx = useContext(AmbientContext);

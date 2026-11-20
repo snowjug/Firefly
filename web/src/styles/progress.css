@@ -36,8 +36,7 @@
 .pg-hero__head,
 .pg-hero__sky,
 .pg-hero__panel,
-.pg-hero__tools,
-.pg-hero__more {
+.pg-hero__tools {
   min-width: 0;
 }
 @media (min-width: 64rem) {
@@ -46,9 +45,8 @@
     grid-template-areas:
       'head sky'
       'panel sky'
-      'tools sky'
-      '. more';
-    grid-template-rows: auto auto 1fr auto;
+      'tools sky';
+    grid-template-rows: auto auto 1fr;
     column-gap: var(--pg-gap);
     row-gap: var(--sp-6);
   }
@@ -67,9 +65,15 @@
   .pg-hero__tools {
     grid-area: tools;
   }
-  .pg-hero__more {
-    grid-area: more;
-  }
+}
+/* The table of scores sits under the hero, not in its grid: a sticky sky slides to the bottom of the
+   whole grid, so anything in a row beneath it would be covered. */
+.pg-more {
+  margin-block-start: var(--sp-6);
+}
+/* What follows the hero waits, unpainted but in place, until the hero has loaded. */
+.pg-below[data-waiting] {
+  visibility: hidden;
 }
 .pg-hero .ff-head {
   margin-block-end: 0;

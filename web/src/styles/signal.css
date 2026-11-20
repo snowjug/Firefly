@@ -481,7 +481,7 @@ html[data-perf='low'] .sig-core * {
   font-family: var(--font-mono);
   font-size: var(--t-micro);
   line-height: 1.4;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 .sig-legend dd.sig-legend__why {
   font-family: var(--font-ui);

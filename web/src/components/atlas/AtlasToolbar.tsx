@@ -84,6 +84,32 @@ export function AtlasToolbar({
             </button>
           ) : null}
         </div>
+        {/* Straight after the button that opens it, so Tab goes into the options and not past them to
+            the search; the panel is drawn on a line of its own under the row (`order` in atlas.css). */}
+        <div id={panelId} className="plate-lens__panel" hidden={!open}>
+          <p className="plate-lens__lead">
+            Light only the missions that match. Nothing on the plate moves.
+          </p>
+          <div className="plate-lens__groups">
+            {groups.map((group) => (
+              <ChoiceRow
+                key={group.key}
+                legend={group.label}
+                name={`plate-lens-${group.key}`}
+                size="text"
+                value={group.value}
+                options={[
+                  { value: '', label: 'Any' },
+                  ...group.options.map((option) => ({
+                    value: option.value,
+                    label: `${option.label} (${option.count})`,
+                  })),
+                ]}
+                onChange={(value) => onLens(group.key, value)}
+              />
+            ))}
+          </div>
+        </div>
         <div className="plate-tools__search" role="search" aria-label="Find a mission">
           <Field label="Find a signal">
             <TextInput
@@ -100,31 +126,6 @@ export function AtlasToolbar({
               onBlur={onSearchBlur}
             />
           </Field>
-        </div>
-      </div>
-
-      <div id={panelId} className="plate-lens__panel" hidden={!open}>
-        <p className="plate-lens__lead">
-          Light only the missions that match. Nothing on the plate moves.
-        </p>
-        <div className="plate-lens__groups">
-          {groups.map((group) => (
-            <ChoiceRow
-              key={group.key}
-              legend={group.label}
-              name={`plate-lens-${group.key}`}
-              size="text"
-              value={group.value}
-              options={[
-                { value: '', label: 'Any' },
-                ...group.options.map((option) => ({
-                  value: option.value,
-                  label: `${option.label} (${option.count})`,
-                })),
-              ]}
-              onChange={(value) => onLens(group.key, value)}
-            />
-          ))}
         </div>
       </div>
     </div>

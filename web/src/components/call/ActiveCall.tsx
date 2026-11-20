@@ -32,23 +32,39 @@ import { useCueEvents } from './useCueEvents.ts';
 // asks for the snapshot on every render and every commit, so asking each time made every keystroke
 // pay for a layout.
 let visibleHeightNow = 0;
-const readViewport = () => (window.visualViewport ? Math.round(window.visualViewport.height) : 0);
+// How much of the page something (an on-screen keyboard) covers: the layout viewport minus the
+// visible one. Pinch zoom shrinks the visible viewport too, and covers nothing, so it is not counted.
+let coveredHeightNow = 0;
+function readViewport() {
+  const viewport = window.visualViewport;
+  visibleHeightNow = viewport ? Math.round(viewport.height) : 0;
+  coveredHeightNow =
+    viewport && viewport.scale <= 1.05
+      ? Math.max(0, Math.round(window.innerHeight - viewport.height))
+      : 0;
+}
 
 function subscribeViewport(onChange: () => void) {
   const viewport = window.visualViewport;
-  visibleHeightNow = readViewport();
+  readViewport();
   const changed = () => {
-    visibleHeightNow = readViewport();
+    readViewport();
     onChange();
   };
   viewport?.addEventListener('resize', changed);
   return () => viewport?.removeEventListener('resize', changed);
 }
 const viewportHeight = () => visibleHeightNow;
+const coveredHeight = () => coveredHeightNow;
 
 /** The height of what is actually visible, so the composer stays above a mobile keyboard. */
 function useVisibleHeight(): number {
   return useSyncExternalStore(subscribeViewport, viewportHeight, () => 0);
+}
+
+/** How much of the page is under something that will go away (a keyboard), in pixels. */
+function useCoveredHeight(): number {
+  return useSyncExternalStore(subscribeViewport, coveredHeight, () => 0);
 }
 
 function redactionNotice(kinds: RedactionKind[]): string {
@@ -85,9 +101,13 @@ export function ActiveCall({
   const narrow = useMediaQuery('(max-width: 719px)');
   const tall = useMediaQuery('(min-height: 780px)');
   const visibleHeight = useVisibleHeight();
+  const coveredHeight = useCoveredHeight();
   const landscapePhone = useMediaQuery('(max-height: 520px)');
-  // Short on room: a landscape phone, or the keyboard covering most of a portrait one.
+  // Short on room: a landscape phone, a small window, or the keyboard covering most of a portrait phone.
   const short = landscapePhone || (visibleHeight > 0 && visibleHeight < 520);
+  // Something that is about to go away (the keyboard) covers a good part of the page, as opposed to
+  // a window that is simply small (a phone held sideways, a desktop zoomed to 400%).
+  const keyboard = short && coveredHeight > 120;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -279,6 +299,7 @@ export function ActiveCall({
       data-layout={layout}
       data-silent={atmosphere.silent || undefined}
       data-short={short || undefined}
+      data-keyboard={keyboard || undefined}
       data-ending={ending || undefined}
       style={frame}
     >

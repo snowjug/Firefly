@@ -10,6 +10,7 @@ import {
 import { NothingYet } from '../components/progress/NothingYet.tsx';
 import { Opportunities } from '../components/progress/Opportunities.tsx';
 import { ProgressStage } from '../components/progress/ProgressStage.tsx';
+import { ScoresMore } from '../components/progress/ScoresMore.tsx';
 import { usePracticeLookups } from '../components/progress/usePracticeLookups.ts';
 import { useScrollToHash } from '../components/progress/useScrollToHash.ts';
 import { Recognition } from '../components/rewards/Recognition.tsx';
@@ -113,11 +114,17 @@ export default function Progress() {
           ) : null}
         </div>
       </div>
+      {hasCalls ? <ScoresMore progress={data.progress} /> : null}
       {hasCalls ? (
         <Opportunities progress={data.progress} scenarioFor={practice.scenarioFor} />
       ) : null}
       {hasCalls ? <p className="pg-footnote">{data.progress.note}</p> : null}
-      <Recognition rewards={rewards} />
+      {/* Not painted until the sky has loaded or failed: it sits below the sky, and would otherwise be
+          pushed off the screen as a visible shift when the sky arrives. It is in the page all along,
+          so the address /progress#recognition still has its target. */}
+      <div className="pg-below" data-waiting={!data && !state.error ? '' : undefined}>
+        <Recognition rewards={rewards} />
+      </div>
     </PageFrame>
   );
 }

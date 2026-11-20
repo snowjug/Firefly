@@ -4,21 +4,13 @@ import { DIMENSIONS, type DimensionId } from '#shared/domain/vocab.ts';
 import { useMediaQuery } from '../../lib/hooks.ts';
 import { useStoredState } from '../../lib/storage.ts';
 import { skillsFromProgress } from '../atlas/constellation-layout.ts';
-import { Disclosure } from '../frame/index.ts';
 import { FocusBlock, SummaryLedger } from './Overview.tsx';
-import { ScoresTable } from './ScoresTable.tsx';
 import { SkillList } from './SkillList.tsx';
 import { SkillReading } from './SkillReading.tsx';
 import { Sky } from './Sky.tsx';
 import { SkyKey } from './SkyKey.tsx';
 import { ViewSwitch, type SkyView } from './ViewSwitch.tsx';
-import {
-  callsScored,
-  describeSkill,
-  lightText,
-  orderedTrends,
-  recentStarIds,
-} from './progress-model.ts';
+import { callsScored, describeSkill, lightText, recentStarIds } from './progress-model.ts';
 import '../../styles/progress.css';
 
 const READING_ID = 'pg-reading';
@@ -38,7 +30,7 @@ export interface ProgressStageProps {
 /**
  * The sky and its panel: the constellation beside a summary and the next focus, or, once a cluster
  * is chosen, that skill's reading in the panel's place. The same data is always available as a list
- * (the way in on a small screen) and, below it, as a table.
+ * (the way in on a small screen) and, below the page's hero, as a table (see `ScoresMore`).
  */
 export function ProgressStage({
   progress,
@@ -55,7 +47,6 @@ export function ProgressStage({
   const sideBySide = useMediaQuery(SIDE_BY_SIDE);
 
   const skills = useMemo(() => skillsFromProgress(progress), [progress]);
-  const trends = useMemo(() => orderedTrends(progress.dimensionTrends), [progress]);
   const recent = useMemo(() => recentStarIds(progress.dimensionTrends), [progress]);
   const descriptions = useMemo(() => {
     const out = {} as Record<DimensionId, string>;
@@ -167,11 +158,6 @@ export function ProgressStage({
       {view === 'list' ? panelSection : null}
       {skySection}
       {view === 'sky' ? panelSection : null}
-      <div className="pg-hero__more">
-        <Disclosure summary="Scores as a table">
-          <ScoresTable trends={trends} />
-        </Disclosure>
-      </div>
     </>
   );
 }

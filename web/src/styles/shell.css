@@ -58,6 +58,12 @@ html:has(.shell[data-shell='app']) {
   flex: 1 0 auto;
   min-width: 0;
 }
+/* While a page shows its loading hairlines the foot of the page would sit in the middle of the
+   screen and then jump below the fold when the content arrives. It is not painted until then, so
+   nothing visible moves (it keeps its place, so the page does not reflow). */
+.shell__main:has(.ff-loading) + .colophon {
+  visibility: hidden;
+}
 /* The connection line sits under the wordmark. The page below it already keeps clear of the
    masthead by its own padding, so it is pulled up by that much and nothing is spaced twice. */
 .shell[data-shell='app'] .offline-banner {
@@ -300,7 +306,7 @@ html:has(.shell[data-shell='app']) {
   padding: 1px 6px;
   border: 1px solid var(--line-2);
   border-radius: 3px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
   letter-spacing: 0.04em;
@@ -770,6 +776,13 @@ html:has(.shell[data-shell='app']) {
 
 /* ------------------------------------------------------------------ Contrast, forced colours, print */
 @media (forced-colors: active) {
+  /* A ground that is only a gradient is not painted in forced colours: give the bars that sit over
+     scrolling content a solid one, so what scrolls under them never prints through. */
+  .masthead::before {
+    background: Canvas;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
   .dock.glass,
   .flyout.glass,
   .palette.glass {

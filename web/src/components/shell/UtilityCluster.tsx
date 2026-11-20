@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useAmbient } from '../../lib/motion/ambient.tsx';
 import { useReducedMotion, useTheme } from '../../lib/theme.tsx';
 import { Icon } from '../Icon.tsx';
+import { AmbientGlyph } from './AmbientGlyph.tsx';
 import { NotificationsMenu } from './NotificationsMenu.tsx';
 import { ProfileMenu } from './ProfileMenu.tsx';
 
@@ -31,25 +32,6 @@ function ThemeGlyph({ dark }: { dark: boolean }) {
     >
       <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
       <path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" />
-    </svg>
-  );
-}
-
-/** Two bars while it moves, a triangle while it is paused: what pressing it would do. */
-function AmbientGlyph({ paused }: { paused: boolean }) {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      {paused ? (
-        <path
-          d="M8.2 5.4v13.2a.6.6 0 0 0 .92.5l10.1-6.6a.6.6 0 0 0 0-1L9.12 4.9a.6.6 0 0 0-.92.5z"
-          fill="currentColor"
-        />
-      ) : (
-        <>
-          <rect x="6.4" y="5" width="3.8" height="14" rx="1.1" fill="currentColor" />
-          <rect x="13.8" y="5" width="3.8" height="14" rx="1.1" fill="currentColor" />
-        </>
-      )}
     </svg>
   );
 }

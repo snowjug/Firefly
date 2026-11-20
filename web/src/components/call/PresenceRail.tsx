@@ -1,7 +1,9 @@
 import { memo } from 'react';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { TEMPERATURE_BANDS } from '#shared/domain/vocab.ts';
+import { useAmbientOptional } from '../../lib/motion/ambient.tsx';
 import { Icon } from '../Icon.tsx';
+import { AmbientGlyph } from '../shell/AmbientGlyph.tsx';
 import type { Atmosphere } from './atmosphere.ts';
 import { PRESENCE_POOL, SignalPresence } from './signal-bridge.tsx';
 
@@ -59,6 +61,9 @@ export const PresenceRail = memo(function PresenceRail({
     TEMPERATURE_BANDS.findIndex((band) => band.id === atmosphere.mood),
   );
   const pool = Math.max(PRESENCE_POOL, found + 2);
+  // The page's own pause control is not on screen during a call, and the presence and the field move
+  // for the whole of it, so the way to still them is here (WCAG 2.2.2).
+  const ambient = useAmbientOptional();
   return (
     <aside className="ch-rail" aria-label={`${persona.name}, the customer`}>
       <div className="ch-rail__presence" data-closing={ending || undefined} aria-hidden="true">
@@ -141,6 +146,27 @@ export const PresenceRail = memo(function PresenceRail({
           <Icon name={soundOn ? 'volume' : 'volume-off'} size={16} />
           Sound effects
         </button>
+        {ambient ? (
+          <button
+            type="button"
+            className="ch-tool"
+            aria-pressed={ambient.paused}
+            aria-disabled={ambient.forced || undefined}
+            onClick={() => {
+              if (!ambient.forced) ambient.toggle();
+            }}
+            title={
+              ambient.forced
+                ? 'Reduced motion is on, so ambient motion is already off'
+                : ambient.paused
+                  ? 'Resume ambient motion'
+                  : 'Pause ambient motion'
+            }
+          >
+            <AmbientGlyph paused={ambient.paused} />
+            Pause motion
+          </button>
+        ) : null}
         <button type="button" className="ch-tool" onClick={onOpenDetails} aria-label="Call details">
           <Icon name="info" size={16} />
           Details
