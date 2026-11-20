@@ -105,6 +105,74 @@ describe('skipping view transitions on input', () => {
   });
 });
 
+describe('a click that begins while a transition runs', () => {
+  const start = () =>
+    (document as unknown as { startViewTransition: () => unknown }).startViewTransition();
+
+  /** A button on the page and a pointer over it; frames are immediate. */
+  function setup() {
+    const transition = fakeTransition();
+    doc.startViewTransition = vi.fn(() => transition);
+    const uninstall = installViewTransitionSkip(document);
+    const button = document.createElement('button');
+    const pressed = vi.fn();
+    button.addEventListener('click', pressed);
+    document.body.append(button);
+    // jsdom has no layout: the pointer is "over" the button.
+    (document as unknown as { elementFromPoint: () => Element | null }).elementFromPoint = () =>
+      button;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 0;
+    });
+    const cleanup = () => {
+      uninstall();
+      button.remove();
+      delete (document as unknown as { elementFromPoint?: unknown }).elementFromPoint;
+      vi.unstubAllGlobals();
+    };
+    return { transition, button, pressed, cleanup };
+  }
+
+  it('is handed to the control under the pointer when the browser sent it to <html>', () => {
+    const { pressed, cleanup } = setup();
+    start();
+    document.dispatchEvent(new Event('pointerdown'));
+    document.documentElement.dispatchEvent(
+      new MouseEvent('click', { bubbles: true, clientX: 12, clientY: 34 }),
+    );
+    expect(pressed).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it('is not repeated when the page heard the click itself', () => {
+    const { button, pressed, cleanup } = setup();
+    start();
+    document.dispatchEvent(new Event('pointerdown'));
+    button.click();
+    expect(pressed).toHaveBeenCalledTimes(1);
+    cleanup();
+  });
+
+  it('is left alone when no transition was running at the press', () => {
+    const { pressed, cleanup } = setup();
+    document.dispatchEvent(new Event('pointerdown'));
+    document.documentElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(pressed).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it('does not press a control that is disabled', () => {
+    const { button, pressed, cleanup } = setup();
+    button.disabled = true;
+    start();
+    document.dispatchEvent(new Event('pointerdown'));
+    document.documentElement.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(pressed).not.toHaveBeenCalled();
+    cleanup();
+  });
+});
+
 describe('the transition styles', () => {
   const css = transitionStyles.replace(/\/\*[\s\S]*?\*\//g, '');
 
