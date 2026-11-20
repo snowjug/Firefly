@@ -1,0 +1,12 @@
+/* The persistent field behind every page (components/world). Layer 0: nothing sits under it. The
+   still version is the tokens' mineral gradient with two lights; the animated canvas, when it
+   runs, is drawn over it. Pages never style this; they ask for a pose through the world store. */
+
+.world {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-world);
+  pointer-events: none;
+  background: var(--world-base);
+  contain: strict;
+}
