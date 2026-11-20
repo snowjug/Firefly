@@ -36,6 +36,8 @@ export interface SkillReadingProps {
   headingLevel: 2 | 3;
   /** The id of the heading, so the surrounding region can be named by it. */
   titleId: string;
+  /** The page says once, above all the rows, what an unlit skill means, so each row stays short. */
+  brief?: boolean;
 }
 
 /**
@@ -54,6 +56,7 @@ export function SkillReading({
   canPractise,
   headingLevel,
   titleId,
+  brief = false,
 }: SkillReadingProps) {
   const meta = DIMENSIONS[skill.id];
   const Heading = headingLevel === 2 ? 'h2' : 'h3';
@@ -96,7 +99,7 @@ export function SkillReading({
             </p>
             {moved ? <p className="pg-reading__moved">{moved}</p> : null}
           </>
-        ) : (
+        ) : brief ? null : (
           <p className="pg-reading__none">
             This skill is drawn as outlines because no completed call has been scored on it yet.
             That is not a low score: a star lights as soon as one is.

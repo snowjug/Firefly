@@ -134,6 +134,24 @@ describe('Progress: nothing completed yet', () => {
     expect(within(reading).queryByRole('img')).not.toBeInTheDocument();
   });
 
+  it('opens as the list on a small screen, where six names do not fit round the sky', async () => {
+    const user = userEvent.setup();
+    matchMediaAs(true);
+    progress.mockResolvedValue(EMPTY_PROGRESS);
+    const { container } = renderProgress();
+    await screen.findByRole('heading', { name: 'No completed practice calls yet' });
+    expect(screen.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
+    const list = screen.getByRole('list', { name: 'The six skills, in report order' });
+    expect(within(list).getAllByRole('article')).toHaveLength(6);
+    // Said once above the rows, not six times inside them.
+    expect(screen.getAllByText(/That is not a low score/)).toHaveLength(1);
+    expect(container.querySelector('.pg-plate')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Constellation' }));
+    expect(container.querySelector('.pg-plate')).not.toBeNull();
+    expect(container.querySelectorAll('.pg-plate .pg-star--lit')).toHaveLength(0);
+  });
+
   it('shows a skeleton while loading, and can be retried when it fails', async () => {
     const user = userEvent.setup();
     progress.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(PROGRESS_WITH_DATA);

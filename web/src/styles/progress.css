@@ -392,6 +392,30 @@
   background: var(--amber);
   box-shadow: 0 0 8px color-mix(in srgb, var(--amber) 70%, transparent);
 }
+/* Six names do not fit around a small sky. Below a width the labels can no longer clear each other,
+   the extra lines go first (the list and the reading say the same), then the names too, leaving the
+   numerals. Everything stays in the accessibility tree: the button is named by the name span. */
+@container (max-width: 44rem) {
+  .pg-skill__meta,
+  .pg-skill__next {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+@container (max-width: 34rem) {
+  .pg-skill__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
 
 /* Four small segments, filled up to the skill's light. */
 .pg-pips {

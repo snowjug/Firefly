@@ -1,9 +1,8 @@
 /* The frame: the wordmark and utility cluster in the corners, the page, a quiet colophon, and the
    command dock along the bottom edge. No sidebar and no top bar.
 
-   Loaded before the legacy sheets (the shell is imported first), so every override of a legacy
-   class (.glass, .chip, .skip-link) uses two classes. Block names here (.shell, .masthead,
-   .wordmark, .utilities, .util, .flyout, .dock, .colophon, .route-progress) are the frame's own.
+   Block names here (.shell, .masthead, .wordmark, .utilities, .util, .flyout, .dock, .colophon,
+   .route-progress) are the frame's own.
 
    Contract for pages:
    - The masthead and the dock float over the page, so a page keeps clear of them itself:
@@ -37,14 +36,13 @@ html:has(.shell[data-shell='app']) {
 
 /* ------------------------------------------------------------------ Frame */
 .shell {
-  /* Legacy pages still read these for offsets; the new frame has no sidebar and no top bar. */
-  --sidebar-w: 0px;
-  --nav-height: 0px;
-  --topbar-h: 0px;
   position: relative;
   display: flex;
   flex-direction: column;
   min-height: 100svh;
+  /* Decorative light (the glow around the instrument) may reach past the screen edge; it must never
+     make the page scroll sideways. `clip` does not create a scroll container, so sticky still works. */
+  overflow-x: clip;
 }
 
 /* Everything the person reads and uses sits above the field (layer 0). */
@@ -70,11 +68,6 @@ html:has(.shell[data-shell='app']) {
 }
 .shell[data-shell='public'] .offline-banner {
   margin-top: var(--masthead-h);
-}
-/* Pages that have not been rebuilt yet (.page is the old container) get the clearance that
-   PageFrame gives itself. Delete with legacy-layout.css. */
-.shell[data-shell='app'] .page {
-  padding-top: calc(var(--masthead-h) + var(--sp-2));
 }
 
 /* ------------------------------------------------------------------ Masthead */
