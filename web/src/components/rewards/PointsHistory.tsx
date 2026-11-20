@@ -4,6 +4,7 @@ import type { LedgerEntryDTO } from '#shared/domain/api.ts';
 import { formatDate } from '../../lib/format.ts';
 import { reportHref, transcriptHref } from '../report/labels.ts';
 import { LEDGER_PAGE } from './rewards-model.ts';
+import '../../styles/rewards.css';
 
 /** The server lists at most this many entries; the total points always count every one. */
 const SERVER_LEDGER_LIMIT = 200;
@@ -13,35 +14,39 @@ function Entry({ entry }: { entry: LedgerEntryDTO }) {
   const turn = entry.evidence?.turnIndex ?? null;
   return (
     <li className="rw-entry" tabIndex={-1}>
-      <p className="rw-entry-points tabular">
+      <p className="rw-entry__points">
         <span aria-hidden="true">+{entry.points}</span>
         <span className="sr-only">{entry.points} points</span>
       </p>
-      <div className="rw-entry-body">
-        <div className="rw-entry-head">
-          <p className="rw-entry-title">{entry.title}</p>
-          <time className="rw-meta" dateTime={entry.at}>
+      <div className="rw-entry__body">
+        <div className="rw-entry__head">
+          <p className="rw-entry__title">{entry.title}</p>
+          <time className="rw-entry__when" dateTime={entry.at}>
             {formatDate(entry.at)}
           </time>
         </div>
-        <p className="rw-entry-reason">{entry.reason}</p>
+        <p className="rw-entry__reason">{entry.reason}</p>
         {entry.sessionId && entry.scenarioTitle ? (
-          <p className="rw-meta">
+          <p className="rw-entry__call">
             Call:{' '}
-            <Link to={reportHref(entry.sessionId)} viewTransition>
+            <Link to={reportHref(entry.sessionId)} className="text-link" viewTransition>
               {entry.scenarioTitle}
             </Link>
           </p>
         ) : null}
         {quote ? (
-          <blockquote className="rw-quote">
+          <blockquote className="rw-entry__quote">
             <p>
               <span className="sr-only">Quote from the call: </span>
               &ldquo;{quote}&rdquo;
             </p>
             {entry.sessionId && turn ? (
-              <p className="rw-meta">
-                <Link to={transcriptHref(entry.sessionId, turn)} viewTransition>
+              <p className="rw-entry__call">
+                <Link
+                  to={transcriptHref(entry.sessionId, turn)}
+                  className="text-link"
+                  viewTransition
+                >
                   Turn {turn} in the transcript
                 </Link>
               </p>
@@ -70,7 +75,7 @@ export function PointsHistory({ ledger }: { ledger: readonly LedgerEntryDTO[] })
 
   if (ledger.length === 0) {
     return (
-      <p className="glass rw-history-empty">
+      <p className="rw-empty">
         Nothing here yet. Every point you earn is listed here with the reason it was awarded.
       </p>
     );
@@ -82,24 +87,24 @@ export function PointsHistory({ ledger }: { ledger: readonly LedgerEntryDTO[] })
     setVisible(shown + LEDGER_PAGE);
   };
   return (
-    <div className="glass rw-history">
-      <ol role="list" className="rw-entries" ref={list}>
+    <div className="rw-history">
+      <ol className="rw-entries" ref={list}>
         {ledger.slice(0, shown).map((entry) => (
           <Entry key={entry.id} entry={entry} />
         ))}
       </ol>
-      <div className="rw-history-foot">
-        <p className="rw-meta" role="status">
+      <div className="rw-history__foot">
+        <p className="rw-history__count" role="status">
           Showing {shown} of {ledger.length} {ledger.length === 1 ? 'entry' : 'entries'}
         </p>
         {shown < ledger.length ? (
-          <button type="button" className="btn btn-secondary btn-sm" onClick={showMore}>
+          <button type="button" className="action action--quiet action--compact" onClick={showMore}>
             Show more
           </button>
         ) : null}
       </div>
       {ledger.length >= SERVER_LEDGER_LIMIT ? (
-        <p className="rw-meta">
+        <p className="rw-history__count">
           Your newest {SERVER_LEDGER_LIMIT} entries are listed. Your total counts every entry.
         </p>
       ) : null}
