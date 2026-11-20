@@ -36,6 +36,8 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+      - name: Performance budgets
+        run: npm run check:budgets
       - name: Secret scan
         run: npm run check:secrets
       - name: Lockfile uses the public registry

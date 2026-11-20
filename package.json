@@ -24,7 +24,8 @@
     "calibrate": "node --disable-warning=ExperimentalWarning scripts/calibrate.ts",
     "check:secrets": "node scripts/scan-secrets.mjs",
     "check:lockfile": "node scripts/normalize-lockfile.mjs --check",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run validate:scenarios && npm test && npm run build && npm run check:secrets && npm run check:lockfile"
+    "check:budgets": "node scripts/check-budgets.mjs",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run validate:scenarios && npm test && npm run build && npm run check:budgets && npm run check:secrets && npm run check:lockfile"
   },
   "dependencies": {
     "react": "^19.3.1",

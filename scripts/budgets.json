@@ -1,0 +1,10 @@
+{
+  "_comment": "Gzip limits for the production build, enforced by scripts/check-budgets.mjs. Baseline before the spatial rebuild (main 1a1c946): first-load JS 93.1 kB, first-load CSS 8.4 kB, largest chunk 60.6 kB raw / 20.7 kB gzip, no web fonts. Raising a limit is a decision: say why in the commit.",
+  "firstLoadJsKB": 125,
+  "firstLoadCssKB": 22,
+  "anyJsChunkKB": 70,
+  "anyCssKB": 26,
+  "criticalFontsKB": 110,
+  "totalFontsKB": 150,
+  "chunkOverridesKB": {}
+}
