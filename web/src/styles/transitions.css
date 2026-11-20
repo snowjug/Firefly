@@ -1,41 +1,37 @@
 /* Route transitions (View Transitions API, started by React Router for links that ask for it).
 
-   The page changes with a short fade and a slight settle, never longer than the route duration.
-   The persistent layers (the field and the dock) keep their own names, so they stay put instead of
-   cross-fading with the page. An object that carries its identity across routes (a mission's
-   instrument becoming the scenario core) holds the name `signal-mission` on both sides and the
-   browser moves and resizes it. Pointer and key presses skip the animation (see
-   lib/motion/transitions.ts), and reduced motion removes it. */
+   The page changes with a short cross-dissolve, never longer than the route duration. The field
+   behind the page is NOT a named element: a named group is drawn above the root snapshot, which
+   would hide the page for the whole transition. It stays in the root snapshot instead, and the
+   old and new roots dissolve with the same duration and easing, which (with the browser's
+   plus-lighter blend) keeps anything identical on both sides, like the field, at a steady
+   brightness. The dock is named so it stays still and above the page. An object that carries its
+   identity across routes (a mission's instrument becoming the scenario core) holds the name
+   `signal-mission` on both sides and the browser moves and resizes it. A press or key skips the
+   animation (see lib/motion/transitions.ts), and reduced motion removes it. */
 
-[data-vt-persist='world'] {
-  view-transition-name: firefly-world;
-}
 [data-vt-persist='dock'] {
   view-transition-name: firefly-dock;
 }
 
-::view-transition-group(firefly-world),
 ::view-transition-group(firefly-dock) {
   animation-duration: 0s;
 }
-::view-transition-old(firefly-world),
 ::view-transition-old(firefly-dock) {
   display: none;
 }
-::view-transition-new(firefly-world),
 ::view-transition-new(firefly-dock) {
   animation: none;
 }
 
-@keyframes vt-page-out {
+@keyframes vt-fade-out {
   to {
     opacity: 0;
   }
 }
-@keyframes vt-page-in {
+@keyframes vt-fade-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.998);
   }
 }
 
@@ -43,10 +39,10 @@
   animation-duration: var(--dur-route);
 }
 ::view-transition-old(root) {
-  animation: vt-page-out var(--dur-component) var(--ease-exit-decelerated) both;
+  animation: vt-fade-out var(--dur-route) var(--ease-signal-pulse) both;
 }
 ::view-transition-new(root) {
-  animation: vt-page-in var(--dur-route) var(--ease-enter-emphasised) both;
+  animation: vt-fade-in var(--dur-route) var(--ease-signal-pulse) both;
 }
 
 ::view-transition-group(signal-mission) {

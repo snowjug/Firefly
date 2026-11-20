@@ -126,7 +126,9 @@ describe('WorldLayer', () => {
     const { container } = mount();
     const layer = container.querySelector('.world');
     expect(layer).toHaveAttribute('aria-hidden', 'true');
-    expect(layer).toHaveAttribute('data-vt-persist', 'world');
+    // A named view-transition group paints above the page's own snapshot, so the field must stay
+    // part of the root snapshot (see styles/transitions.css).
+    expect(layer).not.toHaveAttribute('data-vt-persist');
     expect(canvasOf(container)).toBeNull();
   });
 

@@ -1,5 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installViewTransitionSkip } from './transitions.ts';
+
+// Vitest does not process stylesheets, so `?raw` would be empty: read the file itself.
+const transitionStyles = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../../styles/transitions.css'),
+  'utf8',
+);
 
 type Fake = { startViewTransition?: unknown };
 
@@ -72,5 +81,46 @@ describe('skipping view transitions on input', () => {
 
     uninstall();
     expect(doc.startViewTransition).toBe(original);
+  });
+
+  it('does not let a skipped transition leave unhandled rejections behind', async () => {
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', record);
+
+    const abort = () => Promise.reject(new DOMException('Transition was skipped', 'AbortError'));
+    const transition = {
+      ...fakeTransition(),
+      ready: abort(),
+      updateCallbackDone: abort(),
+    };
+    doc.startViewTransition = vi.fn(() => transition);
+    const uninstall = installViewTransitionSkip(document);
+    (document as unknown as { startViewTransition: () => unknown }).startViewTransition();
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    process.off('unhandledRejection', record);
+    uninstall();
+    expect(unhandled).toEqual([]);
+  });
+});
+
+describe('the transition styles', () => {
+  const css = transitionStyles.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  it('never names the field behind the page: a named group is painted above the page snapshot', () => {
+    expect(css).not.toMatch(/firefly-world/);
+    expect(css).not.toMatch(/data-vt-persist=['"]world['"]/);
+  });
+
+  it('dissolves the old and new page with one duration and one easing, so the field stays steady', () => {
+    const rule = (selector: string) =>
+      css.match(new RegExp(`${selector.replace(/[()]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+    const animation = (selector: string) =>
+      rule(selector).match(/animation:\s*vt-fade-(?:in|out)\s+([^;]+?)\s+both;/)?.[1];
+    const oldRoot = animation('::view-transition-old(root)');
+    const newRoot = animation('::view-transition-new(root)');
+    expect(oldRoot).toBeDefined();
+    expect(oldRoot).toBe(newRoot);
   });
 });

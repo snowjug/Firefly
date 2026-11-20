@@ -37,7 +37,7 @@ export function WorldLayer() {
   }, [pathname]);
 
   return (
-    <div className="world" data-vt-persist="world" aria-hidden="true">
+    <div className="world" aria-hidden="true">
       {idle && tier !== 'low' ? (
         <Suspense fallback={null}>
           <WorldField />

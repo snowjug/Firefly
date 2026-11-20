@@ -7,12 +7,14 @@
 //   2. never letting a transition get in the way: while one runs the browser blocks pointer
 //      events, so the first pointerdown or keydown skips the animation (the page still changes).
 
-/** The names an object carries across routes. Only one element may hold a name at a time. */
+/**
+ * The names an object carries across routes. Only one element may hold a name at a time. The
+ * field behind the page must NOT be named: a named group is painted above the page's snapshot.
+ */
 export const VT_NAME = {
   /** A mission's instrument on the atlas, which becomes the core on the calibration screen. */
   mission: 'signal-mission',
-  /** The persistent field and the dock stay put while the page changes. */
-  world: 'firefly-world',
+  /** The dock stays put, above the page, while the page changes. */
   dock: 'firefly-dock',
 } as const;
 
@@ -21,7 +23,12 @@ type Starter = (callback?: () => void | Promise<void>) => ViewTransition;
 interface Skippable {
   skipTransition(): void;
   finished: Promise<void>;
+  ready?: Promise<void>;
+  updateCallbackDone?: Promise<void>;
 }
+
+/** A skipped or superseded transition rejects its promises with an AbortError; nobody is waiting. */
+const quiet = (promise: Promise<unknown> | undefined) => promise?.catch(() => undefined);
 
 /**
  * Wraps `document.startViewTransition` so the running transition can be skipped, and skips it on
@@ -40,6 +47,11 @@ export function installViewTransitionSkip(doc: Document = document): () => void 
       if (running === transition) running = null;
     };
     transition.finished.then(clear, clear);
+    // Starting a second transition, or skipping one, rejects the first one's `ready` and
+    // `updateCallbackDone` with an AbortError. The router only awaits `finished`, so without this
+    // the rejections surface as unhandled errors in the console.
+    quiet(transition.ready);
+    quiet(transition.updateCallbackDone);
     return transition;
   };
   const skip = () => {
