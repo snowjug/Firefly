@@ -691,9 +691,9 @@ describe('the wrap-up while the report is built', () => {
   it('lists what has really been done, what is under way and what is next', async () => {
     api.getSession.mockResolvedValue(completing('scoring'));
     renderCall();
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Wrapping up your call' }),
-    ).toHaveFocus();
+    const wrapUp = await screen.findByRole('heading', { level: 1, name: 'Wrapping up your call' });
+    // Focus moves in an effect, which can run a moment after the heading is on the page.
+    await waitFor(() => expect(wrapUp).toHaveFocus());
     const steps = screen.getByRole('list', { name: 'Progress' });
     const states = within(steps)
       .getAllByRole('listitem')
@@ -775,9 +775,11 @@ describe('the wrap-up while the report is built', () => {
       }),
     );
     renderCall();
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'We could not finish your report' }),
-    ).toHaveFocus();
+    const failure = await screen.findByRole('heading', {
+      level: 1,
+      name: 'We could not finish your report',
+    });
+    await waitFor(() => expect(failure).toHaveFocus());
     expect(screen.getByText('The coaching service did not answer.')).toBeVisible();
     expect(screen.getByText(/Your transcript is saved/)).toBeVisible();
     expect(screen.getByRole('link', { name: 'Back to home' })).toHaveAttribute('href', '/home');
