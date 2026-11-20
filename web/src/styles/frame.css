@@ -498,6 +498,18 @@ button.text-link {
   min-width: 100%;
   border-block-end: 1px solid var(--line-2);
 }
+/* On a phone the tabs wrap onto a second line, so none is clipped or waits off screen with nothing to
+   say it is there. */
+@media (max-width: 40rem) {
+  .ff-tabs {
+    overflow-x: visible;
+  }
+  .ff-tabs__list {
+    flex-wrap: wrap;
+    gap: 0 var(--sp-5);
+    width: auto;
+  }
+}
 .ff-tabs__tab {
   position: relative;
   display: inline-flex;
@@ -508,7 +520,7 @@ button.text-link {
   padding: 0.5rem 0 0.7rem;
   border: 0;
   background: none;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-display);
   font-size: 1.1875rem;
   font-weight: 400;
@@ -522,7 +534,7 @@ button.text-link {
 }
 @media (hover: hover) {
   .ff-tabs__tab:hover {
-    color: var(--ink-2);
+    color: var(--ink-1);
   }
   .ff-tabs__tab[aria-selected='true']:hover {
     color: var(--ink-1);
@@ -552,7 +564,7 @@ button.text-link {
   font-size: var(--t-micro);
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 /* ====================================================================== Toggle */

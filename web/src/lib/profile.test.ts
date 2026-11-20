@@ -82,8 +82,24 @@ describe('profile helpers', () => {
     expect(initials('   ')).toBe('?');
   });
 
+  it('takes whole characters, so an emoji or a sharp s never leaves half a character or two letters', () => {
+    expect(initials('\u{1F98A}')).toBe('\u{1F98A}');
+    expect(initials('\u{1F98A} Fox')).toBe('\u{1F98A}F');
+    expect(initials('ßeatrice ßauer')).toBe('SS');
+    expect(initials('élodie')).toBe('É');
+  });
+
   it('uses the first name for greetings', () => {
     expect(firstName('Priya Raman')).toBe('Priya');
+  });
+
+  it('skips a title and the surname-first comma, and leaves no stray punctuation', () => {
+    expect(firstName('Dr. Jane Doe')).toBe('Jane');
+    expect(firstName('Prof Ada Lovelace')).toBe('Ada');
+    expect(firstName('Smith, John')).toBe('John');
+    expect(firstName('Dr.')).toBe('Dr');
+    expect(firstName('  Priya  ')).toBe('Priya');
+    expect(firstName('Mx. Sam')).toBe('Sam');
   });
 
   it('greets by time of day', () => {

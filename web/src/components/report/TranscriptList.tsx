@@ -154,7 +154,7 @@ const TurnItem = memo(function TurnItem({
         </span>
       </div>
       <div className="tx-turn__body">
-        <p className="tx-turn__text">
+        <p className="tx-turn__text" dir="auto">
           {pieces.map((piece, index) =>
             piece.quoted ? (
               <mark key={index} className="tx-quote">

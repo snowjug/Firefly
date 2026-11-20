@@ -234,7 +234,9 @@ export const Turn = memo(function Turn({
         {fresh && !mine ? <Arrival /> : null}
       </div>
       <div className="ch-turn__body">
-        <p className="ch-turn__text">{node.text}</p>
+        <p className="ch-turn__text" dir="auto">
+          {node.text}
+        </p>
         {!mine && onListen ? (
           <ListenButton
             text={node.text}

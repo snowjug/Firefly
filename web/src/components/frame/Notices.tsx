@@ -85,18 +85,22 @@ export function LoadingNotice({
   );
 }
 
-/** The 404 page: what happened and the way back. */
-export function NotFoundNotice() {
+/** The 404 page: what happened and the way back (the app's home for someone signed in, else the start). */
+export function NotFoundNotice({ signedIn = false }: { signedIn?: boolean }) {
   return (
     <PageFrame title="Page not found" width="narrow">
       <PageHead
         eyebrow="404"
         title="That page does not exist"
-        lead="The link may be out of date. Pick up where you left off from the start page."
+        lead={
+          signedIn
+            ? 'The link may be out of date. Pick up where you left off from Home.'
+            : 'The link may be out of date. Pick up where you left off from the start page.'
+        }
       />
       <div className="action-row">
-        <Link className="action" to="/">
-          Back to the start
+        <Link className="action" to={signedIn ? '/home' : '/'}>
+          {signedIn ? 'Back to Home' : 'Back to the start'}
           <Icon name="arrow-right" size={18} />
         </Link>
       </div>
