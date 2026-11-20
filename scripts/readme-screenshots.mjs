@@ -118,7 +118,7 @@ async function open(
       if (withProfile && localStorage.getItem('firefly.profile') === null)
         localStorage.setItem('firefly.profile', JSON.stringify(person));
       if (withProfile && localStorage.getItem('firefly.tour') === null)
-        localStorage.setItem('firefly.tour', JSON.stringify({ done: true }));
+        localStorage.setItem('firefly.tour', JSON.stringify('done'));
     },
     {
       theme: scheme,
@@ -223,11 +223,17 @@ await firefly.say(ids.live, STRONG.slice(0, 3));
 const cookies = await desktop.context.cookies();
 const { page } = desktop;
 
+// The browser's storage can only be written once a page of the app is open.
+const onApp = async () => {
+  if (!page.url().startsWith('http')) await page.goto('/help');
+};
 const dark = async () => {
+  await onApp();
   await page.evaluate(() => localStorage.setItem('firefly.theme', '"dark"'));
   await page.emulateMedia({ colorScheme: 'dark' });
 };
 const light = async () => {
+  await onApp();
   await page.evaluate(() => localStorage.setItem('firefly.theme', '"light"'));
   await page.emulateMedia({ colorScheme: 'light' });
 };
@@ -278,7 +284,8 @@ if (wanted('report') || wanted('evidence') || wanted('discovery') || wanted('jou
     await save(page, 'journey');
   }
   if (wanted('evidence')) {
-    await bring(page, '#skills');
+    // One skill's detail: the reason for the score, quoted moments and what to try.
+    await bring(page, '#dim-opening-rapport');
     await save(page, 'evidence');
   }
   if (wanted('discovery')) {
