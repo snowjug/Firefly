@@ -1,55 +1,80 @@
 import { expect, test, type Page } from '@playwright/test';
 import { composer, createCall, endViaApi, say, sayViaApi } from './helpers.ts';
 
-const radio = (page: Page, name: string) => page.getByRole('radio', { name, exact: true });
+/** Picks one word of a setup row: every row is a radio group named by its legend. */
+const choose = (page: Page, row: string, option: string) =>
+  page
+    .getByRole('group', { name: row, exact: true })
+    .getByRole('radio', { name: option, exact: true })
+    .check();
+
+/**
+ * Searches the missions the way it is done now there is no search box in a top bar: from the
+ * palette, whose last row opens the library with the words already in its search.
+ */
+async function searchMissionsFromPalette(page: Page, words: string) {
+  await page.getByRole('button', { name: 'Search and commands' }).click();
+  const palette = page.getByRole('dialog', { name: 'Search and commands' });
+  await palette.getByRole('combobox').fill(words);
+  await palette.getByRole('option', { name: /^Search missions for/ }).click();
+}
+
+/** The library's own line about how many missions the search leaves lit. */
+const showingMissions = (page: Page, lit: number) =>
+  page.getByRole('status').filter({ hasText: new RegExp(`^Showing ${lit} of \\d+ missions$`) });
 
 test.describe('a trainee journey through the interface', () => {
-  test('from the landing page, through sign-in, setup and a Starter call, to the report, rewards and history', async ({
+  test('from the landing page, through sign-in, setup and a Starter call, to the report, history and recognition', async ({
     page,
   }) => {
     await page.goto('/');
     await expect(
-      page.getByRole('heading', { level: 1, name: /Practice real conversations/ }),
+      page.getByRole('heading', { level: 1, name: /Practice difficult customer conversations/ }),
     ).toBeVisible();
     await page
-      .getByRole('link', { name: /Get started/ })
+      .getByRole('link', { name: /^Begin/ })
       .first()
       .click();
     await expect(page).toHaveURL(/\/sign-in$/);
 
     // Identity is a local profile: a name is enough, and nothing is sent anywhere.
     await page.getByLabel('Name').fill('Sam Rivera');
-    await page.getByRole('button', { name: /Continue/ }).click();
+    await page.getByRole('button', { name: 'Create profile' }).click();
     await expect(page).toHaveURL(/\/home$/);
-    await expect(page.getByRole('heading', { level: 1, name: /, Sam$/ })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: /, Sam\.$/ })).toBeVisible();
 
-    // Find a scenario from the top bar, then configure the call on one page.
-    const search = page.getByRole('searchbox', { name: 'Search all scenarios' });
-    await search.fill('export');
-    await search.press('Enter');
+    // Find a mission from the palette, then configure the call on one page.
+    await searchMissionsFromPalette(page, 'export');
     await expect(page).toHaveURL(/\/scenarios\?q=export$/);
-    await expect(page.getByRole('article')).toHaveCount(1);
-    await page.getByRole('link', { name: 'Start A user needs help finding a feature' }).click();
+    await expect(page.getByRole('searchbox', { name: 'Find a signal' })).toHaveValue('export');
+    await expect(showingMissions(page, 1)).toBeVisible();
+    const mission = 'A user needs help finding a feature';
+    await page.getByRole('tabpanel').getByRole('link', { name: mission }).click();
     await expect(page).toHaveURL(/\/scenarios\/cannot-find-export-feature\/setup$/);
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Configure your scenario' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: mission })).toBeVisible();
     await expect(page.getByText('Customised')).toHaveCount(0);
 
-    await radio(page, 'High').check({ force: true });
-    await radio(page, 'Frustrated').check({ force: true });
-    await radio(page, 'Terse').check({ force: true });
-    await radio(page, 'Novice').check({ force: true });
-    await page.getByLabel('Call stage').selectOption({ label: 'Follow-up on an open case' });
-    await radio(page, 'Starter').check({ force: true });
+    await choose(page, 'Business impact', 'High');
+    await choose(page, 'Customer temperature', 'Frustrated');
+    await choose(page, 'Communication style', 'Terse');
+    await choose(page, 'Technical proficiency', 'Novice');
+    await choose(page, 'Call stage', 'Follow-up on an open case');
+    await choose(page, 'Difficulty', 'Starter');
     // What was changed is said in words, and can be put back.
     await expect(page.getByText('Customised')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Reset to scenario defaults' })).toBeVisible();
     // Hidden facts are part of every scenario: shown, never editable.
     await expect(page.getByRole('switch', { name: 'Hidden facts' })).toBeDisabled();
 
-    await page.getByRole('button', { name: 'Start call simulation' }).click();
+    await page.getByRole('button', { name: 'Enter the call' }).click();
     await expect(page).toHaveURL(/\/calls\/[\w-]+$/);
+    // The call is set up as it was calibrated.
+    await page.getByRole('button', { name: 'Call details' }).click();
+    const setUp = page.getByRole('dialog', { name: 'Call details' });
+    await expect(setUp.getByText('Follow-up on an open case', { exact: true })).toBeVisible();
+    await expect(setUp.getByText('High impact', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(setUp).toBeHidden();
 
     const conversation = page.getByRole('region', { name: 'Conversation' });
     await expect(conversation.getByRole('listitem')).toHaveCount(1);
@@ -73,7 +98,9 @@ test.describe('a trainee journey through the interface', () => {
     await page.getByRole('button', { name: 'End call', exact: true }).click();
     await page.getByRole('button', { name: 'End call and get feedback' }).click();
     await expect(page).toHaveURL(/\/sessions\/[\w-]+\/report$/, { timeout: 20_000 });
-    await expect(page.getByRole('heading', { level: 1, name: 'Call feedback' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { level: 1, name: `Call feedback: ${mission}` }),
+    ).toBeVisible();
     await expect(page.getByText('Practice coaching report')).toBeVisible();
     await expect(page.getByRole('img', { name: /Overall score: [\d.]+ out of 5/ })).toBeVisible();
 
@@ -87,7 +114,7 @@ test.describe('a trainee journey through the interface', () => {
       'Ownership & Next Steps',
       'Closing',
     ]) {
-      await expect(page.getByRole('heading', { level: 3, name: skill })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 3, name: skill, exact: true })).toBeVisible();
     }
     for (const section of [
       'What went well',
@@ -107,25 +134,26 @@ test.describe('a trainee journey through the interface', () => {
     await expect(page).toHaveURL(/\/transcript\?turn=\d+/);
     await expect(page.locator('li[data-linked="true"]')).toBeVisible();
 
-    // The call is in History (as a row) and still there after a reload, and its report reopens.
+    // The call is on the History trail (a step with its title) and still there after a reload, and
+    // its report reopens.
     await page.goto('/history');
     await expect(
       page.getByRole('heading', { level: 1, name: 'My practice history' }),
     ).toBeVisible();
-    await expect(
-      page.getByRole('row', { name: /A user needs help finding a feature/ }),
-    ).toHaveCount(1);
+    const trailStep = page.getByRole('heading', { level: 4, name: mission });
+    await expect(trailStep).toHaveCount(1);
     await page.reload();
-    await expect(
-      page.getByRole('row', { name: /A user needs help finding a feature/ }),
-    ).toHaveCount(1);
+    await expect(trailStep).toHaveCount(1);
     await page.getByRole('link', { name: /^View report/ }).click();
     await expect(page.getByRole('heading', { level: 2, name: 'Six skill scores' })).toBeVisible();
 
-    // Rewards explain themselves, and there is no ranking anywhere.
+    // Rewards live in Progress now. The old address lands on its Recognition part, which explains
+    // itself, and there is no ranking anywhere.
     await page.goto('/rewards');
-    await expect(page.getByRole('heading', { level: 1, name: 'Rewards' })).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: 'How points work' })).toBeVisible();
+    await expect(page).toHaveURL(/\/progress#recognition$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'My progress' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Recognition' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 3, name: 'How points work' })).toBeVisible();
     await expect(page.getByText(/leaderboard|rank(?:ing)? #|\bXP\b/i)).toHaveCount(0);
 
     // Progress now has something to show, without a ranking.
@@ -139,9 +167,16 @@ test.describe('a trainee journey through the interface', () => {
   }) => {
     const call = await createCall(page, 'checkout-outage-before-investor-event', 'challenge');
     await page.goto(`/calls/${call.id}`);
-    await expect(page.getByText('Challenge', { exact: true }).first()).toBeVisible();
-    // Challenge calls start immersive: no mood or fact counts are shown during the call.
-    await expect(page.getByText(/uncovered so far/)).toHaveCount(0);
+    await expect(composer(page)).toBeVisible();
+    // The call's details say how it is set up: a Challenge call, and so an immersive one.
+    await page.getByRole('button', { name: 'Call details' }).click();
+    const details = page.getByRole('dialog', { name: 'Call details' });
+    await expect(details.getByText('Challenge', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(details).toBeHidden();
+    // Challenge calls start immersive: no mood or signal counts are shown during the call.
+    await expect(page.getByText(/signals? found/)).toHaveCount(0);
+    await expect(page.getByText('Customer mood', { exact: true })).toHaveCount(0);
 
     await say(
       page,
@@ -161,23 +196,26 @@ test.describe('a trainee journey through the interface', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'Discovery' })).toBeVisible();
   });
 
-  test('the top bar search opens the library with the words already typed in', async ({ page }) => {
+  test("the palette's search row opens the library with the words already typed in", async ({
+    page,
+  }) => {
     await page.goto('/home');
-    const topSearch = page.getByRole('searchbox', { name: 'Search all scenarios' });
-    await topSearch.fill('workspace');
-    await topSearch.press('Enter');
+    await searchMissionsFromPalette(page, 'workspace');
     await expect(page).toHaveURL(/\/scenarios\?q=workspace$/);
-    await expect(
-      page.getByRole('searchbox', { name: 'Search scenarios', exact: true }),
-    ).toHaveValue('workspace');
-    await expect(page.getByRole('article')).toHaveCount(1);
+    await expect(page.getByRole('searchbox', { name: 'Find a signal' })).toHaveValue('workspace');
+    await expect(showingMissions(page, 1)).toBeVisible();
+    // The list view keeps only the one mission that matches, as a link that starts with its title.
+    await page.getByRole('tab', { name: 'List' }).click();
+    const matches = page.getByRole('tabpanel').getByRole('link');
+    await expect(matches).toHaveCount(1);
+    await expect(matches).toHaveAccessibleName(/^Team cannot open the shared project workspace/);
   });
 
   test('older links to the pre-call brief land on the setup page', async ({ page }) => {
     await page.goto('/scenarios/cannot-find-export-feature/brief');
     await expect(page).toHaveURL(/\/scenarios\/cannot-find-export-feature\/setup$/);
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Configure your scenario' }),
+      page.getByRole('heading', { level: 1, name: 'A user needs help finding a feature' }),
     ).toBeVisible();
     await page.goto('/about');
     await expect(page).toHaveURL(/\/help$/);

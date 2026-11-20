@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { createCall, endViaApi, sayViaApi, seriousA11yViolations } from './helpers.ts';
+import { composer, createCall, endViaApi, sayViaApi, seriousA11yViolations } from './helpers.ts';
 
 const SPOTLIGHT = 'team-cannot-open-shared-workspace';
 const UNKNOWN_ID = '00000000-0000-4000-8000-000000000000';
@@ -82,8 +82,19 @@ function stops(finished: string, live: string): Stop[] {
       },
     },
     { name: 'Home', path: '/home' },
+    {
+      name: 'Command palette',
+      path: '/home',
+      prepare: async (page) => {
+        await page.getByRole('button', { name: 'Search and commands' }).click();
+        await expect(page.getByRole('dialog', { name: 'Search and commands' })).toBeVisible();
+        // The missions are fetched when the palette opens, a moment after it does.
+        await expect(page.getByRole('group', { name: 'Missions' })).toBeVisible();
+      },
+    },
     { name: 'Practice setup', path: '/practice' },
-    { name: 'Library', path: '/scenarios' },
+    { name: 'Missions', path: '/scenarios' },
+    { name: 'Missions (list)', path: '/scenarios?view=list' },
     { name: 'Setup', path: `/scenarios/${SPOTLIGHT}/setup` },
     {
       name: 'Live call',
@@ -93,10 +104,16 @@ function stops(finished: string, live: string): Stop[] {
     { name: 'Report', path: `/sessions/${finished}/report` },
     { name: 'Transcript', path: `/sessions/${finished}/transcript` },
     { name: 'History', path: '/history' },
-    { name: 'Rewards', path: '/rewards' },
+    // Rewards live in Progress now: the old address lands on its Recognition part.
     {
-      name: 'Rewards (challenges)',
+      name: 'Progress (recognition)',
       path: '/rewards',
+      ready: (page) => page.getByRole('heading', { level: 2, name: 'Recognition' }),
+    },
+    {
+      name: 'Progress (recognition, challenges)',
+      path: '/rewards',
+      ready: (page) => page.getByRole('heading', { level: 2, name: 'Recognition' }),
       prepare: async (page) => {
         await page.getByRole('tab', { name: /^Challenges/ }).click();
       },
@@ -105,7 +122,7 @@ function stops(finished: string, live: string): Stop[] {
       name: 'Progress with samples',
       path: '/progress',
       prepare: async (page) => {
-        await page.getByRole('switch', { name: 'Include sample sessions' }).check({ force: true });
+        await page.getByRole('switch', { name: 'Include sample sessions' }).check();
         await expect(page.getByText('Sample sessions are included.')).toBeVisible();
       },
     },
@@ -113,13 +130,14 @@ function stops(finished: string, live: string): Stop[] {
       name: 'Calibration with samples',
       path: '/calibration',
       prepare: async (page) => {
-        await page.getByLabel(/Include sample records/).check({ force: true });
+        await page.getByLabel(/Include sample records/).check();
         await expect(page.getByText('No mentor reviews yet')).toHaveCount(0);
       },
     },
     { name: 'Trainer', path: '/trainer' },
     { name: 'Help', path: '/help' },
     { name: 'Settings', path: '/settings' },
+    { name: 'Settings (preferences)', path: '/settings#preferences' },
     {
       name: 'Settings (notifications)',
       path: '/settings',
@@ -146,7 +164,7 @@ function stops(finished: string, live: string): Stop[] {
 async function visit(page: Page, stop: Stop) {
   await page.goto(stop.path);
   await expect(stop.ready?.(page) ?? page.locator('h1').first()).toBeVisible();
-  await expect(page.locator('.skeleton')).toHaveCount(0);
+  await expect(page.locator('.ff-loading')).toHaveCount(0);
   await stop.prepare?.(page);
 }
 
@@ -201,7 +219,49 @@ for (const width of [320, 1440]) {
   });
 }
 
+// The sweep above seeds data first, so it never sees the pages as a first-time learner does. An
+// empty state is its own layout (the sky with nothing lit, a list with nothing in it).
+const FIRST_RUN_PAGES = [
+  'Landing',
+  'Home',
+  'Practice setup',
+  'Missions',
+  'Missions (list)',
+  'Setup',
+  'History',
+  'Trainer',
+  'Help',
+  'Settings',
+  'Not found',
+];
+for (const width of [320, 390]) {
+  test(`first-run pages do not scroll sideways at ${width}px wide`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await signedIn(page);
+    await page.setViewportSize({ width, height: 800 });
+    const empty: Stop[] = [
+      ...stops(UNKNOWN_ID, UNKNOWN_ID).filter((stop) => FIRST_RUN_PAGES.includes(stop.name)),
+      { name: 'Progress (nothing yet)', path: '/progress' },
+      { name: 'Progress, recognition (nothing yet)', path: '/rewards' },
+      { name: 'Calibration (nothing yet)', path: '/calibration' },
+    ];
+    const problems: string[] = [];
+    for (const stop of empty) {
+      await visit(page, stop);
+      const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+      }));
+      if (scrollWidth > innerWidth) {
+        problems.push(`${stop.name}: content is ${scrollWidth}px wide in a ${innerWidth}px window`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+}
+
 test.describe('display preferences', () => {
+  /** Elements that are told to loop for ever. */
   const animating = (page: Page) =>
     page.evaluate(
       () =>
@@ -211,40 +271,200 @@ test.describe('display preferences', () => {
             .some((v) => v.trim() === 'infinite'),
         ).length,
     );
+  /** Animations that loop for ever and are moving right now (a paused one is not). */
+  const moving = (page: Page) =>
+    page.evaluate(
+      () =>
+        document
+          .getAnimations()
+          .filter(
+            (animation) =>
+              animation.playState === 'running' &&
+              animation.effect?.getComputedTiming().iterations === Infinity,
+          ).length,
+    );
 
   test('motion stops when the device asks for less, and when the app is told to', async ({
     page,
   }) => {
-    // The landing page's sphere and orbiting lights keep moving until someone asks for less.
+    // The landing page's instrument and the parts that drift round it keep moving until someone
+    // asks for less.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/');
     await expect(page.locator('h1').first()).toBeVisible();
-    expect(await animating(page)).toBeGreaterThan(0);
+    await expect.poll(() => animating(page)).toBeGreaterThan(0);
 
-    // Reduced motion from the device: nothing loops.
+    // Reduced motion from the device: nothing loops, and ambient motion is held paused.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.reload();
     await expect(page.locator('h1').first()).toBeVisible();
     expect(await animating(page)).toBe(0);
+    await expect(page.locator('html')).toHaveAttribute('data-ambient', 'paused');
 
     // The in-app switch works on a device that asks for nothing, and survives a reload.
     await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.goto('/settings');
-    await page.getByLabel('Reduce motion', { exact: true }).selectOption('reduce');
+    await page.goto('/settings#preferences');
+    await page
+      .getByRole('group', { name: 'Reduce motion', exact: true })
+      .getByRole('radio', { name: 'On', exact: true })
+      .check();
     await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduce');
     await page.goto('/');
     await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduce');
     expect(await animating(page)).toBe(0);
   });
 
+  test('the pause button stops what moves on its own, and the choice is kept', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/');
+    const pause = page.getByRole('button', { name: 'Pause ambient motion' });
+    await expect(pause).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('html')).not.toHaveAttribute('data-ambient', 'paused');
+    await expect.poll(() => moving(page)).toBeGreaterThan(0);
+
+    await pause.click();
+    await expect(pause).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('html')).toHaveAttribute('data-ambient', 'paused');
+    await expect.poll(() => moving(page)).toBe(0);
+
+    // It is the same choice as the Ambient motion switch in Settings, and it is still there after a
+    // reload.
+    await page.goto('/settings#preferences');
+    const ambient = page.getByRole('switch', { name: 'Ambient motion' });
+    await expect(ambient).not.toBeChecked();
+    await expect(page.locator('html')).toHaveAttribute('data-ambient', 'paused');
+    await ambient.check();
+    await expect(page.locator('html')).not.toHaveAttribute('data-ambient', 'paused');
+    await expect(pause).toHaveAttribute('aria-pressed', 'false');
+  });
+
   test('the theme applies at once and is still there after a reload', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
-    await page.goto('/settings');
-    await page.getByLabel('Theme', { exact: true }).selectOption('dark');
+    await page.goto('/settings#preferences');
+    const theme = page.getByRole('group', { name: 'Theme', exact: true });
+    await theme.getByRole('radio', { name: 'Dark', exact: true }).check();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.getByLabel('Theme', { exact: true })).toHaveValue('dark');
+    await expect(theme.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
+
+    // The button in the corner of every page changes the same setting.
+    await page.getByRole('button', { name: 'Switch to light theme' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(theme.getByRole('radio', { name: 'Light', exact: true })).toBeChecked();
+  });
+});
+
+test.describe('the app frame', () => {
+  const DOCK = ['Home', 'Missions', 'History', 'Progress', 'Studio', 'Settings'];
+
+  /** The dock marks the page you are on with aria-current: this destination, or none of them. */
+  async function expectDockMarks(page: Page, current: string | null) {
+    const dock = page.getByRole('navigation', { name: 'Main' });
+    for (const name of DOCK) {
+      const link = dock.getByRole('link', { name, exact: true });
+      if (name === current) await expect(link).toHaveAttribute('aria-current', 'page');
+      else await expect(link).not.toHaveAttribute('aria-current', /.+/);
+    }
+  }
+
+  test('the dock marks where you are, and the practice journey keeps Missions lit', async ({
+    page,
+  }) => {
+    await signedIn(page);
+    const finished = await finishedCall(page);
+    const dock = page.getByRole('navigation', { name: 'Main' });
+
+    await page.goto('/home');
+    await expectDockMarks(page, 'Home');
+    await dock.getByRole('link', { name: 'Missions', exact: true }).click();
+    await expect(page).toHaveURL(/\/scenarios$/);
+    await expectDockMarks(page, 'Missions');
+
+    // Choosing a mission, setting it up, the call and its report are one practice journey, so
+    // Missions stays lit through it.
+    await page
+      .getByRole('tabpanel')
+      .getByRole('link', { name: 'Locked out after a password reset' })
+      .click();
+    await expect(page).toHaveURL(/\/scenarios\/locked-out-after-password-reset\/setup$/);
+    await expectDockMarks(page, 'Missions');
+    await page.getByRole('button', { name: 'Enter the call' }).click();
+    await expect(page).toHaveURL(/\/calls\/[\w-]+$/);
+    // A live call has the whole screen to itself: there is no dock and there are no tools.
+    await expect(composer(page)).toBeVisible();
+    await expect(dock).toHaveCount(0);
+    await expect(page.getByRole('group', { name: 'Tools' })).toHaveCount(0);
+
+    // The other destinations, and the pages that belong to each. Help is reached from the tools
+    // and the footer, not from the dock, so it lights nothing.
+    for (const [path, current] of [
+      ['/practice', 'Missions'],
+      [`/sessions/${finished.id}/report`, 'Missions'],
+      [`/sessions/${finished.id}/transcript`, 'History'],
+      ['/history', 'History'],
+      ['/progress', 'Progress'],
+      ['/rewards', 'Progress'],
+      ['/trainer', 'Studio'],
+      ['/calibration', 'Studio'],
+      ['/settings', 'Settings'],
+      ['/help', null],
+    ] as const) {
+      await page.goto(path);
+      await expect(page.locator('h1').first()).toBeVisible();
+      await expectDockMarks(page, current);
+    }
+  });
+
+  test('the palette opens with the keyboard, narrows as you type, runs a command and gives focus back', async ({
+    page,
+  }) => {
+    await signedIn(page);
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/home');
+    const opener = page.getByRole('button', { name: 'Search and commands' });
+    const palette = page.getByRole('dialog', { name: 'Search and commands' });
+    const field = palette.getByRole('combobox');
+
+    // Ctrl or Cmd+K opens it from anywhere, with the cursor in its field and everything on offer.
+    await opener.focus();
+    await page.keyboard.press('ControlOrMeta+K');
+    await expect(palette).toBeVisible();
+    await expect(field).toBeFocused();
+    for (const group of ['Go to', 'Practice', 'Display', 'Missions']) {
+      await expect(palette.getByRole('group', { name: group, exact: true })).toBeVisible();
+    }
+
+    // Typing narrows it to what matches, and the last row searches the missions for those words.
+    await field.fill('theme');
+    await expect(palette.getByRole('option', { name: 'Switch to dark theme' })).toBeVisible();
+    await expect(palette.getByRole('option', { name: /^Start practice/ })).toHaveCount(0);
+    await expect(palette.getByRole('option', { name: /^Search missions for/ })).toBeVisible();
+
+    // Enter runs the highlighted command: the palette closes and focus is back where it was.
+    await page.keyboard.press('Enter');
+    await expect(palette).toBeHidden();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(opener).toBeFocused();
+
+    // Escape leaves without doing anything, and focus is back there too.
+    await page.keyboard.press('ControlOrMeta+K');
+    await expect(palette).toBeVisible();
+    await field.fill('settings');
+    await page.keyboard.press('Escape');
+    await expect(palette).toBeHidden();
+    await expect(opener).toBeFocused();
+    await expect(page).toHaveURL(/\/home$/);
+
+    // Choosing a page goes there, and focus moves into the page.
+    await page.keyboard.press('ControlOrMeta+K');
+    await field.fill('histo');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/history$/);
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'My practice history' }),
+    ).toBeVisible();
+    await expect(page.locator('main')).toBeFocused();
   });
 });
 
@@ -252,28 +472,36 @@ test.describe('profile and preferences', () => {
   test('a profile is created, edited and forgotten on this device, and its preferences are used', async ({
     page,
   }) => {
-    await page.goto('/settings');
+    await page.goto('/settings#preferences');
     // Without a profile, what lives on the profile says so instead of pretending to work.
     await expect(page.getByText('Create your profile first.').first()).toBeVisible();
 
     await page.goto('/sign-in');
     await page.getByLabel('Name').fill('Sam Rivera');
     await page.getByLabel(/Role/).fill('Apprentice support engineer');
-    await page.getByRole('button', { name: /Continue/ }).click();
+    await page.getByRole('button', { name: 'Create profile' }).click();
     await expect(page).toHaveURL(/\/home$/);
 
     await page.goto('/settings');
-    await expect(page.getByText('Sam Rivera')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Sam Rivera' })).toBeVisible();
     await page.getByRole('button', { name: 'Edit profile' }).click();
     const edit = page.getByRole('dialog');
     await edit.getByLabel('Name').fill('Sam R');
-    await edit.getByRole('button', { name: /Save/ }).click();
-    await expect(page.getByText('Sam R', { exact: true })).toBeVisible();
+    await edit.getByRole('button', { name: 'Save profile' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Sam R', exact: true })).toBeVisible();
 
     // A preference changes what the practice page starts on.
-    await page.getByLabel('Default difficulty').selectOption('challenge');
+    await page.getByRole('tab', { name: 'Preferences' }).click();
+    await page
+      .getByRole('group', { name: 'Default difficulty', exact: true })
+      .getByRole('radio', { name: 'Challenge', exact: true })
+      .check();
     await page.goto('/practice');
-    await expect(page.getByRole('radio', { name: 'Challenge', exact: true })).toBeChecked();
+    await expect(
+      page
+        .getByRole('group', { name: 'Difficulty', exact: true })
+        .getByRole('radio', { name: 'Challenge', exact: true }),
+    ).toBeChecked();
 
     // Signing out forgets the profile here, and nothing else.
     await page.goto('/settings');
@@ -283,19 +511,19 @@ test.describe('profile and preferences', () => {
 
   test('voice is off until it is turned on, after a plain explanation', async ({ page }) => {
     await signedIn(page);
-    await page.goto('/settings');
+    await page.goto('/settings#preferences');
     const voice = page.getByRole('switch', { name: /Enable voice/ });
     await expect(voice).not.toBeChecked();
 
     // Turning it on shows what it means first, and nothing changes until it is accepted.
-    await voice.click({ force: true });
+    await voice.click();
     const dialog = page.getByRole('dialog', { name: /Turn on voice/ });
     await expect(dialog).toContainText(/never records, keeps or uploads audio/);
     await expect(dialog).toContainText(/never use real customer information/);
     await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(voice).not.toBeChecked();
 
-    await voice.click({ force: true });
+    await voice.click();
     await page
       .getByRole('dialog', { name: /Turn on voice/ })
       .getByRole('button', { name: 'Turn on voice' })
@@ -341,16 +569,17 @@ test.describe('setup with the keyboard', () => {
   test('a call can be set up and begun without a pointer', async ({ page }) => {
     await page.goto('/scenarios/locked-out-after-password-reset/setup');
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Configure your scenario' }),
+      page.getByRole('heading', { level: 1, name: 'Locked out after a password reset' }),
     ).toBeVisible();
 
     // Radio groups are changed with the arrow keys, from the option Tab lands on.
-    await tabTo(page, page.locator('input[name="stp-difficulty"]:checked'));
+    const difficulty = page.getByRole('group', { name: 'Difficulty', exact: true });
+    await tabTo(page, difficulty.getByRole('radio', { checked: true }));
     await page.keyboard.press('ArrowRight');
-    await expect(page.getByRole('radio', { name: 'Standard', exact: true })).toBeChecked();
+    await expect(difficulty.getByRole('radio', { name: 'Standard', exact: true })).toBeChecked();
     await expect(page.getByText('Customised')).toBeVisible();
 
-    await tabTo(page, page.getByRole('button', { name: 'Start call simulation' }));
+    await tabTo(page, page.getByRole('button', { name: 'Enter the call' }));
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/calls\/[\w-]+$/);
   });
@@ -378,7 +607,7 @@ test.describe('connection', () => {
 });
 
 test.describe('rewards and progress', () => {
-  test('a finished call earns points that say why, and the report and Rewards agree', async ({
+  test('a finished call earns points that say why, and the report and Progress agree', async ({
     page,
   }) => {
     await signedIn(page);
@@ -402,14 +631,17 @@ test.describe('rewards and progress', () => {
     await expect(section).toBeVisible();
     await expect(section).toContainText(earned[0]!.reason);
 
-    // Rewards shows the same, as a points history, and never as a ranking.
+    // Rewards live in Progress now. The old address lands on its Recognition part, whose points
+    // history shows the same, and never as a ranking.
     await page.goto('/rewards');
-    await expect(page.getByRole('heading', { level: 2, name: 'Points history' })).toBeVisible();
+    await expect(page).toHaveURL(/\/progress#recognition$/);
+    await expect(page.getByRole('heading', { level: 3, name: 'Points history' })).toBeVisible();
     await expect(page.getByText(earned[0]!.reason).first()).toBeVisible();
     await expect(page.getByText(/leaderboard|rank(?:ing)? #|\bXP\b/i)).toHaveCount(0);
 
     // My progress has something to show, and the path leads back to the report.
     await page.goto('/progress');
+    await expect(page.getByRole('heading', { level: 1, name: 'My progress' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'Skill by skill' })).toBeVisible();
     await expect(page.getByText(/leaderboard|rank(?:ing)? #/i)).toHaveCount(0);
   });
@@ -461,7 +693,7 @@ test.describe('mentor calibration', () => {
       await page
         .getByRole('radiogroup', { name: skill, exact: true })
         .getByRole('radio', { name: /^3 / })
-        .check({ force: true });
+        .check();
     }
     await page.getByRole('button', { name: 'Save review' }).click();
 
@@ -505,10 +737,10 @@ test.describe('trainer data tools', () => {
 
     // History labels them. Progress leaves them out until asked.
     await page.goto('/history');
-    await expect(page.locator('.chip', { hasText: 'Sample' }).first()).toBeVisible();
+    await expect(page.locator('.ff-tag', { hasText: 'Sample' }).first()).toBeVisible();
     await page.goto('/progress');
     await expect(page.getByText('No completed practice calls yet')).toBeVisible();
-    await page.getByRole('switch', { name: 'Include sample sessions' }).check({ force: true });
+    await page.getByRole('switch', { name: 'Include sample sessions' }).check();
     await expect(page.getByText('Sample sessions are included.')).toBeVisible();
 
     // Removing samples leaves the trainee's own call alone.
