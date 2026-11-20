@@ -138,9 +138,9 @@ describe('voice is off until it is turned on', () => {
     await open();
     await user.click(screen.getByRole('button', { name: 'Voice (Beta)' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    const link = screen.getByRole('link', { name: 'Create your profile in Settings' });
+    const link = screen.getByRole('link', { name: 'Create your profile' });
     expect(link).toHaveAttribute('href', '/sign-in');
-    expect(link.parentElement).toHaveTextContent('Create your profile in Settings to use voice.');
+    expect(link.parentElement).toHaveTextContent('Create your profile to use voice.');
     expect(getProfile()).toBeNull();
   });
 });

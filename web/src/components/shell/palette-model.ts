@@ -123,13 +123,13 @@ export function buildEntries(context: PaletteContext): PaletteEntry[] {
   return entries;
 }
 
-/** The old top-bar search, kept: what was typed opens the library with those words in its search. */
+/** The search row of the palette: what was typed opens the missions with those words in their search. */
 export function searchEntry(text: string): PaletteEntry {
   return {
     id: 'search',
     group: 'Search',
     label: `Search missions for \u201c${text}\u201d`,
-    hint: 'Library',
+    hint: 'Missions',
     keywords: '',
     action: navigateTo(`${libraryPath}?q=${encodeURIComponent(text)}`),
   };

@@ -14,7 +14,9 @@ export function securityHeaders(res: ServerResponse, isApi: boolean): void {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  // The microphone is allowed for Firefly's own pages only. Browser speech recognition (Voice, Beta)
+  // is refused with `not-allowed` when the policy is `microphone=()`, so it cannot be shut off here.
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=(), payment=()');
   res.setHeader(
     'Content-Security-Policy',
     [

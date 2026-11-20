@@ -45,6 +45,14 @@ describe('basics and security headers', () => {
     expect(res.headers.get('cache-control')).toBe('no-store');
   });
 
+  it('lets its own pages use the microphone (Voice needs it) and nothing else sensitive', async () => {
+    const policy = (await app.client().get('/api/health')).headers.get('permissions-policy') ?? '';
+    // `microphone=()` makes browser speech recognition fail at once with "not-allowed".
+    expect(policy).toContain('microphone=(self)');
+    expect(policy).toContain('camera=()');
+    expect(policy).toContain('geolocation=()');
+  });
+
   it('issues an HttpOnly, SameSite profile cookie', async () => {
     const res = await app.client().raw('/api/health');
     const cookie = res.headers.get('set-cookie') ?? '';

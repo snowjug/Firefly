@@ -186,7 +186,9 @@ const save = async (page, name, options = {}) => {
   console.log('wrote', file);
 };
 const go = async (page, route, extra) => {
-  const url = route.includes('?') ? `${route}&perf=high` : `${route}?perf=high`;
+  // The effects tier goes in the query string, before any #fragment.
+  const [path, fragment] = route.split('#');
+  const url = `${path}${path.includes('?') ? '&' : '?'}perf=high${fragment ? `#${fragment}` : ''}`;
   await page.goto(url);
   await settle(page, extra);
 };

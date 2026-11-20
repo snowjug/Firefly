@@ -37,7 +37,7 @@ export function VoiceOptIn({ onEnabled }: { onEnabled?: () => void }) {
       </button>
       {needsProfile && !profile ? (
         <span className="vc-needs-profile" role="status">
-          <Link to="/sign-in">Create your profile in Settings</Link> to use voice.
+          <Link to="/sign-in">Create your profile</Link> to use voice.
         </span>
       ) : null}
       <VoiceDisclosureDialog open={open} onAccept={accept} onCancel={() => setOpen(false)} />
