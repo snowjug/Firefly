@@ -113,7 +113,11 @@ export class InsightsService {
 
   progress(profileId: string, includeSamples: boolean): ProgressDTO {
     const all = this.repo.listSessions(profileId, { includeSamples, limit: 200 });
-    const completed = all.rows.filter((r) => r.status === 'completed' && r.dimensionScores);
+    // A call that ended early rests on too little to say anything about a skill, and the rewards
+    // and the recommendations already leave it out: so does this, or the figures would not agree.
+    const completed = all.rows.filter(
+      (r) => r.status === 'completed' && r.completion === 'completed' && r.dimensionScores,
+    );
     const inputs: ProgressInput[] = completed.map((r) => {
       const stored = this.repo.getEvaluation(r.id);
       const report = stored ? CoachingReportSchema.safeParse(stored.report) : null;
