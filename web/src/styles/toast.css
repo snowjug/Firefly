@@ -1,0 +1,83 @@
+/* Toasts (lib/toast.tsx): a quiet glass strip above the dock, centred, never in the way of input.
+   The region itself takes no pointer events; only a toast does. `.toast-region` keeps its name
+   because the print sheets hide it. */
+
+.toast-region {
+  position: fixed;
+  z-index: var(--z-transient);
+  inset-inline: 0;
+  bottom: var(--dock-clear, 6rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-inline: var(--sp-4);
+  pointer-events: none;
+}
+.toast.glass {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  box-sizing: border-box;
+  max-width: min(30rem, 100%);
+  padding: 0.8rem 1.15rem 0.8rem 1rem;
+  border: 0;
+  border-radius: var(--r-1);
+  pointer-events: auto;
+  animation: ff-toast-in var(--dur-component) var(--ease-enter-emphasised) both;
+}
+.toast__mark {
+  flex: none;
+  margin-block-start: 0.05rem;
+  color: var(--ink-2);
+}
+.toast[data-tone='positive'] .toast__mark {
+  color: var(--sage-text);
+}
+.toast[data-tone='caution'] .toast__mark {
+  color: var(--amber-text);
+}
+.toast[data-tone='negative'] .toast__mark {
+  color: var(--coral-text);
+}
+.toast__text {
+  min-width: 0;
+}
+.toast__text strong {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+.toast__text p {
+  margin: 0.15rem 0 0;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+
+@keyframes ff-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes ff-toast-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion: no movement, only a quick fade. */
+@media (forced-colors: active) {
+  .toast.glass {
+    border: 1px solid CanvasText;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast.glass {
+    animation: ff-toast-fade var(--dur-response) linear both !important;
+  }
+}
+:root[data-motion='reduce'] .toast.glass {
+  animation: ff-toast-fade var(--dur-response) linear both !important;
+}

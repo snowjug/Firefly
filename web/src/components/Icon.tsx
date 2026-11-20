@@ -1,6 +1,8 @@
 import type { SVGProps } from 'react';
 
-// A small set of stroke icons (24x24). Decorative by default: pass `label` when an icon carries meaning.
+// A small set of hairline stroke icons (24x24). Decorative by default: pass `label` when an icon
+// carries meaning. The stroke is light (1.5) to match the hairline language; pass `strokeWidth` to
+// change it for one icon.
 
 const PATHS = {
   'arrow-right': 'M5 12h14M13 6l6 6-6 6',
@@ -117,7 +119,7 @@ export function Icon({ name, size = 20, label, ...rest }: IconProps) {
       height={size}
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.75}
+      strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
       role={label ? 'img' : undefined}

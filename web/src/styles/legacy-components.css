@@ -906,107 +906,14 @@
   }
 }
 
-/* ------------------------------------------------------------------ Dialog, sheet and drawer */
-.scrim {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-dialog);
-  display: grid;
-  place-items: center;
-  padding: var(--sp-4);
-  background: var(--scrim);
-  animation: fade-in var(--dur-2) var(--ease-out);
-}
-.scrim-bottom {
-  place-items: end center;
-}
-.scrim-start {
-  place-items: stretch start;
-  padding: 0;
-}
-.dialog {
-  width: min(560px, 100%);
-  max-height: min(88vh, 100%);
-  overflow: auto;
-  padding: var(--sp-6);
-  border-radius: var(--r-modal);
-  box-shadow: var(--shadow-2);
-  animation: pop-in var(--dur-4) var(--ease-settle);
-}
-.sheet {
-  width: min(720px, 100%);
-  max-height: 86vh;
-  overflow: auto;
-  padding: var(--sp-5);
-  border-radius: var(--r-modal) var(--r-modal) 0 0;
-  box-shadow: var(--shadow-2);
-  animation: sheet-in var(--dur-4) var(--ease-settle);
-}
-.drawer {
-  width: min(300px, 88vw);
-  height: 100%;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  padding: var(--sp-4) var(--sp-3);
-  border-radius: 0 var(--r-modal) var(--r-modal) 0;
-  background: var(--sidebar-bg);
-  color: var(--sidebar-text);
-  box-shadow: var(--shadow-2);
-  animation: drawer-in var(--dur-4) var(--ease-settle);
-}
-.drawer h2 {
-  color: #fff;
-}
-.drawer .btn-ghost {
-  color: var(--sidebar-text);
-}
-.drawer .btn-ghost:hover {
-  background: var(--sidebar-hover-bg);
-}
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-}
+/* ------------------------------------------------------------------ Dialog, sheet, drawer and toast
+   Their styles live in dialog.css and toast.css. */
 @keyframes pop-in {
   from {
     opacity: 0;
     transform: translateY(10px) scale(0.98);
   }
 }
-@keyframes sheet-in {
-  from {
-    opacity: 0;
-    transform: translateY(24px);
-  }
-}
-@keyframes drawer-in {
-  from {
-    opacity: 0;
-    transform: translateX(-24px);
-  }
-}
-
-/* ------------------------------------------------------------------ Toasts */
-.toast-region {
-  position: fixed;
-  z-index: var(--z-toast);
-  inset: auto var(--sp-4) var(--sp-4) auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  max-width: min(420px, calc(100vw - 2rem));
-}
-.toast {
-  display: flex;
-  gap: var(--sp-3);
-  align-items: flex-start;
-  padding: var(--sp-3) var(--sp-4);
-  border-radius: 14px;
-  animation: pop-in var(--dur-3) var(--ease-out);
-}
-
 /* ------------------------------------------------------------------ Tables */
 .table-wrap {
   position: relative; /* keeps visually hidden text inside the scroll area */
