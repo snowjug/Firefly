@@ -151,7 +151,8 @@ const api = (page) => ({
           data: { text, clientMessageId: randomUUID() },
         });
         if (response.ok()) break;
-        if (response.status() !== 429) throw new Error(`Could not send a message: ${response.status()}`);
+        if (response.status() !== 429)
+          throw new Error(`Could not send a message: ${response.status()}`);
         await page.waitForTimeout(2200);
       }
     }
@@ -257,9 +258,14 @@ if (wanted('call')) {
 }
 if (wanted('call-tension')) {
   // A customer who has been blamed: the room tightens and the filament frays.
-  const tense = await firefly.create('checkout-outage-before-investor-event', 'challenge', 'guided', {
-    startingTemperature: 'frustrated',
-  });
+  const tense = await firefly.create(
+    'checkout-outage-before-investor-event',
+    'challenge',
+    'guided',
+    {
+      startingTemperature: 'frustrated',
+    },
+  );
   await firefly.say(tense, BLAME);
   await go(page, `/calls/${tense}`, 3500);
   await save(page, 'call-tension');
