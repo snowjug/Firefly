@@ -220,13 +220,20 @@ describe('customer state', () => {
     );
   });
 
-  it('exposes only a band and trend to the trainee', async () => {
+  it('exposes only a band, a trend and counts to the trainee', async () => {
     const sim = await simulate(makeScenario({ startingTemperature: 'frustrated' }), [
       'You should have read the instructions.',
     ]);
     const state = publicState(sim.runtime);
-    expect(Object.keys(state).sort()).toEqual(['band', 'discoveredCount', 'silent', 'trend']);
+    expect(Object.keys(state).sort()).toEqual([
+      'band',
+      'discoveredCount',
+      'shifts',
+      'silent',
+      'trend',
+    ]);
     expect(state.trend).toBe('rising');
+    expect(state.shifts).toBe(0);
   });
 });
 
@@ -249,6 +256,8 @@ describe('curveballs', () => {
     expect(sim.runtime.customer.curveball.firedCount).toBe(1);
     expect(sim.runtime.customer.curveball.type).toBe('ask-manager');
     expect(sim.runtime.firedCurveballs).toHaveLength(1);
+    expect(publicState(sim.runtime).shifts).toBe(1); // a count only: the kind is never exposed
+    expect(JSON.stringify(publicState(sim.runtime))).not.toContain('manager');
     expect(sim.events.some((e) => e.category === 'curveball')).toBe(true);
   });
 

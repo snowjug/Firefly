@@ -75,6 +75,7 @@ export function makeSession(over: Partial<SessionDTO> = {}): SessionDTO {
       trend: 'rising',
       discoveredCount: 2,
       silent: false,
+      shifts: 0,
     },
     awaitingReply: null,
     evaluationPhase: null,

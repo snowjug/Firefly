@@ -135,10 +135,12 @@ describe('sessions and messages', () => {
     expect(Object.keys(res.body.state).sort()).toEqual([
       'band',
       'discoveredCount',
+      'shifts',
       'silent',
       'trend',
     ]);
     expect(res.body.state.discoveredCount).toBe(1);
+    expect(res.body.state.shifts).toBe(0);
     const reload = await client.get(`/api/sessions/${session.id}`);
     expect(JSON.stringify(reload.body)).not.toContain('hiddenFacts');
     expect(reload.body.session.turns.map((t: { markers?: unknown }) => t.markers)).toEqual([
