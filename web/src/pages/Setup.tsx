@@ -1,5 +1,5 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useParams, useViewTransitionState } from 'react-router';
 import type { ProgressDTO, PublicScenarioDTO, SessionSummaryDTO } from '#shared/domain/api.ts';
 import { recommendMission } from '#shared/domain/recommend.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
@@ -7,7 +7,6 @@ import {
   CALL_STAGES,
   CALL_STAGE_LABELS,
   CURVEBALL_LABELS,
-  DIFFICULTIES,
   IMPACTS,
   IMPACT_LABELS,
   ISSUE_TYPE_LABELS,
@@ -19,26 +18,38 @@ import {
   STYLES,
   STYLE_LABELS,
   type CurveballType,
-  type Difficulty,
   type IssueType,
   type PracticeMode,
 } from '#shared/domain/vocab.ts';
-import { Icon, type IconName } from '../components/Icon.tsx';
-import { EmptyState, ErrorState, Page, PageHeader, SkeletonBlock } from '../components/Page.tsx';
-import { ChoiceGroup, type ChoiceOption } from '../components/scenario/ChoiceGroup.tsx';
-import { CurveballsField } from '../components/scenario/CurveballsField.tsx';
+import {
+  OPTION_EXPLANATIONS,
+  PRESETS,
+  coreParams,
+  explainChange,
+} from '../components/atlas/core-params.ts';
+import { worldPoseFor } from '../components/atlas/world-pose.ts';
+import { ConnectingView } from '../components/call/ConnectingView.tsx';
 import {
   ChoiceRow,
-  SelectField,
-  ToggleRow,
-  type FieldOption,
-} from '../components/scenario/Fields.tsx';
-import { LaunchSequence } from '../components/scenario/LaunchSequence.tsx';
-import { libraryPath } from '../components/scenario/paths.ts';
+  EmptyNotice,
+  ErrorNotice,
+  Field,
+  LoadingNotice,
+  PageFrame,
+  SelectInput,
+  Tag,
+  Toggle,
+  type ChoiceOption,
+} from '../components/frame/index.ts';
+import { Icon } from '../components/Icon.tsx';
+import { Brief, Reminders } from '../components/scenario/Brief.tsx';
+import { CoreStage } from '../components/scenario/CoreStage.tsx';
+import { CurveballsField } from '../components/scenario/CurveballsField.tsx';
+import { EnterBar } from '../components/scenario/EnterBar.tsx';
+import { isOneOf } from '../components/scenario/guards.ts';
+import { backToMissions, setupPath } from '../components/scenario/paths.ts';
 import { ScenarioNotFound } from '../components/scenario/ScenarioNotFound.tsx';
-import { ScenarioPreview } from '../components/scenario/ScenarioPreview.tsx';
 import {
-  DIFFICULTY_TAGLINES,
   SETTING_NAMES,
   carryChoices,
   changedSettings,
@@ -55,19 +66,20 @@ import {
   overridesFromChoices,
   scenariosOfIssue,
   switchIssue,
-  temperatureBandFor,
   type SetupChoices,
+  type SettingKey,
 } from '../components/scenario/setup-model.ts';
-import { StartBar } from '../components/scenario/StartBar.tsx';
+import { useAfter } from '../components/scenario/useAfter.ts';
 import { useBeginCall } from '../components/scenario/useBeginCall.ts';
-import { useStickyAside } from '../components/scenario/useStickyAside.ts';
-import type { Tone } from '../components/ui/StatCard.tsx';
+import { useScenarioLibrary } from '../components/scenario/useScenarioLibrary.ts';
+import type { GlyphStatus } from '../components/signal/types.ts';
+import { useWorldPose } from '../components/world/useWorldPose.ts';
 import { api } from '../lib/api.ts';
 import { loadDraft, saveDraft } from '../lib/draft.ts';
 import { useApi } from '../lib/hooks.ts';
 import { usePreferences, type ProfilePreferences } from '../lib/profile.ts';
-import '../styles/launch.css';
-import '../styles/setup.css';
+import { useReducedMotion } from '../lib/theme.tsx';
+import '../styles/calibrate.css';
 
 type NonEmpty<T> = readonly [T, ...T[]];
 
@@ -85,72 +97,19 @@ async function loadHistory(signal: AbortSignal): Promise<History> {
   return { sessions: sessions?.sessions ?? [], progress };
 }
 
-function labelled<T extends string>(
-  order: readonly T[],
-  labels: Record<T, { label: string; description: string }>,
-): FieldOption<T>[] {
-  return order.map((value) => ({
-    value,
-    label: labels[value].label,
-    description: labels[value].description,
-  }));
-}
-
-const IMPACT_OPTIONS = labelled(IMPACTS, IMPACT_LABELS);
-const TEMPERATURE_OPTIONS = labelled(START_TEMPERATURES, START_TEMPERATURE_LABELS);
-const PROFICIENCY_OPTIONS = labelled(PROFICIENCIES, PROFICIENCY_LABELS);
-const STYLE_OPTIONS = labelled(STYLES, STYLE_LABELS);
-const STAGE_OPTIONS = labelled(CALL_STAGES, CALL_STAGE_LABELS);
-const MODES: readonly PracticeMode[] = ['guided', 'immersive'];
-
-const QUICK_START: Record<Difficulty, { icon: IconName; tone: Tone }> = {
-  starter: { icon: 'star', tone: 'green' },
-  standard: { icon: 'user', tone: 'blue' },
-  challenge: { icon: 'shield', tone: 'violet' },
-};
-
-const SETUP_LEAD = 'Set the customer parameters to create your practice call.';
-
-function SetupFrame({ children }: { children: ReactNode }) {
-  return (
-    <Page title="Practice setup" className="stp">
-      <PageHeader title="Configure your scenario" lead={SETUP_LEAD} />
-      {children}
-    </Page>
-  );
-}
-
-function SetupSkeleton() {
-  return (
-    <div className="stp-layout" role="status" aria-label="Loading the setup">
-      <div className="stp-main">
-        {[110, 430, 120].map((height) => (
-          <div key={height} className="glass card">
-            <SkeletonBlock height={height} />
-          </div>
-        ))}
-      </div>
-      <div className="stp-aside">
-        <div className="glass card stack">
-          <SkeletonBlock height={14} width="30%" />
-          <SkeletonBlock height={26} width="80%" />
-          <SkeletonBlock height={72} />
-          <SkeletonBlock height={140} />
-        </div>
-      </div>
-      <span className="sr-only">Loading…</span>
-    </div>
-  );
-}
+/** How long a call may take to open before the page says it is opening, so a quick answer shows nothing extra. */
+const SHOW_OPENING_AFTER_MS = 350;
+/** And before it says that it is taking longer than usual. */
+const SLOW_AFTER_MS = 6000;
 
 /**
- * Practice setup, the one place a call is configured and started. It opens at /practice, on the
+ * Calibration, the one place a call is configured and started. It opens at /practice, on the
  * scenario that suits the trainee best, and at /scenarios/:id/setup on the scenario that was chosen.
  */
 export default function Setup() {
   const { id } = useParams<{ id: string }>();
   const preferences = usePreferences();
-  const scenarios = useApi((signal) => api.scenarios(signal), []);
+  const scenarios = useScenarioLibrary();
   const history = useApi<History | null>(
     (signal) => (id ? Promise.resolve(null) : loadHistory(signal)),
     [id],
@@ -158,45 +117,44 @@ export default function Setup() {
 
   if (scenarios.loading || (!id && history.loading)) {
     return (
-      <SetupFrame>
-        <SetupSkeleton />
-      </SetupFrame>
+      <PageFrame title="Calibration" width="wide">
+        <LoadingNotice label="Loading the setup" lines={5} />
+      </PageFrame>
     );
   }
   if (scenarios.error) {
     return (
-      <SetupFrame>
-        <ErrorState
+      <PageFrame title="Calibration" width="wide">
+        <ErrorNotice
+          level={1}
           error={scenarios.error}
           onRetry={scenarios.reload}
           title="Could not load the scenarios"
         />
-      </SetupFrame>
+      </PageFrame>
     );
   }
   const [first, ...rest] = scenarios.data ?? [];
   if (!first) {
     return (
-      <SetupFrame>
-        <EmptyState icon="book" title="No scenarios are available yet">
+      <PageFrame title="Calibration" width="wide">
+        <EmptyNotice level={1} title="No scenarios are available yet">
           Scenarios will appear here once they have been added.
-        </EmptyState>
-      </SetupFrame>
+        </EmptyNotice>
+      </PageFrame>
     );
   }
   const library: NonEmpty<PublicScenarioDTO> = [first, ...rest];
   if (id && !library.some((scenario) => scenario.id === id)) return <ScenarioNotFound />;
 
   return (
-    <SetupFrame>
-      <SetupForm
-        key={id ?? 'practice'}
-        scenarios={library}
-        entryId={id}
-        history={history.data}
-        preferences={preferences}
-      />
-    </SetupFrame>
+    <SetupForm
+      key={id ?? 'practice'}
+      scenarios={library}
+      entryId={id}
+      history={history.data}
+      preferences={preferences}
+    />
   );
 }
 
@@ -248,6 +206,44 @@ function initialFormState(
   };
 }
 
+// ------------------------------------------------------------------------------------------
+// The rows: each setting is one decision in serif words on a hairline, with a sentence under it
+// that says what the chosen word does to the call.
+
+type RowOptions = ChoiceOption[];
+
+/**
+ * The options of one setting. The sentence under the row is the consequence of the chosen option
+ * (`OPTION_EXPLANATIONS`), and it names the scenario's own choice once the choice differs from it.
+ */
+function rowOptions<K extends SettingKey>(
+  setting: K,
+  values: readonly SetupChoices[K][],
+  nameOf: (value: SetupChoices[K]) => string,
+  own: SetupChoices[K],
+): RowOptions {
+  const table: Record<string, string> = OPTION_EXPLANATIONS[setting];
+  return values.map((value) => ({
+    value,
+    label: nameOf(value),
+    hint: `${table[value] ?? ''}${value === own ? '' : ` Scenario default: ${nameOf(own)}.`}`.trim(),
+  }));
+}
+
+const MODES: readonly PracticeMode[] = ['guided', 'immersive'];
+const MODE_SENTENCE: Record<PracticeMode, string> = {
+  guided:
+    'Guided practice adds light cues on screen during the call. The customer behaves the same either way.',
+  immersive:
+    'Immersive practice feels like a real call, with no cues on screen. The customer behaves the same either way.',
+};
+
+function validStatus(state: unknown): GlyphStatus {
+  const status =
+    typeof state === 'object' && state !== null ? (state as { status?: unknown }).status : null;
+  return status === 'attempted' || status === 'completed' ? status : 'new';
+}
+
 function SetupForm({
   scenarios,
   entryId,
@@ -264,8 +260,9 @@ function SetupForm({
   );
   const [notice, setNotice] = useState('');
   const [status, setStatus] = useState('');
-  const asideRef = useRef<HTMLDivElement>(null);
-  useStickyAside(asideRef);
+  const location = useLocation();
+  const reduced = useReducedMotion();
+  const openingRef = useRef<HTMLDivElement>(null);
 
   const { scenario, choices } = state;
   const profile = DIFFICULTY_PROFILES[choices.difficulty];
@@ -274,9 +271,28 @@ function SetupForm({
   const overrides = overridesFromChoices(scenario, choices);
   const changed = changedSettings(scenario, choices);
   const family = scenariosOfIssue(scenarios, scenario.issueType);
+  const { persona } = scenario;
 
-  const call = useBeginCall({ scenarioId: scenario.id, overrides, mode });
+  // The field behind the page answers the settings, the way the core does.
+  useWorldPose(worldPoseFor(coreParams(choices)));
+
+  const call = useBeginCall(
+    { scenarioId: scenario.id, overrides, mode },
+    { name: persona.name, role: `${persona.role}, ${persona.organisation}` },
+  );
   const locked = call.pending;
+  // The opening screen only shows if the wait is real; a quick answer goes straight to the call.
+  const opening = useAfter(call.pending, SHOW_OPENING_AFTER_MS);
+  const slow = useAfter(call.pending, SLOW_AFTER_MS);
+
+  // The opening screen replaces the form, so focus goes to it rather than to nothing.
+  useEffect(() => {
+    if (opening) openingRef.current?.focus();
+  }, [opening]);
+
+  // While the page changes to or from the plate, the core carries the name its star carries there.
+  const moving = useViewTransitionState(setupPath(scenario.id));
+  const transitionName = moving && entryId === scenario.id ? 'signal-mission' : undefined;
 
   // Every change is kept as the draft straight away, so a refresh or a visit elsewhere loses nothing.
   const commit = (next: FormState) => {
@@ -302,6 +318,7 @@ function SetupForm({
       }
     }
     setNotice(message);
+    setStatus(explainChange(choices, next));
     commit({ ...state, choices: next });
   };
 
@@ -327,234 +344,283 @@ function SetupForm({
     setStatus('Reset to the scenario defaults.');
   };
 
-  const issueOptions: FieldOption<IssueType>[] = issueTypesOf(scenarios).map((type) => ({
-    value: type,
-    label: ISSUE_TYPE_LABELS[type],
-  }));
-  const scenarioOptions: FieldOption<string>[] = family.map((candidate) => ({
-    value: candidate.id,
-    label: candidate.title,
-  }));
-  const quickStart: ChoiceOption<Difficulty>[] = DIFFICULTIES.map((difficulty) => {
-    const { icon, tone } = QUICK_START[difficulty];
-    return {
-      value: difficulty,
-      label: DIFFICULTY_PROFILES[difficulty].label,
-      description: DIFFICULTY_TAGLINES[difficulty],
-      tone,
-      // Said only once another difficulty is chosen: it is where the scenario was written to start.
-      tag:
-        difficulty === scenario.difficulty && choices.difficulty !== scenario.difficulty
-          ? 'Scenario default'
-          : undefined,
-      lead: (
-        <span className="tone-icon" data-tone={tone}>
-          <Icon name={icon} size={20} />
-        </span>
-      ),
-    };
-  });
-  const modeOptions: ChoiceOption<PracticeMode>[] = MODES.map((option) => ({
+  const issues = issueTypesOf(scenarios);
+  const modeOptions: RowOptions = MODES.map((option) => ({
     value: option,
     label: PRACTICE_MODE_LABELS[option].label,
-    description: PRACTICE_MODE_LABELS[option].description,
-    tag:
+    hint: `${MODE_SENTENCE[option]}${
       option === automaticMode
         ? preferences.hints === 'auto'
-          ? `Default for ${profile.label}`
-          : 'From your settings'
-        : undefined,
+          ? ` Default for ${profile.label}.`
+          : ' From your settings.'
+        : ''
+    }`,
   }));
 
-  return (
+  const difficultyOptions: RowOptions = rowOptions(
+    'difficulty',
+    PRESETS.map((preset) => preset.id),
+    (value) => DIFFICULTY_PROFILES[value].label,
+    scenario.difficulty,
+  );
+  const disclaimer = (
     <>
-      <div className="stp-layout">
-        <div className="stp-main">
-          <div className="glass card stp-card">
-            <ChoiceGroup
-              name="stp-difficulty"
-              legend="Quick start"
-              heading="h2"
-              columns={3}
-              value={choices.difficulty}
-              options={quickStart}
-              onChange={(difficulty) => update({ difficulty })}
-              disabled={locked}
-              hint={
-                <>
-                  <strong>{profile.label}.</strong> {profile.summary}
-                </>
-              }
-            />
-          </div>
+      <Brief scenario={scenario} customised={changed.length > 0} />
+      <Reminders />
+    </>
+  );
 
-          <div className="glass card stp-card">
-            <div className="stp-card-head">
-              <div className="stp-card-title">
-                <h2 className="t-section">Custom configuration</h2>
-                {changed.length > 0 ? <span className="chip chip-accent">Customised</span> : null}
-              </div>
-              {changed.length > 0 ? (
-                <button
-                  type="button"
-                  className="btn btn-secondary stp-reset"
-                  onClick={reset}
-                  disabled={locked}
-                >
-                  Reset to scenario defaults
-                </button>
-              ) : null}
-              <p className="hint stp-card-note">
+  const rows = (
+    <form
+      className="cal-form"
+      aria-label="Calibrate the scenario"
+      onSubmit={(e) => e.preventDefault()}
+    >
+      <fieldset className="cal-form__set" disabled={locked}>
+        <section className="cal-group" aria-labelledby="cal-call">
+          <div className="cal-group__head">
+            <h2 id="cal-call" className="cal-group__title type-label">
+              Calibrate the call
+            </h2>
+            <div className="cal-state">
+              {changed.length > 0 ? <Tag tone="amber">Customised</Tag> : null}
+              <p className="cal-state__text">
                 {changed.length === 0
                   ? 'Everything starts from the scenario as written.'
                   : `Changed from the scenario: ${changed.map((key) => SETTING_NAMES[key].toLowerCase()).join(', ')}.`}
               </p>
-            </div>
-
-            <div className="stp-fields">
-              <div className="stp-col">
-                <SelectField
-                  label="Issue type"
-                  value={scenario.issueType}
-                  options={issueOptions}
-                  onChange={chooseIssue}
-                  hint={family.length > 1 ? undefined : scenario.summary}
-                  disabled={locked}
-                />
-                {family.length > 1 ? (
-                  <SelectField
-                    label="Scenario"
-                    value={scenario.id}
-                    options={scenarioOptions}
-                    onChange={chooseScenario}
-                    hint={scenario.summary}
-                    disabled={locked}
-                  />
-                ) : null}
-                {state.reason && choices.difficulty === scenario.difficulty ? (
-                  <p className="stp-reason">
-                    <Icon name="spark" size={16} />
-                    <span>
-                      <strong>Suggested for you.</strong> {state.reason}
-                    </span>
-                  </p>
-                ) : null}
-                <p className="stp-browse">
-                  <Link to={libraryPath} className="link-more" viewTransition>
-                    Browse all scenarios <Icon name="arrow-right" size={16} />
-                  </Link>
-                </p>
-                <SelectField
-                  label="Call stage"
-                  value={choices.callStage}
-                  defaultValue={scenario.callStage}
-                  options={STAGE_OPTIONS}
-                  onChange={(callStage) => update({ callStage })}
-                  disabled={locked}
-                />
-              </div>
-              <div className="stp-col">
-                <ChoiceRow
-                  legend="Business impact"
-                  value={choices.impact}
-                  defaultValue={scenario.impact}
-                  options={IMPACT_OPTIONS}
-                  onChange={(impact) => update({ impact })}
-                  disabled={locked}
-                />
-                <ChoiceRow
-                  legend="Customer temperature"
-                  value={choices.startingTemperature}
-                  defaultValue={scenario.startingTemperature}
-                  options={TEMPERATURE_OPTIONS}
-                  onChange={(startingTemperature) => update({ startingTemperature })}
-                  disabled={locked}
-                />
-                <ChoiceRow
-                  legend="Technical proficiency"
-                  value={choices.proficiency}
-                  defaultValue={scenario.proficiency}
-                  options={PROFICIENCY_OPTIONS}
-                  onChange={(proficiency) => update({ proficiency })}
-                  disabled={locked}
-                />
-                <ChoiceRow
-                  legend="Communication style"
-                  value={choices.style}
-                  defaultValue={scenario.style}
-                  options={STYLE_OPTIONS}
-                  onChange={(style) => update({ style })}
-                  disabled={locked}
-                />
-              </div>
-            </div>
-
-            <div className="stp-toggles">
-              <ToggleRow
-                title="Hidden facts"
-                checked
-                locked
-                description="Always on. Every scenario has details the customer only shares when you ask about them."
-              />
-              <CurveballsField
-                scenario={scenario}
-                choices={choices}
-                notice={notice}
-                onChange={(next) => {
-                  setNotice('');
-                  commit({ ...state, choices: next });
-                }}
-                disabled={locked}
-              />
+              {changed.length > 0 ? (
+                <button type="button" className="text-link" onClick={reset}>
+                  Reset to scenario defaults
+                </button>
+              ) : null}
             </div>
           </div>
+          <ChoiceRow
+            legend="Difficulty"
+            name="cal-difficulty"
+            value={choices.difficulty}
+            options={difficultyOptions}
+            onChange={(value) => {
+              if (
+                isOneOf(
+                  PRESETS.map((p) => p.id),
+                  value,
+                )
+              )
+                update({ difficulty: value });
+            }}
+          />
+          <ChoiceRow
+            legend="Business impact"
+            name="cal-impact"
+            value={choices.impact}
+            options={rowOptions('impact', IMPACTS, (v) => IMPACT_LABELS[v].label, scenario.impact)}
+            onChange={(value) => {
+              if (isOneOf(IMPACTS, value)) update({ impact: value });
+            }}
+          />
+          <ChoiceRow
+            legend="Customer temperature"
+            name="cal-temperature"
+            value={choices.startingTemperature}
+            options={rowOptions(
+              'startingTemperature',
+              START_TEMPERATURES,
+              (v) => START_TEMPERATURE_LABELS[v].label,
+              scenario.startingTemperature,
+            )}
+            onChange={(value) => {
+              if (isOneOf(START_TEMPERATURES, value)) update({ startingTemperature: value });
+            }}
+          />
+        </section>
 
-          <div className="glass card stp-card">
-            <ChoiceGroup
-              name="stp-mode"
-              legend="Practice mode"
-              heading="h2"
-              columns={2}
-              value={mode}
-              options={modeOptions}
-              onChange={(next) => commit({ ...state, mode: next })}
-              disabled={locked}
-              hint="Guided practice adds light cues on screen during the call. The customer behaves the same either way."
+        <section className="cal-group" aria-labelledby="cal-customer">
+          <h2 id="cal-customer" className="cal-group__title type-label">
+            About the customer
+          </h2>
+          <ChoiceRow
+            legend="Technical proficiency"
+            name="cal-proficiency"
+            size="text"
+            value={choices.proficiency}
+            options={rowOptions(
+              'proficiency',
+              PROFICIENCIES,
+              (v) => PROFICIENCY_LABELS[v].label,
+              scenario.proficiency,
+            )}
+            onChange={(value) => {
+              if (isOneOf(PROFICIENCIES, value)) update({ proficiency: value });
+            }}
+          />
+          <ChoiceRow
+            legend="Communication style"
+            name="cal-style"
+            size="text"
+            value={choices.style}
+            options={rowOptions('style', STYLES, (v) => STYLE_LABELS[v].label, scenario.style)}
+            onChange={(value) => {
+              if (isOneOf(STYLES, value)) update({ style: value });
+            }}
+          />
+          <ChoiceRow
+            legend="Call stage"
+            name="cal-stage"
+            size="text"
+            value={choices.callStage}
+            options={rowOptions(
+              'callStage',
+              CALL_STAGES,
+              (v) => CALL_STAGE_LABELS[v].label,
+              scenario.callStage,
+            )}
+            onChange={(value) => {
+              if (isOneOf(CALL_STAGES, value)) update({ callStage: value });
+            }}
+          />
+        </section>
+
+        <section className="cal-group" aria-labelledby="cal-during">
+          <h2 id="cal-during" className="cal-group__title type-label">
+            During the call
+          </h2>
+          <Toggle
+            label="Hidden facts"
+            checked
+            disabled
+            onChange={() => undefined}
+            hint="Always on. Every scenario has details the customer only shares when you ask about them."
+          />
+          <CurveballsField
+            scenario={scenario}
+            choices={choices}
+            notice={notice}
+            onChange={(next) => {
+              setNotice('');
+              setStatus(explainChange(choices, next));
+              commit({ ...state, choices: next });
+            }}
+            disabled={locked}
+          />
+          <ChoiceRow
+            legend="Practice mode"
+            name="cal-mode"
+            size="text"
+            value={mode}
+            options={modeOptions}
+            onChange={(value) => {
+              if (isOneOf(MODES, value)) commit({ ...state, mode: value });
+            }}
+          />
+        </section>
+      </fieldset>
+    </form>
+  );
+
+  const scenarioChoice = (
+    <div className="cal-scenario">
+      <Field label="Issue type">
+        <SelectInput
+          value={scenario.issueType}
+          disabled={locked}
+          aria-describedby="cal-summary"
+          options={issues.map((type) => ({ value: type, label: ISSUE_TYPE_LABELS[type] }))}
+          onChange={(event) => {
+            if (isOneOf(issues, event.target.value)) chooseIssue(event.target.value);
+          }}
+        />
+      </Field>
+      {family.length > 1 ? (
+        <Field label="Scenario">
+          <SelectInput
+            value={scenario.id}
+            disabled={locked}
+            aria-describedby="cal-summary"
+            options={family.map((candidate) => ({ value: candidate.id, label: candidate.title }))}
+            onChange={(event) => chooseScenario(event.target.value)}
+          />
+        </Field>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <PageFrame title="Calibration" width="wide" className="cal-page">
+      <div className="cal" data-state={opening ? 'opening' : 'calibrating'}>
+        {opening ? null : (
+          <header className="cal-head">
+            <p className="cal-head__eyebrow type-label">
+              <Link
+                to={backToMissions(location.state)}
+                className="text-link"
+                viewTransition={!reduced}
+              >
+                <Icon name="arrow-left" size={14} /> Back to the missions
+              </Link>
+              <span aria-hidden="true">/</span>
+              <span>Calibration</span>
+              <span aria-hidden="true">/</span>
+              <span>{ISSUE_TYPE_LABELS[scenario.issueType]}</span>
+            </p>
+            <h1 className="cal-head__title type-title">{scenario.title}</h1>
+            <p className="cal-head__who">
+              <strong>{persona.name}</strong>, {persona.role}, {persona.organisation}
+              <span className="cal-head__fiction type-label">A fictional customer</span>
+            </p>
+            <p id="cal-summary" className="cal-head__summary">
+              {scenario.summary}
+            </p>
+            {state.reason && choices.difficulty === scenario.difficulty ? (
+              <p className="cal-head__why">
+                <strong>Suggested for you.</strong> {state.reason}
+              </p>
+            ) : null}
+          </header>
+        )}
+
+        <CoreStage
+          scenario={scenario}
+          choices={choices}
+          status={validStatus(location.state)}
+          quiet={call.pending}
+          transitionName={transitionName}
+        />
+
+        {opening ? (
+          <div className="cal-opening" ref={openingRef} tabIndex={-1}>
+            <ConnectingView
+              name={persona.name}
+              // The persona's job title, not an ARIA role.
+              // eslint-disable-next-line jsx-a11y/aria-role
+              role={`${persona.role}, ${persona.organisation}`}
+              phase={slow ? 'slow' : 'opening'}
             />
           </div>
-        </div>
-
-        <div className="stp-aside" ref={asideRef}>
-          <ScenarioPreview scenario={scenario} choices={choices} customised={changed.length > 0} />
-        </div>
+        ) : (
+          <>
+            <div className="cal-main">
+              {scenarioChoice}
+              {rows}
+              {disclaimer}
+            </div>
+            <EnterBar
+              summary={[
+                profile.label,
+                PRACTICE_MODE_LABELS[mode].label,
+                `About ${scenario.estimatedMinutes} minutes`,
+              ].join(' \u00b7 ')}
+              pending={call.pending}
+              failure={call.failure}
+              onStart={() => void call.begin()}
+            />
+          </>
+        )}
       </div>
-
-      <StartBar
-        title={scenario.title}
-        summary={[
-          profile.label,
-          PRACTICE_MODE_LABELS[mode].label,
-          `About ${scenario.estimatedMinutes} minutes`,
-        ].join(' \u00b7 ')}
-        pending={call.pending}
-        failure={call.failure}
-        onStart={() => void call.begin()}
-      />
       <p className="sr-only" role="status">
         {status}
       </p>
-
-      {call.launching ? (
-        <LaunchSequence
-          title={scenario.title}
-          persona={scenario.persona}
-          mood={temperatureBandFor(choices.startingTemperature)}
-          ready={call.startedId !== null}
-          onDone={() => {
-            if (call.startedId) call.openCall(call.startedId);
-          }}
-        />
-      ) : null}
-    </>
+    </PageFrame>
   );
 }
