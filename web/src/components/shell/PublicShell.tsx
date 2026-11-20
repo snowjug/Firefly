@@ -1,18 +1,37 @@
 import { Outlet } from 'react-router';
 import { OfflineBanner } from '../OfflineBanner.tsx';
+import { WorldLayer } from '../world/WorldLayer.tsx';
+import { RouteProgress } from './RouteProgress.tsx';
+import { ShellModeContext } from './shell-mode.ts';
+import { UtilityCluster } from './UtilityCluster.tsx';
+import { Wordmark } from './Wordmark.tsx';
+import '../../styles/shell.css';
 
 /**
- * The frame for the landing and sign-in pages: no sidebar. Each page draws its own header and
- * provides its own `<main id="main">` so the skip link has somewhere to land.
+ * The frame for the front door (landing, sign-in): the field, the wordmark and the display controls
+ * (theme, ambient motion), and nothing to navigate with. Each page provides its own
+ * `<main id="main">` so the skip link has somewhere to land.
  */
 export function PublicShell() {
   return (
-    <div className="public">
-      <a className="skip-link" href="#main">
-        Skip to main content
-      </a>
-      <OfflineBanner />
-      <Outlet />
-    </div>
+    <ShellModeContext.Provider value="public">
+      <div className="shell" data-shell="public">
+        <a className="skip-link" href="#main">
+          Skip to main content
+        </a>
+        <WorldLayer />
+        <RouteProgress />
+        <header className="masthead">
+          <div className="masthead__brand">
+            <Wordmark mode="public" />
+          </div>
+          <UtilityCluster variant="display" />
+        </header>
+        <div className="shell__stage">
+          <OfflineBanner />
+          <Outlet />
+        </div>
+      </div>
+    </ShellModeContext.Provider>
   );
 }

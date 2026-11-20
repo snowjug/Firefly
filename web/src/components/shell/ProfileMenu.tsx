@@ -3,73 +3,83 @@ import { clearProfile, initials, useProfile } from '../../lib/profile.ts';
 import { Icon } from '../Icon.tsx';
 import { usePopover } from './usePopover.ts';
 
-/** The person's avatar, with a small menu: profile and settings, and "sign out" of this device. */
+/** Who is using this device, with a small menu: profile and settings, and signing out of it. */
 export function ProfileMenu() {
   const profile = useProfile();
   const navigate = useNavigate();
-  const { open, setOpen, toggle, wrapRef, onBlur } = usePopover();
+  const { open, setOpen, toggle, wrapRef, triggerRef, onBlur } = usePopover();
 
   return (
-    <div className="icon-button-wrap" ref={wrapRef} onBlur={onBlur}>
+    <div className="flyout-wrap" ref={wrapRef} onBlur={onBlur}>
       <button
+        ref={triggerRef}
         type="button"
-        className="btn btn-ghost btn-icon"
-        aria-haspopup="true"
+        className="util util--profile"
         aria-expanded={open}
         aria-controls="profile-panel"
         aria-label={
           profile ? `${initials(profile.name)}, account menu for ${profile.name}` : 'Account menu'
         }
+        title={profile ? `Account menu for ${profile.name}` : 'Account menu'}
         onClick={toggle}
-        style={{ padding: 0 }}
       >
-        <span className="avatar-initials">
-          {profile ? initials(profile.name) : <Icon name="user" size={18} />}
+        <span className="util__initials" aria-hidden="true">
+          {profile ? initials(profile.name) : <Icon name="user" size={16} />}
         </span>
       </button>
       {open ? (
         <div
-          className="popover"
+          className="flyout flyout--narrow glass glass--inspector"
           id="profile-panel"
           role="region"
           aria-label="Account"
-          style={{ width: 280 }}
         >
           {profile ? (
             <>
-              <div className="popover-head" style={{ alignItems: 'flex-start' }}>
+              <div className="flyout__head">
                 <div>
-                  <p style={{ fontWeight: 700 }}>{profile.name}</p>
-                  <p className="t-meta">{profile.role || 'Practice profile'}</p>
+                  <p className="flyout__name">{profile.name}</p>
+                  <p className="flyout__meta">{profile.role || 'Practice profile'}</p>
                 </div>
               </div>
-              <Link to="/settings" className="popover-item" onClick={() => setOpen(false)}>
-                <Icon name="gear" size={18} /> Profile &amp; settings
-              </Link>
-              <button
-                type="button"
-                className="popover-item"
-                onClick={() => {
-                  clearProfile();
-                  setOpen(false);
-                  void navigate('/');
-                }}
-              >
-                <Icon name="log-out" size={18} /> Sign out of this device
-              </button>
-              <p className="t-meta" style={{ padding: 'var(--sp-2) var(--sp-3) var(--sp-3)' }}>
+              <ul role="list" className="flyout__list">
+                <li>
+                  <Link to="/settings" className="flyout__item" onClick={() => setOpen(false)}>
+                    <Icon name="gear" size={16} />
+                    <span className="flyout__text">Profile &amp; settings</span>
+                  </Link>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    className="flyout__item"
+                    onClick={() => {
+                      clearProfile();
+                      setOpen(false);
+                      void navigate('/');
+                    }}
+                  >
+                    <Icon name="log-out" size={16} />
+                    <span className="flyout__text">Sign out of this device</span>
+                  </button>
+                </li>
+              </ul>
+              <p className="flyout__note">
                 Your profile is stored in this browser only. Signing out forgets it here; saved
                 practice calls are kept.
               </p>
             </>
           ) : (
             <>
-              <p className="popover-empty" style={{ paddingBottom: 'var(--sp-3)' }}>
-                You have not set up a profile on this device yet.
-              </p>
-              <Link to="/sign-in" className="popover-item" onClick={() => setOpen(false)}>
-                <Icon name="user" size={18} /> Create your profile
-              </Link>
+              <p className="flyout__empty">You have not set up a profile on this device yet.</p>
+              <ul role="list" className="flyout__list">
+                <li>
+                  <Link to="/sign-in" className="flyout__item" onClick={() => setOpen(false)}>
+                    <Icon name="user" size={16} />
+                    <span className="flyout__text">Create your profile</span>
+                  </Link>
+                </li>
+              </ul>
             </>
           )}
         </div>

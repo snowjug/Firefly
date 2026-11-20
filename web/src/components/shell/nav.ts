@@ -1,53 +1,66 @@
-import type { IconName } from '../Icon.tsx';
-
-// The sidebar's destinations. The practice journey (setup, call, report) all belong to "Practice",
-// so that item stays lit while someone is in the middle of it.
+// The dock's destinations, in the order they are numbered on the ruler. The practice journey
+// (choosing a mission, calibrating it, the call, its debrief) all belongs to Missions, so that item
+// stays lit while someone is in the middle of it.
 
 export interface NavItem {
   to: string;
   label: string;
-  icon: IconName;
+  /** Words that find this destination in the palette, besides its label. */
+  keywords: string;
   match: (pathname: string) => boolean;
 }
 
 const exact = (path: string) => (pathname: string) => pathname === path;
 
-export const MAIN_NAV: readonly NavItem[] = [
-  { to: '/home', label: 'Home', icon: 'home', match: exact('/home') },
+export const DOCK_ITEMS: readonly NavItem[] = [
+  { to: '/home', label: 'Home', keywords: 'start overview console', match: exact('/home') },
   {
-    to: '/practice',
-    label: 'Practice',
-    icon: 'headset',
+    to: '/scenarios',
+    label: 'Missions',
+    keywords: 'scenarios practice atlas library calls',
     match: (p) =>
+      p === '/scenarios' ||
       p === '/practice' ||
       p.startsWith('/calls/') ||
       /^\/scenarios\/[^/]+\/setup$/.test(p) ||
       /^\/sessions\/[^/]+\/report$/.test(p),
   },
-  { to: '/scenarios', label: 'Scenarios', icon: 'grid', match: exact('/scenarios') },
-  { to: '/progress', label: 'My Progress', icon: 'chart', match: exact('/progress') },
-  { to: '/rewards', label: 'Rewards', icon: 'trophy', match: exact('/rewards') },
   {
     to: '/history',
     label: 'History',
-    icon: 'history',
+    keywords: 'past calls transcripts reports trail',
     match: (p) => p === '/history' || /^\/sessions\/[^/]+\/transcript$/.test(p),
+  },
+  {
+    to: '/progress',
+    label: 'Progress',
+    keywords: 'skills points recognitions rewards badges constellation',
+    match: (p) => p === '/progress' || p === '/rewards',
+  },
+  {
+    to: '/trainer',
+    label: 'Studio',
+    keywords: 'mentor trainer calibration review',
+    match: (p) => p === '/trainer' || p === '/calibration',
+  },
+  {
+    to: '/settings',
+    label: 'Settings',
+    keywords: 'profile preferences voice privacy tour theme motion',
+    match: exact('/settings'),
   },
 ];
 
-export const MENTOR_NAV: readonly NavItem[] = [
-  { to: '/calibration', label: 'Calibration', icon: 'sliders', match: exact('/calibration') },
-  { to: '/trainer', label: 'Trainer', icon: 'users', match: exact('/trainer') },
-];
+/** Reachable from the colophon, the palette and the utility cluster; it owns no dock item. */
+export const HELP_ITEM: NavItem = {
+  to: '/help',
+  label: 'Help and Responsible AI',
+  keywords: 'about how it works rules limits scores',
+  match: exact('/help'),
+};
 
-export const FOOT_NAV: readonly NavItem[] = [
-  { to: '/settings', label: 'Settings', icon: 'gear', match: exact('/settings') },
-  { to: '/help', label: 'Help', icon: 'help', match: exact('/help') },
-];
-
-export const ALL_NAV: readonly NavItem[] = [...MAIN_NAV, ...MENTOR_NAV, ...FOOT_NAV];
-
-/** The destination that owns an address, if any. */
+/** The destination that owns an address, if any. A trailing slash does not change the answer. */
 export function activeNavItem(pathname: string): NavItem | undefined {
-  return ALL_NAV.find((item) => item.match(pathname));
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  return DOCK_ITEMS.find((item) => item.match(path));
 }

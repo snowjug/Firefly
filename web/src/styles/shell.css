@@ -1,0 +1,842 @@
+/* The frame: the wordmark and utility cluster in the corners, the page, a quiet colophon, and the
+   command dock along the bottom edge. No sidebar and no top bar.
+
+   Loaded before the legacy sheets (the shell is imported first), so every override of a legacy
+   class (.glass, .chip, .skip-link) uses two classes. Block names here (.shell, .masthead,
+   .wordmark, .utilities, .util, .flyout, .dock, .colophon, .route-progress) are the frame's own.
+
+   Contract for pages:
+   - The masthead and the dock float over the page, so a page keeps clear of them itself:
+     `--masthead-h` above (PageFrame pads its top with it) and `--dock-clear` below (dock height +
+     safe area + gap). Both are defined on :root, so portals and toasts can read them too. The
+     colophon that follows `main` also clears the dock, so nothing is ever hidden at the foot.
+   - During a call the shell root carries data-call="true" and `--dock-clear` is 0: the page owns the
+     whole screen. `useShellMode()` returns 'call' | 'app' | 'public'. */
+
+:root {
+  --masthead-h: 4.5rem;
+  --dock-size: var(--dock-h);
+  --dock-bottom: max(var(--sp-4), var(--safe-b));
+  --dock-clear: calc(var(--dock-size) + var(--dock-bottom) + var(--sp-5));
+  --masthead-clear: calc(var(--masthead-h) + var(--sp-3));
+}
+/* No dock during a call or on the front door, so nothing has to keep clear of it. */
+:root:has(.shell[data-shell='call']),
+:root:has(.shell[data-shell='public']) {
+  --dock-clear: 0px;
+}
+:root:has(.shell[data-shell='call']) {
+  --masthead-clear: var(--sp-5);
+}
+
+/* A focused control is never hidden behind the masthead or the dock (WCAG 2.4.11). */
+html:has(.shell[data-shell='app']) {
+  scroll-padding-top: var(--masthead-clear);
+  scroll-padding-bottom: var(--dock-clear);
+}
+
+/* ------------------------------------------------------------------ Frame */
+.shell {
+  /* Legacy pages still read these for offsets; the new frame has no sidebar and no top bar. */
+  --sidebar-w: 0px;
+  --nav-height: 0px;
+  --topbar-h: 0px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+}
+
+/* Everything the person reads and uses sits above the field (layer 0). */
+.shell__stage {
+  position: relative;
+  z-index: var(--z-app);
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.shell__main {
+  flex: 1 0 auto;
+  min-width: 0;
+}
+/* The connection line sits under the wordmark. The page below it already keeps clear of the
+   masthead by its own padding, so it is pulled up by that much and nothing is spaced twice. */
+.shell[data-shell='app'] .offline-banner {
+  margin-top: var(--masthead-h);
+}
+.shell[data-shell='app'] .offline-banner + .shell__main {
+  margin-top: calc(-1 * var(--masthead-h));
+}
+.shell[data-shell='public'] .offline-banner {
+  margin-top: var(--masthead-h);
+}
+/* Pages that have not been rebuilt yet (.page is the old container) get the clearance that
+   PageFrame gives itself. Delete with legacy-layout.css. */
+.shell[data-shell='app'] .page {
+  padding-top: calc(var(--masthead-h) + var(--sp-2));
+}
+
+/* ------------------------------------------------------------------ Masthead */
+.masthead {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: var(--z-dock);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  min-height: var(--masthead-h);
+  /* The wordmark and the page's own left edge are the same line. */
+  padding-inline: max(var(--gutter), calc((100% - var(--page-max)) / 2 + var(--gutter)));
+  pointer-events: none;
+}
+/* The call owns the screen edge to edge, so its signature sits at the edge. */
+.shell[data-call] .masthead {
+  padding-inline: var(--gutter);
+}
+.masthead > * {
+  pointer-events: auto;
+}
+/* Only once the page has moved: a soft backing in the colour of the field, so content scrolling
+   under the corners never runs into the wordmark or the controls. */
+.masthead::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 -1.75rem 0;
+  z-index: -1;
+  background: linear-gradient(
+    var(--field-0) 0%,
+    var(--field-0) 62%,
+    color-mix(in srgb, var(--field-0) 55%, transparent) 82%,
+    transparent 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-component) var(--ease-exit-decelerated);
+}
+.shell:not([data-call]) .masthead[data-scrolled]::before {
+  opacity: 1;
+}
+.masthead__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+/* The mark: a trail spiralling in to a point of light. */
+.mark {
+  flex: none;
+  overflow: visible;
+}
+.mark__trail {
+  fill: none;
+  stroke: var(--ink-1);
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  opacity: 0.9;
+}
+.mark__point {
+  fill: var(--amber);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--amber) 80%, transparent));
+}
+.mark[data-ignite] .mark__trail {
+  animation: mark-draw 900ms var(--ease-enter-emphasised) both;
+}
+.mark[data-ignite] .mark__point {
+  transform-origin: 16.1px 13px;
+  animation: mark-ignite 900ms var(--ease-enter-emphasised) both;
+}
+@keyframes mark-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes mark-ignite {
+  0%,
+  55% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  80% {
+    opacity: 1;
+    transform: scale(1.7);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.wordmark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: var(--tap);
+  border-radius: var(--r-1);
+  color: var(--ink-1);
+  text-decoration: none;
+}
+.wordmark__word {
+  font-family: var(--font-display);
+  font-size: 1.95rem;
+  font-weight: 300;
+  font-optical-sizing: auto;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* The i has no dot of its own (the dotless i, U+0131); this one glows. */
+.wordmark__i {
+  position: relative;
+  display: inline-block;
+}
+.wordmark__i i {
+  position: absolute;
+  left: calc(50% + 0.03em);
+  top: 0.07em;
+  width: 0.15em;
+  height: 0.15em;
+  margin-left: -0.075em;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow:
+    0 0 0.35em color-mix(in srgb, var(--amber) 80%, transparent),
+    0 0 0.9em color-mix(in srgb, var(--amber) 45%, transparent);
+}
+
+/* Whether the customer is simulated: quiet mono text after a hairline, never a pill. The badge
+   itself is shared, so it is restyled here by where it sits. The wordmark already carries two
+   amber points; this one has none. */
+.masthead__provider .chip,
+.colophon__provider .chip {
+  gap: 0.6ch;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: var(--track-mono);
+  line-height: 1.5;
+  text-transform: uppercase;
+  white-space: normal;
+}
+.masthead__provider .chip .dot,
+.colophon__provider .chip .dot {
+  display: none;
+}
+/* While the answer is still on its way the shared badge shows an ellipsis; there is nothing to say yet. */
+.masthead__provider .chip[aria-hidden='true'],
+.colophon__provider .chip[aria-hidden='true'] {
+  display: none;
+}
+.masthead__provider .chip::before {
+  content: '';
+  width: 1px;
+  height: 1.25rem;
+  margin-right: 0.8ch;
+  background: var(--line-3);
+}
+.masthead__provider .chip-negative,
+.colophon__provider .chip-negative {
+  color: var(--coral-text);
+}
+
+/* ------------------------------------------------------------------ Utility cluster */
+.utilities {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.util {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-width: var(--tap);
+  min-height: var(--tap);
+  margin: 0;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-decoration: none;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--dur-micro) var(--ease-exit-decelerated);
+}
+/* A hairline that draws in under a control when it is pointed at or focused. */
+.util::after {
+  content: '';
+  position: absolute;
+  left: 28%;
+  right: 28%;
+  bottom: 9px;
+  height: 1px;
+  background: var(--amber);
+  transform: scaleX(0);
+  transition: transform var(--dur-micro) var(--ease-evidence-link);
+}
+.util:hover,
+.util:focus-visible {
+  color: var(--ink-1);
+}
+.util:hover::after,
+.util:focus-visible::after {
+  transform: scaleX(1);
+}
+.util:active {
+  transform: translateY(1px);
+  transition:
+    transform var(--dur-response) var(--ease-press-spring),
+    color var(--dur-micro);
+}
+.util[aria-pressed='true'] {
+  color: var(--amber-text);
+}
+.util[aria-disabled='true'] {
+  cursor: default;
+}
+.util--search {
+  padding-inline: var(--sp-3);
+}
+.util__keys {
+  padding: 1px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: none;
+}
+.util__glyph {
+  transition: transform var(--dur-component) var(--ease-spatial-spring);
+}
+.util__glyph[data-dark='false'] {
+  transform: rotate(180deg);
+}
+.util__dot {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--amber) 70%, transparent);
+}
+.util__initials {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-3);
+  border-radius: 50%;
+  color: var(--ink-1);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+}
+.util--profile::after {
+  display: none;
+}
+.util--profile:hover .util__initials,
+.util--profile:focus-visible .util__initials,
+.util--profile[aria-expanded='true'] .util__initials {
+  border-color: var(--amber);
+}
+
+/* What a toggle just did, in words, for a few seconds. Also the live region for screen readers. */
+.utilities__status {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  z-index: 1;
+  max-width: min(24rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: var(--sp-1) var(--sp-3);
+  background: color-mix(in srgb, var(--field-0) 92%, transparent);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.4;
+  text-align: right;
+  pointer-events: none;
+}
+.utilities__status:empty {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ Flyouts (notices, account) */
+.flyout-wrap {
+  position: relative;
+}
+.flyout.glass {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  right: 0;
+  z-index: 1;
+  width: min(23rem, calc(100vw - 2rem));
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  border: 0;
+  border-radius: var(--r-2);
+}
+.flyout--narrow.glass {
+  width: min(19rem, calc(100vw - 2rem));
+}
+.flyout__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line-2);
+}
+.flyout__title {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.flyout__head .text-link {
+  font-size: var(--t-small);
+}
+.flyout__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+.flyout__list {
+  max-height: min(52svh, 22rem);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.flyout__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--sp-3) var(--sp-1);
+  border: 0;
+  border-bottom: 1px solid var(--line-1);
+  background: none;
+  color: var(--ink-1);
+  font-size: var(--t-small);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.flyout__item:hover {
+  background: color-mix(in srgb, var(--ink-1) 5%, transparent);
+}
+.flyout__list > li:last-child > .flyout__item {
+  border-bottom: 0;
+}
+.flyout__item > svg {
+  flex: none;
+  margin-top: 0.15em;
+  color: var(--ink-3);
+}
+.flyout__text {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.flyout__strong {
+  font-weight: 600;
+}
+.flyout__meta {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-small);
+}
+.flyout__new {
+  margin-left: 1ch;
+  color: var(--amber-text);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.flyout__empty,
+.flyout__note {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-1) var(--sp-2);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.flyout__note {
+  padding-top: var(--sp-3);
+  color: var(--ink-3);
+}
+
+/* ------------------------------------------------------------------ The command dock */
+.dock.glass {
+  /* More wash than the token's: text on the dock stays above 4.5:1 even over a bright area. */
+  --glass-bg: color-mix(in srgb, var(--glass-nav-solid) 90%, transparent);
+  position: fixed;
+  z-index: var(--z-dock);
+  inset-inline: 0;
+  bottom: var(--dock-bottom);
+  width: fit-content;
+  max-width: calc(100% - 2 * var(--sp-4));
+  margin-inline: auto;
+  padding: 0.75rem var(--sp-2) 0.5rem;
+  border: 0;
+}
+/* The ruler along the top edge: a long tick every six short ones. */
+.dock__ticks {
+  position: absolute;
+  left: var(--sp-2);
+  right: var(--sp-2);
+  top: 0;
+  height: 9px;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, var(--line-3) 0 1px, transparent 1px 36px) 0 0 / 100% 9px
+      no-repeat,
+    repeating-linear-gradient(90deg, var(--line-2) 0 1px, transparent 1px 6px) 0 0 / 100% 5px
+      no-repeat;
+}
+.dock__list {
+  display: flex;
+  gap: 0.125rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dock__link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-height: var(--tap);
+  padding: 0.7rem 1rem;
+  border-radius: 3px;
+  color: var(--ink-2);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  text-decoration: none;
+  transition: color var(--dur-micro) var(--ease-exit-decelerated);
+}
+.dock__no {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  transition: color var(--dur-micro) var(--ease-exit-decelerated);
+}
+.dock__link:hover,
+.dock__link:focus-visible,
+.dock__link[aria-current='page'] {
+  color: var(--ink-1);
+}
+.dock__link:hover .dock__no,
+.dock__link:focus-visible .dock__no,
+.dock__link[aria-current='page'] .dock__no {
+  color: var(--amber-text);
+}
+.dock__link:active {
+  transform: translateY(1px);
+  transition: transform var(--dur-response) var(--ease-press-spring);
+}
+/* Inside the strip: a ring that fits the item rather than reaching out of the glass. */
+.dock__link:focus-visible {
+  outline-offset: -3px;
+  box-shadow: none;
+}
+
+/* The pip: it rides the ruler to where you are, leans to where you point and follows focus. */
+.dock__pip {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--amber) 22%, transparent),
+    0 0 12px color-mix(in srgb, var(--amber) 70%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(var(--pip-x, 0px));
+}
+.dock__pip::after {
+  content: '';
+  position: absolute;
+  left: 3.5px;
+  top: 8px;
+  width: 1px;
+  height: 7px;
+  background: var(--amber);
+  opacity: 0.8;
+}
+.dock__pip[data-on='true'] {
+  opacity: 1;
+}
+.dock__pip[data-ready='true'] {
+  transition:
+    transform 560ms var(--ease-spatial-spring),
+    opacity var(--dur-component) var(--ease-exit-decelerated);
+}
+
+/* ------------------------------------------------------------------ Colophon */
+.colophon {
+  width: min(100%, var(--page-max));
+  margin-inline: auto;
+  padding: var(--sp-5) var(--gutter) var(--dock-clear);
+}
+.colophon__rule {
+  margin-bottom: var(--sp-4);
+}
+.colophon__line {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-small);
+  line-height: 1.55;
+}
+.colophon__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  margin: var(--sp-3) 0 0;
+  font-size: var(--t-small);
+}
+.colophon__links .text-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+.colophon__provider {
+  display: none;
+  margin-top: var(--sp-2);
+}
+
+/* ------------------------------------------------------------------ Route progress */
+.route-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: var(--z-transient);
+  height: 2px;
+  background: var(--amber);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--amber) 70%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+}
+.route-progress[data-state='loading'] {
+  opacity: 1;
+  animation: route-progress-advance 9s cubic-bezier(0.1, 0.6, 0.2, 1) forwards;
+}
+.route-progress[data-state='done'] {
+  transform: scaleX(1);
+  transition:
+    transform 160ms var(--ease-exit-decelerated),
+    opacity 260ms var(--ease-exit-decelerated) 140ms;
+}
+@keyframes route-progress-advance {
+  from {
+    transform: scaleX(0.04);
+  }
+  to {
+    transform: scaleX(0.88);
+  }
+}
+/* Reduced motion: a short static line while something loads, nothing that moves. */
+@media (prefers-reduced-motion: reduce) {
+  .route-progress[data-state='loading'] {
+    animation: none;
+    transform: scaleX(0.25);
+  }
+}
+:root[data-motion='reduce'] .route-progress[data-state='loading'] {
+  animation: none;
+  transform: scaleX(0.25);
+}
+
+/* ------------------------------------------------------------------ Narrow screens */
+@media (max-width: 719px) {
+  :root {
+    --masthead-h: 3.75rem;
+    --dock-size: 3.5rem;
+    --dock-bottom: 0px;
+    --dock-clear: calc(var(--dock-size) + var(--safe-b) + var(--sp-4));
+  }
+  .masthead__provider {
+    display: none;
+  }
+  .colophon__provider {
+    display: block;
+  }
+  .wordmark {
+    gap: 0.5rem;
+  }
+  .wordmark__word {
+    font-size: 1.5rem;
+  }
+  /* A full-width bar along the bottom edge: labels only. */
+  .dock.glass {
+    inset-inline: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    margin-inline: 0;
+    padding: 0.6rem 0.25rem calc(0.25rem + var(--safe-b));
+    border-radius: 0;
+  }
+  .dock__ticks {
+    left: 0;
+    right: 0;
+  }
+  .dock__list {
+    justify-content: space-between;
+    gap: 0;
+  }
+  .dock__list > li {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .dock__link {
+    justify-content: center;
+    padding: 0.7rem 0.125rem;
+    font-size: 0.8125rem;
+  }
+  .dock__no {
+    display: none;
+  }
+  .flyout.glass,
+  .flyout--narrow.glass {
+    position: fixed;
+    top: calc(var(--masthead-h) - var(--sp-2));
+    right: var(--sp-4);
+    left: var(--sp-4);
+    width: auto;
+  }
+  .util__label,
+  .util__keys {
+    display: none;
+  }
+  .util--search {
+    padding-inline: var(--sp-2);
+  }
+}
+@media (max-width: 480px) {
+  .util--help {
+    display: none;
+  }
+}
+@media (max-width: 370px) {
+  .wordmark__word {
+    display: none;
+  }
+  .dock__link {
+    font-size: 0.75rem;
+  }
+  .util {
+    min-width: 40px;
+    padding-inline: var(--sp-1);
+  }
+}
+
+/* A very short window (a landscape phone, or the page zoomed to 400%): the frame goes back to being
+   part of the page, so it can never take the whole viewport. */
+@media (max-height: 30rem) {
+  :root {
+    --dock-clear: 0px;
+    --masthead-clear: var(--sp-5);
+  }
+  .masthead {
+    position: absolute;
+  }
+  .masthead::before {
+    display: none;
+  }
+  .dock.glass {
+    position: relative;
+    bottom: auto;
+    margin-block: 0 var(--sp-4);
+    z-index: var(--z-app);
+  }
+}
+
+/* ------------------------------------------------------------------ Contrast, forced colours, print */
+@media (forced-colors: active) {
+  .dock.glass,
+  .flyout.glass,
+  .palette.glass {
+    border: 1px solid CanvasText;
+  }
+  .dock__link[aria-current='page'] {
+    text-decoration: underline;
+    text-underline-offset: 0.3em;
+  }
+  .dock__pip,
+  .route-progress,
+  .util__dot,
+  .wordmark__i i,
+  .mark__point {
+    forced-color-adjust: none;
+    background: Highlight;
+    box-shadow: none;
+  }
+  .mark__point {
+    fill: Highlight;
+    filter: none;
+  }
+  .mark__trail {
+    stroke: CanvasText;
+  }
+  .util[aria-pressed='true'],
+  .flyout__new {
+    color: Highlight;
+  }
+  .util__keys,
+  .util__initials {
+    border-color: CanvasText;
+  }
+}
+@media print {
+  .masthead,
+  .dock,
+  .route-progress,
+  .skip-link {
+    display: none !important;
+  }
+  .shell[data-shell='app'] .page {
+    padding-top: 0;
+  }
+  .colophon {
+    padding-bottom: 0;
+  }
+}

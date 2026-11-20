@@ -1,8 +1,6 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BadgeDTO, RewardsDTO, SessionSummaryDTO } from '#shared/domain/api.ts';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api.ts';
 import type * as ApiModule from '../../lib/api.ts';
 import {
@@ -11,85 +9,29 @@ import {
   saveProfile,
   updatePreferences,
 } from '../../lib/profile.ts';
-import { ThemeProvider } from '../../lib/theme.tsx';
-import { AppShell } from './AppShell.tsx';
+import { requestTour, resetTourForTests } from '../../lib/tour.ts';
+import { resetPaletteForTests } from './Palette.tsx';
+import { useShellMode } from './shell-mode.ts';
+import {
+  badge,
+  removeViewTransitionStub,
+  renderShell,
+  rewardsWith,
+  session,
+  stubViewTransitions,
+} from './shell-test-kit.tsx';
 
 vi.mock('../../lib/api.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
-  return { ...actual, api: { listSessions: vi.fn(), rewards: vi.fn() } };
+  return { ...actual, api: { listSessions: vi.fn(), rewards: vi.fn(), scenarios: vi.fn() } };
 });
 vi.mock('../ProviderBadge.tsx', () => ({ ProviderBadge: () => <span>Demo mode</span> }));
+vi.mock('../world/WorldLayer.tsx', () => ({ WorldLayer: () => <div data-testid="world" /> }));
 
 const listSessions = vi.mocked(api.listSessions);
 const rewards = vi.mocked(api.rewards);
-
-function badge(overrides: Partial<BadgeDTO> = {}): BadgeDTO {
-  return {
-    id: 'scope-detective',
-    title: 'Scope Detective',
-    criteria: 'Uncover hidden facts in three different calls.',
-    earned: false,
-    earnedAt: null,
-    earnedInSessionId: null,
-    progress: { current: 1, target: 3, unit: 'calls' },
-    ...overrides,
-  };
-}
-
-function rewardsWith(badges: BadgeDTO[]): RewardsDTO {
-  return { badges } as RewardsDTO;
-}
-
-function session(overrides: Partial<SessionSummaryDTO> = {}): SessionSummaryDTO {
-  return {
-    id: 's1',
-    scenarioId: 'team-workspace',
-    scenarioTitle: 'Team cannot open the workspace',
-    issueType: 'sign-in-access',
-    difficulty: 'starter',
-    startingTemperature: 'calm',
-    impact: 'low',
-    style: 'talkative',
-    mode: 'guided',
-    providerKind: 'mock',
-    providerLabel: 'Demo mode',
-    isSample: false,
-    status: 'completed',
-    startedAt: '2026-03-01T09:00:00.000Z',
-    endedAt: '2026-03-01T09:10:00.000Z',
-    durationSeconds: 600,
-    traineeTurns: 6,
-    completion: 'completed',
-    overallScore: 3.2,
-    dimensionScores: null,
-    mentorReviewed: false,
-    ...overrides,
-  };
-}
-
-function Where() {
-  const location = useLocation();
-  return <p data-testid="where">{location.pathname + location.search}</p>;
-}
-
-function renderShell(path = '/home') {
-  return render(
-    <ThemeProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="home" element={<h1>Home page</h1>} />
-            <Route path="calls/:id" element={<h1>Call page</h1>} />
-            <Route path="sessions/:id/report" element={<h1>Report page</h1>} />
-            <Route path="scenarios" element={<Where />} />
-            <Route path="settings" element={<h1>Settings page</h1>} />
-          </Route>
-          <Route path="/" element={<h1>Landing page</h1>} />
-        </Routes>
-      </MemoryRouter>
-    </ThemeProvider>,
-  );
-}
+const scenarios = vi.mocked(api.scenarios);
+let viewTransition: ReturnType<typeof stubViewTransitions>;
 
 beforeAll(() => {
   window.scrollTo = vi.fn();
@@ -97,88 +39,363 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  viewTransition = stubViewTransitions();
   localStorage.clear();
+  sessionStorage.clear();
   resetProfileForTests();
+  resetTourForTests();
+  resetPaletteForTests();
+  document.documentElement.removeAttribute('data-theme');
+  document.documentElement.removeAttribute('data-motion');
+  document.documentElement.removeAttribute('data-ambient');
   listSessions.mockResolvedValue({ sessions: [], total: 0 });
   rewards.mockResolvedValue(rewardsWith([]));
+  scenarios.mockResolvedValue([]);
 });
 
-describe('AppShell navigation', () => {
+afterEach(() => {
+  removeViewTransitionStub();
+});
+
+describe('the dock', () => {
   it('marks the current destination and links every one of them', () => {
     renderShell('/home');
-    const main = screen.getByRole('navigation', { name: 'Main' });
-    expect(within(main).getByRole('link', { name: 'Home' })).toHaveAttribute(
+    const dock = screen.getByRole('navigation', { name: 'Main' });
+    expect(within(dock).getAllByRole('listitem')).toHaveLength(6);
+    expect(
+      within(dock)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href')),
+    ).toEqual(['/home', '/scenarios', '/history', '/progress', '/trainer', '/settings']);
+    expect(within(dock).getByRole('link', { name: 'Home' })).toHaveAttribute(
       'aria-current',
       'page',
     );
-    expect(within(main).getByRole('link', { name: 'Practice' })).not.toHaveAttribute(
+    expect(within(dock).getByRole('link', { name: 'Missions' })).not.toHaveAttribute(
       'aria-current',
     );
-    expect(
-      within(main)
-        .getAllByRole('link')
-        .map((link) => link.getAttribute('href')),
-    ).toEqual(['/home', '/practice', '/scenarios', '/progress', '/rewards', '/history']);
-    expect(
-      within(screen.getByRole('navigation', { name: 'For mentors' }))
-        .getAllByRole('link')
-        .map((link) => link.getAttribute('href')),
-    ).toEqual(['/calibration', '/trainer']);
-    expect(
-      within(screen.getByRole('navigation', { name: 'Account and help' }))
-        .getAllByRole('link')
-        .map((link) => link.getAttribute('href')),
-    ).toEqual(['/settings', '/help']);
   });
 
-  it('keeps Practice lit on the report of a call', () => {
+  it('keeps Missions lit on the report of a call', () => {
     renderShell('/sessions/s1/report');
     expect(
       within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
-        name: 'Practice',
+        name: 'Missions',
       }),
     ).toHaveAttribute('aria-current', 'page');
   });
 
-  it('gives a live call the whole screen: no top bar, no footer and an icon-only sidebar', () => {
-    const { container } = renderShell('/calls/c1');
-    expect(screen.getByRole('heading', { name: 'Call page' })).toBeInTheDocument();
-    expect(screen.queryByRole('search')).not.toBeInTheDocument();
-    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
-    expect(container.querySelector('.app')).toHaveAttribute('data-compact', 'true');
-    // The icons keep their names, so the rail is still usable with a screen reader.
+  it('lights nothing on a page that belongs to no destination', () => {
+    renderShell('/help');
     expect(
-      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
-        name: 'Home',
+      within(screen.getByRole('navigation', { name: 'Main' })).queryByRole('link', {
+        current: 'page',
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
   });
 
-  it('shows the top bar and the training-aid footer on other pages', () => {
+  it('carries the persistent-layer name so a route change does not redraw it', () => {
+    renderShell('/home');
+    expect(screen.getByRole('navigation', { name: 'Main' })).toHaveAttribute(
+      'data-vt-persist',
+      'dock',
+    );
+  });
+
+  it('moves to the destination that was chosen and puts focus on the page', async () => {
+    const user = userEvent.setup();
+    renderShell('/home');
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
+        name: 'Settings',
+      }),
+    );
+    expect(await screen.findByRole('heading', { name: 'Settings page' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
+        name: 'Settings',
+      }),
+    ).toHaveAttribute('aria-current', 'page');
+    await waitFor(() => expect(screen.getByRole('main')).toHaveFocus());
+    expect(window.scrollTo).toHaveBeenCalledWith(0, 0);
+  });
+});
+
+describe('the frame', () => {
+  it('gives a live call the whole screen: no dock, no utilities, no colophon and no banner', () => {
+    const { container } = renderShell('/calls/c1');
+    expect(screen.getByRole('heading', { name: 'Call page' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Tools' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Search and commands' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+    const root = container.querySelector('.shell');
+    expect(root).toHaveAttribute('data-call', 'true');
+    expect(root).toHaveAttribute('data-shell', 'call');
+    // Not hidden, gone: the only thing a keyboard can reach in the frame is the skip link.
+    expect(
+      [...container.querySelectorAll('a[href], button, input, select, textarea')].map((el) =>
+        el.textContent?.trim(),
+      ),
+    ).toEqual(['Skip to main content']);
+  });
+
+  it('keeps the wordmark during a call as a signature that is not a link', () => {
+    const { container } = renderShell('/calls/c1');
+    expect(screen.queryByRole('link', { name: 'Firefly, home' })).not.toBeInTheDocument();
+    expect(container.querySelector('.wordmark--still')).toBeInTheDocument();
+  });
+
+  it('shows the dock, the utilities and the training-aid colophon on other pages', () => {
     const { container } = renderShell('/home');
-    expect(screen.getByRole('search')).toBeInTheDocument();
-    expect(screen.getByRole('contentinfo')).toHaveTextContent('Firefly is a training aid');
-    expect(container.querySelector('.app')).not.toHaveAttribute('data-compact');
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Tools' })).toBeInTheDocument();
+    const colophon = screen.getByRole('contentinfo');
+    expect(colophon).toHaveTextContent(
+      'Firefly is a training aid. Scenarios are fictional; never enter real customer information. Scores are for practice, not performance reviews.',
+    );
+    expect(within(colophon).getByRole('link', { name: 'Responsible AI' })).toHaveAttribute(
+      'href',
+      '/help',
+    );
+    expect(within(colophon).getByRole('link', { name: 'Settings' })).toHaveAttribute(
+      'href',
+      '/settings',
+    );
+    expect(container.querySelector('.shell')).toHaveAttribute('data-shell', 'app');
+    expect(container.querySelector('.shell')).not.toHaveAttribute('data-call');
+    // There is no sidebar and no top bar.
+    expect(screen.queryByRole('search')).not.toBeInTheDocument();
+    expect(container.querySelector('aside')).not.toBeInTheDocument();
+  });
+
+  it('has the skip link first in the tab order, and it leads to the page', async () => {
+    const user = userEvent.setup();
+    renderShell('/home');
+    await user.tab();
+    const skip = screen.getByRole('link', { name: 'Skip to main content' });
+    expect(skip).toHaveFocus();
+    expect(skip).toHaveAttribute('href', '#main');
+    expect(screen.getByRole('main')).toHaveAttribute('id', 'main');
+  });
+
+  it('leaves focus alone on load, even when effects run twice (development)', async () => {
+    const user = userEvent.setup();
+    renderShell('/home', [], { strict: true });
+    expect(document.body).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('link', { name: 'Skip to main content' })).toHaveFocus();
+  });
+
+  it('tells pages which mode the frame is in', () => {
+    function Probe() {
+      return <p>{`mode:${useShellMode()}`}</p>;
+    }
+    renderShell('/probe', [{ path: 'probe', element: <Probe /> }]);
+    expect(screen.getByText('mode:app')).toBeInTheDocument();
+  });
+
+  it('links the wordmark home, to the front door only from the front door', async () => {
+    const user = userEvent.setup();
+    const { router, unmount } = renderShell('/home');
+    expect(screen.getByRole('link', { name: 'Firefly, home' })).toHaveAttribute('href', '/home');
+    await act(() => router.navigate('/'));
+    expect(await screen.findByRole('heading', { name: 'Landing page' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Firefly, home' })).toHaveAttribute('href', '/');
+    // The front door has the display controls and nothing to navigate with.
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pause ambient motion' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Switch to (light|dark) theme/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Search and commands' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('contentinfo')).not.toBeInTheDocument();
+    await user.keyboard('{Control>}k{/Control}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    unmount();
+  });
+
+  it('puts the field behind the page, on both frames', async () => {
+    const { router } = renderShell('/home');
+    expect(screen.getByTestId('world')).toBeInTheDocument();
+    await act(() => router.navigate('/sign-in'));
+    expect(await screen.findByRole('heading', { name: 'Sign in page' })).toBeInTheDocument();
+    expect(screen.getByTestId('world')).toBeInTheDocument();
+  });
+
+  it('opens the tour when it is asked for, and not before', async () => {
+    await import('../tour/FirstRunTour.tsx');
+    renderShell('/home');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    act(() => requestTour());
+    expect(
+      await screen.findByRole('dialog', { name: 'A short tour of Firefly' }),
+    ).toBeInTheDocument();
+  }, 20_000);
+});
+
+describe('navigation animation', () => {
+  it('moves between destinations with a view transition', async () => {
+    const user = userEvent.setup();
+    renderShell('/home');
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
+        name: 'History',
+      }),
+    );
+    expect(await screen.findByRole('heading', { name: 'History page' })).toBeInTheDocument();
+    expect(viewTransition).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves without one when motion is reduced', async () => {
+    localStorage.setItem('firefly.motion', JSON.stringify('reduce'));
+    const user = userEvent.setup();
+    renderShell('/home');
+    await user.click(
+      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', {
+        name: 'History',
+      }),
+    );
+    expect(await screen.findByRole('heading', { name: 'History page' })).toBeInTheDocument();
+    expect(viewTransition).not.toHaveBeenCalled();
+  });
+
+  it('moves with a view transition when a page is chosen from the palette', async () => {
+    const user = userEvent.setup();
+    renderShell('/home');
+    await user.keyboard('{Control>}k{/Control}');
+    await user.type(await screen.findByRole('combobox'), 'history{Enter}');
+    expect(await screen.findByRole('heading', { name: 'History page' })).toBeInTheDocument();
+    expect(viewTransition).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('search and commands', () => {
+  it('opens with Ctrl+K from anywhere, and from the button that shows the shortcut', async () => {
+    const user = userEvent.setup();
+    renderShell('/home');
+    await user.keyboard('{Control>}k{/Control}');
+    expect(await screen.findByRole('dialog', { name: 'Search and commands' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.keyboard('{Meta>}k{/Meta}');
+    expect(await screen.findByRole('dialog', { name: 'Search and commands' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+
+    const button = screen.getByRole('button', { name: 'Search and commands' });
+    expect(button).toHaveTextContent('Ctrl K');
+    expect(button).toHaveAttribute('aria-keyshortcuts', 'Control+K Meta+K');
+    await user.click(button);
+    expect(await screen.findByRole('dialog', { name: 'Search and commands' })).toBeInTheDocument();
+  });
+
+  it('closes again on a second Ctrl+K, and gives focus back to where it was', async () => {
+    const user = userEvent.setup();
+    renderShell('/home');
+    const button = screen.getByRole('button', { name: 'Search and commands' });
+    button.focus();
+    await user.keyboard('{Control>}k{/Control}');
+    expect(await screen.findByRole('dialog', { name: 'Search and commands' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveFocus();
+    await user.keyboard('{Control>}k{/Control}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(button).toHaveFocus();
+  });
+
+  it('does not take the key from a field where someone is typing, unless the field allows it', async () => {
+    const user = userEvent.setup();
+    renderShell('/typing');
+    await user.click(screen.getByRole('textbox', { name: 'Reply' }));
+    await user.keyboard('{Control>}k{/Control}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('searchbox', { name: 'Search here' }));
+    await user.keyboard('{Control>}k{/Control}');
+    expect(await screen.findByRole('dialog', { name: 'Search and commands' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+
+    // A checkbox is not a place to type.
+    await user.click(screen.getByRole('checkbox', { name: 'Agree' }));
+    await user.keyboard('{Control>}k{/Control}');
+    expect(await screen.findByRole('dialog', { name: 'Search and commands' })).toBeInTheDocument();
   });
 
   it('opens the library with the words that were searched for', async () => {
     const user = userEvent.setup();
     renderShell('/home');
-    await user.type(
-      screen.getByRole('searchbox', { name: 'Search all scenarios' }),
-      'sign in{Enter}',
-    );
+    await user.keyboard('{Control>}k{/Control}');
+    await user.type(await screen.findByRole('combobox'), 'sign in{Enter}');
     expect(await screen.findByTestId('where')).toHaveTextContent('/scenarios?q=sign%20in');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('main')).toHaveFocus());
   });
 
-  it('opens a menu drawer on small screens and closes it after choosing a destination', async () => {
+  it('is not a way to reach the field behind a dialog that is already open', async () => {
+    const user = userEvent.setup();
+    renderShell('/modal');
+    expect(screen.getByRole('dialog', { name: 'Another dialog' })).toBeInTheDocument();
+    await user.keyboard('{Control>}k{/Control}');
+    expect(screen.queryByRole('dialog', { name: 'Search and commands' })).not.toBeInTheDocument();
+  });
+});
+
+describe('theme and ambient motion', () => {
+  it('switches the theme and says which one it will switch to next', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('firefly.theme', JSON.stringify('dark'));
+    renderShell('/home');
+    await user.click(screen.getByRole('button', { name: 'Switch to light theme' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+    expect(JSON.parse(localStorage.getItem('firefly.theme') ?? 'null')).toBe('light');
+    await user.click(screen.getByRole('button', { name: 'Switch to dark theme' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+  });
+
+  it('pauses ambient motion, announces it and remembers it', async () => {
     const user = userEvent.setup();
     renderShell('/home');
-    await user.click(screen.getByRole('button', { name: 'Open menu' }));
-    const drawer = await screen.findByRole('dialog', { name: 'Menu' });
-    await user.click(within(drawer).getByRole('link', { name: 'Settings' }));
-    expect(await screen.findByRole('heading', { name: 'Settings page' })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: 'Pause ambient motion' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    const status = within(screen.getByRole('group', { name: 'Tools' })).getByRole('status');
+    expect(status).toBeEmptyDOMElement();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(status).toHaveTextContent('Ambient motion paused.');
+    expect(document.documentElement).toHaveAttribute('data-ambient', 'paused');
+    expect(JSON.parse(localStorage.getItem('firefly.ambient') ?? 'null')).toBe('paused');
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(status).toHaveTextContent('Ambient motion resumed.');
+    expect(document.documentElement).not.toHaveAttribute('data-ambient');
+  });
+
+  it('starts paused when it was paused last time', () => {
+    localStorage.setItem('firefly.ambient', JSON.stringify('paused'));
+    renderShell('/home');
+    expect(screen.getByRole('button', { name: 'Pause ambient motion' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('explains, rather than silently refusing, when reduced motion has already paused it', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('firefly.motion', JSON.stringify('reduce'));
+    renderShell('/home');
+    const toggle = screen.getByRole('button', { name: 'Pause ambient motion' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    expect(toggle).toHaveAccessibleDescription(/already off because reduced motion is on/);
+    await user.click(toggle);
+    expect(
+      within(screen.getByRole('group', { name: 'Tools' })).getByRole('status'),
+    ).toHaveTextContent('already off because reduced motion is on');
+    // What was chosen is untouched.
+    expect(localStorage.getItem('firefly.ambient')).toBeNull();
   });
 });
 
@@ -286,5 +503,70 @@ describe('account menu', () => {
     await user.click(within(panel).getByRole('button', { name: /Sign out of this device/ }));
     expect(await screen.findByRole('heading', { name: 'Landing page' })).toBeInTheDocument();
     expect(getProfile()).toBeNull();
+  });
+});
+
+describe('popovers', () => {
+  it('close on Escape and give focus back to their button', async () => {
+    const user = userEvent.setup();
+    renderShell('/home');
+    const account = screen.getByRole('button', { name: 'Account menu' });
+    await user.click(account);
+    expect(account).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard('{Escape}');
+    expect(account).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: 'Account' })).not.toBeInTheDocument();
+    expect(account).toHaveFocus();
+  });
+
+  it('close on a press outside, and when another one opens', async () => {
+    const user = userEvent.setup();
+    renderShell('/home');
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    expect(screen.getByRole('region', { name: 'Account' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Notifications' }));
+    expect(screen.queryByRole('region', { name: 'Account' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Notifications' })).toBeInTheDocument();
+    await user.click(screen.getByRole('heading', { name: 'Home page' }));
+    expect(screen.queryByRole('region', { name: 'Notifications' })).not.toBeInTheDocument();
+  });
+
+  it('close when keyboard focus leaves them', async () => {
+    const user = userEvent.setup();
+    renderShell('/home');
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(screen.queryByRole('region', { name: 'Account' })).not.toBeInTheDocument();
+  });
+
+  it('close when the page changes', async () => {
+    const user = userEvent.setup();
+    const { router } = renderShell('/home');
+    await user.click(screen.getByRole('button', { name: 'Account menu' }));
+    expect(screen.getByRole('region', { name: 'Account' })).toBeInTheDocument();
+    await act(() => router.navigate('/settings'));
+    expect(screen.queryByRole('region', { name: 'Account' })).not.toBeInTheDocument();
+  });
+});
+
+describe('connection', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('shows the offline line under the wordmark, and not during a call', () => {
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    const { unmount } = renderShell('/home');
+    expect(screen.getByText(/You appear to be offline/)).toBeInTheDocument();
+    unmount();
+
+    renderShell('/calls/c1');
+    expect(screen.queryByText(/You appear to be offline/)).not.toBeInTheDocument();
+  });
+
+  it('shows it on the front door too', () => {
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    renderShell('/');
+    expect(screen.getByText(/You appear to be offline/)).toBeInTheDocument();
   });
 });

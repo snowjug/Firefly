@@ -1,48 +1,49 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, Outlet, useLocation, useMatch } from 'react-router';
+import { Outlet, useLocation, useMatch } from 'react-router';
 import { useOnDemand } from '../../lib/onDemand.ts';
-import { useTheme } from '../../lib/theme.tsx';
 import { useTourRequests } from '../../lib/tour.ts';
-import { Dialog } from '../Dialog.tsx';
-import { Icon } from '../Icon.tsx';
 import { OfflineBanner } from '../OfflineBanner.tsx';
 import { ProviderBadge } from '../ProviderBadge.tsx';
-import { BrandMark } from './BrandMark.tsx';
-import { NotificationsMenu } from './NotificationsMenu.tsx';
-import { ProfileMenu } from './ProfileMenu.tsx';
-import { SidebarBrand, SidebarNav } from './SidebarNav.tsx';
-import { TopbarSearch } from './TopbarSearch.tsx';
+import { WorldLayer } from '../world/WorldLayer.tsx';
+import { CommandDock } from './CommandDock.tsx';
+import { Colophon } from './Colophon.tsx';
+import { usePaletteShortcut } from './palette-shortcut.ts';
+import { RouteProgress } from './RouteProgress.tsx';
+import { ShellModeContext, type ShellMode } from './shell-mode.ts';
+import { UtilityCluster } from './UtilityCluster.tsx';
+import { Wordmark } from './Wordmark.tsx';
+import '../../styles/shell.css';
 
-// The tour (and the examples inside it) is only needed if someone asks for it, so it is not part of
-// the first download.
+// The tour (and the examples inside it) and the palette are only needed if someone asks for them,
+// so neither is part of the first download.
 const loadTour = () => import('../tour/FirstRunTour.tsx');
+const loadPalette = () => import('./Palette.tsx');
 
-function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const next = resolvedTheme === 'dark' ? 'light' : 'dark';
-  return (
-    <button
-      type="button"
-      className="btn btn-ghost btn-icon"
-      onClick={() => setTheme(next)}
-      aria-label={`Switch to ${next} theme`}
-    >
-      <Icon name={resolvedTheme === 'dark' ? 'sun' : 'moon'} />
-    </button>
-  );
+/** True once the page has moved off the top, when the masthead needs a soft backing. */
+function useScrolledAway(): boolean {
+  const [away, setAway] = useState(() => window.scrollY > 8);
+  useEffect(() => {
+    const update = () => setAway(window.scrollY > 8);
+    window.addEventListener('scroll', update, { passive: true });
+    return () => window.removeEventListener('scroll', update);
+  }, []);
+  return away;
 }
 
 /**
- * The signed-in frame: a navy sidebar on wide screens (a drawer on small ones), a top bar with
- * search, notices and the account menu, and the page. A live call hides the top bar and the footer
- * and shrinks the sidebar to icons, so the conversation gets the room.
+ * The signed-in frame. There is no sidebar and no top bar: a persistent field behind everything, the
+ * wordmark and a small utility cluster in the corners, the page, a quiet colophon at its foot and
+ * the command dock along the bottom edge. A live call steps the frame out of the way: no dock, no
+ * utilities, no colophon and no connection banner (the call explains a failed send where it
+ * happens), leaving the call the whole screen.
  */
 export function AppShell() {
   const location = useLocation();
   const onCall = Boolean(useMatch('/calls/:id'));
+  const mode: ShellMode = onCall ? 'call' : 'app';
   const mainRef = useRef<HTMLElement>(null);
-  const first = useRef(true);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const settledPath = useRef(location.pathname);
+  const scrolledAway = useScrolledAway();
 
   // The tour opens only when someone asks for it (from the home page or Settings), never by itself.
   const tourRequests = useTourRequests();
@@ -63,86 +64,72 @@ export function AppShell() {
     setTourOpen(false);
   }
 
-  // Move focus to the page content when the route changes so keyboard and screen-reader users start at the top.
+  // Search and commands: Ctrl or Cmd+K anywhere, or the button in the utility cluster. The code
+  // arrives on first use (and is fetched quietly once the page is idle, so first use is instant).
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const paletteCode = useOnDemand(loadPalette, paletteOpen);
+  const PaletteDialog = paletteCode.module?.Palette;
+  if (paletteCode.failed && paletteOpen) setPaletteOpen(false);
+  usePaletteShortcut(() => setPaletteOpen((open) => !open));
   useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      return;
+    const warm = () => void loadPalette().catch(() => undefined);
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(warm, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
     }
+    const id = window.setTimeout(warm, 2500);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  // Move focus to the page content when the route changes so keyboard and screen-reader users start
+  // at the top. Compared by address (not "is this the first run") so that React's double run of
+  // effects in development cannot move focus on load.
+  useEffect(() => {
+    if (settledPath.current === location.pathname) return;
+    settledPath.current = location.pathname;
     mainRef.current?.focus({ preventScroll: true });
     window.scrollTo(0, 0);
-    setMenuOpen(false);
   }, [location.pathname]);
 
+  const Masthead = onCall ? 'div' : 'header';
   return (
-    <div className="app" data-compact={onCall ? 'true' : undefined}>
-      <a className="skip-link" href="#main">
-        Skip to main content
-      </a>
+    <ShellModeContext.Provider value={mode}>
+      <div className="shell" data-shell={mode} data-call={onCall ? 'true' : undefined}>
+        <a className="skip-link" href="#main">
+          Skip to main content
+        </a>
+        <WorldLayer />
+        <RouteProgress />
 
-      <aside className="sidebar" aria-label="Firefly">
-        <SidebarBrand />
-        <SidebarNav />
-      </aside>
-
-      <div className="app-main">
-        {onCall ? null : (
-          <header className="topbar">
-            <button
-              type="button"
-              className="btn btn-ghost btn-icon menu-button"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Open menu"
-            >
-              <Icon name="menu" />
-            </button>
-            <Link to="/home" className="brand topbar-brand" aria-label="Firefly home">
-              <BrandMark size={30} />
-              <span>Firefly</span>
-            </Link>
-            <TopbarSearch />
-            <div className="topbar-end">
-              <span className="hide-sm">
+        <Masthead className="masthead" data-scrolled={scrolledAway ? 'true' : undefined}>
+          <div className="masthead__brand">
+            <Wordmark mode={mode} />
+            {onCall ? null : (
+              <span className="masthead__provider">
                 <ProviderBadge compact />
               </span>
-              <ThemeToggle />
-              <NotificationsMenu />
-              <ProfileMenu />
-            </div>
-          </header>
-        )}
+            )}
+          </div>
+          {onCall ? null : <UtilityCluster onOpenPalette={() => setPaletteOpen(true)} />}
+        </Masthead>
 
-        <main id="main" tabIndex={-1} ref={mainRef} style={{ display: 'contents' }}>
+        <div className="shell__stage">
           {/* The call fills the screen and already explains a failed send where it happens. */}
           {onCall ? null : <OfflineBanner />}
-          <Outlet />
-        </main>
-
-        {onCall ? null : (
-          <footer className="footer">
-            <div className="footer-inner">
-              <span>
-                Firefly is a training aid. Scenarios are fictional; never enter real customer
-                information. Scores are for practice, not performance reviews.
-              </span>
-              <span className="cluster" style={{ ['--cluster-gap' as string]: 'var(--sp-4)' }}>
-                <Link to="/help">Responsible AI</Link>
-                <Link to="/settings">Settings</Link>
-              </span>
-            </div>
-          </footer>
-        )}
-      </div>
-
-      {FirstRunTour ? <FirstRunTour open={tourOpen} onClose={() => setTourOpen(false)} /> : null}
-
-      <Dialog open={menuOpen} onClose={() => setMenuOpen(false)} title="Menu" variant="drawer">
-        <SidebarBrand onNavigate={() => setMenuOpen(false)} />
-        <SidebarNav onNavigate={() => setMenuOpen(false)} />
-        <div style={{ marginTop: 'var(--sp-4)' }}>
-          <ProviderBadge />
+          <main id="main" tabIndex={-1} ref={mainRef} className="shell__main">
+            <Outlet />
+          </main>
+          {onCall ? null : <Colophon />}
         </div>
-      </Dialog>
-    </div>
+
+        {/* Last in the order because it is last on the screen: focus follows the page. The skip link
+            and the palette (Ctrl+K) are the quick ways past or around it. */}
+        {onCall ? null : <CommandDock />}
+        {PaletteDialog && paletteOpen ? (
+          <PaletteDialog onClose={() => setPaletteOpen(false)} />
+        ) : null}
+        {FirstRunTour ? <FirstRunTour open={tourOpen} onClose={() => setTourOpen(false)} /> : null}
+      </div>
+    </ShellModeContext.Provider>
   );
 }
