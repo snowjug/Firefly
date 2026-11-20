@@ -52,8 +52,9 @@ Three families, self-hosted and subset (`web/public/fonts/`, SIL Open Font Licen
 - **Newsreader** (display, reading text, the customer's words, the learner's reply): variable weight
   300 to 600, with an italic.
 - **Hanken Grotesk** (interface text): variable weight 400 to 700.
-- **IBM Plex Mono** (telemetry and labels): 400 and 500. Uppercase with 0.1 em tracking, never below
-  12 px and never used for sentences.
+- **Firefly Mono** (telemetry and labels): 400 and 500. A renamed Latin subset of IBM Plex Mono (the
+  attribution notes say why it is renamed). Uppercase with 0.1 em tracking, never below 12 px and
+  never used for sentences.
 
 Roles are classes in `styles/type.css` (`type-hero`, `type-display`, `type-title`, `type-heading`,
 `type-lead`, `type-read`, `type-ui`, `type-small`, `type-label`, `type-number`). Components pick a role;

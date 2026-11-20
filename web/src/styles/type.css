@@ -2,7 +2,7 @@
    telemetry. Components pick a role; they do not invent sizes.
 
    Display and reading text use Newsreader, interface text Hanken Grotesk, measurements and labels
-   IBM Plex Mono. Telemetry never goes below 12px (--t-micro) and keeps 0.1em tracking. */
+   Firefly Mono. Telemetry never goes below 12px (--t-micro) and keeps 0.1em tracking. */
 
 .type-hero,
 .type-display,

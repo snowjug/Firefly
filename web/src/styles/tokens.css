@@ -19,7 +19,7 @@
   --font-read: var(--font-display);
   --font-ui: 'Hanken Grotesk', 'Hanken Fallback', system-ui, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-mono:
-    'IBM Plex Mono', 'Plex Fallback', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas,
+    'Firefly Mono', 'Mono Fallback', ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas,
     monospace;
 
   /* Fluid scale (clamp, no breakpoints). Body is 16px; telemetry labels never go below 12px. */

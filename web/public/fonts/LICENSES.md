@@ -4,20 +4,35 @@ Firefly ships three open-licensed font families, self-hosted as WOFF2 files in t
 loaded from a third-party font service. All three are licensed under the SIL Open Font License,
 Version 1.1, copied in full below.
 
-The files here are modified versions of the originals: they are subset to Latin letters, numerals and
-common punctuation, and the variable fonts are limited to the weight range Firefly uses
-(Newsreader 300 to 600, Newsreader Italic 300 to 500 in basic Latin only, Hanken Grotesk 400 to 700).
-They are distributed under the same licence and are not sold by themselves.
+The files here are Modified Versions of the originals in the sense of the licence: they are subset to
+Latin letters, numerals and common punctuation, and the variable fonts are limited to the weight
+range Firefly uses (Newsreader 300 to 600, Newsreader Italic 300 to 500 in basic Latin only, Hanken
+Grotesk 400 to 700). They are distributed under the same licence and are not sold by themselves.
 
-| File | Family | Copyright | Source |
-| --- | --- | --- | --- |
-| `newsreader.woff2`, `newsreader-italic.woff2` | Newsreader | Copyright 2020 The Newsreader Project Authors (http://github.com/productiontype/Newsreader) | https://github.com/productiontype/Newsreader |
-| `hanken-grotesk.woff2` | Hanken Grotesk | Copyright 2021 The Hanken Grotesk Project Authors (https://github.com/marcologous/hanken-grotesk) | https://github.com/marcologous/hanken-grotesk |
-| `plex-mono-400.woff2`, `plex-mono-500.woff2` | IBM Plex Mono | Copyright 2017 IBM Corp. All rights reserved. | https://github.com/IBM/plex |
+| File | Loaded in the page as | Derived from | Copyright | Source |
+| --- | --- | --- | --- | --- |
+| `newsreader.woff2`, `newsreader-italic.woff2` | Newsreader | Newsreader | Copyright 2020 The Newsreader Project Authors (http://github.com/productiontype/Newsreader) | https://github.com/productiontype/Newsreader |
+| `hanken-grotesk.woff2` | Hanken Grotesk | Hanken Grotesk | Copyright 2021 The Hanken Grotesk Project Authors (https://github.com/marcologous/hanken-grotesk) | https://github.com/marcologous/hanken-grotesk |
+| `firefly-mono-400.woff2`, `firefly-mono-500.woff2` | Firefly Mono | IBM Plex Mono | Copyright 2017 IBM Corp. All rights reserved. | https://github.com/IBM/plex |
 
 The font files were obtained from the Fontsource packages on npm (`@fontsource-variable/newsreader`,
 `@fontsource-variable/hanken-grotesk`, `@fontsource/ibm-plex-mono`), which redistribute the upstream
 fonts under the same licence.
+
+## Reserved Font Names
+
+The upstream licence notices for Newsreader and Hanken Grotesk declare no Reserved Font Name, so
+their subset files keep their original names.
+
+IBM's notice for IBM Plex declares the Reserved Font Name "Plex". The Open Font License treats a
+subset as a Modified Version, and a Modified Version may not use a Reserved Font Name without the
+copyright holder's written permission. Firefly has no such permission, so the mono files were
+renamed before they were added: the family, full, PostScript and unique-identifier name records and
+the OS/2 vendor tag were changed (to `Firefly Mono`, `Firefly Mono Medium` and `NONE`), and the page
+loads them as `Firefly Mono`. Nothing else was touched. The glyph outlines, metrics, character map
+and layout tables are identical to the Fontsource subset they came from (compared with fontTools:
+glyph order, `cmap`, `glyf`, `loca`, `hmtx`, `hhea`, `maxp`, `GPOS`, `GSUB`, `gasp` and `post`). The
+IBM copyright notice and the licence URL stay inside the font files.
 
 ---
 

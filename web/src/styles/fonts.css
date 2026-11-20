@@ -1,12 +1,13 @@
 /* Self-hosted fonts (SIL OFL; see /fonts/LICENSES.md). Nothing is loaded from a third party.
 
-   Newsreader is the display and reading face, Hanken Grotesk the interface face and IBM Plex Mono
-   the telemetry face. Each web font has a metric-matched local fallback, so when the real font
+   Newsreader is the display and reading face, Hanken Grotesk the interface face and Firefly Mono
+   the telemetry face (a renamed Latin subset of IBM's open-licensed mono; the licence notes explain
+   why it is renamed). Each web font has a metric-matched local fallback, so when the real font
    arrives the text does not move: `size-adjust` and the ascent/descent overrides were computed from
    the fonts' own metrics against Georgia, Arial and Courier New.
 
-   Only the critical three (roman Newsreader, Hanken Grotesk, Plex Mono 400) are preloaded from
-   index.html; the italic and the 500 weight are fetched only when something uses them. */
+   Only roman Newsreader and Hanken Grotesk are preloaded from index.html; the italic and both mono
+   weights are fetched only when something uses them. */
 
 @font-face {
   font-family: 'Newsreader';
@@ -30,15 +31,15 @@
   font-display: swap;
 }
 @font-face {
-  font-family: 'IBM Plex Mono';
-  src: url('/fonts/plex-mono-400.woff2') format('woff2');
+  font-family: 'Firefly Mono';
+  src: url('/fonts/firefly-mono-400.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'IBM Plex Mono';
-  src: url('/fonts/plex-mono-500.woff2') format('woff2');
+  font-family: 'Firefly Mono';
+  src: url('/fonts/firefly-mono-500.woff2') format('woff2');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -62,7 +63,7 @@
   line-gap-override: 0%;
 }
 @font-face {
-  font-family: 'Plex Fallback';
+  font-family: 'Mono Fallback';
   src: local('Courier New');
   size-adjust: 99.98%;
   ascent-override: 102.52%;

@@ -8,7 +8,7 @@ import type { PlotNode, PlateSize, Point, Segment } from './atlas-plate.ts';
 // focus and in its accessible description).
 //
 // Nothing is measured in the browser. Text widths come from the advances of the real fonts
-// (Newsreader for titles, IBM Plex Mono for the small lines), kept a little wide, and the page
+// (Newsreader for titles, Firefly Mono for the small lines), kept a little wide, and the page
 // draws exactly the lines decided here, so the box that was checked is the box that is drawn.
 
 export interface Rect {
@@ -115,7 +115,7 @@ export function titleWidth(text: string, size: number): number {
   return (total / 1000) * size * SAFETY;
 }
 
-/** IBM Plex Mono advances 0.6 em, and the small lines are tracked at 0.1 em. */
+/** Firefly Mono advances 0.6 em, and the small lines are tracked at 0.1 em. */
 export function kickerWidth(text: string, size = 12, tracking = 0.1): number {
   return [...text].length * (0.6 + tracking) * size;
 }
