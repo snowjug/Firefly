@@ -1,0 +1,68 @@
+/* Route transitions (View Transitions API, started by React Router for links that ask for it).
+
+   The page changes with a short fade and a slight settle, never longer than the route duration.
+   The persistent layers (the field and the dock) keep their own names, so they stay put instead of
+   cross-fading with the page. An object that carries its identity across routes (a mission's
+   instrument becoming the scenario core) holds the name `signal-mission` on both sides and the
+   browser moves and resizes it. Pointer and key presses skip the animation (see
+   lib/motion/transitions.ts), and reduced motion removes it. */
+
+[data-vt-persist='world'] {
+  view-transition-name: firefly-world;
+}
+[data-vt-persist='dock'] {
+  view-transition-name: firefly-dock;
+}
+
+::view-transition-group(firefly-world),
+::view-transition-group(firefly-dock) {
+  animation-duration: 0s;
+}
+::view-transition-old(firefly-world),
+::view-transition-old(firefly-dock) {
+  display: none;
+}
+::view-transition-new(firefly-world),
+::view-transition-new(firefly-dock) {
+  animation: none;
+}
+
+@keyframes vt-page-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.998);
+  }
+}
+
+::view-transition-group(root) {
+  animation-duration: var(--dur-route);
+}
+::view-transition-old(root) {
+  animation: vt-page-out var(--dur-component) var(--ease-exit-decelerated) both;
+}
+::view-transition-new(root) {
+  animation: vt-page-in var(--dur-route) var(--ease-enter-emphasised) both;
+}
+
+::view-transition-group(signal-mission) {
+  animation-duration: var(--dur-route);
+  animation-timing-function: var(--ease-spatial-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+:root[data-motion='reduce']::view-transition-group(*),
+:root[data-motion='reduce']::view-transition-old(*),
+:root[data-motion='reduce']::view-transition-new(*) {
+  animation: none !important;
+}
