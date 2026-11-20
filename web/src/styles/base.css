@@ -1,7 +1,72 @@
-/* Base: the field, focus, selection, the skip link and the rules that make reduced motion real.
-   Loads after the legacy sheets so its element rules win while pages are being rebuilt. */
+/* Base: a small reset, the field, focus, selection, the skip link and the rules that make reduced
+   motion real. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+ul[role='list'],
+ol[role='list'] {
+  list-style: none;
+  padding: 0;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* A link in running text keeps its underline and takes the colour of the text around it. */
+a {
+  color: inherit;
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
 
 html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   background: var(--field-0);
   color: var(--ink-1);
   scroll-padding-top: var(--sp-5);

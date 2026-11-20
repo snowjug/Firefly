@@ -1,9 +1,4 @@
 @import './tokens.css';
-@import './legacy.css';
-@import './legacy-base.css';
-@import './legacy-components.css';
-@import './legacy-layout.css';
-@import './tour.css';
 @import './base.css';
 @import './type.css';
 @import './materials.css';

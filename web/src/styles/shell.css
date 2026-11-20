@@ -214,44 +214,29 @@ html:has(.shell[data-shell='app']) {
 }
 
 /* Whether the customer is simulated: quiet mono text after a hairline, never a pill. The badge
-   itself is shared, so it is restyled here by where it sits. The wordmark already carries two
-   amber points; this one has none. */
-.masthead__provider .chip,
-.colophon__provider .chip {
+   itself is shared, so its hairline is added here by where it sits. The wordmark already carries
+   two amber points; this one has none. */
+.provider-badge {
+  display: inline-flex;
+  align-items: center;
   gap: 0.6ch;
   max-width: 100%;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
   color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
-  font-weight: 400;
   letter-spacing: var(--track-mono);
   line-height: 1.5;
   text-transform: uppercase;
-  white-space: normal;
 }
-.masthead__provider .chip .dot,
-.colophon__provider .chip .dot {
-  display: none;
+.provider-badge--offline {
+  color: var(--coral-text);
 }
-/* While the answer is still on its way the shared badge shows an ellipsis; there is nothing to say yet. */
-.masthead__provider .chip[aria-hidden='true'],
-.colophon__provider .chip[aria-hidden='true'] {
-  display: none;
-}
-.masthead__provider .chip::before {
+.masthead__provider .provider-badge::before {
   content: '';
   width: 1px;
   height: 1.25rem;
   margin-right: 0.8ch;
   background: var(--line-3);
-}
-.masthead__provider .chip-negative,
-.colophon__provider .chip-negative {
-  color: var(--coral-text);
 }
 
 /* ------------------------------------------------------------------ Utility cluster */

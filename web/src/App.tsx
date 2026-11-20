@@ -8,9 +8,12 @@ import {
   useParams,
   type RouteObject,
 } from 'react-router';
-import { NotFound, LoadingCards, Page } from './components/Page.tsx';
+import { PageError, RouteError } from './components/AppErrorBoundary.tsx';
+import { LoadingNotice } from './components/frame/Notices.tsx';
+import { PageFrame } from './components/frame/PageFrame.tsx';
 import { AppShell } from './components/shell/AppShell.tsx';
 import { PublicShell } from './components/shell/PublicShell.tsx';
+import NotFound from './pages/NotFound.tsx';
 
 /** Set on every page's route, so the page for an address can be fetched before it is rendered. */
 interface PageHandle {
@@ -46,9 +49,9 @@ const settings = lazyPage(() => import('./pages/Settings.tsx'));
 
 function Loading() {
   return (
-    <Page title="Loading">
-      <LoadingCards count={3} />
-    </Page>
+    <PageFrame title="Loading">
+      <LoadingNotice label="Loading" lines={4} />
+    </PageFrame>
   );
 }
 
@@ -62,6 +65,8 @@ export const appRoutes: RouteObject[] = [
   {
     // Shown only while the first page's code is still arriving.
     HydrateFallback: Loading,
+    // The router would otherwise print the error and its stack to whoever is looking.
+    ErrorBoundary: RouteError,
     children: [
       {
         Component: PublicShell,
@@ -73,23 +78,30 @@ export const appRoutes: RouteObject[] = [
       {
         Component: AppShell,
         children: [
-          { path: 'home', ...dashboard },
-          { path: 'practice', ...setup },
-          { path: 'scenarios', ...library },
-          { path: 'scenarios/:id/setup', ...setup },
-          { path: 'scenarios/:id/brief', Component: BriefRedirect },
-          { path: 'calls/:id', ...call },
-          { path: 'sessions/:id/report', ...report },
-          { path: 'sessions/:id/transcript', ...transcript },
-          { path: 'history', ...history },
-          { path: 'rewards', ...rewards },
-          { path: 'progress', ...progress },
-          { path: 'calibration', ...calibration },
-          { path: 'trainer', ...trainer },
-          { path: 'help', ...help },
-          { path: 'about', element: <Navigate to="/help" replace /> },
-          { path: 'settings', ...settings },
-          { path: '*', Component: NotFound },
+          {
+            // A page that fails is replaced by the error screen inside the frame, so the masthead
+            // and the dock stay where they are (the error would otherwise replace the frame too).
+            ErrorBoundary: PageError,
+            children: [
+              { path: 'home', ...dashboard },
+              { path: 'practice', ...setup },
+              { path: 'scenarios', ...library },
+              { path: 'scenarios/:id/setup', ...setup },
+              { path: 'scenarios/:id/brief', Component: BriefRedirect },
+              { path: 'calls/:id', ...call },
+              { path: 'sessions/:id/report', ...report },
+              { path: 'sessions/:id/transcript', ...transcript },
+              { path: 'history', ...history },
+              { path: 'rewards', ...rewards },
+              { path: 'progress', ...progress },
+              { path: 'calibration', ...calibration },
+              { path: 'trainer', ...trainer },
+              { path: 'help', ...help },
+              { path: 'about', element: <Navigate to="/help" replace /> },
+              { path: 'settings', ...settings },
+              { path: '*', Component: NotFound },
+            ],
+          },
         ],
       },
     ],

@@ -15,7 +15,7 @@ const sheets = Object.fromEntries(OWN.map((name) => [name, read(name)])) as Reco
   (typeof OWN)[number],
   string
 >;
-const tokens = read('tokens.css') + read('legacy.css') + read('materials.css');
+const tokens = read('tokens.css') + read('materials.css');
 
 describe.each(OWN)('%s', (name) => {
   const css = sheets[name];

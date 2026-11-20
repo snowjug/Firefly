@@ -5,7 +5,7 @@
 export function BrandMark({ size = 32, ignite = false }: { size?: number; ignite?: boolean }) {
   return (
     <svg
-      className="brand-mark mark"
+      className="mark"
       width={size}
       height={size}
       viewBox="0 0 32 32"

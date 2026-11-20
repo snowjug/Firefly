@@ -22,7 +22,7 @@ export function Wordmark({ mode }: { mode: ShellMode }) {
 
   const content = (
     <>
-      <BrandMark size={32} ignite={fresh && !reduced} />
+      <BrandMark size={34} ignite={fresh && !reduced} />
       <span className="wordmark__word" aria-hidden="true">
         F
         <span className="wordmark__i">
