@@ -96,6 +96,63 @@ describe('conversation state', () => {
     });
     expect(calmer.shifts).toMatchObject([{ kind: 'band', direction: 'calmer' }]);
   });
+
+  describe('a curveball', () => {
+    const reply = (
+      current: ReturnType<typeof initialCallState>,
+      key: string,
+      text: string,
+      over: Parameters<typeof makeReply>[1] = {},
+    ) => {
+      const response = makeReply(text, over);
+      return {
+        next: callReducer(current, { type: 'sent', key, response, announcement: '' }),
+        customerKey: `t${response.customerTurn.index}`,
+      };
+    };
+    const opening = { ...initialCallState(makeSession(), 60), turns: [sending] };
+
+    it('is recorded once, after the reply that raised the shift count, saying nothing of its kind', () => {
+      const { next, customerKey } = reply(opening, 'k1', 'Actually, that is not the problem.', {
+        shifts: 1,
+      });
+      expect(next.shifts).toStrictEqual([{ afterKey: customerKey, kind: 'curveball' }]);
+      expect(next.state.shifts).toBe(1);
+      expect(next.discoveries).toBe(0);
+    });
+
+    it('is still one entry when the count jumps by more than one', () => {
+      const { next, customerKey } = reply(opening, 'k1', 'Hm.', { shifts: 3 });
+      expect(next.shifts).toStrictEqual([{ afterKey: customerKey, kind: 'curveball' }]);
+    });
+
+    it('is not recorded while the count stays the same, or if it ever goes down', () => {
+      const settled = { ...opening, state: { ...opening.state, shifts: 2 } };
+      expect(reply(settled, 'k1', 'Fine.', { shifts: 2 }).next.shifts).toEqual([]);
+      expect(reply(settled, 'k1', 'Fine.', { shifts: 1 }).next.shifts).toEqual([]);
+      expect(reply(opening, 'k1', 'Fine.').next.shifts).toEqual([]);
+    });
+
+    it('follows the change of mood and the silence it came with, all after the same reply', () => {
+      const { next, customerKey } = reply(opening, 'k1', '...', {
+        band: { id: 'angry', label: 'Angry' },
+        silent: true,
+        shifts: 1,
+      });
+      expect(next.shifts.map((shift) => shift.kind)).toEqual(['band', 'silent', 'curveball']);
+      expect(next.shifts.every((shift) => shift.afterKey === customerKey)).toBe(true);
+    });
+
+    it('is recorded again after a later reply that raises the count again', () => {
+      const first = reply(opening, 'k1', 'First.', { shifts: 1 });
+      const again = { ...first.next, turns: [...first.next.turns, { ...sending, key: 'k2' }] };
+      const second = reply(again, 'k2', 'Second.', { shifts: 2 });
+      expect(second.next.shifts).toStrictEqual([
+        { afterKey: first.customerKey, kind: 'curveball' },
+        { afterKey: second.customerKey, kind: 'curveball' },
+      ]);
+    });
+  });
 });
 
 describe('starter phrases', () => {
@@ -358,6 +415,37 @@ describe('MessageList', () => {
     expect(container.querySelector('.shift')).toBeNull();
     expect(screen.queryByText(/signal found/i)).not.toBeInTheDocument();
     expect(container.querySelector('[data-signal]')).toBeNull();
+  });
+
+  it('says only that the conversation changed for a curveball, and only in guided practice', () => {
+    const turns = [turn({ key: 't1', index: 1 }), turn({ key: 't3', index: 3, text: 'Hm.' })];
+    const shifts = [{ afterKey: 't3', kind: 'curveball' as const }];
+    const { container, rerender } = render(
+      <MessageList
+        persona={persona}
+        typing={false}
+        onRetry={vi.fn()}
+        turns={turns}
+        guided
+        shifts={shifts}
+      />,
+    );
+    const note = container.querySelector('.shift');
+    expect(note).toHaveAttribute('data-kind', 'curveball');
+    expect(note).toHaveTextContent(/^The conversation changed\.$/);
+    expect(screen.queryByText(/mood shifted/)).not.toBeInTheDocument();
+
+    rerender(
+      <MessageList
+        persona={persona}
+        typing={false}
+        onRetry={vi.fn()}
+        turns={turns}
+        shifts={shifts}
+      />,
+    );
+    expect(container.querySelector('.shift')).toBeNull();
+    expect(screen.queryByText(/conversation changed/i)).not.toBeInTheDocument();
   });
 
   it('only gives messages that arrive later an entrance, never the ones the call opened with', () => {

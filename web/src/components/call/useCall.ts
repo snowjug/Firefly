@@ -27,7 +27,8 @@ export interface ChatTurn {
 export interface ChatShift {
   /** The customer turn after which this change appeared. */
   afterKey: string;
-  kind: 'band' | 'silent';
+  /** A `curveball` is only ever "the conversation changed": its kind is never sent or shown. */
+  kind: 'band' | 'silent' | 'curveball';
   /** For a band change: the customer's mood before and after. */
   from?: { id: PublicStateDTO['band']['id']; label: string };
   to?: { id: PublicStateDTO['band']['id']; label: string };
@@ -123,6 +124,8 @@ function shiftsBetween(
     });
   }
   if (!before.silent && after.silent) shifts.push({ afterKey, kind: 'silent' });
+  // One entry however far the count jumped: the screen only says the conversation changed.
+  if (after.shifts > before.shifts) shifts.push({ afterKey, kind: 'curveball' });
   return shifts;
 }
 

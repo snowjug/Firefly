@@ -673,7 +673,7 @@ The unit tests cover the domain rules (customer state, discovery, curveballs, sc
 - Accessibility is checked by automated tools, keyboard tests and review. Nobody has tested with a screen reader or voice control.
 - Browser tests run in Chromium (Edge and Chromium). Other browser engines are not tested.
 - Demo mode is pattern-based. It can miss unusual phrasing, and it cannot answer small-talk questions about itself, such as the customer's name or phone number, so the customer carries on with the call instead. It is less flexible than a person or a model.
-- There is no dedicated mid-call cue when a curveball lands, because the call state the browser receives does not include one. Mood shifts and silence are shown, and the report explains the curveball afterwards.
+- When a curveball lands, guided practice says only that the conversation changed, never which kind of curveball it was, and immersive practice shows nothing. Mood shifts and silence are shown in guided practice the same way, and the report explains the curveball afterwards.
 - The local profile is a name for greetings, not a login: there is no account, no password and no organisation sign-in. Keep Firefly on a trusted network.
 - "Practice time" on the home page adds up the length of each call from start to end, so a call left open for hours inflates it.
 - Firefly is not deployed. There is no hosting configuration. The interface is English only.

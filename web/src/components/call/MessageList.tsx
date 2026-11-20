@@ -3,6 +3,7 @@ import { Icon } from '../Icon.tsx';
 import { ListenButton } from '../voice/ListenButton.tsx';
 import { formatTime } from '../../lib/format.ts';
 import type { ChatShift, ChatTurn } from './useCall.ts';
+import { SHIFT_COPY } from './atmosphere.ts';
 
 interface Persona {
   name: string;
@@ -106,6 +107,7 @@ function Message({
 
 function shiftText(shift: ChatShift, name: string): string {
   if (shift.kind === 'silent') return `${name} has gone quiet.`;
+  if (shift.kind === 'curveball') return SHIFT_COPY.curveball;
   return `${name}'s mood shifted from ${shift.from?.label ?? 'one state'} to ${shift.to?.label ?? 'another'}.`;
 }
 
