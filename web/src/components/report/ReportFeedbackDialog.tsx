@@ -1,9 +1,10 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { DIMENSION_IDS, DIMENSIONS, type DimensionId } from '#shared/domain/vocab.ts';
 import { useToast } from '../../lib/toast.tsx';
 import { Dialog } from '../Dialog.tsx';
+import { Field, SelectInput, TextArea, TextInput } from '../frame/index.ts';
 import { Icon } from '../Icon.tsx';
 import { copyText } from './CopyButton.tsx';
 import { feedbackNote, issueUrl } from './labels.ts';
@@ -17,7 +18,6 @@ interface FeedbackTarget {
 
 function FeedbackForm({ sessionId, evaluator, turnCount }: FeedbackTarget) {
   const { toast } = useToast();
-  const uid = useId();
   const [skill, setSkill] = useState<DimensionId | ''>('');
   const [turnText, setTurnText] = useState('');
 
@@ -52,14 +52,9 @@ function FeedbackForm({ sessionId, evaluator, turnCount }: FeedbackTarget) {
 
   return (
     <div className="rp-fb">
-      <div className="rp-fb-fields">
-        <div className="field">
-          <label className="label" htmlFor={`${uid}-skill`}>
-            Which skill looks wrong?
-          </label>
-          <select
-            id={`${uid}-skill`}
-            className="select"
+      <div className="rp-fb__fields">
+        <Field label="Which skill looks wrong?">
+          <SelectInput
             value={skill}
             onChange={(event) => setSkill(event.target.value as DimensionId | '')}
             data-autofocus
@@ -70,66 +65,45 @@ function FeedbackForm({ sessionId, evaluator, turnCount }: FeedbackTarget) {
                 {DIMENSIONS[id].label}
               </option>
             ))}
-          </select>
-        </div>
+          </SelectInput>
+        </Field>
 
-        <div className="field">
-          <label className="label" htmlFor={`${uid}-turn`}>
-            Turn number
-          </label>
-          <input
-            id={`${uid}-turn`}
-            className="input"
+        <Field
+          label="Turn number"
+          hint="The turn number is optional. Every quote in the report shows its turn."
+          error={turnProblem ? `Use a whole number from 1 to ${turnCount}.` : undefined}
+        >
+          <TextInput
             inputMode="numeric"
             autoComplete="off"
             value={turnText}
             onChange={(event) => setTurnText(event.target.value)}
-            aria-invalid={turnProblem ? 'true' : undefined}
-            aria-describedby={`${uid}-turn-hint`}
           />
-        </div>
-        <p id={`${uid}-turn-hint`} className={turnProblem ? 'field-error' : 'hint'}>
-          {turnProblem
-            ? `Use a whole number from 1 to ${turnCount}.`
-            : 'The turn number is optional. Every quote in the report shows its turn.'}
-        </p>
+        </Field>
       </div>
 
-      <div className="field">
-        <label className="label" htmlFor={`${uid}-note`}>
-          The note you will copy
-        </label>
-        <textarea
-          id={`${uid}-note`}
-          className="textarea mono"
-          rows={5}
-          readOnly
-          value={note}
-          aria-describedby={`${uid}-note-hint`}
-        />
-        <p id={`${uid}-note-hint`} className="hint">
-          It names the call, skill and turn. It never includes the words of the conversation.
-        </p>
+      <Field
+        label="The note you will copy"
+        hint="It names the call, skill and turn. It never includes the words of the conversation."
+      >
+        <TextArea className="rp-fb__note" rows={5} readOnly value={note} />
+      </Field>
+
+      <div className="action-row">
+        <button type="button" className="action" onClick={copy}>
+          <Icon name="copy" size={18} /> Copy a note for your mentor
+        </button>
       </div>
 
-      <button type="button" className="btn btn-primary" onClick={copy}>
-        <Icon name="copy" size={18} /> Copy a note for your mentor
-      </button>
-
-      <div className="divider" />
-
-      <div className="rp-fb-public">
-        <p className="t-label">Or tell the Firefly team</p>
-        <div className="callout callout-caution" role="note">
-          <Icon name="alert" size={18} />
-          <p>
-            A GitHub issue is public. Never paste real customer information into it. Firefly&rsquo;s
-            scenarios are fictional, so there is nothing real to share.
-          </p>
-        </div>
-        <div className="cluster">
+      <div className="rp-fb__public">
+        <p className="type-label">Or tell the Firefly team</p>
+        <p className="rp-note" role="note">
+          A GitHub issue is public. Never paste real customer information into it. Firefly&rsquo;s
+          scenarios are fictional, so there is nothing real to share.
+        </p>
+        <div className="action-row">
           <a
-            className="btn btn-secondary"
+            className="action action--quiet"
             href={issueUrl(note)}
             target="_blank"
             rel="noopener noreferrer"
@@ -139,9 +113,12 @@ function FeedbackForm({ sessionId, evaluator, turnCount }: FeedbackTarget) {
             <Icon name="external" size={16} />
           </a>
         </div>
-        <p className="t-small t-muted">
+        <p className="rp-quiet">
           Mentors can compare this report with their own scores on the{' '}
-          <Link to="/calibration">calibration page</Link>.
+          <Link to="/calibration" className="text-link">
+            calibration page
+          </Link>
+          .
         </p>
       </div>
     </div>
@@ -153,12 +130,13 @@ export function ReportFeedbackButton(props: FeedbackTarget) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" className="btn btn-secondary" onClick={() => setOpen(true)}>
+      <button type="button" className="action action--quiet" onClick={() => setOpen(true)}>
         <Icon name="flag" size={18} /> Report incorrect feedback
       </button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
+        eyebrow="About this report"
         title="Report incorrect feedback"
         description="Automatic feedback can be wrong. If something in this report looks incorrect, unfair or confusing, tell your mentor or the Firefly team, without sharing the conversation."
       >

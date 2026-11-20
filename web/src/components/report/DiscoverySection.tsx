@@ -1,114 +1,119 @@
+import { useId } from 'react';
 import type { CoachingReport, DiscoveryResult } from '#shared/domain/report.ts';
 import { FACT_IMPORTANCE } from '#shared/domain/vocab.ts';
-import { Icon } from '../Icon.tsx';
-import { Disclosure } from './Disclosure.tsx';
+import { Disclosure, Section } from './bridge.tsx';
 import { EvidenceQuote } from './EvidenceQuote.tsx';
-import { SectionHead } from './SectionHead.tsx';
 import { DISCOVERY_STATUS, IMPORTANCE_LABEL, type DiscoveryStatus } from './labels.ts';
 
-const IMPORTANCE_TONE = {
-  critical: 'chip-caution',
-  important: 'chip-info',
-  helpful: '',
-} as const;
-
-/** A tick, a half circle or a cross: shape plus the words beside it, never colour alone. */
-function StatusMark({ status }: { status: DiscoveryStatus }) {
-  if (status === 'discovered') {
-    return <Icon name="check-circle" size={20} className="rp-mark" data-status={status} />;
-  }
-  if (status === 'missed') {
-    return <Icon name="x-circle" size={20} className="rp-mark" data-status={status} />;
-  }
+/**
+ * A fact as a point: lit and amber when it was found, half lit when it was found in part, an empty
+ * ring when it was missed. The shape and the word beside it say it; the colour only adds to them.
+ */
+export function DiscoveryMark({ status, size = 20 }: { status: DiscoveryStatus; size?: number }) {
   return (
     <svg
-      viewBox="0 0 20 20"
-      width={20}
-      height={20}
-      aria-hidden="true"
-      focusable="false"
       className="rp-mark"
       data-status={status}
+      viewBox="-10 -10 20 20"
+      width={size}
+      height={size}
+      aria-hidden="true"
+      focusable="false"
     >
-      <circle cx="10" cy="10" r="8.2" className="rp-glyph-ring" />
-      <path d="M10 1.8a8.2 8.2 0 010 16.4z" className="rp-glyph-half" />
+      <circle className="rp-mark__halo" r="9" />
+      <circle className="rp-mark__ring" r="5.2" />
+      {status === 'discovered' ? <circle className="rp-mark__fill" r="5.2" /> : null}
+      {status === 'partial' ? (
+        <path className="rp-mark__fill" d="M0 -5.2a5.2 5.2 0 0 0 0 10.4Z" />
+      ) : null}
     </svg>
   );
 }
 
-function FactCard({
+function Fact({
   fact,
   turnHref,
+  sessionId,
 }: {
   fact: DiscoveryResult;
   turnHref: (turn: number) => string;
+  sessionId: string;
 }) {
   const found = fact.status === 'discovered';
-  const titleId = `fact-${fact.factId}-title`;
+  const titleId = useId();
   return (
-    <article
-      id={`fact-${fact.factId}`}
-      className="glass card rp-fact"
-      data-status={fact.status}
-      data-importance={fact.importance}
-      aria-labelledby={titleId}
-    >
-      <header className="rp-fact-head">
-        <span className="rp-fact-status">
-          <StatusMark status={fact.status} />
-          {DISCOVERY_STATUS[fact.status]}
-        </span>
-        <h3 id={titleId} className="rp-fact-title">
-          {fact.label}
-        </h3>
-        <span className={`chip ${IMPORTANCE_TONE[fact.importance]}`.trim()}>
-          <span className="sr-only">Importance: </span>
-          {IMPORTANCE_LABEL[fact.importance]}
-        </span>
-      </header>
-
-      <div className="rp-fact-body">
-        {fact.revealingQuestion ? (
-          <EvidenceQuote
-            quote={fact.revealingQuestion}
-            turn={fact.revealedAtTurn}
-            href={fact.revealedAtTurn !== null ? turnHref(fact.revealedAtTurn) : undefined}
-            label="Your question"
-            tone="positive"
-          />
-        ) : null}
-        {!found ? (
-          <div className="rp-better">
-            <p className="t-label">A question worth asking</p>
-            <p className="rp-better-text">{fact.betterQuestion}</p>
-          </div>
-        ) : null}
-      </div>
-
-      <Disclosure
-        className="rp-fact-more"
-        summary="What the customer had held back"
-        defaultOpen={!found}
+    <li>
+      <article
+        id={`fact-${fact.factId}`}
+        className="rp-fact"
+        data-status={fact.status}
+        data-importance={fact.importance}
+        aria-labelledby={titleId}
       >
-        <EvidenceQuote
-          quote={fact.whatWasHidden}
-          label={found ? 'The customer said' : 'The customer would have said'}
-        />
-        <div>
-          <p className="t-label">Why it mattered</p>
-          <p>{fact.consequence}</p>
+        <span className="rp-fact__node">
+          <DiscoveryMark status={fact.status} size={22} />
+        </span>
+        <header className="rp-fact__head">
+          <p className="rp-fact__status">{DISCOVERY_STATUS[fact.status]}</p>
+          <h3 id={titleId} className="rp-fact__title">
+            {fact.label}
+          </h3>
+          <p className="rp-fact__importance">
+            <span className="sr-only">Importance: </span>
+            {IMPORTANCE_LABEL[fact.importance]}
+          </p>
+        </header>
+
+        <div className="rp-fact__body">
+          {fact.revealingQuestion ? (
+            <EvidenceQuote
+              quote={fact.revealingQuestion}
+              turn={fact.revealedAtTurn}
+              href={fact.revealedAtTurn !== null ? turnHref(fact.revealedAtTurn) : undefined}
+              label="Your question"
+              tone="positive"
+              sessionId={sessionId}
+            />
+          ) : null}
+          {!found ? (
+            <div className="rp-better">
+              <p className="type-label">A question worth asking</p>
+              <p className="rp-better__text">{fact.betterQuestion}</p>
+            </div>
+          ) : null}
+          <Disclosure summary="What the customer had held back" defaultOpen={!found}>
+            <div className="rp-held">
+              <EvidenceQuote
+                quote={fact.whatWasHidden}
+                label={found ? 'The customer said' : 'The customer would have said'}
+              />
+              <div className="rp-why">
+                <p className="type-label">Why it mattered</p>
+                <p>{fact.consequence}</p>
+              </div>
+            </div>
+          </Disclosure>
         </div>
-      </Disclosure>
-    </article>
+      </article>
+    </li>
   );
 }
 
+/**
+ * The hidden facts as a map: a line of points, one for each fact the customer held back, in the
+ * order of how much it mattered. Each says in words whether the call found it, and what the
+ * question worth asking would have been.
+ */
 export function DiscoverySection({
   discovery,
+  eyebrow,
   turnHref,
+  sessionId,
 }: {
   discovery: CoachingReport['discovery'];
+  eyebrow?: string;
   turnHref: (turn: number) => string;
+  sessionId: string;
 }) {
   const { found, partial, missed, total, results } = discovery;
   const ordered = [...results].sort(
@@ -121,45 +126,34 @@ export function DiscoverySection({
           partial > 0 ? `, and ${partial} partly` : ''
         }`;
   return (
-    <section id="discovery" className="rp-section" aria-labelledby="discovery-title">
-      <SectionHead id="discovery-title" title="Discovery">
+    <Section id="discovery" eyebrow={eyebrow} title="Discovery">
+      <p className="rp-lead">
         Customers rarely volunteer everything. These are the facts this customer held back, and
         whether your questions brought them out.
-      </SectionHead>
-
-      <div className="glass card rp-disc-summary">
-        <p className="rp-disc-headline">{headline}</p>
+      </p>
+      <div className="rp-disc">
+        <p className="rp-disc__headline">{headline}</p>
         {total > 0 ? (
-          <>
-            <ol className="rp-disc-bar" aria-hidden="true">
-              {ordered.map((fact) => (
-                <li key={fact.factId} data-status={fact.status} />
-              ))}
-            </ol>
-            <ul role="list" className="rp-disc-counts">
-              <li>
-                <StatusMark status="discovered" /> {found} found
-              </li>
-              <li>
-                <StatusMark status="partial" /> {partial} partly found
-              </li>
-              <li>
-                <StatusMark status="missed" /> {missed} missed
-              </li>
-            </ul>
-          </>
+          <ul role="list" className="rp-disc__counts">
+            <li>
+              <DiscoveryMark status="discovered" size={18} /> {found} found
+            </li>
+            <li>
+              <DiscoveryMark status="partial" size={18} /> {partial} partly found
+            </li>
+            <li>
+              <DiscoveryMark status="missed" size={18} /> {missed} missed
+            </li>
+          </ul>
         ) : null}
       </div>
-
       {ordered.length > 0 ? (
-        <ul role="list" className="rp-stack">
+        <ol role="list" className="rp-facts">
           {ordered.map((fact) => (
-            <li key={fact.factId}>
-              <FactCard fact={fact} turnHref={turnHref} />
-            </li>
+            <Fact key={fact.factId} fact={fact} turnHref={turnHref} sessionId={sessionId} />
           ))}
-        </ul>
+        </ol>
       ) : null}
-    </section>
+    </Section>
   );
 }

@@ -1,119 +1,78 @@
 import type { SessionDTO } from '#shared/domain/api.ts';
 import type { CoachingReport } from '#shared/domain/report.ts';
+import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import { PRACTICE_MODE_LABELS } from '#shared/domain/vocab.ts';
 import { formatDateTime, formatDuration } from '../../lib/format.ts';
 import { usedVoice } from '../../lib/voice-sessions.ts';
-import { DifficultyChip } from '../Chips.tsx';
-import { Icon } from '../Icon.tsx';
-import { CustomerAvatar } from '../illustration/index.ts';
-import { TemperatureOrb } from '../TemperatureOrb.tsx';
+import { Tag } from './bridge.tsx';
 import { ENDED_EARLY_NOTE, SAMPLE_NOTE, SUFFICIENCY_BADGE, VOICE_NOTE } from './labels.ts';
 
 /**
- * What this report is about: the call, how it ended, how the coaching was produced and what the
- * coach said overall. Notes about thin evidence sit with the summary they qualify.
+ * What this report is about, in the mono line under the title: when, how long, how hard, how it was
+ * practised, how it ended and who coached. The notes that qualify the result (an early end, thin
+ * evidence, voice, a sample) follow it, before anything is read, because how far the report can be
+ * trusted comes first.
  */
 export function ReportMeta({ session, report }: { session: SessionDTO; report: CoachingReport }) {
-  const { summary, completion, evaluator } = report;
+  const { completion, evaluator } = report;
   const endedEarly = completion.status === 'ended-early';
   const evidenceBadge = SUFFICIENCY_BADGE[completion.evidence];
+  const voice = usedVoice(session.id);
   return (
-    <section className="glass card rp-meta" aria-labelledby="rp-meta-title">
-      <div className="rp-meta-top">
-        <span className="rp-meta-avatar" aria-hidden="true">
-          <CustomerAvatar seed={session.scenario.persona.name} mood={session.state.band.id} />
-        </span>
-        <div className="rp-meta-id">
-          <p className="t-label">Practice coaching report</p>
-          <h2 id="rp-meta-title" className="rp-meta-title">
-            {session.scenarioTitle}
-          </h2>
-        </div>
-      </div>
-
-      <ul role="list" className="rp-meta-line">
+    <div className="rp-meta">
+      <ul role="list" className="rp-meta__line" aria-label="About this call">
         <li>
-          <Icon name="calendar" size={15} />
           <time dateTime={session.startedAt}>{formatDateTime(session.startedAt)}</time>
         </li>
         <li>
-          <Icon name="clock" size={15} />
           <span>
             <span className="sr-only">Duration: </span>
             {formatDuration(session.durationSeconds)}
           </span>
         </li>
-        <li>
-          <DifficultyChip difficulty={session.difficulty} />
-        </li>
+        <li>{DIFFICULTY_PROFILES[session.difficulty].label}</li>
         <li>{PRACTICE_MODE_LABELS[session.mode].label}</li>
+        {voice ? <li>Voice used</li> : null}
       </ul>
 
-      <ul role="list" className="rp-status" aria-label="How the call went">
+      <ul role="list" className="rp-meta__status" aria-label="How the call went">
         <li>
-          <span className={`chip ${endedEarly ? 'chip-caution' : 'chip-positive'}`}>
-            <Icon name={endedEarly ? 'flag' : 'check'} size={14} />
-            {endedEarly ? 'Ended early' : 'Completed'}
-          </span>
-        </li>
-        <li>
-          <span className="chip">
-            <TemperatureOrb band={session.state.band.id} />
-            Customer at the end: {session.state.band.label}
-          </span>
+          <Tag tone={endedEarly ? 'amber' : 'sage'}>{endedEarly ? 'Ended early' : 'Completed'}</Tag>
         </li>
         {evidenceBadge ? (
           <li>
-            <span className="chip chip-caution">{evidenceBadge}</span>
+            <Tag tone="amber">{evidenceBadge}</Tag>
           </li>
         ) : null}
-        <li>
-          <span className="chip chip-info" title="How the coaching in this report was produced">
-            <Icon name="info" size={14} />
-            {evaluator.providerLabel}
-          </span>
+        <li title="How the coaching in this report was produced">
+          <Tag tone="aqua">{evaluator.providerLabel}</Tag>
         </li>
         {session.isSample ? (
           <li>
-            <span className="chip chip-accent">Sample session</span>
+            <Tag tone="amber">Sample session</Tag>
           </li>
         ) : null}
         {session.mentorReviewed ? (
           <li>
-            <span className="chip chip-positive">Mentor reviewed</span>
+            <Tag tone="sage">Mentor reviewed</Tag>
           </li>
         ) : null}
       </ul>
 
-      {endedEarly ? (
-        <p className="rp-ended-note t-small t-muted">
-          <Icon name="info" size={16} />
-          <span>{ENDED_EARLY_NOTE}</span>
-        </p>
-      ) : null}
-      {usedVoice(session.id) ? (
-        <p className="rp-ended-note t-small t-muted">
-          <Icon name="mic" size={16} />
-          <span>{VOICE_NOTE}</span>
-        </p>
-      ) : null}
-
-      <div className="rp-meta-body">
-        <p className="rp-summary">{summary.overall}</p>
+      <div className="rp-notes">
+        {endedEarly ? <p className="rp-note">{ENDED_EARLY_NOTE}</p> : null}
+        {voice ? <p className="rp-note">{VOICE_NOTE}</p> : null}
         {evidenceBadge ? (
-          <div className="callout callout-caution rp-evidence-note" role="note">
-            <Icon name="info" size={18} />
-            <p>
-              <strong>{evidenceBadge}.</strong>{' '}
-              {completion.note ??
-                'This report rests on a small amount of the conversation, so treat it as a starting point.'}
-            </p>
-          </div>
+          <p className="rp-note" role="note">
+            <strong>{evidenceBadge}.</strong>{' '}
+            {completion.note ??
+              'This report rests on a small amount of the conversation, so treat it as a starting point.'}
+          </p>
         ) : completion.note ? (
-          <p className="t-small t-muted rp-note">{completion.note}</p>
+          <p className="rp-note">{completion.note}</p>
         ) : null}
-        {session.isSample ? <p className="t-small t-muted rp-note">{SAMPLE_NOTE}</p> : null}
+        {session.isSample ? <p className="rp-note">{SAMPLE_NOTE}</p> : null}
       </div>
-    </section>
+    </div>
   );
 }

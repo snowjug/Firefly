@@ -1,37 +1,40 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { EVALUATION_PHASES, type EvaluationPhase } from '#shared/domain/vocab.ts';
 import { api, errorMessage } from '../../lib/api.ts';
 import { Icon } from '../Icon.tsx';
-import { Page, SkeletonBlock } from '../Page.tsx';
+import { atmosphereFor, cueLevelFor } from '../call/atmosphere.ts';
+import { SignalPresence } from '../signal/SignalPresence.tsx';
+import { LoadingNotice, PageFrame, PageHead } from './bridge.tsx';
 import { transcriptHref } from './labels.ts';
 import '../../styles/report.css';
 
-const PHASE_TEXT: Record<EvaluationPhase, { label: string; detail: string }> = {
+// The same real steps, in the same words, as the call's own wrap-up (components/call/EndingView):
+// the page the learner is on when the call ends and the page they land on if they come back while
+// the coaching is still being made are one continuous moment. Each step is shown only because the
+// server has reported reaching it.
+const STEPS: Record<EvaluationPhase, { title: string; detail: string }> = {
   transcript_locked: {
-    label: 'Transcript secured',
-    detail: 'Your conversation is saved and locked, so nothing below can change it.',
+    title: 'Transcript saved',
+    detail: 'Your conversation is saved and can no longer change.',
   },
   discovery_review: {
-    label: 'Analysing discovery',
-    detail: 'Checking which of the customer\u2019s hidden facts your questions brought out.',
+    title: 'Reviewing what you uncovered',
+    detail: 'Checking which hidden facts came up and which questions revealed them.',
   },
   scoring: {
-    label: 'Finding evidence and scoring',
-    detail: 'Looking for quotes in your transcript for each of the six skills.',
+    title: 'Finding evidence and scoring',
+    detail: 'Matching what you said to the six coaching areas, turn by turn.',
   },
   building_report: {
-    label: 'Building your coaching report',
-    detail: 'Putting the summary, strengths and next steps together.',
+    title: 'Building your coaching report',
+    detail: 'Writing feedback tied to exact moments in your call.',
   },
-  saved: {
-    label: 'Report saved',
-    detail: 'Your report is ready.',
-  },
+  saved: { title: 'Report ready', detail: 'Opening your report.' },
 };
 
-/** The real evaluation phases, as a stepper. The current phase is also named in text. */
+/** The real evaluation phases, as a line of points. The current phase is also named in text. */
 export function EvaluationProgress({
   session,
   stalled,
@@ -47,67 +50,81 @@ export function EvaluationProgress({
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
   }, []);
+  // Until the report is ready the customer's mood stays unseen in immersive practice, exactly as it
+  // was during the call: the presence is the neutral one.
+  const atmosphere = useMemo(
+    () => atmosphereFor(session.state, cueLevelFor(session.scenario.config.mode)),
+    [session.state, session.scenario.config.mode],
+  );
 
   return (
-    <Page title="Preparing your report" width="narrow" className="rp-root">
-      <section className="glass glass-strong rp-wait" aria-labelledby="rp-wait-title">
-        <p className="t-label">Practice coaching report</p>
-        <h1 id="rp-wait-title" className="t-title" tabIndex={-1} ref={heading}>
-          Preparing your coaching report
-        </h1>
-        <p className="t-lead">
-          Your call &ldquo;{session.scenarioTitle}&rdquo; has ended. This usually takes a few
-          seconds, and you can stay on this page.
-        </p>
+    <PageFrame title="Preparing your report" className="rp rp--wait">
+      <div className="rp-wait" data-mood={atmosphere.mood}>
+        <div className="rp-wait__presence" aria-hidden="true">
+          <SignalPresence
+            atmosphere={atmosphere}
+            discovered={0}
+            pool={7}
+            shifts={0}
+            frozen
+            size={240}
+          />
+        </div>
+        <section className="rp-wait__main" aria-labelledby="rp-wait-title">
+          <p className="type-label">Call ended</p>
+          <h1 id="rp-wait-title" className="rp-wait__title" tabIndex={-1} ref={heading}>
+            Wrapping up your call
+          </h1>
+          <p className="rp-wait__lead">
+            Your call &ldquo;{session.scenarioTitle}&rdquo; has ended. Firefly is turning your
+            conversation into coaching that points to what you actually said. This usually takes a
+            few seconds, and you can stay on this page. Scores are for practice, not performance
+            assessment.
+          </p>
 
-        <ol role="list" className="rp-steps" aria-label="Report progress">
-          {EVALUATION_PHASES.map((id, index) => {
-            const state = index < shown || finished ? 'done' : index === shown ? 'current' : 'todo';
-            return (
-              <li
-                key={id}
-                className="rp-step"
-                data-state={state}
-                aria-current={state === 'current' ? 'step' : undefined}
-              >
-                <span className="rp-step-mark" aria-hidden="true">
-                  {state === 'done' ? (
-                    <Icon name="check" size={16} />
-                  ) : state === 'current' ? (
-                    <span className="spinner" />
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <span className="rp-step-text">
-                  <span className="rp-step-label">{PHASE_TEXT[id].label}</span>
-                  <span className="rp-step-detail t-meta">{PHASE_TEXT[id].detail}</span>
-                </span>
-                <span className="rp-step-state t-meta">
-                  {state === 'done' ? 'Done' : state === 'current' ? 'In progress' : 'Waiting'}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+          <ol role="list" className="rp-steps" aria-label="Report progress">
+            {EVALUATION_PHASES.map((id, index) => {
+              const state =
+                index < shown || finished ? 'done' : index === shown ? 'current' : 'todo';
+              return (
+                <li
+                  key={id}
+                  className="rp-step"
+                  data-state={state}
+                  aria-current={state === 'current' ? 'step' : undefined}
+                >
+                  <span className="rp-step__mark" aria-hidden="true" data-ambient="step" />
+                  <span className="rp-step__text">
+                    <span className="rp-step__title">{STEPS[id].title}</span>
+                    {state === 'current' ? (
+                      <span className="rp-step__detail">{STEPS[id].detail}</span>
+                    ) : null}
+                  </span>
+                  <span className="rp-step__state type-label">
+                    {state === 'done' ? 'Done' : state === 'current' ? 'In progress' : 'Waiting'}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
 
-        <p role="status" className="sr-only">
-          {`Step ${Math.min(shown, EVALUATION_PHASES.length - 1) + 1} of ${EVALUATION_PHASES.length}: ${PHASE_TEXT[phase].label}`}
-        </p>
-        {stalled ? (
-          <div className="callout callout-caution" role="status">
-            <Icon name="info" size={18} />
-            <p>
+          <p role="status" className="sr-only">
+            {`Step ${Math.min(shown, EVALUATION_PHASES.length - 1) + 1} of ${EVALUATION_PHASES.length}: ${STEPS[phase].title}`}
+          </p>
+          {stalled ? (
+            <p className="rp-note" role="status">
               We are having trouble checking on your report. We will keep trying, and your
               transcript is safe.
             </p>
-          </div>
-        ) : null}
-        <p className="t-small">
-          <Link to={transcriptHref(session.id)}>Read your transcript while you wait</Link>
-        </p>
-      </section>
-    </Page>
+          ) : null}
+          <p>
+            <Link to={transcriptHref(session.id)} className="text-link">
+              Read your transcript while you wait
+            </Link>
+          </p>
+        </section>
+      </div>
+    </PageFrame>
   );
 }
 
@@ -145,122 +162,82 @@ export function EvaluationFailed({
   };
 
   return (
-    <Page title="Report not ready" width="narrow" className="rp-root">
-      <section className="glass glass-strong rp-wait rp-failed" aria-labelledby="rp-failed-title">
-        <span className="state-icon" aria-hidden="true">
-          <Icon name="alert" size={26} />
-        </span>
-        <p className="t-label">Practice coaching report</p>
-        <h1 id="rp-failed-title" className="t-title">
-          We couldn&rsquo;t finish your coaching report
-        </h1>
-        <p className="t-lead">
-          {error?.message ?? 'Something went wrong while preparing your report.'}
-        </p>
-        <p className="rp-safe">
-          <Icon name="shield" size={18} />
-          <Link to={transcriptHref(session.id)}>Your transcript is safe &ndash; read it here</Link>
-        </p>
+    <PageFrame title="Report not ready" width="narrow" className="rp rp--wait">
+      <PageHead
+        eyebrow="Practice coaching report"
+        title="We couldn’t finish your coaching report"
+        lead={error?.message ?? 'Something went wrong while preparing your report.'}
+      />
+      <div className="rp-safe">
+        <Icon name="shield" size={18} />
+        <Link to={transcriptHref(session.id)} className="text-link">
+          Your transcript is safe &ndash; read it here
+        </Link>
+      </div>
 
-        {retryable ? (
-          <div className="cluster">
-            <button
-              type="button"
-              className="btn btn-primary btn-lg"
-              onClick={retry}
-              disabled={busy}
-            >
-              {busy ? (
-                <span className="spinner" aria-hidden="true" />
-              ) : (
-                <Icon name="refresh" size={18} />
-              )}
-              Retry evaluation
-            </button>
-            <Link to="/history" className="btn btn-secondary btn-lg" viewTransition>
+      {retryable ? (
+        <div className="action-row">
+          <button type="button" className="action" onClick={retry} disabled={busy} aria-busy={busy}>
+            <Icon name="refresh" size={18} />
+            Retry evaluation
+          </button>
+          <Link to="/history" className="text-link" viewTransition>
+            Back to history
+          </Link>
+        </div>
+      ) : (
+        <>
+          <p className="rp-quiet">
+            Trying again is unlikely to help right now. Your transcript is saved, and you can
+            practise again from the library.
+          </p>
+          <div className="action-row">
+            <Link to="/history" className="action action--quiet" viewTransition>
               Back to history
             </Link>
           </div>
-        ) : (
-          <>
-            <p className="t-small t-muted">
-              Trying again is unlikely to help right now. Your transcript is saved, and you can
-              practise again from the library.
-            </p>
-            <Link to="/history" className="btn btn-secondary" viewTransition>
-              Back to history
-            </Link>
-          </>
-        )}
-        <p role="status" className={statusText ? 't-small' : 'sr-only'}>
-          {statusText}
+        </>
+      )}
+      <p role="status" className={statusText ? 'rp-quiet' : 'sr-only'}>
+        {statusText}
+      </p>
+      {problem ? (
+        <p className="rp-note rp-note--error" role="alert">
+          {errorMessage(problem)}
         </p>
-        {problem ? (
-          <p className="field-error" role="alert">
-            {errorMessage(problem)}
-          </p>
-        ) : null}
-      </section>
-    </Page>
+      ) : null}
+    </PageFrame>
   );
 }
 
 /** The report could not be read back from storage even though the call is complete. */
 export function ReportUnavailable({ session }: { session: SessionDTO }) {
   return (
-    <Page title="Report unavailable" width="narrow" className="rp-root">
-      <section className="glass glass-strong rp-wait rp-failed" aria-labelledby="rp-missing-title">
-        <span className="state-icon" aria-hidden="true">
-          <Icon name="alert" size={26} />
-        </span>
-        <p className="t-label">Practice coaching report</p>
-        <h1 id="rp-missing-title" className="t-title">
-          This report can&rsquo;t be opened
-        </h1>
-        <p className="t-lead">
-          The saved report for &ldquo;{session.scenarioTitle}&rdquo; could not be read. Your
-          transcript is still available.
-        </p>
-        <div className="cluster">
-          <Link to={transcriptHref(session.id)} className="btn btn-primary" viewTransition>
-            <Icon name="notes" size={18} /> Read your transcript
-          </Link>
-          <Link to="/history" className="btn btn-secondary" viewTransition>
-            Back to history
-          </Link>
-        </div>
-      </section>
-    </Page>
+    <PageFrame title="Report unavailable" width="narrow" className="rp rp--wait">
+      <PageHead
+        eyebrow="Practice coaching report"
+        title="This report can’t be opened"
+        lead={`The saved report for \u201c${session.scenarioTitle}\u201d could not be read. Your transcript is still available.`}
+      />
+      <div className="action-row">
+        <Link to={transcriptHref(session.id)} className="action" viewTransition>
+          <Icon name="notes" size={18} /> Read your transcript
+        </Link>
+        <Link to="/history" className="text-link" viewTransition>
+          Back to history
+        </Link>
+      </div>
+    </PageFrame>
   );
 }
 
+/** The report while it loads: the title is there for screen readers, the page is hairlines. */
 export function ReportSkeleton() {
   return (
-    <Page title="Loading report" className="rp-root">
+    <PageFrame title="Loading report" className="rp rp--wait">
       <h1 className="sr-only">Call feedback</h1>
-      <div className="rp-skeleton" role="status" aria-label="Loading your report">
-        <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-2)' }}>
-          <SkeletonBlock height={32} width="min(18rem, 60%)" />
-          <SkeletonBlock height={18} width="min(28rem, 85%)" />
-        </div>
-        <div className="glass card stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
-          <SkeletonBlock height={14} width="30%" />
-          <SkeletonBlock height={28} width="60%" />
-          <SkeletonBlock height={16} width="55%" />
-          <SkeletonBlock height={72} />
-        </div>
-        <div className="rp-scores">
-          <div className="glass card rp-overall">
-            <SkeletonBlock height={168} width={168} />
-          </div>
-          <div className="glass card stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
-            {Array.from({ length: 6 }, (_, i) => (
-              <SkeletonBlock key={i} height={20} />
-            ))}
-          </div>
-        </div>
-        <span className="sr-only">Loading your report&hellip;</span>
-      </div>
-    </Page>
+      <p className="type-label">Practice coaching report</p>
+      <LoadingNotice label="Loading your report" lines={5} />
+    </PageFrame>
   );
 }

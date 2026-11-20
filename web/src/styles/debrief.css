@@ -1,0 +1,977 @@
+/* The drawn parts of the debrief, and its print sheet.
+
+   The journey is the customer's mood as the filament the call chamber hangs its conversation from;
+   the strip across the head of the page is the same line replayed once; the constellation is the
+   six skills as stars; the wording diff shows a stronger way to say something as the change it is.
+   Every one of them has words as well as a shape, so none depends on colour, and every one is
+   decoration over a page that is already complete. The replay and the diff's movement are the only
+   things that move on their own, they never run under reduced motion (base.css removes the
+   movement; useReconstruction does not start the replay), and `data-ambient` is not used because
+   nothing here moves for longer than a couple of seconds. */
+
+/* ------------------------------------------------------------------ The strip (the replay) */
+.rp-strip {
+  grid-area: strip;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.rp-strip__svg {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+}
+.rp-strip__base {
+  stroke: var(--line-2);
+  stroke-width: 1;
+}
+.rp-strip__tick {
+  stroke: var(--line-3);
+  stroke-width: 1;
+}
+.rp-strip__end {
+  fill: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.rp-strip__scan {
+  stroke: var(--amber);
+  stroke-width: 1;
+  opacity: 0;
+}
+.rp-strip__flare {
+  fill: none;
+  stroke: var(--band-ink);
+  stroke-width: 1;
+  opacity: 0.55;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.rp-strip__node,
+.rp-strip__signal {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.rp-strip__skip {
+  position: absolute;
+  inset-block-start: -1.75rem;
+  inset-inline-end: 0;
+  min-height: 2.5rem;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+
+/* The replay: a playhead sweeps once from the first moment to the last, the line appears behind it,
+   points arrive as it passes them and the turning points flare. All of it ends inside 2.4 s. */
+.rp-strip[data-phase='playing'] .rp-strip__reveal {
+  animation: rp-reveal var(--sweep) linear 100ms both;
+}
+.rp-strip[data-phase='playing'] .rp-strip__scan {
+  animation: rp-scan var(--sweep) linear 100ms both;
+}
+.rp-strip[data-phase='playing'] .rp-strip__node {
+  animation: rp-node 320ms var(--ease-discovery-settle) calc(100ms + var(--p) * var(--sweep)) both;
+}
+.rp-strip[data-phase='playing'] .rp-strip__signal {
+  animation: rp-signal 560ms var(--ease-discovery-settle) calc(100ms + var(--p) * var(--sweep)) both;
+}
+.rp-strip[data-phase='playing'] .rp-strip__flare {
+  animation: rp-flare 760ms var(--ease-exit-decelerated) calc(100ms + var(--p) * var(--sweep)) both;
+}
+@keyframes rp-reveal {
+  from {
+    width: 0;
+  }
+}
+@keyframes rp-scan {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(var(--span));
+  }
+}
+@keyframes rp-node {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+@keyframes rp-signal {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.5);
+  }
+}
+@keyframes rp-flare {
+  from {
+    opacity: 0.9;
+    transform: scale(0.7);
+  }
+  60% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+  to {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+}
+/* The summary's point settles when the line has been drawn. */
+.rp-page[data-replay='playing'] .rp-overview__story::before {
+  animation: rp-settle 520ms var(--ease-discovery-settle) 1850ms both;
+}
+@keyframes rp-settle {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+}
+
+/* ------------------------------------------------------------------ The journey */
+.tl {
+  display: grid;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+.tl-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-5);
+}
+.tl-summary {
+  margin: 0;
+  color: var(--ink-1);
+  font-family: var(--font-display);
+  font-size: var(--t-heading);
+  font-weight: 300;
+  line-height: 1.25;
+  letter-spacing: var(--track-title);
+}
+.tl-chart {
+  min-width: 0;
+}
+.tl-plot {
+  position: relative;
+  width: 100%;
+}
+.tl-svg {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+}
+.tl-grid {
+  stroke: var(--line-1);
+  stroke-width: 1;
+}
+.tl-base {
+  stroke: var(--line-3);
+}
+.tl-band-dot {
+  fill: var(--band-ink);
+}
+.tl-band-label,
+.tl-tick,
+.tl-axis-title,
+.tl-edge,
+.tl-label {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+}
+.tl-band-label,
+.tl-axis-title,
+.tl-edge {
+  fill: var(--ink-3);
+  text-transform: uppercase;
+}
+.tl-tick {
+  fill: var(--ink-3);
+  letter-spacing: 0;
+}
+.tl-label {
+  fill: var(--ink-2);
+  letter-spacing: 0.02em;
+}
+.tl-piece {
+  fill: none;
+  stroke: var(--band-ink);
+  stroke-linecap: round;
+}
+/* A soft wider line under the filament: the light it gives off. Left out on the cheapest tier. */
+.tl-glow {
+  fill: none;
+  stroke: var(--band-color);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.16;
+}
+html[data-perf='low'] .tl-glow {
+  display: none;
+}
+.tl-m-fill {
+  fill: var(--band-ink);
+  stroke: var(--field-1);
+  stroke-width: 1.5;
+  paint-order: stroke;
+}
+.tl-m-ring {
+  fill: var(--field-1);
+  stroke: var(--band-ink);
+  stroke-width: 1.5;
+}
+.tl-stem {
+  stroke: color-mix(in srgb, var(--amber) 55%, transparent);
+  stroke-width: 1;
+}
+.tl-star {
+  fill: var(--amber);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--amber) 65%, transparent));
+}
+html[data-perf='low'] .tl-star {
+  filter: none;
+}
+.tl-signal[data-status='partial'] .tl-star {
+  fill: var(--field-1);
+  stroke: var(--amber);
+  stroke-width: 1.2;
+}
+.tl-guide {
+  stroke: var(--aqua);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+  opacity: 0.75;
+}
+.tl-ring {
+  fill: none;
+  stroke: var(--aqua);
+  stroke-width: 1.5;
+}
+.tl-hit {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.tl-point {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateX(-50%);
+}
+.tl-point:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+@media (hover: hover) {
+  .tl-point:hover {
+    background: color-mix(in srgb, var(--aqua) 9%, transparent);
+  }
+}
+.tl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  list-style: none;
+  text-transform: uppercase;
+}
+.tl-legend > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tl-legend .tl-m-fill {
+  fill: var(--ink-2);
+  stroke: none;
+}
+.tl-legend .tl-m-ring {
+  fill: none;
+  stroke: var(--ink-2);
+}
+.tl-legend__star {
+  fill: var(--amber);
+}
+.tl-hint {
+  max-width: var(--measure-read);
+  margin: var(--sp-2) 0 0;
+  color: var(--ink-3);
+  font-size: var(--t-small);
+  line-height: 1.55;
+}
+
+/* The selected moment, with the customer held still as they were then. */
+.tl-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'presence body'
+    'presence stepper';
+  gap: var(--sp-4) var(--sp-7);
+  padding-block-start: var(--sp-6);
+  border-block-start: 1px solid var(--line-2);
+}
+.tl-panel__presence {
+  grid-area: presence;
+  align-self: start;
+}
+.tl-panel__body {
+  grid-area: body;
+  display: grid;
+  gap: var(--sp-4);
+  min-width: 0;
+  max-width: var(--rp-measure);
+}
+.tl-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1.25rem;
+}
+.tl-panel__turn {
+  margin: 0;
+  color: var(--ink-1);
+  font-family: var(--font-display);
+  font-size: var(--t-title);
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: var(--track-title);
+}
+.tl-panel__count,
+.tl-panel__kind {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.tl-panel__kind {
+  color: var(--ink-2);
+}
+.tl-panel__band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.7rem;
+  margin: 0;
+  font-family: var(--font-read);
+  font-size: var(--t-lead);
+  line-height: 1.4;
+}
+.tl-panel__band strong {
+  font-weight: 500;
+}
+.tl-panel__change {
+  color: var(--ink-2);
+}
+.tl-dot {
+  display: inline-block;
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--band-ink);
+  align-self: center;
+}
+.tl-panel__block {
+  display: grid;
+  gap: var(--sp-1);
+}
+.tl-panel__block > p:last-child {
+  margin: 0;
+}
+.tl-panel__block > p:not(.type-label):not(.rp-quiet) {
+  font-family: var(--font-read);
+  font-size: var(--t-read);
+  line-height: 1.5;
+}
+.tl-panel__signals {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  color: var(--amber-text);
+  font-size: var(--t-small);
+  list-style: none;
+}
+.tl-panel__signals > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.tl-panel__signals svg {
+  flex: none;
+  margin-block-start: 0.15em;
+  fill: var(--amber);
+}
+.tl-panel__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+}
+.tl-stepper {
+  grid-area: stepper;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.tl-table-wrap {
+  min-width: 0;
+}
+.tl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-small);
+}
+.tl-table th,
+.tl-table td {
+  padding: 0.6rem 0.9rem 0.6rem 0;
+  border-block-start: 1px solid var(--line-2);
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.tl-table thead th {
+  border-block-start: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.tl-table tbody th {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tl-cell-band {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tl-narrow-only {
+  display: none;
+  color: var(--ink-2);
+}
+@media (max-width: 719px) {
+  .tl-panel {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'presence'
+      'body'
+      'stepper';
+    gap: var(--sp-4);
+  }
+  .tl-col-change {
+    display: none;
+  }
+  .tl-narrow-only {
+    display: inline;
+  }
+}
+
+/* ------------------------------------------------------------------ The constellation */
+.rp-const {
+  margin-block: var(--sp-6) 0;
+}
+.rp-const__stage {
+  position: relative;
+  height: clamp(19rem, 30vw, 24rem);
+}
+.rp-const__lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.rp-const__lines polyline {
+  fill: none;
+  stroke: var(--line-3);
+  stroke-width: 1;
+  stroke-dasharray: 1 7;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.rp-const__list {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-const__item {
+  position: absolute;
+  inset-inline-start: var(--x);
+  inset-block-start: var(--y);
+}
+/* The link is the star with its words, placed so the star's centre is on the point. */
+.rp-const__link {
+  position: absolute;
+  inset: 0 auto auto 0;
+  display: grid;
+  justify-items: center;
+  min-width: 5rem;
+  color: var(--ink-1);
+  text-decoration: none;
+  transform: translate(-50%, -26px);
+}
+.rp-const__item[data-side='above'] .rp-const__link {
+  transform: translate(-50%, calc(-100% + 26px));
+}
+.rp-const__item[data-side='above'] .rp-const__words {
+  order: -1;
+}
+.rp-const__star {
+  display: block;
+  width: 52px;
+  height: 52px;
+  overflow: visible;
+  fill: var(--amber);
+  opacity: 0.8;
+  transition: transform var(--dur-component) var(--ease-spatial-spring);
+}
+.rp-const__star path {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--amber) 65%, transparent));
+}
+.rp-const__star[data-solid='true'] circle {
+  fill: var(--amber-hi);
+}
+.rp-const__star:not([data-solid]) {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+.rp-const__star:not([data-solid]) path {
+  filter: none;
+}
+.rp-const__star:not([data-solid]) circle {
+  fill: var(--amber);
+  stroke: none;
+}
+.rp-const__item[data-score='1'] .rp-const__star {
+  opacity: 0.5;
+}
+.rp-const__item[data-score='2'] .rp-const__star {
+  opacity: 0.62;
+}
+.rp-const__item[data-score='3'] .rp-const__star {
+  opacity: 0.74;
+}
+.rp-const__item[data-score='4'] .rp-const__star {
+  opacity: 0.88;
+}
+.rp-const__item[data-score='5'] .rp-const__star {
+  opacity: 1;
+}
+html[data-perf='low'] .rp-const__star path {
+  filter: none;
+}
+.rp-const__link:focus-visible .rp-const__star {
+  transform: scale(1.14);
+}
+@media (hover: hover) {
+  .rp-const__link:hover .rp-const__star {
+    transform: scale(1.14);
+  }
+}
+.rp-const__words {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  gap: 0.1rem 0.7rem;
+  width: max-content;
+  max-width: 11.5rem;
+  padding: 0.2rem 0.4rem;
+  text-align: center;
+}
+.rp-const__n,
+.rp-const__name,
+.rp-const__badge {
+  grid-column: 1 / -1;
+}
+.rp-const__n {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+}
+.rp-const__name {
+  color: var(--ink-1);
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  line-height: 1.2;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.25em;
+  transition: text-decoration-color var(--dur-micro);
+}
+.rp-const__link:hover .rp-const__name,
+.rp-const__link:focus-visible .rp-const__name {
+  text-decoration-color: var(--amber);
+}
+.rp-const__score {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+}
+.rp-const__num {
+  color: var(--ink-1);
+  font-size: 1.0625rem;
+}
+.rp-const__label {
+  color: var(--ink-2);
+  font-family: var(--font-read);
+  font-size: 0.9375rem;
+  font-style: italic;
+}
+.rp-const__badge {
+  color: var(--amber-text);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+/* Without room for a sky, the stars are a list: each a row with its star in front. */
+@media (max-width: 719px) {
+  .rp-const__stage {
+    height: auto;
+  }
+  .rp-const__lines {
+    display: none;
+  }
+  .rp-const__list {
+    position: static;
+    display: grid;
+  }
+  .rp-const__item {
+    position: static;
+    border-block-start: 1px solid var(--line-2);
+  }
+  .rp-const__link,
+  .rp-const__item[data-side='above'] .rp-const__link {
+    position: static;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    min-height: 3.5rem;
+    padding-block: 0.3rem;
+    transform: none;
+  }
+  .rp-const__item[data-side='above'] .rp-const__words {
+    order: 0;
+  }
+  .rp-const__star {
+    flex: none;
+    width: 44px;
+    height: 44px;
+  }
+  .rp-const__words {
+    flex: 1;
+    grid-template-columns: auto 1fr;
+    justify-content: start;
+    gap: 0.05rem 0.7rem;
+    width: auto;
+    max-width: none;
+    padding: 0;
+    text-align: start;
+  }
+  .rp-const__n {
+    display: none;
+  }
+  .rp-const__item:last-child {
+    border-block-end: 1px solid var(--line-2);
+  }
+}
+
+/* ------------------------------------------------------------------ The wording diff */
+.wd {
+  display: grid;
+  gap: var(--sp-2);
+  interpolate-size: allow-keywords;
+}
+.wd__line,
+.wd__plain {
+  margin: 0;
+  color: var(--ink-1);
+  font-family: var(--font-read);
+  font-size: var(--t-lead);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+/* Words that come in or go out grow and shrink in place; where the browser cannot animate a width
+   they simply appear and disappear. */
+.wd__word {
+  display: inline-block;
+  width: auto;
+  overflow: hidden;
+  vertical-align: bottom;
+  white-space: pre;
+  transition:
+    width var(--dur-component) var(--ease-exit-decelerated),
+    opacity var(--dur-micro) ease;
+}
+.wd[data-view='after'] .wd__word[data-kind='remove'] {
+  width: 0;
+  opacity: 0;
+}
+.wd[data-view='changes'] .wd__word[data-kind='remove'] {
+  color: var(--ink-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--coral);
+  text-decoration-thickness: 1px;
+}
+.wd[data-view='changes'] .wd__word[data-kind='add'] {
+  text-decoration: underline;
+  text-decoration-color: var(--amber);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.22em;
+}
+.wd__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--sp-5);
+}
+.wd__counts {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--t-small);
+}
+.wd__mark {
+  position: relative;
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+}
+.wd__mark::before,
+.wd__mark::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+}
+.wd__mark::before {
+  inset-inline: 0;
+  inset-block-start: calc(50% - 0.5px);
+  height: 1px;
+}
+.wd__mark::after {
+  inset-block: 0;
+  inset-inline-start: calc(50% - 0.5px);
+  width: 1px;
+  transition: transform var(--dur-component) var(--ease-spatial-spring);
+}
+.wd__toggle[aria-pressed='true'] .wd__mark::after {
+  transform: scaleY(0);
+}
+
+/* ------------------------------------------------------------------ Forced colours */
+@media (forced-colors: active) {
+  .tl-star,
+  .rp-const__star,
+  .tl-legend__star,
+  .tl-panel__signals svg {
+    forced-color-adjust: none;
+    fill: Highlight;
+    stroke: Highlight;
+    filter: none;
+  }
+  .rp-const__star:not([data-solid]) {
+    fill: none;
+  }
+  .tl-piece,
+  .rp-strip__base,
+  .rp-strip__flare {
+    forced-color-adjust: none;
+    stroke: CanvasText;
+  }
+  .tl-glow {
+    display: none;
+  }
+  .tl-m-fill,
+  .tl-legend .tl-m-fill {
+    forced-color-adjust: none;
+    fill: CanvasText;
+    stroke: Canvas;
+  }
+  .tl-m-ring {
+    forced-color-adjust: none;
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+  .tl-guide,
+  .tl-ring {
+    stroke: Highlight;
+  }
+  .tl-grid,
+  .tl-stem,
+  .rp-const__lines polyline {
+    stroke: CanvasText;
+  }
+  .rp-strip__scan {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ Print and PDF
+   "Download report" opens the browser's print dialog, where "Save as PDF" makes the file. On paper
+   the field, the dock and everything that is only for the screen go away, the colours become a
+   light set that prints cleanly, every disclosure is open (the primitives do that), the wording
+   diff shows both what went out and what came in, and no moment is split across a page if it can
+   be helped. */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  :root:has(.rp),
+  :root[data-theme='dark']:has(.rp),
+  :root[data-theme='light']:has(.rp) {
+    color-scheme: light;
+    --field-0: #fff;
+    --field-1: #fff;
+    --field-2: #f6f5f1;
+    --solid-1: #fff;
+    --solid-2: #fff;
+    --ink-1: #14201e;
+    --ink-2: #33403d;
+    --ink-3: #55615d;
+    --ink-inverse: #fff;
+    --line-1: rgba(20, 32, 30, 0.14);
+    --line-2: rgba(20, 32, 30, 0.28);
+    --line-3: rgba(20, 32, 30, 0.5);
+    --amber: #c78a14;
+    --amber-hi: #c78a14;
+    --amber-text: #7d5300;
+    --aqua: #0f7a8f;
+    --aqua-text: #0b6477;
+    --sage: #2e8a62;
+    --sage-text: #1f6445;
+    --coral: #c4452b;
+    --coral-text: #a2301a;
+    --mood-calm: #2e8a62;
+    --mood-concerned: #b07a10;
+    --mood-frustrated: #c2640f;
+    --mood-angry: #c4452b;
+    --mood-escalating: #a8302a;
+    --focus: #0b6477;
+  }
+  .rp,
+  .rp * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  html:has(.rp) body {
+    background: #fff;
+    color: var(--ink-1);
+  }
+  .rp {
+    max-width: none;
+    padding-inline: 0;
+  }
+  .rp-rail,
+  .rp-jump,
+  .rp-mast__actions,
+  .rp-strip__skip,
+  .rp-copy,
+  .rp-ctx,
+  .rp-ctx__toggle,
+  .rp-next__actions,
+  .rp-about__foot .action,
+  .rp-rewards__foot a,
+  .tl-toggle,
+  .tl-stepper,
+  .tl-hit,
+  .tl-panel__link,
+  .wd__toggle,
+  .rp-const__lines {
+    display: none !important;
+  }
+  .rp-body {
+    display: block;
+    margin-block-start: var(--sp-6);
+  }
+  .rp-mast {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .rp-mast__presence {
+    transform: scale(0.7);
+    transform-origin: top right;
+  }
+  .rp-main > .ff-section {
+    margin-block-start: var(--sp-7);
+  }
+  .rp-skill,
+  .rp-moment,
+  .rp-fact,
+  .rp-curve,
+  .rp-ledger-item,
+  .rp-quote,
+  .tl-panel,
+  .rp-next,
+  .rp-about {
+    break-inside: avoid;
+  }
+  .ff-section__head {
+    break-after: avoid;
+  }
+  .rp-const__stage {
+    height: 17rem;
+  }
+  .rp-const__star path,
+  .rp-mark,
+  .tl-star,
+  .rp-scale__pip,
+  .rp-overview__story::before {
+    filter: none !important;
+    box-shadow: none !important;
+  }
+  .wd .wd__word {
+    width: auto !important;
+    opacity: 1 !important;
+  }
+  .wd .wd__word[data-kind='remove'] {
+    color: var(--ink-3);
+    text-decoration: line-through;
+  }
+  .wd .wd__word[data-kind='add'] {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+  }
+  .rp-strip__svg,
+  .tl-svg {
+    max-width: 100%;
+  }
+  a[href^='#'] {
+    text-decoration: none;
+  }
+}

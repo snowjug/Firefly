@@ -7,13 +7,18 @@ import {
   SESSION_ID,
   makeBadge,
   makeLedgerEntry,
+  makeReport,
   makeRewards,
   makeSession,
   makeSpecSession,
+  point,
 } from '../components/report/report.fixtures.ts';
+import { reconstructionKey } from '../components/report/useReconstruction.ts';
 import { ApiError, api } from '../lib/api.ts';
 import type * as ApiModule from '../lib/api.ts';
 import { loadDraft } from '../lib/draft.ts';
+import { PerfTierProvider } from '../lib/PerfTierProvider.tsx';
+import { ThemeProvider } from '../lib/theme.tsx';
 import { ToastProvider } from '../lib/toast.tsx';
 import Report from './Report.tsx';
 
@@ -26,13 +31,14 @@ const getSession = vi.mocked(api.getSession);
 const evaluate = vi.mocked(api.evaluate);
 const rewards = vi.mocked(api.rewards);
 
-// A wide screen, so evidence is shown inline and the section bar is visible.
+// A wide screen, so evidence is shown inline and the section rail is visible. Everything matches
+// except a request for reduced motion, which the tests that want it make through the setting.
 function stubMatchMedia() {
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     writable: true,
     value: (query: string) => ({
-      matches: true,
+      matches: !query.includes('prefers-reduced-motion'),
       media: query,
       onchange: null,
       addEventListener: () => undefined,
@@ -44,8 +50,8 @@ function stubMatchMedia() {
   });
 }
 
-function renderReport() {
-  return render(
+function renderReport(options: { replay?: boolean } = {}) {
+  const page = (
     <ToastProvider>
       <MemoryRouter initialEntries={[`/sessions/${SESSION_ID}/report`]}>
         <Routes>
@@ -53,14 +59,25 @@ function renderReport() {
           <Route path="calls/:id" element={<p>The call screen</p>} />
           <Route path="history" element={<p>The history screen</p>} />
           <Route path="rewards" element={<p>The rewards screen</p>} />
+          <Route path="scenarios/:id/setup" element={<p>The setup screen</p>} />
           <Route path="calibration" element={<p>The calibration screen</p>} />
         </Routes>
       </MemoryRouter>
-    </ToastProvider>,
+    </ToastProvider>
+  );
+  // The replay plays only where effects are affordable and motion is allowed.
+  return render(
+    options.replay ? (
+      <ThemeProvider>
+        <PerfTierProvider tier="high">{page}</PerfTierProvider>
+      </ThemeProvider>
+    ) : (
+      page
+    ),
   );
 }
 
-const FOUND = { level: 1, name: 'Call feedback' } as const;
+const FOUND = { level: 1, name: /Call feedback/ } as const;
 
 // The loading skeleton has the same hidden title, so the report is ready once the skeleton is gone.
 async function findLoadedReport() {
@@ -70,10 +87,17 @@ async function findLoadedReport() {
   );
 }
 
+/** The masthead: the title, the customer and the facts of the call. */
+const masthead = () => screen.getByRole('heading', { level: 1 }).closest('header') as HTMLElement;
+const skillCard = (name: string) =>
+  screen.getByRole('heading', { level: 3, name }).closest('article') as HTMLElement;
+
 beforeEach(() => {
   vi.resetAllMocks();
   sessionStorage.clear();
+  localStorage.clear();
   stubMatchMedia();
+  Element.prototype.scrollIntoView = vi.fn();
   rewards.mockResolvedValue(makeRewards());
 });
 
@@ -84,7 +108,7 @@ describe('Report page: session status', () => {
     expect(await screen.findByText('The call screen')).toBeInTheDocument();
   });
 
-  it('shows the real evaluation phase, then the report, and moves focus to the heading', async () => {
+  it('shows the real evaluation phase, in the words of the call, then the report, and moves focus to the heading', async () => {
     getSession
       .mockResolvedValueOnce(
         makeSession({ status: 'completing', evaluationPhase: 'scoring', report: null }),
@@ -93,19 +117,21 @@ describe('Report page: session status', () => {
     renderReport();
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Preparing your coaching report' }),
+      await screen.findByRole('heading', { level: 1, name: 'Wrapping up your call' }),
     ).toBeInTheDocument();
     const current = screen.getByText('Finding evidence and scoring').closest('li');
     expect(current).toHaveAttribute('aria-current', 'step');
     expect(within(current as HTMLElement).getByText('In progress')).toBeInTheDocument();
     expect(screen.getByText('Step 3 of 5: Finding evidence and scoring')).toBeInTheDocument();
     expect(screen.getAllByText('Done')).toHaveLength(2);
+    expect(screen.getByText('Transcript saved')).toBeInTheDocument();
+    expect(screen.getByText('Reviewing what you uncovered')).toBeInTheDocument();
     expect(screen.queryByText(/%/)).not.toBeInTheDocument();
 
-    const title = await screen.findByRole('heading', FOUND, { timeout: 4000 });
+    const title = await screen.findByRole('heading', FOUND, { timeout: 6000 });
     // Focus is applied in an effect right after the heading appears, so wait for it.
     await waitFor(() => expect(title).toHaveFocus());
-  });
+  }, 15_000);
 
   it('offers a retry when the evaluation failed, and keeps the transcript one click away', async () => {
     const user = userEvent.setup();
@@ -184,6 +210,9 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
     await renderSpec();
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveAccessibleName(
+      'Call feedback: A user needs help finding a feature',
+    );
     expect(screen.getByText(/ended before a natural close, so treat the feedback/i)).toBeVisible();
     expect(screen.queryByText(/great effort/i)).not.toBeInTheDocument();
     const download = screen.getByRole('button', { name: 'Download report' });
@@ -202,45 +231,50 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
 
   it('shows the call: when, how long, how hard, how it ended, who coached, and the notes', async () => {
     await renderSpec();
-    const meta = screen.getByRole('region', { name: 'A user needs help finding a feature' });
+    const meta = within(masthead());
 
-    expect(within(meta).getByText('Practice coaching report')).toBeInTheDocument();
-    expect(meta.querySelector('time')).toHaveAttribute('datetime', makeSpecSession().startedAt);
-    expect(within(meta).getByText('3 min 6s')).toBeInTheDocument();
-    expect(within(meta).getByText('Starter')).toBeInTheDocument();
-    expect(within(meta).getByText('Guided practice')).toBeInTheDocument();
-    expect(within(meta).getByText('Ended early')).toBeInTheDocument();
-    expect(within(meta).getByText('Customer at the end: Concerned')).toBeInTheDocument();
-    expect(within(meta).getByText('Gemini (model "gemini-test-model")')).toBeInTheDocument();
+    expect(meta.getByText('Practice coaching report')).toBeInTheDocument();
+    expect(masthead().querySelector('time')).toHaveAttribute(
+      'datetime',
+      makeSpecSession().startedAt,
+    );
+    expect(meta.getByText('3 min 6s')).toBeInTheDocument();
+    expect(meta.getByText('Starter')).toBeInTheDocument();
+    expect(meta.getByText('Guided practice')).toBeInTheDocument();
+    expect(meta.getByText('Ended early')).toBeInTheDocument();
+    expect(meta.getByText('Customer at the end: Concerned')).toBeInTheDocument();
+    expect(meta.getByText('Gemini (model "gemini-test-model")')).toBeInTheDocument();
+    // The customer, in the same place as the scenario.
+    expect(meta.getByText('Carmen Reyes')).toBeInTheDocument();
+    expect(meta.getByText('Finance assistant, Harbour Foods')).toBeInTheDocument();
     // Said once each: the plain note about the early end, and the evidence note with its badge.
     expect(
-      within(meta).getByText(
+      meta.getByText(
         'This call stopped before a wrap-up, so the Closing score rests on limited evidence.',
       ),
     ).toBeInTheDocument();
-    expect(
-      within(meta).getByText(/The call ended early after dismissive trainee replies/),
-    ).toBeVisible();
-    const note = within(meta).getByRole('note');
+    const note = meta.getByRole('note');
     expect(note).toHaveTextContent('Limited evidence.');
     expect(note).toHaveTextContent('The call was ended before a natural close.');
     expect(note).toHaveTextContent('More turns would give firmer coaching.');
+    // The coach's own summary opens the page body.
+    expect(screen.getByText(/The call ended early after dismissive trainee replies/)).toBeVisible();
   });
 
-  it('shows the overall score with its caption, the quick facts and six skill rows with evidence chips', async () => {
+  it('shows the overall score with its caption, the quick facts and six skill stars with evidence tags', async () => {
     await renderSpec();
     expect(screen.getByRole('img', { name: 'Overall score: 1 out of 5' })).toBeInTheDocument();
     expect(
       screen.getByText('Across the six skills. A practice signal, not a grade or a ranking.'),
     ).toBeInTheDocument();
 
-    const facts = screen.getByRole('list', { name: 'At a glance' });
+    const facts = screen.getByRole('group', { name: 'At a glance' });
     expect(within(facts).getByText('0 of 4')).toBeInTheDocument();
     expect(within(facts).getByText('Hidden facts found')).toBeInTheDocument();
     expect(within(facts).getByText('Calm to Concerned')).toBeInTheDocument();
     expect(within(facts).getByText('Customer mood')).toBeInTheDocument();
-    expect(within(facts).getByText('5')).toBeInTheDocument();
-    expect(within(facts).getByText('Your turns')).toBeInTheDocument();
+    const turns = within(facts).getByText('Your turns').closest('div') as HTMLElement;
+    expect(within(turns).getByText('5')).toBeInTheDocument();
     expect(within(facts).getByRole('link', { name: 'Scoping & Discovery' })).toHaveAttribute(
       'href',
       '#dim-scoping-discovery',
@@ -251,17 +285,18 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
     );
 
     const skills = screen.getByRole('region', { name: 'Six skill scores' });
-    const rows = within(skills).getAllByRole('link');
-    expect(rows).toHaveLength(6);
+    const stars = within(within(skills).getByRole('navigation', { name: 'The six skills' }));
+    const links = stars.getAllByRole('link');
+    expect(links).toHaveLength(6);
     DIMENSION_IDS.forEach((id, index) => {
-      expect(rows[index]).toHaveAttribute('href', `#dim-${id}`);
-      expect(rows[index]).toHaveTextContent(DIMENSIONS[id].label);
-      expect(rows[index]).toHaveTextContent('1 of 5');
-      expect(rows[index]).toHaveTextContent('Not demonstrated');
+      expect(links[index]).toHaveAttribute('href', `#dim-${id}`);
+      expect(links[index]).toHaveTextContent(DIMENSIONS[id].label);
+      expect(links[index]).toHaveTextContent('1 of 5');
+      expect(links[index]).toHaveTextContent('Not demonstrated');
     });
-    expect(within(skills).getAllByText('Limited evidence')).toHaveLength(2);
-    expect(within(skills).getAllByText('Not enough evidence')).toHaveLength(1);
-    expect(rows[5]).toHaveTextContent('Not enough evidence');
+    expect(stars.getAllByText('Limited evidence')).toHaveLength(2);
+    expect(stars.getAllByText('Not enough evidence')).toHaveLength(1);
+    expect(links[5]).toHaveTextContent('Not enough evidence');
   });
 
   it('keeps the lead sentence of every section of the original report', async () => {
@@ -273,12 +308,13 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
       'Customers rarely volunteer everything. These are the facts this customer held back, and whether your questions brought them out.',
       'How the customer\u2019s mood moved through the call, and what moved it. Turning points link back to the exact turn in your transcript.',
       'One thing to work on in your next call, not a list of everything.',
+      'Why each skill scored as it did, the moments from your call it rests on, and one thing to try.',
     ]) {
       expect(screen.getByText(sentence)).toBeInTheDocument();
     }
   });
 
-  it('lists the sections in "On this page" once the rewards are known', async () => {
+  it('lists the sections in "On this page", in reading order, once the rewards are known', async () => {
     await renderSpec();
     const nav = screen.getByRole('navigation', { name: 'On this page' });
     await within(nav).findByRole('link', { name: 'Rewards' });
@@ -287,12 +323,11 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
         .getAllByRole('link')
         .map((link) => link.textContent),
     ).toEqual([
+      'Customer temperature',
       'Six skills',
       'What went well',
-      'Skill details',
       'Opportunities',
       'Discovery',
-      'Customer temperature',
       'Rewards',
       'Next practice',
       'About this report',
@@ -312,9 +347,7 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
       ),
     ).toBeInTheDocument();
 
-    const opening = screen
-      .getByRole('heading', { level: 3, name: 'Opening & Rapport' })
-      .closest('article') as HTMLElement;
+    const opening = skillCard('Opening & Rapport');
     expect(within(opening).getByText('Communicate effectively')).toBeInTheDocument();
     expect(within(opening).getByText('Be empathetic')).toBeInTheDocument();
     expect(opening).toHaveTextContent('1 of 5 – Not demonstrated');
@@ -328,9 +361,7 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
     expect(within(opening).getByText('To strengthen this')).toBeInTheDocument();
     expect(within(opening).getByText(/offering a warm, professional greeting/)).toBeInTheDocument();
 
-    const scoping = screen
-      .getByRole('heading', { level: 3, name: 'Scoping & Discovery' })
-      .closest('article') as HTMLElement;
+    const scoping = skillCard('Scoping & Discovery');
     expect(
       within(scoping).getByText('No quotable moment stood out for this skill.'),
     ).toBeInTheDocument();
@@ -341,9 +372,7 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
   it('opens the conversation around a quote in place', async () => {
     const user = userEvent.setup();
     await renderSpec();
-    const opening = screen
-      .getByRole('heading', { level: 3, name: 'Opening & Rapport' })
-      .closest('article') as HTMLElement;
+    const opening = skillCard('Opening & Rapport');
     await user.click(within(opening).getByText('See it in the conversation'));
     const around = within(opening).getByRole('list', { name: 'The conversation around turn 2' });
     expect(
@@ -355,14 +384,15 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
       'aria-current',
       'true',
     );
+    expect(
+      within(opening).getByRole('link', { name: /open the whole transcript at turn 2/i }),
+    ).toHaveAttribute('href', `/sessions/${SESSION_ID}/transcript?turn=2`);
   });
 
   it('shows the opportunity with what was said, why it matters and a stronger way to say it', async () => {
     const user = userEvent.setup();
     await renderSpec();
-    const card = screen
-      .getByRole('heading', { level: 3, name: 'A moment to rework: empathy' })
-      .closest('article') as HTMLElement;
+    const card = skillCard('A moment to rework: empathy');
     expect(within(card).getByText('Empathy & De-escalation')).toBeInTheDocument();
     expect(within(card).getByRole('link', { name: 'Turn 4, view in transcript' })).toHaveAttribute(
       'href',
@@ -379,11 +409,6 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
 
     await user.click(within(card).getByRole('button', { name: 'Copy phrasing' }));
     expect(await navigator.clipboard.readText()).toMatch(/^I completely understand/);
-    // The same item is summarised in "Areas to improve" and links to the detail.
-    const areas = screen.getByRole('region', { name: 'Areas to improve' });
-    expect(
-      within(areas).getByRole('link', { name: /see a stronger way to say it/i }),
-    ).toHaveAttribute('href', '#imp-0');
   });
 
   it('describes discovery: found 0 of 4, the three counts and every fact with its status and importance', async () => {
@@ -401,9 +426,7 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
       ['Following an old training guide', 'Helpful'],
     ] as const;
     for (const [label, importance] of facts) {
-      const card = screen
-        .getByRole('heading', { level: 3, name: label })
-        .closest('article') as HTMLElement;
+      const card = skillCard(label);
       expect(within(card).getByText('Missed')).toBeInTheDocument();
       expect(within(card).getByText(importance)).toBeInTheDocument();
       expect(card).toHaveTextContent(`Importance: ${importance}`);
@@ -497,6 +520,10 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
       'href',
       `/sessions/${SESSION_ID}/transcript`,
     );
+    expect(within(next).getByRole('link', { name: 'Back to history' })).toHaveAttribute(
+      'href',
+      '/history',
+    );
 
     // Opening the setup carries the suggested difficulty with it.
     await user.click(practise);
@@ -504,6 +531,18 @@ describe('Report page: a call that ended early (modelled on a real report)', () 
       scenarioId: 'team-cannot-open-shared-workspace',
       overrides: { difficulty: 'starter' },
     });
+  });
+
+  it('copies a summary made only of the report’s own words', async () => {
+    const user = userEvent.setup();
+    await renderSpec();
+    await user.click(screen.getByRole('button', { name: 'Copy summary' }));
+    const copied = await navigator.clipboard.readText();
+    expect(copied).toContain('Call feedback: A user needs help finding a feature');
+    expect(copied).toContain('The call ended early after dismissive trainee replies');
+    expect(copied).toContain('Next practice target: Empathy & De-escalation.');
+    expect(copied).toContain('Scores are for practice, not performance assessment.');
+    expect(await screen.findByText('Summary copied to the clipboard.')).toBeInTheDocument();
   });
 
   it('closes with what the report is, its limits, the rubric and the training-aid reminder', async () => {
@@ -596,9 +635,7 @@ describe('Report page: a completed call', () => {
         screen.getByRole('heading', { level: 3, name: DIMENSIONS[id].label }),
       ).toBeInTheDocument();
     }
-    const openingCard = screen
-      .getByRole('heading', { level: 3, name: 'Opening & Rapport' })
-      .closest('article') as HTMLElement;
+    const openingCard = skillCard('Opening & Rapport');
     expect(openingCard).toHaveTextContent('4 of 5 \u2013 Strong');
     expect(
       within(openingCard).getByRole('link', { name: 'Turn 4, view in transcript' }),
@@ -621,11 +658,7 @@ describe('Report page: a completed call', () => {
       within(strengths).getAllByRole('link', { name: /view in transcript/i }).length,
     ).toBeGreaterThan(0);
 
-    const title = screen.getByRole('heading', {
-      level: 3,
-      name: /did not find out: phone still using the old password/i,
-    });
-    const card = title.closest('article') as HTMLElement;
+    const card = skillCard('Did not find out: Phone still using the old password');
     expect(within(card).getByText(/didn.t come up in the call/i)).toBeInTheDocument();
     expect(within(card).queryAllByRole('link')).toHaveLength(0);
     expect(within(card).getByText('A stronger way to say it')).toBeInTheDocument();
@@ -649,23 +682,33 @@ describe('Report page: a completed call', () => {
     getSession.mockResolvedValue(makeSession());
     renderReport();
     expect(await screen.findByText('Found 1 of 3 hidden facts, and 1 partly')).toBeInTheDocument();
-    const missed = screen
-      .getByRole('heading', { level: 3, name: 'Phone still using the old password' })
-      .closest('article') as HTMLElement;
+    const missed = skillCard('Phone still using the old password');
     expect(within(missed).getByText('Missed')).toBeInTheDocument();
     expect(within(missed).getByText('A question worth asking')).toBeInTheDocument();
-    const found = screen
-      .getByRole('heading', { level: 3, name: 'Started right after the password change' })
-      .closest('article') as HTMLElement;
+    const found = skillCard('Started right after the password change');
     expect(within(found).getByText('Found')).toBeInTheDocument();
     expect(within(found).getByText('Your question')).toBeInTheDocument();
     expect(
       within(found).getByRole('link', { name: 'Turn 4, view in transcript' }),
     ).toBeInTheDocument();
-    const partly = screen
-      .getByRole('heading', { level: 3, name: 'The message says the account is locked' })
-      .closest('article') as HTMLElement;
+    const partly = skillCard('The message says the account is locked');
     expect(within(partly).getByText('Partly found')).toBeInTheDocument();
+  });
+
+  it('says plainly when the scenario had no hidden facts, and drops the quick fact about them', async () => {
+    getSession.mockResolvedValue(
+      makeSession({
+        report: makeReport({
+          discovery: { results: [], found: 0, partial: 0, missed: 0, total: 0 },
+        }),
+      }),
+    );
+    renderReport();
+    expect(
+      await screen.findByText('This scenario had no hidden facts to find.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Hidden facts found')).not.toBeInTheDocument();
+    expect(screen.queryByText(/partly found/)).not.toBeInTheDocument();
   });
 
   it('links to the next practice scenario and keeps the training note visible', async () => {
@@ -699,10 +742,12 @@ describe('Report page: a completed call', () => {
       }),
     );
     renderReport();
-    const curveball = (
-      await screen.findByRole('heading', { level: 3, name: 'Asks for a manager' })
-    ).closest('article') as HTMLElement;
+    await findLoadedReport();
+    const curveball = skillCard('Asks for a manager');
     expect(within(curveball).getByText('Still open when the call ended')).toBeInTheDocument();
+    expect(
+      within(curveball).getByText('After turn 4 the customer asked for a manager.'),
+    ).toBeVisible();
     expect(within(curveball).getByRole('link', { name: /view turn 4/i })).toHaveAttribute(
       'href',
       `/sessions/${SESSION_ID}/transcript?turn=4`,
@@ -714,6 +759,21 @@ describe('Report page: a completed call', () => {
     ).toHaveAttribute('href', '#curveball');
   });
 
+  it('shows a curveball without an assessment as what it was, with nothing invented', async () => {
+    getSession.mockResolvedValue(
+      makeSession({
+        report: makeReport({
+          curveball: { type: 'deadline', firedAtTurn: 6, status: 'resolved', assessment: '' },
+        }),
+      }),
+    );
+    renderReport();
+    await findLoadedReport();
+    const curveball = skillCard('Imposes a deadline');
+    expect(within(curveball).getByText('Handled')).toBeInTheDocument();
+    expect(within(curveball).queryByText('How it went')).not.toBeInTheDocument();
+  });
+
   it('marks a sample session and a mentor review', async () => {
     getSession.mockResolvedValue(makeSession({ isSample: true, mentorReviewed: true }));
     renderReport();
@@ -721,6 +781,79 @@ describe('Report page: a completed call', () => {
     expect(screen.getByText('Sample session')).toBeInTheDocument();
     expect(screen.getByText('Mentor reviewed')).toBeInTheDocument();
     expect(screen.getByText(/Sample sessions are generated by Firefly/)).toBeInTheDocument();
+  });
+
+  it('copes with a very long title, long evaluator text and a long journey', async () => {
+    const long = 'Customer who cannot open the shared workspace '.repeat(8).trim();
+    const base = makeReport();
+    getSession.mockResolvedValue(
+      makeSession({
+        scenarioTitle: long,
+        report: makeReport({
+          summary: { ...base.summary, overall: 'A very long summary. '.repeat(40).trim() },
+          journey: {
+            ...base.journey,
+            points: Array.from({ length: 40 }, (_, i) =>
+              point(
+                1 + i * 2,
+                20 + ((i * 7) % 60),
+                i === 39 ? 'end' : i === 0 ? 'start' : 'turn',
+                3,
+              ),
+            ),
+          },
+        }),
+      }),
+    );
+    renderReport();
+    await findLoadedReport();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(long);
+    expect(screen.getAllByRole('button', { name: /^Turn \d+,/ })).toHaveLength(40);
+  });
+});
+
+describe('Report page: the opening replay', () => {
+  it('plays once, can be skipped and is not played again for the same call', async () => {
+    const user = userEvent.setup();
+    getSession.mockResolvedValue(makeSession());
+    const first = renderReport({ replay: true });
+    await findLoadedReport();
+    expect(document.querySelector('.rp-page')).toHaveAttribute('data-replay', 'playing');
+    // The report is there and readable from the first frame, replay or not.
+    expect(screen.getByRole('heading', { level: 2, name: 'Customer temperature' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Skip the replay of the call' }));
+    expect(document.querySelector('.rp-page')).toHaveAttribute('data-replay', 'done');
+    expect(screen.queryByRole('button', { name: 'Skip the replay of the call' })).toBeNull();
+    expect(sessionStorage.getItem(reconstructionKey(SESSION_ID))).not.toBeNull();
+    first.unmount();
+
+    renderReport({ replay: true });
+    await findLoadedReport();
+    expect(document.querySelector('.rp-page')).toHaveAttribute('data-replay', 'done');
+  });
+
+  it('is not played at all with reduced motion', async () => {
+    localStorage.setItem('firefly.motion', JSON.stringify('reduce'));
+    getSession.mockResolvedValue(makeSession());
+    renderReport({ replay: true });
+    await findLoadedReport();
+    expect(document.querySelector('.rp-page')).toHaveAttribute('data-replay', 'done');
+    expect(screen.queryByRole('button', { name: 'Skip the replay of the call' })).toBeNull();
+  });
+});
+
+describe('Report page: choosing a skill', () => {
+  it('moves to the skill’s details and puts focus there', async () => {
+    const user = userEvent.setup();
+    getSession.mockResolvedValue(makeSession());
+    renderReport();
+    await findLoadedReport();
+    const nav = screen.getByRole('navigation', { name: 'The six skills' });
+    await user.click(within(nav).getByRole('link', { name: /^.*Clarity/ }));
+    const details = document.getElementById('dim-clarity') as HTMLElement;
+    expect(details).toHaveFocus();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(details).toHaveAttribute('data-arrived');
   });
 });
 

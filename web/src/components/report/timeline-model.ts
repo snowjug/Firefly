@@ -217,9 +217,10 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 
 export function layoutChart(moments: readonly Moment[], width: number): ChartLayout {
   const compact = width < 440;
-  const gutter = compact ? 82 : 102;
-  const bandHeight = compact ? 36 : 44;
-  const top = 14;
+  // The band names sit in the gutter in mono capitals: wide enough for "FRUSTRATED" and "ESCALATING".
+  const gutter = compact ? 94 : 118;
+  const bandHeight = compact ? 38 : 48;
+  const top = 18;
   const plotHeight = bandHeight * BAND_COUNT;
   const left = gutter;
   const right = Math.max(left + 48, width - (compact ? 14 : 22));
@@ -231,7 +232,7 @@ export function layoutChart(moments: readonly Moment[], width: number): ChartLay
   const bottom = top + plotHeight;
   return {
     width,
-    height: bottom + 54,
+    height: bottom + 58,
     compact,
     dense: count > 1 && step < 22,
     plot: { left, right, top, bottom },
@@ -240,8 +241,8 @@ export function layoutChart(moments: readonly Moment[], width: number): ChartLay
     ys: moments.map((m) => bottom - (clamp(m.point.temperature, 0, 100) / 100) * plotHeight),
     step,
     markerSize: count > 1 && step < 14 ? 4 : count > 1 && step < 26 ? 5 : 6,
-    tickY: bottom + 22,
-    edgeY: bottom + 42,
+    tickY: bottom + 24,
+    edgeY: bottom + 44,
   };
 }
 

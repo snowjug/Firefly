@@ -1,20 +1,27 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
-import { DIMENSION_IDS } from '#shared/domain/vocab.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DIMENSION_IDS, DIMENSIONS, scoreLabel } from '#shared/domain/vocab.ts';
 import { EvidenceQuote } from './EvidenceQuote.tsx';
+import { ReportOverview } from './ReportOverview.tsx';
 import { pickCallRewards } from './RewardsSection.tsx';
-import { ScoreOverview } from './ScoreOverview.tsx';
-import { SectionNav } from './SectionNav.tsx';
-import { feedbackNote, issueUrl, noPointsReason, reportSubline } from './labels.ts';
+import { SectionRail } from './SectionRail.tsx';
+import { SkillConstellation, armsFor } from './SkillConstellation.tsx';
+import {
+  OVERALL_CAPTION,
+  feedbackNote,
+  issueUrl,
+  noPointsReason,
+  reportSubline,
+} from './labels.ts';
 import {
   SESSION_ID,
   makeBadge,
+  makeEarlyReport,
   makeLedgerEntry,
   makeReport,
   makeRewards,
-  makeSpecReport,
   makeTurns,
 } from './report.fixtures.ts';
 import { ReportTurnsContext, segmentAround } from './turns-context.ts';
@@ -36,7 +43,10 @@ function stubMatchMedia(matches: boolean) {
   });
 }
 
-afterEach(() => stubMatchMedia(false));
+afterEach(() => {
+  stubMatchMedia(false);
+  vi.unstubAllGlobals();
+});
 
 describe('the line under "Call feedback"', () => {
   const withScore = (
@@ -167,53 +177,108 @@ describe('what one call earned out of the whole ledger', () => {
   });
 });
 
-describe('the score row', () => {
-  function renderScores(report = makeSpecReport()) {
+describe('the opening of the report', () => {
+  function renderOverview(report = makeReport()) {
     return render(
       <MemoryRouter>
-        <ScoreOverview report={report} />
+        <ReportOverview report={report} />
       </MemoryRouter>,
     );
   }
 
-  it('draws an empty ring and says so when there is no overall score', () => {
+  it('says the overall score in words with its caption, and sets it on a ruler that adds no noise', () => {
+    renderOverview();
+    const figure = screen.getByRole('img', { name: 'Overall score: 3.7 out of 5' });
+    expect(figure).toBeInTheDocument();
+    // The ruler inside is a picture of that sentence: it is not announced a second time.
+    expect(within(figure).queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByText(scoreLabel(3.7))).toBeInTheDocument();
+    expect(screen.getByText(OVERALL_CAPTION)).toBeInTheDocument();
+    expect(screen.getByText(makeReport().summary.overall)).toBeInTheDocument();
+  });
+
+  it('draws an empty ruler and says so when there is no overall score', () => {
     const base = makeReport();
-    renderScores(makeReport({ summary: { ...base.summary, overallScore: null } }));
+    renderOverview(makeReport({ summary: { ...base.summary, overallScore: null } }));
     expect(screen.getByRole('img', { name: 'No overall score for this call' })).toBeInTheDocument();
     expect(screen.getByText('No overall score for this call.')).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: /Overall score:/ })).not.toBeInTheDocument();
-    expect(
-      screen.queryByText('Across the six skills. A practice signal, not a grade or a ranking.'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(OVERALL_CAPTION)).not.toBeInTheDocument();
   });
 
-  it('lists the skills in rubric order with the number, its name and a warmer bar for weaker scores', () => {
-    const { container } = renderScores(makeReport());
-    const rows = [...container.querySelectorAll('.rp-skill-row')];
-    expect(rows.map((row) => row.getAttribute('href'))).toEqual(
-      DIMENSION_IDS.map((id) => `#dim-${id}`),
+  it('sets the facts about the call as rows of one ledger, with the skills to look at first as links', () => {
+    renderOverview();
+    const facts = screen.getByRole('group', { name: 'At a glance' });
+    expect(within(facts).getByText('Hidden facts found').nextElementSibling).toHaveTextContent(
+      '1 of 3',
     );
-    const clarity = rows[3] as HTMLElement;
-    expect(clarity).toHaveTextContent('3 of 5');
-    expect(clarity).toHaveTextContent('Developing');
-    expect(clarity).toHaveAttribute('data-tone', 'ok');
-    expect(rows[1]).toHaveAttribute('data-tone', 'low');
+    expect(within(facts).getByText('Customer mood').nextElementSibling).toHaveTextContent(
+      'Frustrated to Calm',
+    );
+    expect(within(facts).getByText('Your turns').nextElementSibling).toHaveTextContent('8');
+    expect(
+      within(facts).getByRole('link', { name: DIMENSIONS['scoping-discovery'].label }),
+    ).toHaveAttribute('href', '#dim-scoping-discovery');
+    expect(within(facts).getByRole('link', { name: DIMENSIONS.clarity.label })).toHaveAttribute(
+      'href',
+      '#dim-clarity',
+    );
   });
 
   it('leaves out quick facts it has nothing to say about', () => {
     const base = makeReport();
-    renderScores(
+    renderOverview(
       makeReport({
         discovery: { results: [], found: 0, partial: 0, missed: 0, total: 0 },
         journey: { ...base.journey, points: [] },
         summary: { ...base.summary, coachingFocus: [] },
       }),
     );
-    const facts = screen.getByRole('list', { name: 'At a glance' });
+    const facts = screen.getByRole('group', { name: 'At a glance' });
     expect(within(facts).queryByText('Hidden facts found')).not.toBeInTheDocument();
     expect(within(facts).queryByText('Customer mood')).not.toBeInTheDocument();
     expect(within(facts).queryByText('Coaching focus')).not.toBeInTheDocument();
     expect(within(facts).getByText('Your turns')).toBeInTheDocument();
+  });
+});
+
+describe('the six skills as a constellation', () => {
+  it('lists the skills in call order, each a link to its details named in numbers and words', () => {
+    const { container } = render(
+      <SkillConstellation dimensions={[...makeReport().dimensions].reverse()} />,
+    );
+    const items = [...container.querySelectorAll('.rp-const__item')];
+    expect(items.map((item) => item.querySelector('a')?.getAttribute('href'))).toEqual(
+      DIMENSION_IDS.map((id) => `#dim-${id}`),
+    );
+    const clarity = items[3] as HTMLElement;
+    expect(clarity).toHaveTextContent(DIMENSIONS.clarity.label);
+    expect(clarity).toHaveTextContent('3 of 5');
+    expect(clarity).toHaveTextContent('Developing');
+    // Weaker scores are drawn warmer, and the tone is a word the stylesheet reads, not a colour.
+    expect(clarity).toHaveAttribute('data-tone', 'ok');
+    expect(items[1]).toHaveAttribute('data-tone', 'low');
+    expect(items[5]).toHaveAttribute('data-score', '5');
+  });
+
+  it('draws a skill resting on thin evidence as an outline, and says so in words', () => {
+    const { container } = render(<SkillConstellation dimensions={makeEarlyReport().dimensions} />);
+    const items = [...container.querySelectorAll('.rp-const__item')];
+    expect(items[0]).toHaveTextContent('Not enough evidence');
+    expect(items[1]).toHaveTextContent('Limited evidence');
+    for (const item of items) {
+      const solid = item.querySelector('.rp-const__star')?.hasAttribute('data-solid');
+      expect(solid).toBe(item.getAttribute('data-sufficiency') === 'sufficient');
+    }
+    const full = render(<SkillConstellation dimensions={makeReport().dimensions} />);
+    expect(full.container.querySelectorAll('.rp-const__star[data-solid]')).toHaveLength(6);
+  });
+
+  it('gives a higher score longer arms, within bounds', () => {
+    expect(armsFor(5)).toBeGreaterThan(armsFor(3));
+    expect(armsFor(3)).toBeGreaterThan(armsFor(1));
+    expect(armsFor(9)).toBe(armsFor(5));
+    expect(armsFor(0)).toBe(armsFor(1));
   });
 });
 
@@ -243,8 +308,11 @@ describe('EvidenceQuote in a report', () => {
         <ReportTurnsContext.Provider value={makeTurns(10)}>{quote}</ReportTurnsContext.Provider>
       </MemoryRouter>,
     );
+    const toggle = screen.getByRole('button', { name: 'See it in the conversation' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('list', { name: /around turn 4/i })).not.toBeInTheDocument();
-    await user.click(screen.getByText('See it in the conversation'));
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const list = screen.getByRole('list', { name: 'The conversation around turn 4' });
     const items = within(list).getAllByRole('listitem');
     expect(items).toHaveLength(5);
@@ -259,6 +327,9 @@ describe('EvidenceQuote in a report', () => {
       'href',
       '/sessions/s/transcript?turn=4',
     );
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('list', { name: /around turn 4/i })).not.toBeInTheDocument();
   });
 
   it('shows a turn without a quote and a quote without a link', () => {
@@ -280,23 +351,58 @@ describe('"On this page"', () => {
     { id: 'discovery', label: 'Discovery' },
   ];
 
-  it('is a row of links on a wide screen', () => {
+  it('is a rail of numbered links beside the page on a wide screen', () => {
     stubMatchMedia(true);
-    render(<SectionNav items={items} />);
+    render(<SectionRail items={items} />);
     const nav = screen.getByRole('navigation', { name: 'On this page' });
     expect(within(nav).getByRole('link', { name: 'Discovery' })).toHaveAttribute(
       'href',
       '#discovery',
     );
     expect(within(nav).queryByText('Jump to a section')).not.toBeInTheDocument();
+    expect(within(nav).getAllByRole('listitem')).toHaveLength(2);
   });
 
   it('folds into a "Jump to a section" disclosure on a narrow one', async () => {
     const user = userEvent.setup();
     stubMatchMedia(false);
-    render(<SectionNav items={items} />);
+    render(<SectionRail items={items} />);
     const nav = screen.getByRole('navigation', { name: 'On this page' });
     await user.click(within(nav).getByText('Jump to a section'));
     expect(within(nav).getByRole('link', { name: 'Six skills' })).toBeVisible();
+  });
+
+  it('marks the section being read, and nothing near the top of the page', () => {
+    stubMatchMedia(true);
+    let notify: IntersectionObserverCallback = () => undefined;
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          notify = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    for (const item of items) {
+      const section = document.createElement('section');
+      section.id = item.id;
+      document.body.append(section);
+    }
+    render(<SectionRail items={items} />);
+    const link = (name: string) => screen.getByRole('link', { name });
+    expect(link('Discovery')).not.toHaveAttribute('aria-current');
+    act(() =>
+      notify(
+        [
+          { isIntersecting: true, target: document.getElementById('discovery') },
+        ] as unknown as IntersectionObserverEntry[],
+        {} as IntersectionObserver,
+      ),
+    );
+    expect(link('Discovery')).toHaveAttribute('aria-current', 'location');
+    expect(link('Six skills')).not.toHaveAttribute('aria-current');
+    for (const item of items) document.getElementById(item.id)?.remove();
   });
 });
