@@ -1,524 +1,480 @@
-/* Landing and sign-in. These two pages sit outside the app shell: the hero and the sign-in side panel
-   are always dark (they are brand moments), everything below follows the theme. */
+/* The front door (/) and sign-in (/sign-in). Both sit in the public frame: the field behind them,
+   the wordmark and the display toggles in the corners, and nothing to navigate with. The page keeps
+   clear of the masthead itself (`--masthead-h`); there is no dock here, so nothing is reserved below.
 
-.public {
-  min-height: 100vh;
-  background: var(--bg);
-}
+   Type does the work. One serif statement, one object (the signal instrument), hairlines instead of
+   boxes. Tokens only, so both themes, forced colours and higher contrast come with them. The
+   introduction (the instrument being lit once per device) animates the instrument and a soft bloom
+   behind it and never the text, which is readable from the first frame. */
 
-/* ------------------------------------------------------------------ Landing: header */
-.lp {
+/* ====================================================================== Front door */
+.door {
   position: relative;
-}
-.lp-dark,
-.lp-header {
-  --lp-text: #ffffff;
-  --lp-text-2: #c3cdf0;
-  --lp-line: rgba(255, 255, 255, 0.14);
-  --lp-card: rgba(255, 255, 255, 0.06);
-}
-.lp-dark {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding-top: 76px;
-  color: var(--lp-text);
-  background:
-    radial-gradient(48rem 34rem at 78% 36%, rgba(96, 82, 255, 0.34), transparent 62%),
-    radial-gradient(30rem 22rem at 8% 100%, rgba(40, 110, 255, 0.22), transparent 70%),
-    linear-gradient(165deg, #040a28 0%, #08133f 52%, #0a1a5c 100%);
-}
-.lp-dark::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.55;
-  background:
-    radial-gradient(circle at 12% 22%, rgba(255, 255, 255, 0.55) 0 1px, transparent 2px),
-    radial-gradient(circle at 31% 64%, rgba(255, 255, 255, 0.4) 0 1px, transparent 2px),
-    radial-gradient(circle at 47% 12%, rgba(255, 255, 255, 0.45) 0 1px, transparent 2px),
-    radial-gradient(circle at 64% 82%, rgba(255, 255, 255, 0.35) 0 1px, transparent 2px),
-    radial-gradient(circle at 88% 18%, rgba(255, 255, 255, 0.5) 0 1px, transparent 2px),
-    radial-gradient(circle at 93% 70%, rgba(255, 255, 255, 0.4) 0 1px, transparent 2px);
-}
-.lp-header {
-  position: absolute;
-  inset: 0 0 auto 0;
-  z-index: 3;
-}
-.lp-nav {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-5);
-  width: min(100% - 2 * var(--sp-5), 1240px);
-  margin: 0 auto;
-  padding: var(--sp-4) 0;
-}
-.lp-nav .brand {
-  color: #fff;
-}
-.lp-nav-links {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-5);
-  margin-left: var(--sp-6);
-}
-.lp-nav-links a {
-  color: var(--lp-text-2);
-  font-size: var(--fs-small);
-  font-weight: 600;
-  text-decoration: none;
-}
-.lp-nav-links a:hover {
-  color: #fff;
-  text-decoration: underline;
-}
-.lp-nav-end {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.lp-dark a:focus-visible,
-.lp-dark button:focus-visible,
-.lp-header a:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 3px;
-  border-radius: 6px;
+  /* One two-column grid for the whole page, so the sentences under "How a call goes" start where
+     the instrument does. */
+  --door-cols: minmax(0, 1.15fr) minmax(0, 1fr);
+  --door-gap: var(--sp-7);
 }
 
-/* ------------------------------------------------------------------ Landing: hero */
-.lp-hero {
-  width: min(100% - 2 * var(--sp-5), 1240px);
-  margin: 0 auto;
+.door__stage {
+  box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-columns: var(--door-cols);
   align-items: center;
-  gap: var(--sp-6);
-  padding: var(--sp-7) 0 var(--sp-6);
+  column-gap: var(--door-gap);
+  width: 100%;
+  max-width: var(--page-max);
+  min-height: 100svh;
+  margin-inline: auto;
+  padding: calc(var(--masthead-h) + var(--sp-5)) var(--gutter) var(--sp-8);
 }
-.lp-eyebrow {
-  margin-bottom: var(--sp-3);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #9fb4ff;
-}
-.lp-title {
-  font-size: clamp(2.4rem, 1.4rem + 3.6vw, 4.1rem);
-  line-height: 1.04;
-  letter-spacing: -0.035em;
-  font-weight: 780;
-  color: #fff;
-}
-.lp-lead {
-  max-width: 52ch;
-  margin-top: var(--sp-4);
-  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.15rem);
-  line-height: 1.55;
-  color: var(--lp-text-2);
-}
-.lp-cta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
-  margin-top: var(--sp-5);
-}
-.lp-trust {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2) var(--sp-5);
-  margin-top: var(--sp-5);
-  font-size: var(--fs-meta);
-  color: var(--lp-text-2);
-}
-.lp-trust span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.lp-orb {
+
+.door__copy {
   display: grid;
-  place-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+  max-width: 46rem;
   min-width: 0;
 }
-/* Keep the words inside the sphere: a little smaller than the artwork's default. */
-.lp-orb .ill-orb-slot {
-  font-size: clamp(14px, 5cqw, 28px);
-  padding: 0 24%;
-}
-
-/* ------------------------------------------------------------------ Landing: feature strip */
-.lp-strip {
-  width: min(100% - 2 * var(--sp-5), 1240px);
-  margin: 0 auto;
-  padding: 0 0 var(--sp-7);
-}
-.lp-strip ul {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-3);
+.door__eyebrow {
   margin: 0;
-  padding: var(--sp-4);
-  list-style: none;
-  border-radius: var(--r-panel);
-  border: 1px solid var(--lp-line);
-  background: var(--lp-card);
 }
-.lp-strip li {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
-}
-.lp-strip-icon {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  color: #bcd0ff;
-  background: rgba(96, 130, 255, 0.18);
-}
-.lp-strip strong {
-  display: block;
-  font-size: var(--fs-small);
-  color: #fff;
-}
-.lp-strip span {
-  font-size: var(--fs-meta);
-  color: var(--lp-text-2);
-}
-
-/* ------------------------------------------------------------------ Landing: sections */
-.lp-section {
-  width: min(100% - 2 * var(--sp-5), 1240px);
-  margin: 0 auto;
-  padding: var(--sp-8) 0 0;
-  scroll-margin-top: var(--sp-4);
-}
-.lp-section > header {
-  max-width: 62ch;
-  margin-bottom: var(--sp-5);
-}
-.lp-kicker {
-  margin-bottom: var(--sp-2);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--primary);
-}
-.lp-h2 {
-  font-size: clamp(1.5rem, 1.2rem + 1.1vw, 2.1rem);
-  line-height: 1.15;
-  letter-spacing: -0.025em;
-  font-weight: 760;
-}
-.lp-section > header p:not(.lp-kicker) {
-  margin-top: var(--sp-3);
-  color: var(--text-2);
-}
-.lp-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-4);
-}
-.lp-card {
-  padding: var(--sp-5);
-}
-.lp-card h3 {
-  margin: var(--sp-3) 0 var(--sp-2);
-  font-size: 1.05rem;
-}
-.lp-card p {
-  color: var(--text-2);
-  font-size: var(--fs-small);
-}
-.lp-card ul {
-  margin: var(--sp-3) 0 0;
-  padding-left: 1.1rem;
-  color: var(--text-2);
-  font-size: var(--fs-small);
-}
-
-.lp-steps {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--sp-4);
+.door__title {
   margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 1rem + 3.45vw, 4.25rem);
+  font-weight: 300;
+  font-optical-sizing: auto;
+  line-height: 1.04;
+  letter-spacing: var(--track-display);
+  text-wrap: pretty;
 }
-.lp-steps li {
-  position: relative;
-  padding: var(--sp-5) var(--sp-4) var(--sp-4);
-  border-radius: var(--r-card);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
+.door__title em {
+  font-style: italic;
+  font-weight: 300;
+  /* The last words stay together on one line. */
+  white-space: nowrap;
 }
-.lp-steps li::before {
-  counter-increment: step;
-  content: counter(step);
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  margin-bottom: var(--sp-3);
-  border-radius: 50%;
-  font-weight: 750;
-  color: #fff;
-  background: var(--banner-bg);
-}
-.lp-steps h3 {
-  font-size: 1rem;
-  margin-bottom: var(--sp-1);
-}
-.lp-steps p {
-  font-size: var(--fs-small);
-  color: var(--text-2);
-}
-
-.lp-skills {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-3);
+.door__lead {
+  max-width: 33em;
   margin: 0;
-  padding: 0;
-  list-style: none;
 }
-.lp-skills li {
-  display: flex;
-  gap: var(--sp-3);
-  align-items: flex-start;
-  padding: var(--sp-4);
-  border-radius: var(--r-card);
-  border: 1px solid var(--border);
-  background: var(--surface);
+.door__actions {
+  margin-block-start: var(--sp-2);
 }
-.lp-skills strong {
-  display: block;
-  font-size: var(--fs-small);
-}
-.lp-skills span {
-  font-size: var(--fs-meta);
-  color: var(--text-2);
-}
-
-.lp-about {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: var(--sp-5);
-  align-items: start;
-}
-.lp-about ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: var(--sp-3);
-}
-.lp-about li {
-  display: flex;
-  gap: var(--sp-3);
-  align-items: flex-start;
-  font-size: var(--fs-small);
-}
-.lp-about li svg {
-  flex: none;
-  margin-top: 2px;
-  color: var(--positive);
-}
-
-.lp-final {
-  width: min(100% - 2 * var(--sp-5), 1240px);
-  margin: var(--sp-8) auto 0;
-}
-.lp-footer {
-  width: min(100% - 2 * var(--sp-5), 1240px);
-  margin: var(--sp-7) auto 0;
-  padding: var(--sp-5) 0 var(--sp-6);
-  border-top: 1px solid var(--border);
+.door__facts {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-3) var(--sp-5);
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--fs-meta);
-  color: var(--text-3);
-}
-
-@media (max-width: 1000px) {
-  .lp-hero {
-    grid-template-columns: minmax(0, 1fr);
-    padding-top: var(--sp-5);
-  }
-  .lp-orb {
-    order: -1;
-    width: min(100%, 380px);
-    margin: 0 auto;
-  }
-  .lp-strip ul {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .lp-steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .lp-cards,
-  .lp-skills {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .lp-about {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-@media (max-width: 700px) {
-  .lp-nav-links {
-    display: none;
-  }
-  .lp-strip ul,
-  .lp-steps,
-  .lp-cards,
-  .lp-skills {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .lp-section {
-    padding-top: var(--sp-7);
-  }
-}
-
-/* ------------------------------------------------------------------ Sign-in */
-.si {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-}
-.si-art {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: var(--sp-3);
-  min-height: 420px;
-  padding: var(--sp-7) var(--sp-7) var(--sp-7);
-  color: #fff;
-  background: linear-gradient(170deg, #050c2e 0%, #0a1a5c 100%);
-}
-.si-art-visual {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-}
-/* A dark wash behind the words, so they stay readable over the lit windows. */
-.si-art::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(
-    180deg,
-    rgba(4, 10, 40, 0) 38%,
-    rgba(4, 10, 40, 0.78) 72%,
-    rgba(4, 10, 40, 0.92) 100%
-  );
-}
-.si-art h2 {
-  max-width: 14ch;
-  font-size: clamp(2rem, 1.3rem + 2.4vw, 3.2rem);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  font-weight: 780;
-  color: #fff;
-}
-.si-art p {
-  max-width: 40ch;
-  color: #c3cdf0;
-}
-.si-art-rule {
-  width: 56px;
-  height: 3px;
-  border-radius: 3px;
-  background: #4d86ff;
-}
-.si-panel {
-  display: grid;
-  place-items: center;
-  padding: var(--sp-6) var(--sp-5);
-}
-.si-card {
-  width: min(100%, 460px);
-  padding: var(--sp-6);
-  display: grid;
-  gap: var(--sp-4);
-}
-.si-card .brand {
-  color: var(--text);
-}
-.si-card h1 {
-  font-size: 1.7rem;
-  letter-spacing: -0.025em;
-  font-weight: 760;
-}
-.si-or {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  color: var(--text-3);
-  font-size: var(--fs-meta);
-}
-.si-or::before,
-.si-or::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-.si-facts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-3);
-  margin: 0;
+  gap: var(--sp-2) var(--sp-6);
+  margin: var(--sp-3) 0 0;
   padding: var(--sp-4) 0 0;
-  border-top: 1px solid var(--border);
+  border-block-start: 1px solid var(--line-2);
   list-style: none;
-  text-align: center;
 }
-.si-facts li {
+
+/* The instrument, alone. It is made at the size it is shown at (see useFittedSize), so its fine
+   print stays legible; the box only has to keep its shape. */
+.door__figure {
+  position: relative;
   display: grid;
   justify-items: center;
-  gap: var(--sp-1);
-  font-size: var(--fs-meta);
-  color: var(--text-2);
+  gap: var(--sp-5);
+  min-width: 0;
+  margin: 0;
 }
-.si-facts strong {
-  font-size: var(--fs-small);
-  color: var(--text);
+.door-instrument {
+  width: min(100%, 37.5rem);
 }
-@media (max-width: 900px) {
-  .si {
+.door-instrument__box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+}
+.door-instrument__box > .sig-core {
+  position: absolute;
+  inset: 0;
+}
+/* The light that comes up behind the heart while the instrument is lit. */
+.door-instrument__bloom {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 50%;
+  width: 70%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle closest-side,
+    color-mix(in srgb, var(--amber) 60%, transparent),
+    transparent 72%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.2);
+}
+.door-instrument[data-ignition='playing'] .door-instrument__bloom {
+  animation: door-bloom 1100ms var(--ease-exit-decelerated) both;
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* A breath so slow it is felt rather than seen; it stops with the ambient pause. */
+  .door-instrument__box {
+    animation: door-breathe 14s ease-in-out infinite;
+  }
+}
+@keyframes door-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.014);
+  }
+}
+@keyframes door-bloom {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  38% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.3);
+  }
+}
+
+.door__caption {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-3);
+  max-width: 30rem;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.door__fig {
+  padding-block-start: 0.15rem;
+  color: var(--amber-text);
+}
+
+/* ------------------------------------------------------------------ Sections */
+.door__section {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding: var(--sp-9) var(--gutter) 0;
+  scroll-margin-block-start: var(--masthead-h);
+}
+.door__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-2);
+  margin-block-end: var(--sp-7);
+}
+.door__head > p {
+  margin: 0;
+}
+.door__h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-title);
+  font-weight: 300;
+  line-height: var(--lh-title);
+  letter-spacing: var(--track-title);
+  text-wrap: balance;
+}
+
+/* How a call goes: one line per step, a number, a word, a sentence. The rules carry a tick, as the
+   page frame's sections do. */
+.door__steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.door__step {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--door-cols);
+  align-items: baseline;
+  column-gap: var(--door-gap);
+  padding-block: var(--sp-6);
+  border-block-start: 1px solid var(--line-2);
+}
+.door__step::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  height: 9px;
+  background: var(--line-3);
+}
+.door__step:last-child {
+  border-block-end: 1px solid var(--line-2);
+}
+.door__step-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+.door__step-no {
+  flex: none;
+  min-width: 2.25rem;
+  color: var(--ink-3);
+  font-size: var(--t-micro);
+}
+.door__step-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.875rem, 1.2rem + 2vw, 3rem);
+  font-weight: 300;
+  line-height: 1.08;
+  letter-spacing: var(--track-title);
+}
+.door__step-text {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-read);
+  font-size: var(--t-read);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.door__skills {
+  display: grid;
+  gap: var(--sp-3);
+  margin-block-start: var(--sp-7);
+}
+.door__skills p {
+  margin: 0;
+}
+.door__skills ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.door__skills li {
+  padding-inline-end: var(--sp-4);
+  margin-inline-end: var(--sp-4);
+  border-inline-end: 1px solid var(--line-2);
+  color: var(--ink-1);
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+  line-height: 1.3;
+}
+.door__skills li:last-child {
+  padding-inline-end: 0;
+  margin-inline-end: 0;
+  border-inline-end: 0;
+}
+
+/* What Firefly is not: four plain statements in two columns, each led by an italic. */
+.door__not {
+  display: grid;
+  grid-template-columns: var(--door-cols);
+  column-gap: var(--door-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.door__not-item {
+  padding-block: var(--sp-5) var(--sp-6);
+  border-block-start: 1px solid var(--line-2);
+}
+.door__not-name {
+  margin: 0 0 var(--sp-2);
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 1.1rem + 1.1vw, 2.125rem);
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.15;
+  letter-spacing: var(--track-title);
+}
+.door__not-text {
+  max-width: 42ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-read);
+  font-size: var(--t-read);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.door__close {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  margin-block-start: var(--sp-7);
+  padding-block-start: var(--sp-6);
+  border-block-start: 1px solid var(--line-2);
+}
+.door__close-line {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-heading);
+  font-weight: 300;
+  letter-spacing: var(--track-title);
+}
+
+.door__colophon {
+  margin-block-start: var(--sp-9);
+}
+
+/* ====================================================================== Sign-in */
+.entry {
+  position: relative;
+}
+.entry__frame {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  grid-template-areas:
+    'intro panel'
+    'facts panel';
+  grid-template-rows: auto 1fr;
+  align-items: start;
+  column-gap: var(--sp-9);
+  row-gap: var(--sp-8);
+  width: 100%;
+  max-width: var(--page-max);
+  min-height: calc(100svh - 10rem);
+  margin-inline: auto;
+  padding: calc(var(--masthead-h) + var(--sp-7)) var(--gutter) 0;
+}
+.entry__intro {
+  grid-area: intro;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+  min-width: 0;
+}
+.entry__eyebrow,
+.entry__lead {
+  margin: 0;
+}
+.entry__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-display);
+  font-weight: 300;
+  font-optical-sizing: auto;
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.entry__title em {
+  font-style: italic;
+}
+.entry__lead {
+  max-width: 28em;
+}
+.entry__panel {
+  grid-area: panel;
+  min-width: 0;
+  max-width: 36rem;
+  /* The form starts level with the title, not with the small line above it. */
+  padding-block-start: var(--sp-5);
+}
+.entry__facts {
+  grid-area: facts;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-6);
+  min-width: 0;
+  max-width: 34rem;
+}
+.entry__block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+  gap: var(--sp-2);
+}
+.entry__block > p {
+  margin: 0;
+}
+.entry__note {
+  max-width: var(--measure-ui);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+
+/* ====================================================================== Narrow screens */
+@media (max-width: 62rem) {
+  .door__stage {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    row-gap: var(--sp-8);
+    min-height: 0;
+    padding-block-end: var(--sp-7);
+  }
+  .door-instrument {
+    width: min(100%, 34rem);
+  }
+  .door__figure {
+    justify-items: center;
+  }
+  .door__caption {
+    justify-self: center;
+  }
+  .entry__frame {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'intro'
+      'panel'
+      'facts';
+    grid-template-rows: none;
+    row-gap: var(--sp-7);
+    min-height: 0;
+  }
+  .entry__panel {
+    padding-block-start: 0;
+  }
+}
+@media (max-width: 48rem) {
+  .door__section {
+    padding-block-start: var(--sp-8);
+  }
+  .door__step {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--sp-2);
+  }
+  .door__step-text {
+    padding-inline-start: calc(2.25rem + var(--sp-5));
+  }
+  .door__not {
     grid-template-columns: minmax(0, 1fr);
   }
-  .si-art {
-    min-height: 260px;
-    padding: var(--sp-6) var(--sp-5);
+  /* A wrapped line of names cannot carry its dividers tidily; a short list can. */
+  .door__skills ul {
+    display: grid;
+    gap: 0;
   }
-  .si-panel {
-    padding: var(--sp-5) var(--sp-4) var(--sp-7);
+  .door__skills li {
+    margin-inline-end: 0;
+    padding: var(--sp-2) 0;
+    border-inline-end: 0;
+    border-block-start: 1px solid var(--line-1);
+  }
+  .door__skills li:last-child {
+    border-block-end: 1px solid var(--line-1);
+  }
+  .door__close {
+    align-items: flex-start;
   }
 }
-@media (max-width: 480px) {
-  .si-card {
-    padding: var(--sp-5) var(--sp-4);
-  }
-  .si-facts {
-    grid-template-columns: minmax(0, 1fr);
+
+/* Forced colours: the bloom is light on light, so it is dropped; the instrument keeps its lines. */
+@media (forced-colors: active) {
+  .door-instrument__bloom {
+    display: none;
   }
 }

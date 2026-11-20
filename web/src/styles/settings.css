@@ -1,287 +1,110 @@
-/* Settings: a profile card beside tabs of preferences, notifications and data & privacy.
-   Tokens only, so both themes work. */
+/* Settings: a quiet working page. Words on hairlines, one column, no ambient motion (the route's field
+   is a still frame). The rows are the page frame's own (ChoiceRow, Toggle, Ledger, Stat); this sheet
+   is the rhythm between them. Tokens only. */
 
-.st-grid {
-  display: grid;
-  grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
-  gap: var(--sp-5);
-  align-items: start;
-}
-@media (max-width: 900px) {
-  .st-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* ------------------------------------------------------------------ Profile card */
-.st-profile {
-  display: grid;
-  justify-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-6) var(--sp-5);
-  text-align: center;
-}
-.st-profile > * {
-  min-width: 0;
-  max-width: 100%;
-}
-.st-profile:focus {
-  outline: none;
-}
-.st-identity {
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-}
-.st-name {
-  font-family: var(--font-heading);
-  font-size: 1.3rem;
-  font-weight: 760;
-  letter-spacing: -0.015em;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-.st-role {
-  color: var(--text-2);
-  overflow-wrap: anywhere;
-}
-.st-place {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--text-3);
-  font-size: var(--fs-small);
-}
-.st-edit {
-  min-width: 12rem;
-  margin-top: var(--sp-2);
-  --btn-fg: var(--accent-strong);
-  --btn-border: color-mix(in srgb, var(--accent) 35%, transparent);
-  background: var(--primary-soft);
-}
-.st-edit:hover {
-  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
-}
-.st-divider {
-  width: 100%;
-  margin: var(--sp-2) 0;
-}
-.st-signout {
-  display: grid;
-  justify-items: center;
-  gap: var(--sp-2);
-}
-.st-signout .hint {
-  max-width: 32ch;
-}
-.st-profile-new {
-  justify-items: stretch;
-  text-align: left;
-}
-@media (min-width: 561px) and (max-width: 900px) {
-  /* Beside the settings there is no column for it, so the card becomes a compact row. */
-  .st-profile:not(.st-profile-new) {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    justify-items: start;
-    gap: var(--sp-3) var(--sp-5);
-    padding: var(--sp-5);
-    text-align: left;
-  }
-  .st-profile:not(.st-profile-new) .st-identity {
-    justify-items: start;
-  }
-  .st-profile:not(.st-profile-new) .st-edit {
-    min-width: 0;
-    margin-top: 0;
-  }
-  .st-profile:not(.st-profile-new) .st-divider,
-  .st-profile:not(.st-profile-new) .st-signout {
-    grid-column: 1 / -1;
-  }
-  .st-profile:not(.st-profile-new) .st-signout {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    justify-items: start;
-    gap: var(--sp-1) var(--sp-4);
-  }
-}
-.st-profile-new .tone-icon {
-  justify-self: start;
-}
-.st-form {
-  --stack-gap: var(--sp-4);
-  text-align: left;
-}
-.st-form-actions {
-  margin-top: var(--sp-1);
-}
-
-/* ------------------------------------------------------------------ Tabs and panels */
-.st-settings {
-  min-width: 0;
+.st-root {
+  --st-measure: 52rem;
 }
 .st-tabs {
-  padding: var(--sp-2) var(--sp-5) 0;
+  max-width: var(--st-measure);
 }
 .st-panel {
-  padding: var(--sp-2) var(--sp-5) var(--sp-5);
-}
-.st-panel[hidden] {
-  display: none;
+  max-width: var(--st-measure);
+  margin-block-start: var(--sp-7);
 }
 .st-panel-body {
   display: grid;
-  /* One wide item must not stretch every group beyond the screen. */
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-2);
-}
-.st-group {
-  display: grid;
-  gap: var(--sp-1);
-}
-.st-group > h3 {
-  margin-top: var(--sp-4);
-}
-.st-rows {
-  display: grid;
-}
-.st-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(12rem, 20rem);
-  align-items: center;
-  gap: var(--sp-2) var(--sp-5);
-  padding: var(--sp-3) 0;
-  border-bottom: 1px solid var(--border);
-}
-.st-row:last-child {
-  border-bottom: 0;
-}
-.st-row[data-kind='switch'] {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-.st-row-text {
-  display: grid;
-  gap: 2px;
   min-width: 0;
 }
-.st-row-label {
-  font-weight: 640;
-  overflow-wrap: anywhere;
-}
-.st-row .hint {
-  max-width: 62ch;
-  overflow-wrap: anywhere;
-}
-.st-row-control {
-  display: flex;
-  justify-content: flex-end;
-  min-width: 0;
-}
-.st-row-control .select {
-  min-width: 0;
-}
-.st-locked {
-  color: var(--text);
-  font-weight: 650;
-}
-/* The tick box sits under the drawn track, so let clicks on the track reach it. */
-.st-row .sw-track {
-  pointer-events: none;
-}
-@media (max-width: 640px) {
-  .st-tabs {
-    padding-inline: var(--sp-4);
-  }
-  .st-panel {
-    padding-inline: var(--sp-4);
-  }
-  .st-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .st-row[data-kind='switch'] {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .st-row-control {
-    justify-content: flex-start;
-  }
-}
-@media (max-width: 480px) {
-  /* Three tabs share the row, and a long name wraps, so none is cut off or hidden by scrolling. */
-  .st-tabs .tabs {
-    gap: var(--sp-2);
-    overflow-x: visible;
-  }
-  .st-tabs .tab {
-    flex: 1 1 0;
-    min-width: 0;
-    padding: var(--sp-2) 0;
-    line-height: 1.2;
-    text-align: center;
-    white-space: normal;
-  }
-}
-.st-note {
-  margin-top: var(--sp-3);
+.st-panel-body:focus {
+  outline: none;
 }
 
-/* ------------------------------------------------------------------ Data and privacy */
-.st-where {
+/* A group's contents: spaced as a stack, each part on its own line. */
+.st-stack {
   display: grid;
-  gap: var(--sp-4);
-  margin: var(--sp-2) 0 0;
-  padding: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-6);
+  min-width: 0;
 }
-.st-where > li {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-3);
-}
-.st-where .tone-icon {
-  width: 38px;
-  height: 38px;
-}
-.st-where-title {
-  font-weight: 650;
-}
-.st-list {
-  display: grid;
-  margin: var(--sp-1) 0 var(--sp-3);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  background: var(--surface-2);
-}
-.st-list > div {
-  display: grid;
-  grid-template-columns: 11rem minmax(0, 1fr);
-  gap: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  border-top: 1px solid var(--border);
-}
-.st-list > div:first-child {
-  border-top: 0;
-}
-.st-list dt {
-  color: var(--text-3);
-  font-size: var(--fs-small);
-  font-weight: 560;
-}
-.st-list dd {
+.st-lede {
+  max-width: var(--measure-read);
   margin: 0;
+  color: var(--ink-2);
+  line-height: 1.55;
   overflow-wrap: anywhere;
 }
-@media (max-width: 520px) {
-  .st-list > div {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2px;
+.st-locked {
+  color: var(--amber-text);
+  font-weight: 600;
+}
+.st-mono {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* Who this is. */
+.st-identity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+  max-width: 36rem;
+}
+.st-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-title);
+  font-weight: 300;
+  line-height: var(--lh-title);
+  letter-spacing: var(--track-title);
+  overflow-wrap: anywhere;
+}
+
+/* A setting that starts something rather than holding a value: what it does, and the one button. */
+.st-act {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4) var(--sp-6);
+  padding-block: var(--sp-4);
+  border-block-start: 1px solid var(--line-2);
+}
+.st-act:last-child {
+  border-block-end: 1px solid var(--line-2);
+}
+.st-act__text {
+  flex: 1 1 22rem;
+  min-width: 0;
+}
+.st-act__title {
+  margin: 0 0 var(--sp-1);
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+  font-weight: 400;
+  line-height: 1.3;
+}
+.st-act__hint {
+  max-width: 54ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  overflow-wrap: anywhere;
+}
+
+.st-caution {
+  max-width: var(--measure-read);
+  margin: 0;
+  padding-inline-start: var(--sp-4);
+  border-inline-start: 2px solid var(--amber);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.55;
+}
+
+@media (max-width: 40rem) {
+  .st-panel {
+    margin-block-start: var(--sp-6);
   }
-}
-.st-group > p,
-.st-group > .cluster,
-.st-group > div:not(.st-rows) {
-  margin-top: var(--sp-1);
-}
-/* A long link wraps on a narrow screen rather than pushing the page sideways. */
-.st-group .link-more {
-  white-space: normal;
 }

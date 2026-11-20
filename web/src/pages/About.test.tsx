@@ -1,6 +1,7 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigDTO } from '#shared/domain/api.ts';
 import {
   CARE_LABELS,
@@ -35,12 +36,31 @@ function renderHelp(address = '/help') {
   );
 }
 
+/** jsdom has no media queries: say whether the window is wide enough for the index beside the text. */
+function setViewport(wide: boolean) {
+  window.matchMedia = ((query: string) => ({
+    matches: wide,
+    media: query,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+}
+
 const section = (name: string) =>
   screen.getByRole('heading', { level: 2, name }).closest('section') as HTMLElement;
 
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.config.mockResolvedValue(CONFIG);
+  setViewport(true);
+});
+afterEach(() => {
+  // @ts-expect-error -- put jsdom back as it was: no matchMedia
+  delete window.matchMedia;
 });
 
 describe('Help page', () => {
@@ -56,8 +76,9 @@ describe('Help page', () => {
       const id = link.getAttribute('href')?.slice(1) ?? '';
       const target = document.getElementById(id);
       expect(target, `#${id}`).not.toBeNull();
-      // Each target is the card for that topic, named by its own heading.
+      // Each target is the topic for that link, named by its own heading, and can take focus.
       expect(target).toHaveAccessibleName();
+      expect(target).toHaveAttribute('tabindex', '-1');
       expect(target?.querySelector('h2')?.textContent).toContain(link.textContent ?? '');
     }
     expect(
@@ -67,6 +88,51 @@ describe('Help page', () => {
       'href',
       '#voice',
     );
+  });
+
+  it('collapses the index into a list under a button on a narrow window, with the same links', async () => {
+    setViewport(false);
+    const user = userEvent.setup();
+    renderHelp();
+    const summary = screen.getByText('On this page', { selector: 'summary span' });
+    const details = summary.closest('details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    const links = within(details).getAllByRole('link', { hidden: true });
+    expect(links.length).toBeGreaterThanOrEqual(10);
+
+    await user.click(summary);
+    expect(details.open).toBe(true);
+    expect(within(details).getByRole('navigation', { name: 'On this page' })).toBeVisible();
+  });
+
+  it('marks the section being read in the index, and nothing else', async () => {
+    const observers: { callback: IntersectionObserverCallback }[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          observers.push({ callback });
+        }
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+    );
+    renderHelp();
+    const toc = screen.getByRole('navigation', { name: 'On this page' });
+    expect(within(toc).queryByRole('link', { current: 'location' })).toBeNull();
+
+    const voice = document.getElementById('voice') as HTMLElement;
+    act(() => {
+      observers[0]?.callback(
+        [{ isIntersecting: true, target: voice } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+    const current = within(toc).getAllByRole('link', { current: 'location' });
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveTextContent('Voice (Beta)');
+    vi.unstubAllGlobals();
   });
 
   it('lists the six coaching dimensions with what they look at and their CARE behaviours', () => {
@@ -90,6 +156,7 @@ describe('Help page', () => {
     renderHelp();
     const responsible = section('Responsible AI and data safety');
     expect(responsible).toHaveAttribute('id', 'responsible-ai');
+    expect(responsible).toHaveTextContent('Firefly is a training aid');
     expect(responsible).toHaveTextContent('Do not enter real customer information');
     expect(responsible).toHaveTextContent('AI feedback can be incomplete or wrong');
     expect(responsible).toHaveTextContent('not a performance rating');
@@ -100,6 +167,11 @@ describe('Help page', () => {
     expect(within(responsible).getByRole('link', { name: 'History' })).toHaveAttribute(
       'href',
       '/history',
+    );
+    expect(within(responsible).getAllByRole('link', { name: 'Calibration page' })).toHaveLength(1);
+    expect(within(responsible).getByRole('link', { name: 'Settings' })).toHaveAttribute(
+      'href',
+      '/settings#data',
     );
   });
 
@@ -115,7 +187,7 @@ describe('Help page', () => {
     expect(voice).toHaveTextContent('The microphone is never opened until you turn voice on');
     expect(within(voice).getByRole('link', { name: 'Settings' })).toHaveAttribute(
       'href',
-      '/settings',
+      '/settings#preferences',
     );
   });
 
@@ -174,5 +246,12 @@ describe('Help page', () => {
     expect(
       screen.getByText('Demo mode (built-in rules engine)', { selector: 'dd' }),
     ).toBeInTheDocument();
+  });
+
+  it('says so, in words, when the server cannot be reached', async () => {
+    mocks.config.mockRejectedValue(new Error('offline'));
+    renderHelp();
+    expect(await screen.findByText(/Unavailable: the server could not be reached/)).toBeVisible();
+    expect(screen.getAllByText('Unavailable').length).toBeGreaterThanOrEqual(1);
   });
 });

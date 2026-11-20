@@ -21,6 +21,8 @@ function renderSignIn(entry = '/sign-in') {
   );
 }
 
+const create = () => screen.getByRole('button', { name: 'Create profile' });
+
 beforeEach(() => {
   localStorage.clear();
   resetProfileForTests();
@@ -36,17 +38,27 @@ describe('SignIn: a local profile', () => {
     expect(screen.getByLabelText('Name')).toBeRequired();
     expect(screen.getByLabelText(/Role/)).not.toBeRequired();
     expect(screen.getByLabelText(/Location/)).not.toBeRequired();
+    // The page does not start with the cursor in a field: the skip link and the page come first.
+    expect(screen.getByLabelText('Name')).not.toHaveFocus();
   });
 
   it('will not continue without a name, and says why', async () => {
     const user = userEvent.setup();
     renderSignIn();
     await user.type(screen.getByLabelText('Name'), '   ');
-    await user.click(screen.getByRole('button', { name: /Continue/ }));
-    expect(screen.getByRole('alert')).toHaveTextContent(/Enter a name/);
+    await user.click(create());
+    expect(
+      screen.getByText('Enter a name so Firefly can greet you. A first name is enough.'),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toHaveFocus();
     expect(screen.getByLabelText('Name')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Name')).toHaveAccessibleDescription(/Enter a name/);
     expect(getProfile()).toBeNull();
+
+    // Typing clears the complaint.
+    await user.type(screen.getByLabelText('Name'), 'P');
+    expect(screen.queryByText(/Enter a name so Firefly/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).not.toHaveAttribute('aria-invalid');
   });
 
   it('saves the profile and opens the dashboard', async () => {
@@ -55,7 +67,7 @@ describe('SignIn: a local profile', () => {
     await user.type(screen.getByLabelText('Name'), '  Priya Raman ');
     await user.type(screen.getByLabelText(/Role/), 'Apprentice support engineer');
     await user.type(screen.getByLabelText(/Location/), 'Pune');
-    await user.click(screen.getByRole('button', { name: /Continue/ }));
+    await user.click(create());
     expect(await screen.findByTestId('where')).toHaveTextContent('/home');
     expect(getProfile()).toMatchObject({
       name: 'Priya Raman',
@@ -78,23 +90,61 @@ describe('SignIn: a local profile', () => {
     expect(await screen.findByTestId('where')).toHaveTextContent('/home');
   });
 
+  it('can carry on without a profile, and keeps nothing', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderSignIn('/sign-in?next=/scenarios');
+    const link = screen.getByRole('link', { name: 'Continue without a profile' });
+    expect(link).toHaveAttribute('href', '/scenarios');
+    await user.click(link);
+    expect(await screen.findByTestId('where')).toHaveTextContent('/scenarios');
+    expect(getProfile()).toBeNull();
+    unmount();
+
+    // And a link from somewhere else never leaves the app.
+    renderSignIn('/sign-in?next=https://evil.example');
+    expect(screen.getByRole('link', { name: 'Continue without a profile' })).toHaveAttribute(
+      'href',
+      '/home',
+    );
+  });
+
   it('welcomes someone back, and lets them switch to another name or keep the current one', async () => {
     saveProfile({ name: 'Priya Raman' });
     const user = userEvent.setup();
     renderSignIn();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome back, Priya');
-    expect(screen.getByRole('link', { name: /Continue/ })).toHaveAttribute('href', '/home');
+    expect(screen.getByRole('link', { name: 'Continue' })).toHaveAttribute('href', '/home');
+    expect(screen.queryByRole('link', { name: 'Continue without a profile' })).toBeNull();
 
+    // A different name: the form opens empty with the cursor in it.
     await user.click(screen.getByRole('button', { name: 'Use a different name' }));
     expect(screen.getByLabelText('Name')).toHaveValue('');
+    expect(screen.getByLabelText('Name')).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Sign out of this device' })).toBeNull();
+
+    // Keeping the current one goes back, and focus lands on the heading.
     await user.click(screen.getByRole('button', { name: 'Keep using Priya Raman' }));
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome back, Priya');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
+    expect(getProfile()?.name).toBe('Priya Raman');
 
     await user.click(screen.getByRole('button', { name: 'Sign out of this device' }));
     expect(getProfile()).toBeNull();
     expect(
       screen.getByRole('heading', { level: 1, name: 'Create your practice profile' }),
     ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
+  });
+
+  it('replaces the profile when a different name is created', async () => {
+    saveProfile({ name: 'Priya Raman', role: 'Support' });
+    const user = userEvent.setup();
+    renderSignIn();
+    await user.click(screen.getByRole('button', { name: 'Use a different name' }));
+    await user.type(screen.getByLabelText('Name'), 'Sam Carter');
+    await user.click(create());
+    expect(await screen.findByTestId('where')).toHaveTextContent('/home');
+    expect(getProfile()).toMatchObject({ name: 'Sam Carter', role: '' });
   });
 });
 
@@ -102,22 +152,38 @@ describe('SignIn: honesty about organisation sign-in', () => {
   it('shows that organisation sign-in is not available instead of pretending', async () => {
     const user = userEvent.setup();
     renderSignIn();
-    const button = screen.getByRole('button', { name: /Sign in with your organisation/ });
-    expect(button).toHaveAttribute('aria-disabled', 'true');
-    expect(button).toHaveAccessibleDescription(/not available yet/);
-    await user.click(button);
-    expect(getProfile()).toBeNull();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
-      'Create your practice profile',
-    );
+    const row = screen.getByText('Organisation sign-in').closest('div') as HTMLElement;
+    expect(within(row).getByText('Not available yet')).toBeInTheDocument();
+    expect(
+      within(row).getByText(/A local profile is all Firefly needs for now/),
+    ).toBeInTheDocument();
+    // Nothing that looks like a way to sign in with an organisation, and no one named.
+    expect(screen.queryByRole('button', { name: /organisation/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Microsoft/i)).not.toBeInTheDocument();
+    await user.click(row);
+    expect(getProfile()).toBeNull();
   });
 
   it('states what is kept where', () => {
     renderSignIn();
-    const facts = screen.getByRole('list');
-    expect(within(facts).getByText('Stays in this browser')).toBeInTheDocument();
-    expect(within(facts).getByText('Fictional practice only')).toBeInTheDocument();
-    expect(within(facts).getByText('Coaching, not assessment')).toBeInTheDocument();
+    expect(screen.getByText('Stays in this browser')).toBeInTheDocument();
+    expect(screen.getByText('Fictional practice only')).toBeInTheDocument();
+    expect(screen.getByText('Coaching, not assessment')).toBeInTheDocument();
+    expect(screen.getByRole('contentinfo')).toHaveTextContent(/Firefly is a training aid/);
+  });
+
+  it('leaves the banner to the frame', () => {
+    renderSignIn();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveAttribute('id', 'main');
+  });
+});
+
+describe('SignIn: imperfect content', () => {
+  it('keeps a very long name to the field limit and still lays out a welcome for it', () => {
+    saveProfile({ name: `${'Wolfeschlegelsteinhausenbergerdorff '.repeat(4)}Jr` });
+    renderSignIn();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Welcome back, Wolfe/);
+    expect(getProfile()?.name.length).toBeLessThanOrEqual(60);
   });
 });
