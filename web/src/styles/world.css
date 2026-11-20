@@ -1,12 +1,97 @@
-/* The persistent field behind every page (components/world). Layer 0: nothing sits under it. The
-   still version is the tokens' mineral gradient with two lights; the animated canvas, when it
-   runs, is drawn over it. Pages never style this; they ask for a pose through the world store. */
+/* The persistent field behind every page (components/world). Layer 0: nothing sits under it. The still
+   version is the tokens' mineral gradient with two lights; the animated canvas, when it runs, is drawn
+   over it. Pages never style this; they ask for a pose through `useWorldPose`.
+
+   Legibility is part of the design. The canvas as a whole is capped at `--world-cap`, so however many
+   strands overlap, no pixel can move the page further than the cap: text in --ink-1 and --ink-2 keeps
+   WCAG AA contrast over the brightest possible field (a test checks this against the real tokens).
+   Contrast-more users get a fraction of that, forced colours and print get nothing, and low effects
+   (`data-perf='low'`) is the still gradient only. */
+
+:root {
+  /* Strongest the field can be, as a share of the canvas. Dark adds light, light adds ink. Chosen so
+     that even a pixel saturated by overlapping strands leaves --ink-1 and --ink-2 at WCAG AA over the
+     hardest part of the field gradient (the lightest on dark, the darkest on parchment); a test works
+     it out from the tokens, so changing a token or this number fails there first. */
+  --world-cap: 0.19;
+  /* How much of the cap people who ask for more contrast get. */
+  --world-cap-scale: 1;
+}
+:root[data-theme='light'] {
+  --world-cap: 0.17;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --world-cap: 0.17;
+  }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --world-cap-scale: 0.35;
+  }
+}
 
 .world {
   position: fixed;
   inset: 0;
-  z-index: var(--z-world);
+  /* One step under layer 0, so the field sits behind all content even if a page forgets to position
+     its own layer (the root is an isolated stacking context). */
+  z-index: calc(var(--z-world) - 1);
   pointer-events: none;
   background: var(--world-base);
   contain: strict;
+}
+
+.world__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-cinematic) var(--ease-exit-decelerated);
+}
+.world__canvas[data-live] {
+  opacity: calc(var(--world-cap) * var(--world-cap-scale));
+}
+
+html[data-perf='low'] .world__canvas {
+  display: none;
+}
+@media (forced-colors: active) {
+  .world__canvas {
+    display: none;
+  }
+}
+@media print {
+  .world {
+    display: none;
+  }
+}
+
+/* A veil for long text: put it on the block that holds the reading, and the field quietens behind it
+   with a soft, field-coloured wash that fades out at its edges (no box, no border). Strength is
+   `--world-veil`, 0 to 1. */
+.world-veil {
+  --world-veil: 0.72;
+  position: relative;
+  isolation: isolate;
+}
+.world-veil::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--sp-6) * -1) calc(var(--sp-7) * -1);
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse closest-side at 50% 50%,
+    color-mix(in srgb, var(--field-1) calc(var(--world-veil) * 100%), transparent) 0%,
+    color-mix(in srgb, var(--field-1) calc(var(--world-veil) * 78%), transparent) 62%,
+    transparent 100%
+  );
+}
+@media (forced-colors: active), print {
+  .world-veil::before {
+    display: none;
+  }
 }
