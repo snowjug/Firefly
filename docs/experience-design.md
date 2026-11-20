@@ -1,331 +1,368 @@
 # Firefly experience design
 
-This is the design reasoning behind what a learner sees and does: the concept, the principles, each
-screen, how rewards and voice fit in, and how accessibility, motion and performance are handled. The
-mechanics live elsewhere: [design-system.md](design-system.md) for tokens and components,
-[architecture.md](architecture.md) for how it is built, [rewards.md](rewards.md) and
-[voice.md](voice.md) for those two features.
+This is the design reasoning behind what a learner sees and does: the concept, the one object the
+interface is built around, how the customer's state becomes the atmosphere of the room, each screen,
+and how motion, input, accessibility and performance are handled. The mechanics live elsewhere:
+[design-system.md](design-system.md) for tokens and components, [accessibility.md](accessibility.md),
+[performance.md](performance.md), [architecture.md](architecture.md) for how it is built,
+[attribution.md](attribution.md) for fonts, packages and what was studied, and
+[rewards.md](rewards.md) and [voice.md](voice.md) for those two features.
 
 ## Creative concept
 
-A learner is rehearsing a hard conversation. The product should feel like a **calm, confident
-workspace**, not a game and not a call centre dashboard.
+**Firefly is a living simulation space where conversation signals become visible.**
 
-- A deep **navy sidebar** frames bright **white cards** on a pale blue canvas, so the thing you are
-  working on is always the brightest thing on the screen.
-- **One vivid blue** carries every primary action. A **blue-to-violet gradient** marks the moments
-  that invite you to start something: the practice banner and the landing hero.
-- **Warm amber is reserved for rewards**: points, stars and badges. If something is amber, it was
-  earned.
-- The **customer is a person**, drawn as a 2D portrait whose expression follows how they feel, and
-  who speaks (when voice is on) in a voice of their own.
-- **Feedback is evidence.** Every score sits next to the words from the call that support it.
+A learner is rehearsing a hard conversation. The product should feel like a quiet, well-lit room in
+which something is listening: it shows how composed the customer is, what has been found, what shifted,
+and afterwards what the evidence says. It should not feel like a dashboard with a chat box in it.
 
-The look was shaped by a reference board of nine screens (landing, sign-in, dashboard, scenario
-setup, call, feedback, history, rewards, profile and settings). Where the board suggested something
-the product cannot honestly do (a working Microsoft sign-in, experience points, a "top performer"
-label, 3D avatars), the design keeps the layout and replaces the claim: see
-[What was adapted](#what-was-adapted-from-the-reference).
+- **A deep mineral field, lit by a few meaningful lights.** The background is a blue-green black, never
+  pure black. **Amber** means _discovery_ (something was found; the recommended next mission; the
+  primary action). **Aqua** means _focus_. **Sage** means _stable_. **Coral and ember** mean _tension_.
+  The light theme is a luminous parchment with the same lights turned to ink-safe tones. It is designed
+  separately, not inverted.
+- **Editorial type.** Very large serif next to small monospaced telemetry. Scale contrast does most of
+  the work that boxes do in a dashboard.
+- **Hairlines, tick scales and space instead of cards.** Nothing is put in a rounded rectangle because
+  it is a section. Reading surfaces are opaque; glass is used only for things that float (the dock, the
+  palette, an inspector, a dialog).
+- **One object.** The Signal instrument (below) appears at every scale, so a mission, a calibration, a
+  live customer and a finished call read as the same thing.
+- **Feedback is evidence.** Every score sits next to the words from the call that support it, and every
+  quote links to the exact turn in the transcript.
+
+What it is deliberately not: a card grid, a row of stat tiles, a gradient banner, a navy sidebar, a
+cartoon or stock-photo customer, sparkles, confetti, or an "AI" badge.
 
 ## Design principles
 
-1. **Clarity before decoration.** One primary action per screen, strong hierarchy, plain language.
-   Effects exist to explain state, never to fill space.
+1. **Signals, not decoration.** Every animation must answer one question: what changed, where did it
+   come from, where did it go, what is selected, what happened, what is connected, what is important,
+   what state am I in, what did I achieve. If it answers none, it is removed. Idle motion is a slow
+   breath, nothing more, and it can be paused.
 2. **Honest.** Demo mode is always labelled and never presented as a model. No fake progress, fake
-   metrics or disguised mock output. Identity is a local profile, not an account. Voice is labelled
-   Beta and is opt-in.
+   metrics or disguised mock output; a new learner sees intentional empty states, not invented history.
+   Identity is a local profile, not an account. Voice is labelled Beta and is opt-in.
 3. **Evidence over opinion.** Scores, strengths, opportunities and rewards each carry the reason and,
-   where one exists, the quoted moment. Quotes link to the exact turn in the transcript.
-4. **Practice, not performance.** Scores are practice signals. There is no leaderboard, no ranking,
-   no comparison with colleagues, and no reward for speed or volume. Every report and many screens say
-   so.
+   where one exists, the quoted moment.
+4. **Practice, not performance.** Scores are practice signals. There is no leaderboard, no ranking, no
+   comparison with colleagues, and no reward for speed or volume. Every report and many screens say so.
 5. **Calm.** No countdown pressure, no streak shaming, no confetti. A missed day costs nothing.
-6. **Private by default.** The profile and preferences stay in the browser. Notices are derived
-   locally. Voice never records audio.
-7. **Accessible by default.** WCAG 2.2 AA is a release requirement (see
-   [Accessibility approach](#accessibility-approach)).
-8. **Two real themes.** Light and dark are both designed, not inverted.
+6. **Cues are a training aid.** Guided practice shows the customer's mood, discoveries and shifts.
+   Immersive practice shows none of it, because a real call would not.
+7. **Never reveal what the learner is meant to discover.** The interface cannot show a hidden fact, the
+   kind of curveball, an evaluator criterion, or how many hidden facts there are before the report.
+8. **Private by default.** The profile and preferences stay in the browser. Notices are derived locally.
+   Voice never records audio.
+9. **Accessible by default.** WCAG 2.2 AA is a release requirement, and reduced motion is a first-class
+   mode, not an afterthought.
+10. **Performance is part of the aesthetic.** A simpler thing that stays smooth beats an ambitious thing
+    that stutters; effects adapt to the device.
 
-## The visual system
+## The object: the Signal instrument
 
-The tokens, surfaces and components are documented in [design-system.md](design-system.md). In short:
-system fonts only (no download, no layout shift), a 4 px spacing scale, 14 px card radius, solid
-cards with a hairline border and a soft shadow, native form controls restyled, and CSS custom
-properties for every colour so both themes share one set of rules. The 2D illustrations are drawn in
-SVG (`web/src/components/illustration/`): customer portraits generated from a seed (the same name
-always gives the same person), an agent with a headset for the home banner, the landing sphere and
-a night-time building for sign-in.
+One drawing, with one grammar, used at four scales.
+
+| Mark                       | Meaning                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Rings                      | Difficulty: Starter one ring, Standard two, Challenge three                                                         |
+| Overall size               | Business impact: Low, Medium, High                                                                                  |
+| Edge texture               | How the customer starts: calm is a smooth line, anxious round dashes, frustrated long and short dashes, angry teeth |
+| Heart shape                | Call stage: first contact a circle, follow-up a diamond, escalated a triangle, closure a square                     |
+| Heart fill                 | Status: new is an outline, attempted is half filled, completed is solid                                             |
+| Ticks around the rim       | Duration: one tick is a minute, a long tick every five                                                              |
+| Glint (four amber strokes) | The recommended next mission                                                                                        |
+
+Every mark is also written out (`describeGlyph`, `describeCore`, and the key to the plate), so nothing
+is carried by shape or colour alone.
+
+| Scale        | Where                              | What it does                                                                                                                                                                             |
+| ------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Glyph**    | Mission atlas, history trail, home | A static mark per mission or call. Legible at 28 px, drawn up to 140 px                                                                                                                  |
+| **Core**     | Calibration                        | An engraved instrument with lettered marks A to F and a legend. It turns live as the settings change                                                                                     |
+| **Presence** | The live call                      | The customer. Mood sets compression, edge and fragmentation; easing back widens the rings and rejoins fragments; a curveball kinks the rings; a discovery lights the next dot on the rim |
+| **Frozen**   | Report, history                    | The presence held at the moment that matters                                                                                                                                             |
+
+The same stars, at sky scale, are the progress constellation.
+
+```mermaid
+flowchart LR
+    A[Mission glyph<br/>on the atlas] -->|press: shared element| B[Core<br/>calibration]
+    B -->|Enter the call| C[Connecting<br/>the customer's name]
+    C --> D[Presence<br/>live call]
+    D -->|end call| E[Wrap-up<br/>real server phases]
+    E --> F[Frozen presence<br/>debrief and history]
+    F --> G[Skill constellation<br/>progress]
+```
+
+The hand-offs are real transitions, not cuts. Pressing a mission star starts a view transition in which
+the star becomes the core (see [Motion language](#motion-language)).
+
+## Customer state becomes atmosphere
+
+The customer's public state (mood band, trend, discoveries, silence, how many times the conversation
+has shifted) drives the room. Mood is always shown by **shape, word and movement together**, never by
+colour alone.
+
+| Mood        | Word in guided practice | Presence                                      | Filament (the spine of the conversation) | The room            |
+| ----------- | ----------------------- | --------------------------------------------- | ---------------------------------------- | ------------------- |
+| Calm        | Calm, steady            | Wide, smooth concentric rings                 | Straight, slow travelling light          | Open, cool, slow    |
+| Concerned   | Concerned               | Rings tighten, dashed edge                    | A slight sway                            | Warms towards amber |
+| Frustrated  | Frustrated              | Compressed and uneven, long and short dashes  | A visible tremor                         | Warmer, narrower    |
+| Angry       | Angry                   | Crossed and compressed, toothed edge          | Kinks                                    | Hot and tight       |
+| Escalating  | Escalating              | A fragmenting edge (never flashing)           | Broken segments                          | Closed, ember       |
+| Easing back | "…, easing"             | Rings widen, fragments rejoin, movement slows | Straightens                              | Cool returns        |
+
+The numbers behind each mood live in `web/src/components/call/atmosphere.ts` and mirror the
+`[data-mood]` blocks in `tokens.css`; a test parses the stylesheet so they cannot drift apart. Nothing
+flashes, and nothing changes faster than three times a second.
+
+**Guided practice** shows the mood word with a rising, steady or easing mark, the presence and the room,
+"N signals found" against a fixed pool of dots, a "Signal found" mark on the filament, a "The
+conversation changed." line when a curveball lands (never what kind), and a few hint ideas that only
+ever fill the message box. **Immersive practice** shows none of it: a neutral presence that still
+breathes, and one line saying that mood cues are off. The cue level is decided in one place
+(`cueLevelFor`), and anything other than guided fails closed.
 
 ## Route by route
 
-| Route                               | Screen                  | What it is for                                                                                                                                    |
-| ----------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                                 | Landing                 | What Firefly is and is not, a way in, and the principles in plain words                                                                           |
-| `/sign-in`                          | Sign-in                 | Create a local profile (a name). Organisation sign-in is shown as not available                                                                   |
-| `/home`                             | Home                    | Greeting, four real numbers, the "start a new practice session" banner (or "resume call"), recommended scenarios with the reason, recent practice |
-| `/practice`, `/scenarios/:id/setup` | Practice setup          | Configure a call on one page and start it                                                                                                         |
-| `/scenarios`                        | Scenarios               | A searchable catalogue of the 13 scenarios                                                                                                        |
-| `/calls/:id`                        | Call                    | The conversation, typed or spoken                                                                                                                 |
-| `/sessions/:id/report`              | Call feedback           | The full coaching report, opened as soon as a call ends                                                                                           |
-| `/sessions/:id/transcript`          | Transcript              | The conversation with markers, and the target of every quote link                                                                                 |
-| `/history`                          | History                 | Every call as a table: score, badges earned, view, resume, retry, compare, delete                                                                 |
-| `/rewards`                          | Rewards                 | Level, badges, challenges, streak, how points work and the points history                                                                         |
-| `/progress`                         | My progress             | Trends per skill, where to focus next, repeated opportunities                                                                                     |
-| `/settings`                         | Profile and settings    | The profile, preferences, notifications, data and privacy                                                                                         |
-| `/help`                             | Help and responsible AI | How things work, voice and privacy, points, working with a mentor, limits                                                                         |
-| `/calibration`, `/trainer`          | Mentor area             | Blind review and calibration; demo tools and sample data                                                                                          |
+### Front door and sign-in
 
-### Landing and sign-in
-
-A dark hero with the promise ("Practice real conversations. Build real impact."), a glowing orbit
-sphere, four highlights and a short explanation. The landing page and the sign-in's side panel are
-always dark because they are brand moments; everything else follows the theme. Sign-in asks only for a
-name (role and location are optional), says in the first paragraph that there is no password and no
-account, and leaves the organisation sign-in button visibly disabled with the reason. Anyone with a
-saved profile sees "Welcome back" and one button.
+The engraved instrument alone in the field, the positioning statement in display serif, and five steps
+(Configure, Simulate, Adapt, Evaluate, Improve) that describe only what Firefly really does. Below
+them, an unembellished list of what it is not: not an assessment, not a real customer, not an account,
+not always right. The first visit has a short ignition (the wordmark lights once, at most 1.2 seconds,
+skipped by any key, by reduced motion and by the low effects tier, and it never animates text).
+**Sign-in is a local profile**: a name, saved in this browser. There is no password and no organisation
+sign-in is pretended.
 
 ### Home
 
-The first screen after sign-in answers "what should I do now?". It shows four real numbers (scenarios
-completed, average score, badges earned, practice time; sample calls never count), then one big
-invitation. If a call is open, the invitation becomes **Resume call**. Below it are four
-recommended scenarios, the first chosen by `recommend.ts` with the reason in words, and the last three
-finished calls. The first-run tour is offered once, never forced.
+A calm console, not a stats wall. An editorial greeting, then one hero: the call you left open (with
+"Return to your call"), or the recommended mission as a large glyph with the reason it was recommended
+and one action. Below it: a practice ledger that says plainly when there is nothing yet, the last call
+as one line, the skill to work on next, and where to go next. A new learner sees an intentional first-run
+state and an offer of the short introduction.
 
-### Practice setup
+### Missions
 
-One page replaces the earlier eight-step wizard and the separate pre-call brief.
+The scenario library as an atlas of stars at stable positions: grouped into families, labelled by a
+deterministic, collision-checked solver, with the recommended mission glinting. A pointer light follows
+fine pointers only; arrow keys move across the plane; a detail card resolves on hover or focus. **The
+chart always has a list alternative** (the default under 640 px) with the same information, a "Find a
+signal" search, a lens (difficulty, status, family) and a key to the plate.
 
-- **Quick start** is a radio group (Starter, Standard, Challenge), the same difficulty presets the
-  engine uses.
-- **Custom configuration** changes the issue type, scenario, business impact, customer temperature,
-  technical proficiency, communication style, call stage and curveballs. Hidden facts are shown as a
-  read-only "always on" row: every scenario has details the customer shares only when asked.
-- Everything starts from the scenario as written. A **Customised** chip says when something differs,
-  and **Reset to scenario defaults** puts it back.
-- The **scenario preview** is what the old brief page was: the customer, the situation, your goal,
-  what you will practise, ground rules, and the honest reminders (fictional customers, the provider
-  note). It never shows hidden facts.
-- **Start call simulation** stays in a bar at the bottom of the screen. It is safe to press twice and
-  safe to retry; a short launch moment is skipped under reduced motion.
+### Calibration
 
-### Scenarios
-
-A plain catalogue: search (pre-filled by the top bar search), filters for issue type, difficulty and
-impact, and cards that say how often you have practised the scenario and your best score. One card is
-recommended, with the reason.
+The scenario's setup, around the engraved core. One row per setting, typographic rather than boxed, each
+with a sentence on what the choice does (announced politely). Presets, curveballs, practice mode, the
+brief, and the draft that is saved as you go. The core changes live as settings change. **Enter the
+call** starts the call; if the server takes longer than 350 ms, an honest connecting view shows the
+customer's name and one line of true state, never fake progress.
 
 ### The call
 
-The call screen owns the viewport. The sidebar shrinks to an icon rail (and disappears below 960 px).
+The customer is the presence beside a name, a role and a mood word. The conversation is typeset on the
+filament: speaker and turn in a monospaced margin, the latest customer line large, earlier lines
+smaller but never below AA contrast, your own lines italic. The reply field is an underlined serif
+line. Long calls stay fast (older turns use `content-visibility`, scrolling never yanks the reader, and
+there is a "Jump to latest" control). Voice (Beta) adds a microphone and spoken replies; see
+[voice.md](voice.md). While a call is live the dock and utility cluster leave the screen and the tab
+order; leaving goes through **End call**.
 
-- **Stage.** The customer's portrait, their name, role and organisation, the business impact and their
-  latest message as a speech bubble (a decoration: the conversation list is the accessible record).
-- **Chat.** Customer messages on the left, yours on the right, a typing indicator, and a composer
-  whose accessible name is "Your reply to the customer". Enter sends, Shift+Enter adds a line, a
-  message that looks like personal data is warned about before it is sent, and a failed send keeps the
-  message with a Retry.
-- **Guided practice** adds the mood in words, a mood meter, a count of facts uncovered (never how many
-  exist) and a few hint chips that insert a generic starter phrase and never reveal a fact.
-  **Immersive practice** shows none of that, and the portrait stays calm, so the face cannot give the
-  mood away.
-- **Voice (Beta)** adds a microphone, mute, hands-free, a live caption and a status line. See
-  [voice.md](voice.md).
-- **Details** opens the briefing (situation, goal, ground rules, areas worth exploring) and private
-  notes, which never leave the tab.
-- **End call** asks for confirmation, locks the transcript, shows the real stage evaluation has
-  reached, and then opens the report by itself.
+### Wrap-up and the debrief
 
-### Call feedback
+Ending a call locks the transcript, lists the real server phases as they happen, and opens the report.
+The report is one long editorial page: a masthead with the frozen presence, a numbered section rail, the
+customer's journey as a filament line with turning points (arrow keys move between points; a list is
+always available), six skills as a small constellation that doubles as navigation, evidence quotes that
+link to the exact transcript turn, a word-level diff between what you said and a stronger way to say it
+(labelled in text, never colour alone), a discovery review, one next practice target, rewards earned
+for the call, and an honest "About this report". A first view replays the journey once (2.4 seconds,
+skippable, never under reduced motion or on the low tier). A call that ends early is labelled as such
+and says its scores rest on limited evidence.
 
-The report is the payoff, so nothing is hidden behind a click.
+### Evidence lens (transcript)
 
-1. A **meta card**: the scenario, date, duration, difficulty, practice mode, whether the call was
-   completed or ended early, the customer's mood at the end, who produced the coaching, and the summary.
-2. An **overall score ring** ("a practice signal, not a grade or a ranking"), hidden facts found, the
-   customer's mood range, your turns and the coaching focus, beside **six skill bars** with their
-   evidence labels.
-3. **On this page** navigation, **What went well** and **Areas to improve**.
-4. **Skill details**: the rationale, the CARE behaviours, evidence quotes with "see it in the
-   conversation", and what to try.
-5. **Opportunities**: what you said, why it matters, a stronger way to say it and why it works.
-6. **Discovery**: for every hidden fact whether it was found, a question worth asking, what the customer
-   had held back and why it mattered.
-7. The **customer temperature timeline**, with turning points you can walk with the arrow keys.
-8. **Rewards from this call**, with the reason for each award.
-9. **Next practice target** and a suggested call.
-10. **About this report**: how it was produced, the disclaimer, the rubric, and **Report incorrect
-    feedback**.
+The whole conversation typeset like the call. Turns that the report cites are marked with the reason,
+and arriving from a quote focuses the exact turn.
 
-A call that ends early, or has too little in it, says so instead of inventing a full assessment: no
-overall score, evidence labels on the skills that rest on little, and rewards that explain why a call
-earned nothing. A call that used voice carries a reminder to check quotes against the transcript.
-**Download report** opens the browser's print dialog with a dedicated print stylesheet.
+### Progress and recognition
 
-### History, Rewards and My progress
+A sky of six clusters of fourteen stars, one cluster per coaching skill, lit only as far as the
+evidence supports (a dormant star means _no evidence yet_, not zero). Selecting a cluster opens its
+reading: trend, what moved, the report it came from, repeated opportunities and a link to practise. A
+list is the default under 640 px. **Recognition** lives below the sky (`/progress#recognition`; `/rewards`
+redirects there): points (never XP), badges as engraved marks that say Earned, In progress or Locked in
+words, challenges as plain rows, the rules, and the points history. Nothing is ranked or compared.
 
-- **History** is a table on wide screens and stacked cards on narrow ones. The Badges column shows what
-  each call earned.
-- **Rewards** shows a level and what the next one needs (both points and kinds of call), earned and
-  locked badges in words, three personal challenges, the streak, the seven rules with their safeguards,
-  and a points history that gives the reason for every award. See [rewards.md](rewards.md).
-- **My progress** shows, per skill, a small trend with a text summary ("Latest 4, average 3.2,
-  rising"), where to focus next and the opportunities that keep coming back. It never compares one
-  person with another.
+### History
 
-### Settings, Help and the mentor area
+A month-grouped trail: each call is a glyph on a hairline with its date, title, customer, duration,
+difficulty, status (in words and shape), score and links. Status tabs show counts; a Refine disclosure
+holds the other filters; comparing two finished calls and deleting a call keep their behaviour.
 
-- **Settings** keeps device choices (theme, reduced motion, sound, language) apart from profile choices
-  (default difficulty, hints, voice, notifications). Without a profile the profile choices are disabled
-  with a reason. Every change is saved at once and confirmed.
-- **Help** explains the product in plain language and carries the Responsible AI content.
-- **Calibration** and **Trainer** are mentor tools. They sit under their own heading in the sidebar and
-  use the same cards and tables. They keep their purpose: a blind mentor review, and demo tools with
-  clearly labelled sample data.
+### Studio, Settings and Responsible AI
 
-### The tour
+The studio (trainer tools and mentor calibration) and the reading pages are the quietest in the
+product: type, hairlines, ledgers and almost no ambient motion. The Responsible AI page keeps its
+reviewed copy in a long-form reading layout. Settings has four tabs, an **Ambient motion** row that
+mirrors the control in the top-right cluster, and "Replay the introduction".
 
-An optional five-step tour (about 45 seconds): pick a scenario, hidden facts, the customer reacts,
-feedback, ready. It is offered from Home and Settings, never opens by itself, can be skipped at any
-step and ends at the practice page. It is its own chunk, so it is not part of the first download.
+### States
 
-## Rewards
+Loading is hairlines with end ticks where the text will be. Empty states are one sentence and at most
+one action. Errors say what happened and what to do, and offer a retry only when retrying can help.
+There is a designed 404, router and page error screens that never print a stack trace and keep the dock
+where the page failed inside the app, and a calm line when the browser goes offline.
 
-Rewards are in the product to encourage practice, and the design makes four promises:
+## Shell and navigation
 
-- **Every award explains itself.** The points history gives one plain sentence and, where there is one,
-  the quoted moment.
-- **They cannot be gamed.** Nothing is paid for speed, call length or message count; a fact pays once;
-  repeats of one scenario pay little; calls that end early or have too little evidence earn nothing.
-- **They are forgiving.** A streak forgives one missed day. Nothing is taken away for a retry or a
-  missed day.
-- **They are private.** No ranking, no leaderboard, no sharing. They are worked out from your own saved
-  calls every time they are asked for, so deleting a call takes back what it earned.
-
-The rules, levels, badges and challenges are in [rewards.md](rewards.md).
-
-## What was adapted from the reference
-
-| The reference showed                      | What Firefly does instead                                                                                               |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| "Sign in with Microsoft"                  | A local profile (a name). The organisation button is visible but disabled, with the reason                              |
-| XP, levels and a "Top Performer" label    | Points with a reason for each, four levels that need breadth as well as points, and no ranking of any kind              |
-| "AI-powered" practice                     | Plain language: demo mode is a rules engine and says so; a live model is named when one is configured                   |
-| A 3D-style customer                       | A 2D illustration that follows the customer's mood                                                                      |
-| Push notifications                        | A bell menu with notices worked out in the browser; nothing is emailed or pushed                                        |
-| Voice and "Download report" as decoration | Voice is a real, opt-in beta with its privacy stated; Download report opens a real print dialog with a print stylesheet |
+There is no sidebar and no top bar. A **command dock** at the bottom holds six numbered destinations
+(Home, Missions, History, Progress, Studio, Settings) as real links in a `nav` list, with an amber pip
+that glides to the active or hovered or focused item. The **utility cluster** at the top right holds
+search, theme, a persistent **Pause ambient motion** control, notices, the account and help.
+**Ctrl or Cmd + K** opens a palette to go anywhere, start practice, switch theme or pause motion, find a
+mission, or search missions. A quiet colophon at the foot of every page carries the training-aid line
+and links to Responsible AI and Settings. On phones the dock is a full-width bottom bar.
 
 ## Motion language
 
 Motion explains what changed. It never blocks input and never carries essential information.
 
-- Durations: feedback 120 to 200 ms, state changes 320 to 450 ms, reveals 640 ms, and 1000 ms only for
-  the score ring and the launch moment.
-- Only `transform` and `opacity` are animated. Layout is never animated and text is never faded in.
-- Route changes use the View Transitions API where it exists: a short crossfade.
-- The customer's portrait breathes, blinks and moves its mouth while the customer speaks or types. The
-  orbit lights on the landing sphere drift. All of it stops under reduced motion.
-- **Reduced motion** is honoured from the device and from Settings (`data-motion="reduce"`). Animation
-  and transitions collapse to near zero, the score ring draws at its final value, the portrait holds
-  still and the launch moment is skipped. State changes remain visible.
+- **Durations:** response 100 ms, micro 160 ms, component 260 ms, route 440 ms, cinematic 800 ms (the
+  longest anything may take, and always skippable). Idle drift is slow and non-essential.
+- **Easing:** named tokens, including three damped springs sampled into CSS `linear()` (a gentle
+  spatial spring, a discovery settle, and a press with half a percent of overshoot).
+- **Native first:** CSS transitions, the Web Animations API for choreography, the View Transitions API
+  for route changes, and a few small `requestAnimationFrame` tweens for the instruments. There is no
+  animation library.
+- **Route transitions** are a short cross-dissolve. The dock is a named element so it stays still above
+  the page; the mission star carries a shared name so it flies into the calibration core. The animated
+  field is _not_ named (a named group is painted above the page snapshot and would hide it). **The first
+  press or key skips a running transition**, because the browser blocks pointer events while one runs.
+- **Ambient motion** (the breathing presence, drifting light, the field) is paused by a persistent
+  control, by reduced motion, by a hidden tab, and by the low effects tier.
+- **Reduced motion** is honoured from the device and from Settings (`data-motion="reduce"`): movement
+  stops and state changes are instant, with the same information in words. It is designed and tested as a
+  real mode.
 - **Sound** is optional and off by default (`web/src/lib/sound.ts`): short tones synthesised in the
-  browser, never required. Voice is a separate opt-in.
+  browser. Voice is a separate opt-in.
+
+## Input and the pointer
+
+The native cursor is never hidden. Physical feedback is local: the atlas has a pointer light that
+brightens the nearest star, buttons press with a spring, and the dock pip leans towards hover. These are
+for **fine pointers only** (`(hover: hover) and (pointer: fine)`); touch gets taps and visible
+alternatives, and keyboard focus gets the same feedback as hover. Dragging or panning never has no
+alternative. Pointer handlers are coalesced to one per animation frame, write only transforms and custom
+properties, and are off on the low tier and under reduced motion.
 
 ## Accessibility approach
 
-The checklist every page must meet is in [design-system.md](design-system.md#accessibility-checklist).
-How it shows up in practice:
-
-- **Landmarks and headings.** One `h1` per page, ordered headings, a skip link, a named region for the
-  conversation.
-- **Never colour alone.** Every mood, score, status, badge and difficulty is also written out. Score
-  rings and sparklines come with a text equivalent, the temperature chart with a data table.
-- **Keyboard.** Everything works without a pointer: setup, the composer and voice controls, tabs and
-  radio groups (arrow keys), the timeline (arrow keys between points), menus and dialogs (focus trap,
-  Escape, focus restored).
-- **Announcements.** New customer replies are announced politely, once, as a whole message. Status
-  changes ("Listening", "Customer is speaking") use polite live regions.
-- **Targets.** Primary controls are at least 44 px. A few dense secondary controls are 36 px.
-- **Illustrations** are decorative and hidden from assistive technology.
-- **Automated checks.** The browser tests run axe-core (WCAG 2.0 to 2.2, A and AA) on every page in both
-  themes and check that nothing scrolls sideways at 320 and 1440 px.
-- **Not done.** Nobody has tested with a screen reader or voice control.
+The details, the criteria that shaped the design and the honest gaps are in
+[accessibility.md](accessibility.md). In short: semantic landmarks and one `h1` per page; every spatial
+view has a semantic alternative (atlas to list, instrument to text, constellation to list, journey to
+list); colour is never the only channel; visible focus everywhere; targets of at least 44 px; polite
+live regions for discoveries and shifts; reflow from 320 px; and reduced motion, increased contrast,
+forced colours and reduced transparency each have a defined result.
 
 ## Responsive strategy
 
-- **Above 960 px** the sidebar is a column. **At or below 960 px** it becomes a drawer opened from the
-  top bar, and the top bar shows the brand. **At or below 420 px** the brand's name steps aside so the
-  three action buttons still fit at 320 px.
-- Pages that hold dense content (feedback, history, home) respond to the width of the page itself with
-  container queries, so they behave the same beside a sidebar, in a drawer layout or on paper.
-- History becomes stacked cards, the call's stage becomes a compact strip above the chat, and the
-  setup preview moves below the form.
-- Everything is designed down to 320 px without horizontal scrolling and up to ultra-wide screens.
+- Designed from 320 px (no sideways scrolling) to wide screens, with a content column of at most 1360 px
+  that the masthead aligns to.
+- **Below 720 px** the dock becomes a full-width bottom bar with labels only. Charts offer their list
+  first; the call becomes a compact presence strip above a full-height conversation with the composer
+  fixed at the bottom, clear of the on-screen keyboard and safe areas.
+- Short landscape screens keep **End call** reachable.
 
 ## Performance strategy
 
-- **Nothing blocks the first screen.** No web fonts, no raster images, no UI framework; the runtime
-  dependencies are React, React Router and zod.
-- **Every page is its own chunk.** The page for the opening address is fetched before the first render,
-  and optional pieces (the tour, the avatar artwork on Home) load after the first paint through
-  `useOnDemand`, never through `Suspense` inside a page's first render.
-- **No layout jumps.** A page is at least one screen tall so the footer never jumps, loading states are
-  skeletons of the final layout, and illustrations have fixed aspect ratios.
-- **Cheap animation.** Transform and opacity only; the portrait's animation is CSS, with no React
-  re-render per frame.
-- **Sizes.** From the production build (gzip): the shared app code is about 93 kB, the stylesheet shared
-  by every page about 8 kB, the largest page chunks (Call and Report) about 21 kB and 17 kB, and a typical
-  page chunk 4 to 6 kB. These are build sizes. Load times have not been measured for this release.
+Budgets are enforced in CI (`npm run check:budgets`); numbers and method are in
+[performance.md](performance.md). The shape of it: fonts are self-hosted, subset and preloaded for the
+first paint; every page is its own lazily loaded chunk; the animated field is a separate lazy chunk
+requested when the browser is idle; and a **performance tier** (high, medium, low) chosen from device
+hints and a frame monitor that only steps down decides how much decoration is drawn (blur, the field,
+pointer light). `?perf=low`, `?perf=medium` and `?perf=high` pin a tier for testing.
+
+## How the direction was chosen
+
+Three directions were built as real, interactive browser prototypes before any production code, each
+with the missions universe, the node-to-core hand-off and the live call:
+
+| Direction               | Idea                                                              | What was kept                                                                                                  | What was not                                                              |
+| ----------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **A: Editorial Signal** | A page-like interface; the instrument at three scales             | **The base.** The grammar, the editorial type, the margin-and-filament conversation, the star-to-core hand-off | Greedy runtime label placement; a heavy pointer lens; a grain overlay     |
+| **B: Cinematic Signal** | A WebGL field of luminous strands that re-weave into the customer | The idea of an atmosphere driven by the customer's state, as a Canvas2D field limited in intensity             | WebGL, strands behind text at full strength, conversation cards           |
+| **C: Tactile Material** | One glass lens with physical controls and refraction              | Micro-physics: the press spring, the magnetic dock pip                                                         | Skeuomorphic materials, per-token backdrop blur, Chromium-only refraction |
+
+The prototypes were scored on originality, identity, readability, usefulness, craft, maintainability,
+accessibility, performance and scalability. A won on readability and accessibility; B was the most
+cinematic and the heaviest; C had the most expensive pointer path. The decision and the fixes it
+required are recorded in the plan that guided the rebuild.
+
+## What was not adopted
+
+| Tempting                               | What Firefly does instead                                                                                  |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| "Sign in with Microsoft"               | A local profile (a name). Nothing pretends to be an account                                                |
+| XP, levels and a "Top Performer" label | Points with a reason for each, four levels that need breadth as well as points, and no ranking of any kind |
+| "AI-powered" practice                  | Plain language: demo mode is a rules engine and says so; a live model is named when one is configured      |
+| A cartoon, stock or 3D customer        | An abstract presence that follows the customer's mood. It is not a face and not a person                   |
+| Push notifications                     | A bell menu with notices worked out in the browser; nothing is emailed or pushed                           |
+| three.js, a physics engine, a UI kit   | Hand-written Canvas2D, SVG and CSS. No runtime dependency was added for this redesign                      |
 
 ## Dependency choices
 
-No runtime dependency was added for the redesign, rewards or voice.
+No runtime dependency was added for the redesign. The runtime dependencies remain React, React DOM,
+React Router and zod.
 
-| Considered                 | Decision                                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------------------------- |
-| Three.js / WebGL           | Not used. 2D SVG portraits are enough, load instantly and have no failure mode                    |
-| Animation libraries        | Not used. CSS transitions, one spring easing and CSS keyframes cover every need                   |
-| Web fonts                  | Not used. A system stack means no download and no layout shift                                    |
-| Audio files                | Not used. Call tones are synthesised with Web Audio; speech uses the browser's own voices         |
-| Speech services            | None of Firefly's own. Voice uses the browser's Web Speech API and sends only recognised text     |
-| Icon or illustration packs | Not used. Icons are inline SVG paths in `web/src/components/Icon.tsx`; portraits are hand-drawn   |
-| Charting libraries         | Not used. The temperature timeline and sparklines are small SVG components with text alternatives |
+| Considered                                   | Decision                                                                                                                                |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| three.js and React Three Fiber               | Not used. About 250 kB gzipped for a scene that Canvas2D and SVG draw at about 1 ms per frame                                           |
+| Animation libraries (Motion, GSAP, Anime.js) | Not used. CSS transitions, the Web Animations API, View Transitions and small tweens cover every need. Revisit only for a measured need |
+| Radix or another primitives kit              | Not used. The primitives are small, typed and tested in `components/frame`; dialogs, tabs, menus and the palette are ours               |
+| Web fonts from a CDN                         | Not used. Three families are self-hosted, subset and served from our own origin (the Content-Security-Policy allows `font-src 'self'`)  |
+| Chart libraries                              | Not used. The journey, the sky and the sparklines are small SVG components with text alternatives                                       |
+| Component marketplaces                       | Studied for ideas only; no component was copied (see [attribution.md](attribution.md))                                                  |
+
+The router moved from declarative routes to a **data router**, because the View Transitions API is only
+started by `<Link viewTransition>` and `navigate(..., { viewTransition: true })` in data mode. In the
+declarative mode the option is silently ignored (measured in a real browser: zero calls).
 
 ## Visual review
 
-Design changes are checked in a real browser, in both themes, on a phone-sized and a desktop-sized
-screen. Two tools help:
+Design changes are checked in a real browser, in both themes, on a phone-sized, a laptop-sized and a
+wide screen, with reduced motion and with `?perf=low`. Passing tests is not visual approval. Tools:
 
-- `node scripts/shot.mjs` captures any single state (it can create calls, send messages, end a call
-  and load sample sessions first). Its options are documented at the top of the file.
-- `node scripts/readme-screenshots.mjs` regenerates the README and documentation images from a
-  running demo-mode Firefly with a clean in-memory database (the command is at the top of the file).
-  After running it, `git diff --stat docs/images` shows what changed; open those pictures and review
-  them. There are no pixel-comparison baselines.
+- `node scripts/readme-screenshots.mjs` regenerates the README and documentation images from a running
+  demo-mode Firefly with a clean in-memory database (the command is at the top of the file). After
+  running it, `git diff --stat docs/images` shows what changed; open those pictures and review them.
+  There are no pixel-comparison baselines.
+- `node scripts/shot.mjs` captures any single state (it can create calls, send messages, end a call and
+  load sample sessions first). Its options are documented at the top of the file.
 
-The automated guards against regressions are the browser tests: accessibility in both themes on every
-page, no sideways scrolling at 320 and 1440 px, reduced motion, theme persistence, the profile and
-voice opt-in, keyboard setup and the full trainee journey from the landing page to the report.
+The automated guards are the unit tests (including pure models for layout, atmosphere, the journey and
+perf tiers), the browser tests (accessibility in both themes on every page, no sideways scrolling at
+320 and 1440 px, reduced motion, theme persistence, the palette, the dock, the profile and voice
+opt-in, keyboard setup and the full trainee journey), and the bundle budgets.
 
 A design change should also be reviewed against these questions: does it look like the rest of the
-product, is every animation saying something, does every reward explain itself, does it work with the
-keyboard and with reduced motion, and does it stay fast.
-
-## Attribution and licences
-
-The interface uses no third-party fonts, images, icons, sounds, 3D assets or animation libraries.
-Fonts come from the visitor's system. The illustrations are drawn for this project. The screenshots in
-`docs/images` are of Firefly itself with fictional data. The repository has no LICENSE file, so no
-licence is granted to others by the repository itself.
+product, does every animation answer one of the questions above, does every reward explain itself, does
+it work with the keyboard and with reduced motion, does it stay legible over the field, and does it stay
+fast.
 
 ## Limitations
 
-- Nobody has used Firefly with a screen reader or voice control; accessibility is checked by automated
-  tools, keyboard tests and review.
-- Browser coverage is Chromium (Edge and Chromium); other engines are not tested. Voice input needs a
+- Nobody has used Firefly with a screen reader, a magnifier or voice control; accessibility is checked by
+  automated tools, keyboard walkthroughs, contrast computed from the tokens, and review.
+- Browser coverage is Chromium (Edge and Chromium). View transitions and CSS `linear()` easing are
+  progressive enhancements: other engines get the same pages without the animation. Voice input needs a
   Chromium-based browser.
-- There is no dedicated mid-call cue when a curveball lands, because the call state sent to the browser
-  does not include one; the mood-shift lines and silence show its effect.
+- The atlas label placement is tuned and tested at five viewport sizes; unusual sizes can still place a
+  label less well, which is why the list alternative is always one tab away.
+- The animated field is drawn on a 2D canvas and measured on one machine. Real-device frame times
+  (including phones) have not been measured.
 - The local profile is a name for greetings, not a login.
 - Rewards and recommendations are practice signals from a handful of calls, derived from rules-based or
   model-drafted coaching, and they have not been calibrated against real mentor scoring (see
