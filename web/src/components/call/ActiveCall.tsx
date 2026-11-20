@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { REDACTION_LABELS, type RedactionKind } from '#shared/domain/text.ts';
@@ -10,26 +10,41 @@ import { useSound } from '../../lib/sound.ts';
 import { useStoredState } from '../../lib/storage.ts';
 import { useToast } from '../../lib/toast.tsx';
 import { forgetVoiceSession } from '../../lib/voice-sessions.ts';
-import { Dialog } from '../Dialog.tsx';
 import { VoiceOptIn } from '../voice/VoiceOptIn.tsx';
 import { VoicePanel } from '../voice/VoicePanel.tsx';
-import { CallHeader } from './CallHeader.tsx';
+import { atmosphereFor, cueLevelFor, shiftAnnouncement } from './atmosphere.ts';
+import { CallDetails } from './CallDetails.tsx';
+import { CallStrip } from './CallStrip.tsx';
+import { ChamberModal } from './ChamberModal.tsx';
 import { Composer } from './Composer.tsx';
-import { ContextPanel } from './ContextPanel.tsx';
+import { Conversation } from './Conversation.tsx';
 import { EndCallDialog } from './EndCallDialog.tsx';
-import { HintChips } from './HintChips.tsx';
-import { MessageList } from './MessageList.tsx';
-import { CustomerStage } from './StagePanel.tsx';
+import { HintLinks } from './HintLinks.tsx';
+import { PresenceRail } from './PresenceRail.tsx';
+import { useWorldPose } from './signal-bridge.tsx';
 import { hintsFor, withStarter, type Hint, type HintId } from './hints.ts';
 import { useCall } from './useCall.ts';
 import { useCallVoice } from './useCallVoice.ts';
+import { useCueEvents } from './useCueEvents.ts';
+
+// The height of what is actually visible, kept as a number that is only read when the viewport
+// says it changed. Reading `visualViewport.height` makes the browser lay the page out, and React
+// asks for the snapshot on every render and every commit, so asking each time made every keystroke
+// pay for a layout.
+let visibleHeightNow = 0;
+const readViewport = () => (window.visualViewport ? Math.round(window.visualViewport.height) : 0);
 
 function subscribeViewport(onChange: () => void) {
   const viewport = window.visualViewport;
-  viewport?.addEventListener('resize', onChange);
-  return () => viewport?.removeEventListener('resize', onChange);
+  visibleHeightNow = readViewport();
+  const changed = () => {
+    visibleHeightNow = readViewport();
+    onChange();
+  };
+  viewport?.addEventListener('resize', changed);
+  return () => viewport?.removeEventListener('resize', changed);
 }
-const viewportHeight = () => (window.visualViewport ? Math.round(window.visualViewport.height) : 0);
+const viewportHeight = () => visibleHeightNow;
 
 /** The height of what is actually visible, so the composer stays above a mobile keyboard. */
 function useVisibleHeight(): number {
@@ -47,6 +62,13 @@ function appendWords(draft: string, words: string): string {
   return `${draft}${/\s$/.test(draft) ? '' : ' '}${words}`;
 }
 
+/** The presence's size: large beside the conversation, small above it, a point on a phone. */
+function presenceSize(layout: 'wide' | 'middle' | 'narrow', tall: boolean): number {
+  if (layout === 'narrow') return 56;
+  if (layout === 'middle') return 124;
+  return tall ? 320 : 236;
+}
+
 export function ActiveCall({
   session,
   onEnded,
@@ -58,9 +80,10 @@ export function ActiveCall({
   const { toast } = useToast();
   const { config } = useAppConfig();
   const { voice: voiceOn } = usePreferences();
-  const [soundOn] = useSound();
-  // The shell drops its sidebar at this width, and the portrait becomes a strip above the chat.
-  const wide = useMediaQuery('(min-width: 961px)');
+  const [soundOn, setSound] = useSound();
+  const wide = useMediaQuery('(min-width: 1024px)');
+  const narrow = useMediaQuery('(max-width: 719px)');
+  const tall = useMediaQuery('(min-height: 780px)');
   const visibleHeight = useVisibleHeight();
   const landscapePhone = useMediaQuery('(max-height: 520px)');
   // Short on room: a landscape phone, or the keyboard covering most of a portrait one.
@@ -126,10 +149,11 @@ export function ActiveCall({
   );
 
   const limit = config?.limits.maxMessageChars ?? 1500;
+  const { persona, config: setup } = session.scenario;
   const { voice, calling, handsFree, setHandsFree, toggleCall, hangUp } = useCallVoice({
     sessionId: session.id,
     allowed: voiceOn,
-    customer: session.scenario.persona.name,
+    customer: persona.name,
     mood: chat.state.band.id,
     busy: chat.pending,
     turns: chat.turns,
@@ -187,21 +211,39 @@ export function ActiveCall({
       forgetVoiceSession(session.id);
       setEndOpen(false);
       toast({ tone: 'info', title: 'Call discarded', message: 'Nothing was saved.' });
-      navigate('/home', { replace: true });
+      void navigate('/home', { replace: true });
     } catch (error) {
       setEndError(errorMessage(error));
       setEnding(false);
     }
   };
 
-  const openEnd = () => {
+  const openEnd = useCallback(() => {
     setEndError(null);
     setEndOpen(true);
-  };
+  }, []);
+  const openDetails = useCallback(() => setDetailsOpen(true), []);
 
-  const { persona, config: setup } = session.scenario;
   const guided = setup.mode === 'guided';
-  const latestCustomer = [...chat.turns].reverse().find((turn) => turn.role === 'customer');
+  const cue = cueLevelFor(setup.mode);
+  // What the room is told about the customer. With cues off it is the same whatever the state is.
+  const atmosphere = useMemo(() => atmosphereFor(chat.state, cue), [chat.state, cue]);
+  const pose = useMemo(
+    () => ({
+      tension: atmosphere.tension,
+      open: atmosphere.open,
+      warmth: atmosphere.warmth,
+      energy: atmosphere.energy,
+      intensity: 1,
+      recovering: atmosphere.recovering,
+    }),
+    [atmosphere],
+  );
+  useWorldPose(pose);
+
+  const curveballs = chat.shifts.filter((shift) => shift.kind === 'curveball').length;
+  const { announceFound } = useCueEvents({ cue, discoveries: chat.discoveries, curveballs });
+
   const hints = guided
     ? hintsFor({
         areas: session.scenario.expectedDiscoveryAreas,
@@ -211,87 +253,113 @@ export function ActiveCall({
       })
     : [];
   const canHear = voiceOn && voice.support.synthesis;
-  // The customer's voice is the announcement while a voice call is on; reading it too would say it twice.
-  const announcement = calling && voice.support.synthesis ? '' : chat.announcement;
+
+  // A screen reader is told about each reply once (and, in guided practice, how the conversation
+  // moved with it). The customer's voice is the announcement while a voice call is on; reading
+  // it too would say it twice.
+  const newestCustomer = chat.turns.findLast((turn) => turn.role === 'customer');
+  const moved = chat.shifts
+    .filter((shift) => shift.afterKey === newestCustomer?.key)
+    .map((shift) => shiftAnnouncement(shift, persona.name, cue))
+    .filter(Boolean);
+  const announcement =
+    calling && voice.support.synthesis
+      ? ''
+      : [chat.announcement, ...moved].filter(Boolean).join(' ');
+
+  const layout = narrow ? 'narrow' : wide ? 'wide' : 'middle';
+  const frame = visibleHeight > 0 ? { ['--vvh' as string]: `${visibleHeight}px` } : undefined;
 
   return (
     <div
-      className="call"
+      className="ch"
+      data-mood={atmosphere.mood}
+      data-trend={atmosphere.trend}
       data-mode={setup.mode}
+      data-layout={layout}
+      data-silent={atmosphere.silent || undefined}
       data-short={short || undefined}
-      style={visibleHeight > 0 ? { ['--vvh' as string]: `${visibleHeight}px` } : undefined}
+      data-ending={ending || undefined}
+      style={frame}
     >
-      <div className="call-frame">
-        <CallHeader session={session} onOpenDetails={() => setDetailsOpen(true)} onEnd={openEnd} />
-        <div className="call-body">
-          <CustomerStage
-            session={session}
-            state={chat.state}
-            typing={chat.pending}
-            speaking={voice.customerSpeaking}
-            latest={latestCustomer?.text ?? null}
-            discoveries={chat.discoveries}
-            variant={wide ? 'panel' : 'strip'}
-          />
-          <div className="chat glass">
-            <MessageList
-              turns={chat.turns}
-              persona={persona}
-              typing={chat.pending}
-              onRetry={handleRetry}
-              onListen={canHear ? voice.replay : undefined}
-              guided={guided}
-              signalKeys={chat.signalKeys}
-              shifts={chat.shifts}
-            />
-            <p className="sr-only" role="status" aria-live="polite">
-              {announcement}
-            </p>
-            <div className="chat-dock">
-              <HintChips hints={hints} onPick={pickHint} />
-              <Composer
-                value={reply}
-                onChange={changeReply}
-                inputRef={replyRef}
-                maxChars={limit}
-                busy={chat.pending}
-                blockedMessage={
-                  chat.limitReached
-                    ? 'This call has reached its message limit. End the call to get your coaching.'
-                    : null
-                }
-                turnsRemaining={chat.turnsRemaining}
-                onSend={sendTyped}
-                voiceBar={
-                  voiceOn ? (
-                    <VoicePanel
-                      voice={voice}
-                      calling={calling}
-                      handsFree={handsFree}
-                      onHandsFree={setHandsFree}
-                      onToggleCall={toggleCall}
-                      customer={persona.name}
-                      hasDraft={reply.trim() !== ''}
-                      callRef={callButtonRef}
-                    />
-                  ) : undefined
-                }
-                footerExtra={
-                  voiceOn ? undefined : <VoiceOptIn onEnabled={() => setFocusVoice((n) => n + 1)} />
-                }
+      <CallStrip session={session} />
+      <PresenceRail
+        persona={persona}
+        atmosphere={atmosphere}
+        guided={guided}
+        found={chat.state.discoveredCount}
+        shifts={chat.state.shifts}
+        announceFound={announceFound}
+        speaking={chat.pending || voice.customerSpeaking}
+        ending={ending}
+        size={presenceSize(layout, tall)}
+        soundOn={soundOn}
+        onSound={setSound}
+        onOpenDetails={openDetails}
+        onEnd={openEnd}
+      />
+      <div className="ch-main world-veil">
+        {guided && session.scenario.brief.goal ? (
+          <p className="ch-objective">
+            <span className="ch-eyebrow">Objective</span>
+            <em>{session.scenario.brief.goal}</em>
+          </p>
+        ) : null}
+        <Conversation
+          turns={chat.turns}
+          customer={persona.name}
+          typing={chat.pending}
+          cue={cue}
+          signalKeys={chat.signalKeys}
+          shifts={chat.shifts}
+          moods={chat.moods}
+          onRetry={handleRetry}
+          onListen={canHear ? voice.replay : undefined}
+        />
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
+        </p>
+        <Composer
+          value={reply}
+          onChange={changeReply}
+          inputRef={replyRef}
+          maxChars={limit}
+          busy={chat.pending}
+          blockedMessage={
+            chat.limitReached
+              ? 'This call has reached its message limit. End the call to get your coaching.'
+              : null
+          }
+          turnsRemaining={chat.turnsRemaining}
+          onSend={sendTyped}
+          ideas={<HintLinks hints={chat.limitReached ? [] : hints} onPick={pickHint} />}
+          voiceBar={
+            voiceOn ? (
+              <VoicePanel
+                voice={voice}
+                calling={calling}
+                handsFree={handsFree}
+                onHandsFree={setHandsFree}
+                onToggleCall={toggleCall}
+                customer={persona.name}
+                hasDraft={reply.trim() !== ''}
+                callRef={callButtonRef}
               />
-            </div>
-          </div>
-        </div>
+            ) : undefined
+          }
+          footerExtra={
+            voiceOn ? undefined : <VoiceOptIn onEnabled={() => setFocusVoice((n) => n + 1)} />
+          }
+        />
       </div>
-      <Dialog
+      <ChamberModal
         open={detailsOpen}
         onClose={() => setDetailsOpen(false)}
         title="Call details"
-        variant={wide ? 'dialog' : 'sheet'}
+        variant="inspector"
       >
-        <ContextPanel session={session} state={chat.state} notes={notes} onNotes={setNotes} />
-      </Dialog>
+        <CallDetails session={session} notes={notes} onNotes={setNotes} />
+      </ChamberModal>
       <EndCallDialog
         open={endOpen}
         onClose={() => setEndOpen(false)}

@@ -16,7 +16,7 @@ export function ListenButton({
   return (
     <button
       type="button"
-      className="btn btn-ghost btn-sm msg-listen"
+      className="ch-listen"
       aria-label={`Listen to ${who}'s message from ${time}`}
       onClick={() => onListen(text)}
     >

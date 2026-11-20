@@ -1,0 +1,1923 @@
+/* The chamber: the live call, set as a page.
+
+   Left, the customer as a presence and a name; right, the conversation as typeset lines hung on a
+   hairline (the filament) whose straightness is the customer's composure; under it, the line the
+   trainee speaks on. The room takes its light from the customer's mood through the `data-mood`
+   atmosphere numbers (tokens.css), so a small change in them is a small change here.
+
+   Reading stays quiet; the room moves. Idle movement is a slow light on the filament and the
+   presence's own breath, both marked data-ambient so the pause control stops them, and both gone
+   for reduced motion and for the lowest performance tier. */
+
+/* ------------------------------------------------------------------ The room */
+.ch {
+  --margin: 11.5rem;
+  --fil: 2.75rem;
+  --measure: 37rem;
+  /* The room to the left of the page's margin column: none beside the rail, a gutter without it. */
+  --lead: 0px;
+  --turn-gap: calc(1.4rem + 1.1rem * var(--atm-open));
+  --room-shade: var(--field-0);
+  /* How much of the room's light tints the ground the words are read on. Light on the light theme,
+     where any tint darkens that ground and takes the small print below its contrast. */
+  --glow-base: 10%;
+  --glow-rise: 12%;
+  --shade-max: 44%;
+  --glow-at: 15% 46%;
+  --glow-size: calc(22% + 32% * var(--atm-open)) calc(30% + 44% * var(--atm-open));
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(20rem, 29%) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'strip strip'
+    'rail main';
+  height: var(--vvh, 100dvh);
+  min-height: 0;
+  overflow: hidden;
+  color: var(--ink-1);
+}
+:root[data-theme='light'] .ch {
+  --room-shade: var(--amber-text);
+  --glow-base: 5%;
+  --glow-rise: 5%;
+  --shade-max: 8%;
+}
+/* The room's light tints the ground a little, so the quietest ink is a shade deeper in here. The
+   theme's own value is kept under another name first: a variable cannot be defined in terms of itself. */
+:root {
+  --ch-ink-3: var(--ink-3);
+}
+:root[data-theme='light'] :is(.ch, .ch-wrap) {
+  --ink-3: color-mix(in srgb, var(--ink-2) 50%, var(--ch-ink-3));
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .ch {
+    --room-shade: var(--amber-text);
+    --glow-base: 5%;
+    --glow-rise: 5%;
+    --shade-max: 8%;
+  }
+  :root:not([data-theme]) :is(.ch, .ch-wrap) {
+    --ink-3: color-mix(in srgb, var(--ink-2) 50%, var(--ch-ink-3));
+  }
+}
+/* With cues off the room is the same whatever the customer does, and no mood colour is borrowed. */
+.ch[data-mood='neutral'] {
+  --atm-color: var(--aqua);
+}
+
+/* The light in the room: a glow behind the presence that tightens and warms with the customer, and
+   edges that close in as tension rises. Both follow the registered --atm-* numbers. It is a large
+   gradient, so it lives on a layer of its own (as does the veil behind the page): otherwise every
+   keystroke and every blink of the caret would paint it again. */
+.ch::before,
+.ch-main.world-veil::before {
+  will-change: transform;
+}
+.ch::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse var(--glow-size) at var(--glow-at),
+      color-mix(
+        in srgb,
+        var(--atm-color) calc(var(--glow-base) + var(--glow-rise) * var(--atm-tension)),
+        transparent
+      ),
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 92% 92% at 44% 50%,
+      transparent calc(100% - 118% * var(--atm-tension)),
+      color-mix(in srgb, var(--room-shade) calc(var(--shade-max) * var(--atm-tension)), transparent)
+        100%
+    );
+}
+
+/* ------------------------------------------------------------------ The strip */
+/* The frame leaves its wordmark in the top left corner during a call; the strip shares that row
+   and starts after it. */
+.ch-strip {
+  grid-area: strip;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem 1.25rem;
+  min-width: 0;
+  min-height: var(--masthead-h, 3.5rem);
+  padding: 0.6rem var(--gutter);
+  border-bottom: 1px solid var(--line-1);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  line-height: 1.4;
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+[data-call] .ch-strip {
+  padding-left: calc(var(--gutter) + 10.5rem);
+}
+.ch-strip p,
+.ch-strip ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ch-strip__live {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--ink-2);
+}
+.ch-strip__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--aqua);
+}
+.ch-strip__clock {
+  flex: none;
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums;
+}
+.ch-strip__title {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ch-strip__meta {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem 1.1rem;
+}
+.ch-strip__meta li + li::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin-right: 1.1rem;
+  border-radius: 50%;
+  background: var(--ink-3);
+  vertical-align: middle;
+}
+.ch-strip__home {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-3);
+  text-underline-offset: 0.3em;
+}
+.ch-strip__home:hover {
+  color: var(--ink-1);
+  text-decoration-color: var(--amber);
+}
+
+/* ------------------------------------------------------------------ The presence rail */
+.ch-rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: safe center;
+  gap: 0.85rem;
+  min-height: 0;
+  padding: 0.5rem 1.5rem 1.2rem var(--gutter);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.ch-rail__presence {
+  flex: none;
+  margin: -0.5rem 0 -0.25rem -0.6rem;
+  color: var(--atm-color);
+  transition:
+    opacity var(--dur-route) var(--ease-exit-decelerated),
+    transform var(--dur-route) var(--ease-exit-decelerated);
+}
+.ch-rail__presence svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.ch-rail__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 1.4rem + 2.2vw, 3.5rem);
+  font-weight: 300;
+  line-height: 1.04;
+  letter-spacing: var(--track-display);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.ch-rail__role {
+  max-width: 20rem;
+  margin: 0.4rem 0 0;
+  color: var(--ink-2);
+  font-size: var(--t-body);
+  line-height: 1.4;
+}
+
+.ch-mood {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0.2rem 0 0;
+}
+.ch-mood--off {
+  max-width: 19rem;
+  color: var(--ink-3);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.ch-mood__word {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+/* The trend is a shape as well as a word: a dot holds, a point up rises, a point down eases. */
+.ch-trend {
+  display: inline-block;
+  flex: none;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--atm-color);
+}
+.ch-mood[data-trend='rising'] .ch-trend,
+.ch-note[data-direction='tenser'] .ch-trend {
+  width: 0.8rem;
+  height: 0.72rem;
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.ch-mood[data-trend='falling'] .ch-trend,
+.ch-note[data-direction='calmer'] .ch-trend {
+  width: 0.8rem;
+  height: 0.72rem;
+  border-radius: 0;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.ch-scale {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  width: min(18rem, 100%);
+  height: 1rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--line-3);
+}
+.ch-scale i {
+  width: 1px;
+  height: 6px;
+  background: var(--line-3);
+}
+.ch-scale__pip {
+  position: absolute;
+  top: -0.34rem;
+  left: calc(var(--level, 0) * 100%);
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-left: -0.31rem;
+  border-radius: 50%;
+  background: var(--atm-color);
+  transition: left var(--dur-route) var(--ease-spatial-spring);
+}
+
+.ch-signals {
+  display: grid;
+  gap: 0.35rem;
+}
+.ch-signals__line {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.4;
+}
+.ch-signals__line strong {
+  color: var(--ink-1);
+  font-weight: 600;
+}
+.ch-signals__dots {
+  display: inline-flex;
+  gap: 5px;
+}
+.ch-signals__dots i {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--ink-3);
+  border-radius: 50%;
+  transition:
+    background-color var(--dur-component),
+    border-color var(--dur-component),
+    box-shadow var(--dur-component);
+}
+.ch-signals__dots i[data-lit] {
+  border-color: var(--amber);
+  background: var(--amber);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--amber) 60%, transparent);
+}
+html[data-perf='low'] .ch-signals__dots i[data-lit] {
+  box-shadow: none;
+}
+.ch-found {
+  align-self: flex-start;
+  min-height: 2rem;
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border-radius: var(--r-1);
+  color: var(--amber-text);
+  font-size: var(--t-small);
+  font-weight: 500;
+  line-height: 1.4;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity var(--dur-route) var(--ease-evidence-link),
+    transform var(--dur-route) var(--ease-evidence-link);
+}
+.ch-found:not(:empty) {
+  opacity: 1;
+  transform: none;
+}
+
+.ch-rail__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 1.15rem;
+  margin-top: 0.3rem;
+}
+.ch-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: var(--tap);
+  padding: 0.5rem 1.05rem;
+  border: 1px solid var(--line-3);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink-1);
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-micro),
+    background-color var(--dur-micro),
+    transform var(--dur-micro) var(--ease-press-spring);
+}
+.ch-end:hover {
+  border-color: var(--coral);
+  background: color-mix(in srgb, var(--coral) 10%, transparent);
+}
+.ch-end:active {
+  transform: translateY(1px);
+}
+.ch-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--tap);
+  padding: 0.25rem 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: none;
+  color: var(--ink-2);
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    color var(--dur-micro),
+    border-color var(--dur-micro);
+}
+.ch-tool:hover {
+  color: var(--ink-1);
+  border-bottom-color: var(--line-3);
+}
+.ch-tool[aria-pressed='true'] {
+  color: var(--ink-1);
+  border-bottom-color: var(--amber);
+}
+
+/* Ending the call: the presence closes and the room goes quiet. */
+.ch[data-ending] .ch-rail__presence {
+  opacity: 0.5;
+  transform: scale(0.9);
+}
+.ch[data-ending] .ch-conv,
+.ch[data-ending] .ch-composer {
+  opacity: 0.55;
+  transition: opacity var(--dur-route) var(--ease-exit-decelerated);
+}
+
+/* ------------------------------------------------------------------ The page of the conversation */
+.ch-main {
+  grid-area: main;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  container: chmain / inline-size;
+}
+/* The field quietens behind the page the conversation is read on (components/world: .world-veil),
+   more as the customer is more tense, because that is when the field is busiest. */
+.ch-main.world-veil {
+  --world-veil: calc(0.6 + 0.26 * var(--atm-tension));
+}
+@container chmain (max-width: 58rem) {
+  .ch-main {
+    --margin: 9.5rem;
+  }
+}
+.ch-objective {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.95rem 2rem 0.85rem calc(var(--lead) + var(--margin) + var(--fil));
+}
+.ch-objective em {
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  line-height: 1.4;
+}
+
+.ch-conv {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  /* The line under it grows and shrinks as it is typed in: that must never make this page lay out again. */
+  contain: layout style;
+}
+.ch-conv__scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 1.25rem 2rem 0 var(--lead);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--line-2) transparent;
+  scrollbar-width: thin;
+}
+/* The top of the page fades into the strip. A mask on a scroller makes the whole page paint through
+   an extra surface on every scrolled frame, which a long call cannot afford on a modest GPU, so the
+   lowest tier keeps a plain edge. */
+html:not([data-perf='low']) .ch-conv__scroll {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 4rem, black 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, black 4rem, black 100%);
+}
+.ch-conv__scroll:focus-visible {
+  outline-offset: -4px;
+}
+.ch-conv__page {
+  position: relative;
+  width: min(100%, calc(var(--margin) + var(--fil) + var(--measure) + 2rem));
+  /* Room below the newest line, so a new turn can rest a little way down the page. */
+  padding-bottom: max(40dvh, 12rem);
+}
+.ch-conv__note {
+  max-width: var(--measure);
+  margin: 0 0 1.5rem calc(var(--margin) + var(--fil));
+  color: var(--ink-3);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.ch-turns {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One turn: who in the margin, a point on the filament, the words. Older turns are only drawn
+   while they are near the screen, so a call of sixty replies is as quick as one of three. */
+.ch-turn {
+  --mark-y: 0.95rem;
+  display: grid;
+  grid-template-columns: var(--margin) var(--fil) minmax(0, var(--measure));
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'label spine body'
+    'notes spine body';
+  padding-bottom: var(--turn-gap);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 7.5rem;
+}
+.ch-turn[data-near],
+.ch-turn--typing {
+  content-visibility: visible;
+}
+.ch-turn[data-emphasis='active'] {
+  --mark-y: 1.3rem;
+}
+.ch-turn__label {
+  grid-area: label;
+  margin: 0;
+  padding: 0.3rem 1rem 0 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  line-height: 1.5;
+  letter-spacing: var(--track-mono);
+  text-align: right;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.ch-turn__who {
+  color: var(--ink-2);
+}
+.ch-turn__n {
+  margin-left: 0.15rem;
+}
+.ch-turn__mood {
+  display: block;
+}
+.ch-turn[data-emphasis='active'] .ch-turn__who {
+  color: var(--ink-1);
+}
+
+.ch-turn__spine {
+  grid-area: spine;
+  position: relative;
+  align-self: stretch;
+}
+.ch-spine {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.ch-spine path {
+  fill: none;
+  stroke: var(--line-3);
+  vector-effect: non-scaling-stroke;
+}
+.ch-turn[data-mood='frustrated'] .ch-spine path {
+  stroke: color-mix(in srgb, var(--mood-frustrated) 70%, var(--line-3));
+}
+.ch-turn[data-mood='angry'] .ch-spine path,
+.ch-turn[data-shift] .ch-spine path {
+  stroke: color-mix(in srgb, var(--mood-angry) 80%, var(--line-3));
+}
+.ch-turn[data-mood='escalating'] .ch-spine path {
+  stroke: var(--mood-escalating);
+}
+.ch-turn__mark {
+  position: absolute;
+  top: var(--mark-y);
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--ink-2);
+}
+.ch-turn[data-role='trainee'] .ch-turn__mark {
+  border: 1px solid var(--ink-2);
+  background: var(--field-1);
+  box-sizing: border-box;
+}
+.ch-turn[data-emphasis='active'] .ch-turn__mark {
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  background: var(--atm-color);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--atm-color) 24%, transparent);
+}
+.ch-turn[data-role='trainee'][data-emphasis='active'] .ch-turn__mark {
+  border: 2px solid var(--atm-color);
+  background: var(--field-1);
+  box-shadow: none;
+}
+.ch-turn[data-signal] .ch-turn__mark {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  place-items: center;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.ch-star {
+  fill: var(--amber);
+  overflow: visible;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--amber) 70%, transparent));
+}
+html[data-perf='low'] .ch-star {
+  filter: none;
+}
+.ch-turn[data-fresh][data-signal] .ch-star {
+  animation: ch-star 900ms var(--ease-discovery-settle) 200ms both;
+}
+@keyframes ch-star {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.8);
+  }
+}
+
+.ch-turn__body {
+  grid-area: body;
+  min-width: 0;
+}
+.ch-turn__text {
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-read);
+  font-size: var(--t-read);
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -0.003em;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  white-space: pre-wrap;
+  transition:
+    font-size var(--dur-route) var(--ease-evidence-link),
+    color var(--dur-component);
+}
+.ch-turn[data-emphasis='active'] .ch-turn__text {
+  color: var(--ink-1);
+  font-size: var(--t-heading);
+  line-height: 1.36;
+  letter-spacing: -0.012em;
+}
+.ch-turn[data-emphasis='settled'] .ch-turn__text {
+  color: var(--ink-3);
+  font-weight: 360;
+}
+.ch-turn[data-role='trainee'] .ch-turn__body {
+  padding-left: 2.2rem;
+}
+.ch-turn[data-role='trainee'] .ch-turn__text {
+  font-size: calc(var(--t-read) * 0.94);
+  font-style: italic;
+}
+.ch-turn[data-role='trainee'][data-emphasis='active'] .ch-turn__text {
+  font-size: var(--t-lead);
+}
+.ch-turn[data-status='sending'] .ch-turn__text {
+  opacity: 0.7;
+}
+.ch-turn[data-fresh] .ch-turn__body {
+  animation: ch-line-in var(--dur-route) var(--ease-enter-emphasised) both;
+}
+.ch-turn[data-fresh] .ch-turn__mark {
+  animation: ch-mark-in var(--dur-component) var(--ease-discovery-settle) both;
+}
+@keyframes ch-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes ch-mark-in {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+.ch-turn__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1rem 1rem;
+  margin: 0.5rem 0 0;
+  color: var(--ink-3);
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.ch-turn__status--failed {
+  color: var(--coral-text);
+}
+.ch-listen {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  margin-top: 0.2rem;
+  padding: 0.2rem 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 0.3em;
+}
+.ch-listen:hover {
+  color: var(--ink-1);
+  text-decoration-color: var(--amber);
+}
+
+/* What happened in this turn, in the margin. Never says what was found or what kind of change. */
+.ch-turn__notes {
+  grid-area: notes;
+  padding: 0.55rem 1rem 0 0;
+  text-align: right;
+}
+.ch-note {
+  margin: 0 0 0.55rem;
+  color: var(--ink-2);
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+.ch-note__label {
+  display: block;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.ch-note__label .ch-trend {
+  margin-right: 0.4rem;
+  vertical-align: baseline;
+}
+.ch-note[data-kind='signal'] .ch-note__label {
+  color: var(--amber-text);
+}
+.ch-note[data-kind='curveball'] .ch-note__label,
+.ch-note[data-direction='tenser'] .ch-note__label {
+  color: var(--coral-text);
+}
+.ch-note[data-direction='calmer'] .ch-note__label {
+  color: var(--sage-text);
+}
+.ch-note[data-kind='band'] .ch-trend {
+  background: currentColor;
+}
+.ch-turn[data-fresh] .ch-turn__notes {
+  animation: ch-line-in var(--dur-route) var(--ease-enter-emphasised) 380ms both;
+}
+
+/* The customer is composing a reply. A breath on the point: opacity and scale only, so it never
+   makes the page repaint. */
+@keyframes ch-breath {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+.ch-turn--typing .ch-turn__mark {
+  border: 1px solid var(--atm-color);
+  background: var(--field-1);
+  box-sizing: border-box;
+  animation: ch-breath 2.4s var(--ease-signal-pulse) infinite;
+}
+.ch-typing {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-read);
+  font-size: 1.0625rem;
+  font-style: italic;
+  line-height: 1.5;
+}
+.ch-typing__dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.ch-typing__dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--amber);
+  animation: ch-type 1.4s var(--ease-signal-pulse) infinite;
+}
+.ch-typing__dots i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.ch-typing__dots i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes ch-type {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+/* A reply arriving: a light travels the filament from what was said to the reply (Turn.tsx, once). */
+.ch-arrival {
+  position: absolute;
+  top: var(--mark-y);
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: var(--atm-color);
+  box-shadow: 0 0 10px 2px color-mix(in srgb, var(--atm-color) 70%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+html[data-perf='low'] .ch-arrival {
+  display: none;
+}
+@media (forced-colors: active) {
+  .ch-arrival {
+    display: none;
+  }
+}
+
+.ch-jump {
+  position: absolute;
+  bottom: 0.75rem;
+  left: calc(var(--lead) + var(--margin) + var(--fil));
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.9rem 0.4rem 0.7rem;
+  border: 0;
+  border-radius: var(--r-pill);
+  color: var(--ink-1);
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ The line the trainee speaks on */
+.ch-composer {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--margin) var(--fil) minmax(0, var(--measure));
+  width: min(100%, calc(var(--margin) + var(--fil) + var(--measure) + 2rem));
+  padding: 0.9rem 2rem max(1.1rem, var(--safe-b)) var(--lead);
+}
+.ch-composer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: calc(var(--lead) + var(--margin) + var(--fil) / 2);
+  width: 1px;
+  height: 1.5rem;
+  background: var(--line-3);
+}
+.ch-composer__label {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 0.65rem 1rem 0 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  line-height: 1.4;
+  letter-spacing: var(--track-mono);
+  text-align: right;
+  text-transform: uppercase;
+}
+.ch-composer__mark {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  justify-self: center;
+  width: 9px;
+  height: 9px;
+  margin-top: 1.15rem;
+  border: 1px solid var(--ink-2);
+  border-radius: 50%;
+  background: var(--field-1);
+  transition:
+    background-color var(--dur-micro),
+    border-color var(--dur-micro);
+}
+.ch-composer:focus-within .ch-composer__mark {
+  border-color: var(--focus);
+  background: var(--focus);
+}
+.ch-composer__main {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+}
+.ch-composer__input {
+  display: block;
+  width: 100%;
+  min-height: 3.1rem;
+  max-height: 168px;
+  padding: 0.35rem 0 0.7rem;
+  resize: none;
+  overflow-y: auto;
+  field-sizing: content;
+  border: 0;
+  border-bottom: 1px solid var(--line-3);
+  border-radius: 0;
+  background: transparent;
+  caret-color: var(--amber);
+  color: var(--ink-1);
+  font-family: var(--font-read);
+  font-size: 1.4rem;
+  line-height: 1.4;
+  transition: border-color var(--dur-micro);
+}
+.ch-composer__input::placeholder {
+  color: var(--ink-3);
+  font-style: italic;
+  opacity: 1;
+}
+.ch-composer__input:focus-visible {
+  padding-bottom: calc(0.7rem - 1px);
+  border-bottom: 2px solid var(--focus);
+  outline: 0;
+  box-shadow: 0 10px 16px -14px var(--focus);
+}
+@media (forced-colors: active) {
+  .ch-composer__input:focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+.ch-composer__input:disabled {
+  opacity: 0.6;
+}
+.ch-composer__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-top: 0.7rem;
+}
+.ch-composer__help {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1rem 1rem;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.ch-composer__help kbd {
+  padding: 0 0.3em;
+  border: 1px solid var(--line-3);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.ch-composer__over {
+  color: var(--coral-text);
+  font-weight: 600;
+}
+.ch-composer__warning {
+  margin: 0.6rem 0 0;
+  padding-left: 0.9rem;
+  border-left: 1px solid var(--amber);
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.ch-composer__blocked {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin: 0 0 0.7rem;
+  padding-left: 0.9rem;
+  border-left: 1px solid var(--amber);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.ch-send {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: var(--tap);
+  padding: 0.5rem 1rem 0.5rem 1.15rem;
+  border: 1px solid var(--ink-1);
+  border-radius: 2px;
+  background: var(--ink-1);
+  color: var(--ink-inverse);
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-micro),
+    border-color var(--dur-micro),
+    color var(--dur-micro),
+    transform var(--dur-micro) var(--ease-press-spring);
+}
+.ch-send svg {
+  transition: transform var(--dur-micro) var(--ease-evidence-link);
+}
+.ch-send:hover:not(:disabled) svg {
+  transform: translateX(3px);
+}
+.ch-send:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.ch-send:disabled {
+  border-color: var(--line-3);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: default;
+}
+
+/* Ideas for what to say, as quiet links. Choosing one only fills the line. */
+.ch-ideas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1.1rem;
+  margin-bottom: 0.35rem;
+}
+.ch-ideas__label {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.ch-ideas__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ch-idea {
+  min-height: 2.5rem;
+  padding: 0.35rem 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--line-3);
+  text-underline-offset: 0.3em;
+  transition:
+    color var(--dur-micro),
+    text-decoration-color var(--dur-micro);
+}
+.ch-idea:hover {
+  color: var(--ink-1);
+  text-decoration-color: var(--amber);
+}
+
+/* ------------------------------------------------------------------ Voice (beta) */
+.vc {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line-1);
+}
+.vc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1.1rem;
+}
+.vc-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.vc-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.7rem;
+}
+.vc-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--line-3);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink-1);
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-micro),
+    background-color var(--dur-micro);
+}
+.vc-button:hover:not(:disabled) {
+  border-color: var(--ink-1);
+}
+.vc-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.vc-button[aria-pressed='true'] {
+  border-color: var(--aqua);
+  background: color-mix(in srgb, var(--aqua) 14%, transparent);
+}
+.vc-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.5rem;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  cursor: pointer;
+}
+.vc-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.vc-switch__track {
+  position: relative;
+  width: 2.1rem;
+  height: 1.1rem;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-pill);
+  transition:
+    background-color var(--dur-micro),
+    border-color var(--dur-micro);
+}
+.vc-switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: var(--ink-2);
+  transition: transform var(--dur-micro) var(--ease-press-spring);
+}
+.vc-switch input:checked + .vc-switch__track {
+  border-color: var(--aqua);
+  background: color-mix(in srgb, var(--aqua) 22%, transparent);
+}
+.vc-switch input:checked + .vc-switch__track .vc-switch__thumb {
+  background: var(--aqua);
+  transform: translateX(1rem);
+}
+.vc-switch input:focus-visible + .vc-switch__track {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.vc-status,
+.vc-hint,
+.vc-where {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.vc-status:empty,
+.vc-hint:empty {
+  display: none;
+}
+.vc-where {
+  color: var(--ink-3);
+}
+.vc-interim {
+  margin: 0;
+  color: var(--ink-1);
+  font-family: var(--font-read);
+  font-size: 1.1rem;
+  font-style: italic;
+  line-height: 1.4;
+}
+.vc-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.7rem;
+  padding-left: 0.9rem;
+  border-left: 1px solid var(--coral);
+  color: var(--coral-text);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.vc-note {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.vc-note svg {
+  flex: none;
+  margin-top: 0.15rem;
+}
+.vc-optin {
+  min-height: 2.25rem;
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.vc-needs-profile {
+  color: var(--ink-2);
+}
+.vc-needs-profile a {
+  color: var(--ink-1);
+}
+
+/* ------------------------------------------------------------------ The details sheet */
+.ch-details {
+  display: grid;
+  gap: var(--sp-5);
+}
+.ch-details__section {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line-1);
+}
+.ch-details__section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.ch-details__section .ch-eyebrow:not(:first-child) {
+  margin-top: 0.7rem;
+}
+.ch-details__scenario {
+  margin: 0;
+  font-family: var(--font-read);
+  font-size: 1.25rem;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.ch-details__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-heading);
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: var(--track-title);
+}
+.ch-details__role,
+.ch-details__small {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.ch-details__small {
+  color: var(--ink-3);
+}
+.ch-details__read {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--ink-1);
+  font-family: var(--font-read);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.ch-details__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ch-details__list li {
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--line-1);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.ch-details__list li:first-child {
+  border-top: 0;
+}
+.ch-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1.25rem;
+  margin: 0.8rem 0 0;
+}
+.ch-facts dt {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.ch-facts dd {
+  margin: 0.1rem 0 0;
+  color: var(--ink-1);
+  font-size: var(--t-small);
+  line-height: 1.4;
+}
+.ch-disclosure {
+  margin-top: 0.2rem;
+}
+.ch-disclosure summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.25rem;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+}
+.ch-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+.ch-disclosure summary::before {
+  content: '+';
+  width: 1rem;
+  color: var(--amber-text);
+  font-family: var(--font-mono);
+}
+.ch-disclosure[open] summary::before {
+  content: '\2212';
+}
+.ch-notes {
+  display: block;
+  width: 100%;
+  min-height: 6.5rem;
+  padding: 0.65rem 0.75rem;
+  resize: vertical;
+  border: 1px solid var(--line-3);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--ink-1);
+  font-family: var(--font-read);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+}
+.ch-notes::placeholder {
+  color: var(--ink-3);
+  font-style: italic;
+  opacity: 1;
+}
+.ch-notes:focus-visible {
+  border-color: var(--focus);
+}
+
+/* ------------------------------------------------------------------ Wrapping up */
+.ch-wrap {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(18rem, 34%) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-6);
+  min-height: 100dvh;
+  padding: var(--sp-7) var(--gutter);
+}
+.ch-wrap[data-mood='neutral'] {
+  --atm-color: var(--aqua);
+}
+.ch-wrap .ch-eyebrow {
+  color: var(--ink-2);
+}
+.ch-wrap__presence {
+  justify-self: center;
+  color: var(--atm-color);
+  opacity: 0.7;
+  transform: scale(0.94);
+}
+.ch-wrap__presence svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.ch-wrap__main {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: center;
+  max-width: 46rem;
+}
+.ch-wrap__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-display);
+  font-weight: 300;
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  text-wrap: balance;
+}
+.ch-wrap__lead {
+  max-width: var(--measure-read);
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-read);
+  font-size: var(--t-lead);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.ch-wrap__note {
+  max-width: var(--measure-read);
+  margin: 0;
+  padding-left: 0.9rem;
+  border-left: 1px solid var(--line-3);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+.ch-wrap__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1.5rem;
+  margin-top: var(--sp-3);
+}
+.ch-steps {
+  position: relative;
+  display: grid;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ch-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  gap: 0.9rem;
+  padding: 0 0 1.35rem;
+}
+.ch-step::before {
+  content: '';
+  position: absolute;
+  top: 1.1rem;
+  bottom: -0.25rem;
+  left: calc(0.8rem - 0.5px);
+  width: 1px;
+  background: var(--line-3);
+}
+.ch-step:last-child::before {
+  display: none;
+}
+.ch-step__mark {
+  position: relative;
+  justify-self: center;
+  width: 9px;
+  height: 9px;
+  margin-top: 0.55rem;
+  border: 1px solid var(--ink-3);
+  border-radius: 50%;
+  background: var(--field-1);
+  box-sizing: border-box;
+}
+.ch-step[data-state='done'] .ch-step__mark {
+  border-color: var(--ink-2);
+  background: var(--ink-2);
+}
+.ch-step[data-state='current'] .ch-step__mark {
+  width: 11px;
+  height: 11px;
+  margin-top: 0.5rem;
+  border-color: var(--amber);
+  background: var(--amber);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 24%, transparent);
+  animation: ch-breath 2.4s var(--ease-signal-pulse) infinite;
+}
+.ch-step__text {
+  display: grid;
+  gap: 0.2rem;
+}
+.ch-step__title {
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1.3;
+}
+.ch-step[data-state='current'] .ch-step__title {
+  color: var(--ink-1);
+}
+.ch-step__detail {
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ A call that cannot be shown */
+.ch-notice {
+  display: grid;
+  gap: var(--sp-3);
+  width: min(100%, 58rem);
+}
+.ch-notice__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-display);
+  font-weight: 300;
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  text-wrap: balance;
+}
+.ch-notice__text {
+  max-width: var(--measure-read);
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-read);
+  font-size: var(--t-lead);
+  line-height: 1.45;
+}
+.ch-notice[data-tone='negative'] .ch-eyebrow {
+  color: var(--coral-text);
+}
+.ch-notice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1.5rem;
+  margin-top: var(--sp-3);
+}
+
+/* ------------------------------------------------------------------ Tablet: the presence above */
+@media (max-width: 1023px) {
+  .ch {
+    --margin: 7.5rem;
+    --measure: 40rem;
+    --lead: var(--gutter);
+    /* The presence sits at the top here, so the room's light does too, and stays off the words. */
+    --glow-at: 14% 12%;
+    --glow-size: calc(34% + 26% * var(--atm-open)) calc(11% + 9% * var(--atm-open));
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      'strip'
+      'rail'
+      'main';
+  }
+  .ch-strip {
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    padding-top: 0.6rem;
+    padding-bottom: 0.5rem;
+  }
+  .ch-strip__stage {
+    display: none;
+  }
+  .ch-strip__title {
+    order: 5;
+    flex: 1 0 100%;
+  }
+  .ch-strip__meta {
+    margin-left: auto;
+  }
+  .ch-rail {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'presence who'
+      'presence mood'
+      'presence signals'
+      'tools tools';
+    align-items: center;
+    justify-content: stretch;
+    column-gap: 1.4rem;
+    row-gap: 0.15rem;
+    padding: 0.4rem var(--gutter) 0.4rem;
+    overflow: visible;
+  }
+  .ch-rail__presence {
+    grid-area: presence;
+    margin: 0 0 0 -0.3rem;
+  }
+  .ch-rail__who {
+    grid-area: who;
+  }
+  .ch-rail__name {
+    font-size: clamp(1.9rem, 1.2rem + 2.4vw, 2.6rem);
+  }
+  .ch-rail__role {
+    margin-top: 0.2rem;
+  }
+  .ch-mood {
+    grid-area: mood;
+  }
+  .ch-signals {
+    grid-area: signals;
+  }
+  .ch-rail__tools {
+    grid-area: tools;
+    margin-top: 0;
+  }
+  .ch-scale {
+    display: none;
+  }
+  .ch-found {
+    min-height: 0;
+    padding: 0;
+  }
+  .ch-objective {
+    padding-right: var(--gutter);
+  }
+  .ch-conv__scroll {
+    padding-right: var(--gutter);
+  }
+  .ch-composer {
+    padding-right: var(--gutter);
+  }
+}
+
+/* ------------------------------------------------------------------ Narrow: the presence is a point in a strip */
+@media (max-width: 719px) {
+  .ch {
+    --fil: 1.9rem;
+    --turn-gap: 1.4rem;
+    --lead: 0px;
+  }
+  .ch-strip {
+    gap: 0.1rem 0.9rem;
+    padding: 0.5rem var(--gutter) 0.4rem;
+  }
+  [data-call] .ch-strip {
+    padding-left: calc(var(--gutter) + 8.6rem);
+  }
+  /* With less room "Call in progress" gives way to its point and the clock; a screen reader still
+     hears it. */
+  .ch-strip__live span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .ch-strip__title,
+  .ch-strip__stage,
+  .ch-strip__meta {
+    display: none;
+  }
+  .ch-strip__home {
+    margin-left: auto;
+  }
+  .ch-rail {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'presence who'
+      'presence mood'
+      'tools tools';
+    column-gap: 0.9rem;
+    padding: 0.35rem var(--gutter) 0.2rem;
+  }
+  .ch-rail__name {
+    font-size: 1.7rem;
+  }
+  .ch-rail__role,
+  .ch-scale,
+  .ch-signals__dots {
+    display: none;
+  }
+  .ch-mood__word {
+    font-size: 1.15rem;
+  }
+  .ch-mood--off {
+    max-width: none;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+  .ch-mood .ch-eyebrow {
+    display: none;
+  }
+  .ch-signals {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .ch-rail__tools {
+    gap: 0 0.9rem;
+  }
+  .ch-end {
+    padding: 0.3rem 0.8rem;
+  }
+  .ch-objective {
+    display: none;
+  }
+  .ch-conv__scroll {
+    padding: 0.9rem var(--gutter) 0 var(--gutter);
+  }
+  .ch-conv__note {
+    margin-left: 0;
+  }
+  .ch-conv__page {
+    padding-bottom: 30dvh;
+  }
+  .ch-turn {
+    grid-template-columns: var(--fil) minmax(0, 1fr);
+    grid-template-areas:
+      'spine label'
+      'spine body'
+      'spine notes';
+    grid-template-rows: auto auto 1fr;
+  }
+  .ch-turn__label {
+    padding: 0 0 0.2rem;
+    text-align: left;
+  }
+  .ch-turn__mood {
+    display: inline;
+    margin-left: 0.6rem;
+  }
+  .ch-turn {
+    --mark-y: 0.6rem;
+  }
+  .ch-turn[data-emphasis='active'] {
+    --mark-y: 0.6rem;
+  }
+  .ch-turn[data-role='trainee'] .ch-turn__body {
+    padding-left: 1rem;
+  }
+  .ch-turn__notes {
+    padding: 0.35rem 0 0;
+    text-align: left;
+  }
+  .ch-jump {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .ch-composer {
+    grid-template-columns: var(--fil) minmax(0, 1fr);
+    padding: 0.6rem var(--gutter) max(0.8rem, var(--safe-b)) var(--gutter);
+  }
+  .ch-composer::before {
+    left: calc(var(--gutter) + var(--fil) / 2);
+    height: 1rem;
+  }
+  /* The placeholder says what the line is for; the label stays for a screen reader. */
+  .ch-composer__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .ch-composer__mark {
+    grid-column: 1;
+    grid-row: 1;
+    margin-top: 1rem;
+  }
+  .ch-composer__main {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .ch-composer__input {
+    font-size: 1.2rem;
+  }
+  .ch-composer__row {
+    align-items: center;
+  }
+  .ch-ideas {
+    flex-wrap: nowrap;
+    margin: 0 calc(var(--gutter) * -1) 0.1rem 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
+    mask-image: linear-gradient(to right, black calc(100% - 2.5rem), transparent);
+  }
+  .ch-ideas__label {
+    display: none;
+  }
+  .ch-ideas__list {
+    flex-wrap: nowrap;
+    padding-right: var(--gutter);
+  }
+  .ch-idea {
+    white-space: nowrap;
+  }
+  .ch-wrap {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-4);
+    padding-top: var(--sp-5);
+    align-content: start;
+  }
+  .ch-wrap__presence {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 380px) {
+  [data-call] .ch-strip {
+    padding-left: calc(var(--gutter) + 3.2rem);
+  }
+}
+
+/* Short on room: a landscape phone, or the keyboard over most of the screen. Only the conversation
+   and the line stay, and the few buttons that matter on one row (a landscape phone has no other way
+   to end the call); the rest stays for a screen reader and is only taken out of sight. A portrait
+   phone this short is only ever the keyboard, which is about to go away, so the buttons wait. */
+.ch[data-short] .ch-ideas,
+.ch[data-short] .ch-objective {
+  display: none;
+}
+.ch[data-short] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    'strip'
+    'rail'
+    'main';
+}
+.ch[data-short] .ch-rail {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0.1rem var(--gutter);
+  overflow: visible;
+}
+/* No room to spare below the newest line either. */
+.ch[data-short] .ch-conv__page {
+  padding-bottom: 3rem;
+}
+.ch[data-short] .ch-rail > :not(.ch-rail__tools) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.ch[data-short] .ch-rail__tools {
+  margin: 0;
+}
+@media (min-width: 1024px) {
+  .ch[data-short] {
+    --lead: var(--gutter);
+  }
+}
+@media (max-width: 599px) {
+  .ch[data-short] .ch-rail {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ Forced colours, high contrast */
+@media (forced-colors: active) {
+  .ch-spine path {
+    stroke: CanvasText;
+  }
+  .ch-turn__mark,
+  .ch-trend,
+  .ch-scale__pip,
+  .ch-signals__dots i[data-lit] {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .ch-star {
+    fill: Highlight;
+  }
+  .ch-send {
+    border: 1px solid ButtonText;
+  }
+}

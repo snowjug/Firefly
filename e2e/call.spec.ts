@@ -157,7 +157,8 @@ test.describe('guided and immersive practice', () => {
     const call = await createCall(page, 'locked-out-after-password-reset', 'starter', {});
     await page.goto(`/calls/${call.id}`);
     // Starter calls start guided: the mood in words, a count of what was found, a few ideas.
-    await expect(page.getByText(/facts? uncovered so far/)).toBeVisible();
+    await expect(page.getByText('Customer mood', { exact: true })).toBeVisible();
+    await expect(page.getByText(/signals? found/)).toBeVisible();
     const hints = page.getByRole('group', { name: 'Ideas for what to say' });
     await expect(hints).toBeVisible();
     await hints.getByRole('button').first().click();
@@ -168,13 +169,37 @@ test.describe('guided and immersive practice', () => {
     ).toHaveCount(1);
   });
 
+  test('guided practice marks a signal where it was found, and says only that it was found', async ({
+    page,
+  }) => {
+    const call = await createCall(page, 'locked-out-after-password-reset', 'starter', {});
+    await page.goto(`/calls/${call.id}`);
+    const conversation = page.getByRole('region', { name: 'Conversation' });
+    await say(page, 'Thanks, I am sorry about this. When did it start, and has anything changed?');
+    await expect(conversation.getByRole('listitem')).toHaveCount(3);
+    const found = conversation.getByRole('listitem').last();
+    await expect(found.getByText('Signal found')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /^Signal found$/ })).toHaveCount(1);
+    await expect(page.getByText(/^1 signal found$/)).toBeVisible();
+  });
+
   test('immersive practice shows none of it, because a real call does not', async ({ page }) => {
     const call = await createCall(page, 'team-cannot-open-shared-workspace', 'standard');
     await page.goto(`/calls/${call.id}`);
     await expect(composer(page)).toBeVisible();
-    await expect(page.getByText(/facts? uncovered so far/)).toHaveCount(0);
+    await expect(page.getByText(/signals? found/)).toHaveCount(0);
     await expect(page.getByRole('group', { name: 'Ideas for what to say' })).toHaveCount(0);
-    await expect(page.getByText('Customer mood')).toHaveCount(0);
+    await expect(page.getByText('Customer mood', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Customer mood cues are off in immersive practice.')).toBeVisible();
+  });
+
+  test('immersive practice marks nothing when a signal is found', async ({ page }) => {
+    const call = await createCall(page, 'locked-out-after-password-reset', 'standard');
+    await page.goto(`/calls/${call.id}`);
+    const conversation = page.getByRole('region', { name: 'Conversation' });
+    await say(page, 'Thanks, I am sorry about this. When did it start, and has anything changed?');
+    await expect(conversation.getByRole('listitem')).toHaveCount(3);
+    await expect(page.getByText(/Signal found|Situation shift|Mood shift/)).toHaveCount(0);
   });
 });
 

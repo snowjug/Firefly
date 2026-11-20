@@ -128,14 +128,16 @@ export function makeReply(
 /** What a browser answers to a media query. Everything else is "no". */
 export function stubScreen({
   wide = false,
+  narrow = false,
   coarse = false,
-}: { wide?: boolean; coarse?: boolean } = {}) {
+}: { wide?: boolean; narrow?: boolean; coarse?: boolean } = {}) {
   vi.stubGlobal(
     'matchMedia',
     (query: string) =>
       ({
         matches:
-          (wide && query.includes('min-width: 961px')) ||
+          (wide && query.includes('min-width: 1024px')) ||
+          (narrow && query.includes('max-width: 719px')) ||
           (coarse && query.includes('pointer: coarse')),
         media: query,
         addEventListener: () => undefined,

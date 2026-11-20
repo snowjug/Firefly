@@ -1,8 +1,6 @@
 import type { Ref } from 'react';
 import type { VoiceCall } from '../../lib/voice/index.ts';
 import { Icon } from '../Icon.tsx';
-import { Switch } from '../report/Switch.tsx';
-import '../../styles/call-voice.css';
 
 /** What the status line says. An error is shown on its own, so it has no line here. */
 export function voiceStatusText(
@@ -39,9 +37,27 @@ const MODE_TEXT: Record<VoiceCall['recognitionMode'], string> = {
   unknown: '',
 };
 
+/** An on/off switch on a native checkbox (role="switch"), with a visible label. */
+function HandsFree({ checked, onChange }: { checked: boolean; onChange(on: boolean): void }) {
+  return (
+    <label className="vc-switch">
+      <input
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="vc-switch__track" aria-hidden="true">
+        <span className="vc-switch__thumb" />
+      </span>
+      <span>Hands-free</span>
+    </label>
+  );
+}
+
 /**
- * The voice controls, inside the message box. Voice is a beta: it never starts by itself, typing
- * always works, and where the browser cannot listen it says so in one sentence.
+ * The voice controls, under the line a person types on. Voice is a beta: it never starts by itself,
+ * typing always works, and where the browser cannot listen it says so in one sentence.
  */
 export function VoicePanel({
   voice,
@@ -99,7 +115,7 @@ export function VoicePanel({
           <button
             ref={callRef}
             type="button"
-            className="btn btn-sm vc-call"
+            className="vc-button vc-call"
             aria-pressed={calling}
             onClick={onToggleCall}
             title={calling ? 'End the voice call' : 'Start a voice call'}
@@ -111,7 +127,7 @@ export function VoicePanel({
             <>
               <button
                 type="button"
-                className="btn btn-sm btn-secondary vc-talk"
+                className="vc-button vc-talk"
                 onClick={voice.talk}
                 disabled={connecting || voice.muted}
               >
@@ -120,7 +136,7 @@ export function VoicePanel({
               </button>
               <button
                 type="button"
-                className="btn btn-sm btn-secondary vc-mute"
+                className="vc-button vc-mute"
                 aria-pressed={voice.muted}
                 onClick={voice.toggleMute}
                 disabled={connecting}
@@ -131,7 +147,7 @@ export function VoicePanel({
               {voice.customerSpeaking ? (
                 <button
                   type="button"
-                  className="btn btn-sm btn-secondary vc-stop"
+                  className="vc-button vc-stop"
                   onClick={voice.stopSpeaking}
                   aria-label={`Stop ${customer}'s voice`}
                 >
@@ -141,9 +157,7 @@ export function VoicePanel({
               ) : null}
             </>
           ) : null}
-          <Switch checked={handsFree} onChange={onHandsFree} className="vc-switch">
-            Hands-free
-          </Switch>
+          <HandsFree checked={handsFree} onChange={onHandsFree} />
         </div>
       </div>
       <p className="vc-status" role="status">
@@ -163,11 +177,7 @@ export function VoicePanel({
         <div className="vc-error" role="alert">
           <Icon name="alert" size={16} />
           <span className="vc-error-text">{voice.error.message}</span>
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
-            onClick={() => void voice.start()}
-          >
+          <button type="button" className="ch-link" onClick={() => void voice.start()}>
             <Icon name="refresh" size={14} />
             Try again
           </button>

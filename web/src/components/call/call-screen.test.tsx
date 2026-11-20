@@ -17,6 +17,7 @@ import { markVoiceSession, usedVoice } from '../../lib/voice-sessions.ts';
 import { resetProfileForTests } from '../../lib/profile.ts';
 import Call from '../../pages/Call.tsx';
 import { fakeVoice, immersive, makeReply, makeSession, stubScreen } from './call-test-kit.ts';
+import * as bridge from './signal-bridge.tsx';
 
 const api = vi.hoisted(() => ({
   config: vi.fn(),
@@ -34,6 +35,11 @@ vi.mock('../../lib/voice/index.ts', async () => {
   const kit = await import('./call-test-kit.ts');
   return { useVoiceCall: kit.fakeVoice.useFake, getVoiceSupport: () => kit.voiceSupport };
 });
+vi.mock('./signal-bridge.tsx', async (importOriginal) => ({
+  ...(await importOriginal<typeof bridge>()),
+  useWorldPose: vi.fn(),
+  pulseWorld: vi.fn(),
+}));
 
 const CONFIG: AppConfigDTO = {
   app: { name: 'Firefly', version: '0.1.0' },
@@ -84,6 +90,11 @@ const box = () => screen.getByLabelText('Your reply to the customer');
 const conversation = () => screen.getByRole('region', { name: 'Conversation' });
 const messages = () => within(conversation()).getAllByRole('listitem');
 const ready = () => screen.findByRole('region', { name: 'Conversation' });
+const rail = () => screen.getByRole('complementary', { name: 'Maya Okafor, the customer' });
+const presence = () => document.querySelector('[data-sig="presence"]');
+/** The turn (a list item in the conversation) that says `text`. */
+const turnSaying = (text: string) =>
+  within(conversation()).getByText(text).closest('li') as HTMLElement;
 
 type User = ReturnType<typeof userEvent.setup>;
 
@@ -108,18 +119,18 @@ beforeEach(() => {
   fakeVoice.reset();
   stubScreen({ wide: true });
   Element.prototype.scrollTo = () => undefined;
+  Element.prototype.scrollIntoView = () => undefined;
   api.config.mockResolvedValue(CONFIG);
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('opening the call', () => {
-  it('shows the live header: a title, who is calling, a running clock and a clear way to end', async () => {
+  it('shows the live strip: what it is about, who is calling, a running clock and a clear way to end', async () => {
     await open();
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'Locked out after a password reset' }),
-    ).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Maya Okafor' })).toBeVisible();
     expect(screen.getByText('Call in progress')).toBeVisible();
-    expect(screen.getByText(/Call with Maya Okafor/)).toBeVisible();
+    expect(screen.getByText('Locked out after a password reset')).toBeVisible();
+    expect(screen.getByText('Guided practice')).toBeVisible();
     expect(screen.getByRole('timer', { name: 'Call length' })).toHaveTextContent(/^\d+:\d{2}$/);
     expect(screen.getByRole('timer')).toHaveAttribute('aria-live', 'off');
     expect(screen.getByRole('button', { name: 'End call' })).toBeVisible();
@@ -134,29 +145,32 @@ describe('opening the call', () => {
     expect(screen.getByRole('link', { name: /Firefly home/ })).toHaveAttribute('href', '/home');
   });
 
-  it('puts the customer on a stage that follows their mood and repeats what they said last', async () => {
+  it('puts the customer in the room: their name, how they are, and their latest line set large', async () => {
     await open();
-    const stage = screen.getByRole('region', { name: 'Maya Okafor, the customer' });
-    expect(within(stage).getByText('High impact')).toBeVisible();
-    expect(stage.querySelector('svg.ill-customer')).toHaveAttribute('data-mood', 'frustrated');
-    expect(stage.querySelector('.cstage-bubble')).toHaveTextContent(
-      'Hi, I cannot sign in to the staff portal.',
+    const aside = rail();
+    expect(within(aside).getByText('Receptionist, Northwind Clinic')).toBeVisible();
+    expect(within(aside).getByText('Customer mood')).toBeVisible();
+    expect(within(aside).getByText('Frustrated, rising')).toBeVisible();
+    expect(presence()).toHaveAttribute('data-sig-mood', 'frustrated');
+    // The newest customer line is the one the page rests on; the chat list is its accessible source.
+    expect(turnSaying('Hi, I cannot sign in to the staff portal.')).toHaveAttribute(
+      'data-emphasis',
+      'active',
     );
-    // The chat list is the accessible source of the message; the bubble is a decorative copy.
-    expect(
-      within(conversation()).getByText('Hi, I cannot sign in to the staff portal.'),
-    ).toBeVisible();
     expect(messages()).toHaveLength(1);
   });
 
-  it('shows a compact strip instead of the stage on a narrow screen, with the details as a sheet', async () => {
-    stubScreen({ wide: false });
+  it('shows the objective in guided practice, and the details open as a bottom sheet on a narrow screen', async () => {
+    stubScreen({ narrow: true });
     const user = userEvent.setup();
     await open();
-    expect(document.querySelector('.cstage')).toBeNull();
-    expect(document.querySelector('.cstrip')).not.toBeNull();
+    expect(document.querySelector('.ch')).toHaveAttribute('data-layout', 'narrow');
+    expect(screen.getByText('Find out what is happening.')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Call details' }));
-    expect(screen.getByRole('dialog', { name: 'Call details' })).toHaveClass('sheet');
+    expect(screen.getByRole('dialog', { name: 'Call details' })).toHaveAttribute(
+      'data-variant',
+      'inspector',
+    );
   });
 
   it('says plainly when the call cannot be found, and offers a way on', async () => {
@@ -183,15 +197,22 @@ describe('opening the call', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'We could not open this call' }),
     ).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent('The server is not answering.');
     api.getSession.mockResolvedValue(makeSession());
     await user.click(screen.getByRole('button', { name: /try again/i }));
     await ready();
   });
 
-  it('shows a loading state while the call opens', () => {
+  it('shows one honest line while the call opens, and nothing that pretends to be progress', () => {
     api.getSession.mockReturnValue(new Promise(() => undefined));
     renderCall();
-    expect(screen.getByRole('status', { name: 'Opening your call' })).toBeInTheDocument();
+    const line = screen
+      .getAllByRole('status')
+      .filter((el) => el.textContent === 'Opening the call.');
+    expect(line).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Opening the call.');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(document.title).toBe('Opening your call · Firefly');
   });
 
   it('hands over to the report when the call has already been scored', async () => {
@@ -221,8 +242,15 @@ describe('talking to the customer', () => {
       .filter((el) => /replied:/.test(el.textContent ?? ''));
     expect(announcements).toHaveLength(1);
     expect(announcements[0]).toHaveTextContent('Maya Okafor replied: Last night, about eight.');
-    // The stage repeats the newest reply for sighted people only.
-    expect(document.querySelector('.cstage-bubble')).toHaveTextContent('Last night, about eight.');
+    // The page now rests on the newest reply, and the earlier customer line steps back.
+    expect(turnSaying('Last night, about eight.')).toHaveAttribute('data-emphasis', 'active');
+    expect(turnSaying('Hi, I cannot sign in to the staff portal.')).not.toHaveAttribute(
+      'data-emphasis',
+      'active',
+    );
+    // A light arrives with a fresh reply and nowhere else (not on the opening line, not on a reply of yours).
+    expect(conversation().querySelectorAll('.ch-arrival')).toHaveLength(1);
+    expect(turnSaying('Last night, about eight.').querySelector('.ch-arrival')).not.toBeNull();
   });
 
   it('adds a line with Shift+Enter instead of sending', async () => {
@@ -240,7 +268,7 @@ describe('talking to the customer', () => {
     await open();
     await say(user, 'Hello Maya');
     expect(await screen.findByText('Maya Okafor is typing…')).toBeInTheDocument();
-    expect(document.querySelector('svg.ill-customer')).toHaveAttribute('data-speaking', 'true');
+    expect(presence()).toHaveAttribute('data-typing');
     // Typing ahead is fine, but nothing is sent until the customer has answered.
     await say(user, 'Another thing');
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
@@ -250,6 +278,7 @@ describe('talking to the customer', () => {
     await act(async () => pending.resolve(makeReply('Hello.')));
     expect(await within(conversation()).findByText('Hello.')).toBeVisible();
     expect(screen.queryByText('Maya Okafor is typing…')).not.toBeInTheDocument();
+    expect(presence()).not.toHaveAttribute('data-typing');
     await user.click(screen.getByRole('button', { name: 'Send message' }));
     expect(api.sendMessage).toHaveBeenCalledTimes(2);
   });
@@ -354,6 +383,8 @@ describe('talking to the customer', () => {
     await open();
     await say(user, 'Any ideas?');
     expect(await screen.findByText('Maya Okafor has gone quiet.')).toBeVisible();
+    expect(document.querySelector('.ch')).toHaveAttribute('data-silent');
+    expect(presence()).toHaveAttribute('data-silent');
   });
 
   it('shows no sign of it in immersive practice', async () => {
@@ -363,14 +394,15 @@ describe('talking to the customer', () => {
     await say(user, 'Any ideas?');
     expect(await within(conversation()).findByText('Hm.')).toBeVisible();
     expect(screen.queryByText(/gone quiet/)).not.toBeInTheDocument();
+    expect(document.querySelector('.ch')).not.toHaveAttribute('data-silent');
   });
 });
 
 describe('guided and immersive practice', () => {
-  it('guided practice shows the mood, the facts uncovered and ideas for what to say', async () => {
+  it('guided practice shows the mood, the signals found and ideas for what to say', async () => {
     await open();
     expect(screen.getByText('Customer mood')).toBeVisible();
-    expect(screen.getByText(/uncovered so far/)).toHaveTextContent('2 facts uncovered so far');
+    expect(screen.getByText(/signals found/)).toHaveTextContent('2 signals found');
     const ideas = screen.getByRole('group', { name: 'Ideas for what to say' });
     expect(
       within(ideas)
@@ -396,17 +428,25 @@ describe('guided and immersive practice', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('immersive practice shows no mood label, meter, count or ideas, and a calm face whatever the mood', async () => {
+  it('immersive practice shows no mood, count, objective or ideas, and a neutral presence whatever the mood', async () => {
     await open(immersive(makeSession()));
     expect(screen.queryByText('Customer mood')).not.toBeInTheDocument();
-    expect(screen.queryByText(/uncovered so far/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/signals? found/)).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Ideas for what to say' })).not.toBeInTheDocument();
     expect(screen.queryByText('Frustrated')).not.toBeInTheDocument();
+    expect(screen.queryByText('Objective')).not.toBeInTheDocument();
     expect(screen.getByText('Immersive')).toBeVisible();
-    expect(document.querySelector('svg.ill-customer')).toHaveAttribute('data-mood', 'calm');
+    expect(
+      within(rail()).getByText('Customer mood cues are off in immersive practice.'),
+    ).toBeVisible();
+    // The customer is frustrated and rising, and nothing on the room says so.
+    expect(presence()).toHaveAttribute('data-sig-mood', 'neutral');
+    expect(presence()).toHaveAttribute('data-sig-trend', 'steady');
+    expect(document.querySelector('.ch')).toHaveAttribute('data-mood', 'neutral');
+    expect(document.querySelector('[data-mood="frustrated"]')).toBeNull();
   });
 
-  it('follows the customer\u2019s mood on the stage as it changes', async () => {
+  it('follows the customer’s mood in the room as it changes, and says when it shifted', async () => {
     const user = userEvent.setup();
     api.sendMessage.mockImplementation(
       answer('This is unacceptable.', { band: { id: 'angry', label: 'Angry' } }),
@@ -416,9 +456,87 @@ describe('guided and immersive practice', () => {
     expect(
       await screen.findByText(/Maya Okafor's mood shifted from Frustrated to Angry/),
     ).toBeVisible();
-    const stage = screen.getByRole('region', { name: 'Maya Okafor, the customer' });
-    expect(stage.querySelector('svg.ill-customer')).toHaveAttribute('data-mood', 'angry');
-    expect(within(stage).getByText('Customer mood')).toBeVisible();
+    expect(within(rail()).getByText('Angry, rising')).toBeVisible();
+    expect(presence()).toHaveAttribute('data-sig-mood', 'angry');
+    expect(document.querySelector('.ch')).toHaveAttribute('data-mood', 'angry');
+    // The reply is marked with the mood it came in.
+    expect(turnSaying('This is unacceptable.')).toHaveAttribute('data-mood', 'angry');
+    // A screen reader hears how the conversation moved along with the reply.
+    expect(
+      screen
+        .getAllByRole('status')
+        .some((el) =>
+          /replied: This is unacceptable\. Maya Okafor is more tense\./.test(el.textContent ?? ''),
+        ),
+    ).toBe(true);
+  });
+
+  it('tells the field what the customer is like', async () => {
+    await open();
+    expect(bridge.useWorldPose).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tension: 0.56, open: 0.58, intensity: 1, recovering: false }),
+    );
+  });
+
+  it('tells the field nothing real about the customer in immersive practice', async () => {
+    await open(immersive(makeSession()));
+    expect(bridge.useWorldPose).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tension: 0.08, open: 1, recovering: false }),
+    );
+  });
+});
+
+describe('what happens in the conversation, in guided practice only', () => {
+  it('a found signal is marked on its turn, said once, and given to the field', async () => {
+    const user = userEvent.setup();
+    api.sendMessage.mockImplementation(answer('It started last night.', { discoveredCount: 3 }));
+    await open();
+    await say(user, 'When did it start?');
+    const turn = (await within(conversation()).findByText('It started last night.')).closest('li');
+    expect(turn).toHaveAttribute('data-signal');
+    expect(within(turn as HTMLElement).getByText('Signal found')).toBeVisible();
+    // It never says what was found.
+    expect(turn).not.toHaveTextContent(/fact|hidden/i);
+    const said = screen.getAllByRole('status').filter((el) => el.textContent === 'Signal found');
+    expect(said).toHaveLength(1);
+    expect(screen.getByText(/signals found/)).toHaveTextContent('3 signals found');
+    expect(bridge.pulseWorld).toHaveBeenCalledWith('discovery');
+  });
+
+  it('a turn in the conversation is marked as a situation shift, without saying what kind', async () => {
+    const user = userEvent.setup();
+    api.sendMessage.mockImplementation(answer('Actually, that is not the problem.', { shifts: 1 }));
+    await open();
+    await say(user, 'Let us try something else');
+    const turn = (
+      await within(conversation()).findByText('Actually, that is not the problem.')
+    ).closest('li') as HTMLElement;
+    expect(turn).toHaveAttribute('data-shift');
+    expect(within(turn).getByText('Situation shift')).toBeVisible();
+    expect(within(turn).getByText('The conversation changed.')).toBeVisible();
+    expect(bridge.pulseWorld).toHaveBeenCalledWith('curveball');
+  });
+
+  it('immersive practice shows no signal and no shift, and the field is told nothing', async () => {
+    const user = userEvent.setup();
+    api.sendMessage.mockImplementation(
+      answer('Actually, that is not the problem.', {
+        discoveredCount: 3,
+        shifts: 1,
+        band: { id: 'angry', label: 'Angry' },
+      }),
+    );
+    await open(immersive(makeSession()));
+    await say(user, 'Let us try something else');
+    const turn = (
+      await within(conversation()).findByText('Actually, that is not the problem.')
+    ).closest('li') as HTMLElement;
+    expect(turn).not.toHaveAttribute('data-signal');
+    expect(turn).not.toHaveAttribute('data-shift');
+    expect(turn).not.toHaveAttribute('data-mood');
+    expect(screen.queryByText(/Signal found|Situation shift|mood shifted/)).not.toBeInTheDocument();
+    expect(bridge.pulseWorld).not.toHaveBeenCalled();
+    expect(presence()).toHaveAttribute('data-sig-mood', 'neutral');
   });
 });
 
@@ -430,6 +548,7 @@ describe('details and notes', () => {
     await user.click(opener);
     const dialog = screen.getByRole('dialog', { name: 'Call details' });
     expect(within(dialog).getByText('A customer cannot sign in.')).toBeVisible();
+    expect(within(dialog).getByText('The situation')).toBeVisible();
     expect(within(dialog).getByText('Find out what is happening.')).toBeVisible();
     expect(within(dialog).getByText('When it started')).toBeVisible();
     await user.click(within(dialog).getByLabelText('Private notes'));
@@ -452,45 +571,47 @@ describe('details and notes', () => {
 });
 
 describe('ending the call', () => {
+  const twoReplies = () => {
+    const base = makeSession();
+    return makeSession({
+      traineeTurns: 2,
+      turns: [
+        ...base.turns,
+        {
+          index: 2,
+          role: 'trainee',
+          text: 'Hello',
+          createdAt: '2025-01-01T10:00:05.000Z',
+          source: 'trainee',
+        },
+        {
+          index: 3,
+          role: 'customer',
+          text: 'Hi',
+          createdAt: '2025-01-01T10:00:06.000Z',
+          source: 'live',
+        },
+        {
+          index: 4,
+          role: 'trainee',
+          text: 'Tell me more',
+          createdAt: '2025-01-01T10:00:07.000Z',
+          source: 'trainee',
+        },
+        {
+          index: 5,
+          role: 'customer',
+          text: 'Well',
+          createdAt: '2025-01-01T10:00:08.000Z',
+          source: 'live',
+        },
+      ],
+    });
+  };
+
   it('asks first, then ends the call and hands over to the report', async () => {
     const user = userEvent.setup();
-    const base = makeSession();
-    await open(
-      makeSession({
-        traineeTurns: 2,
-        turns: [
-          ...base.turns,
-          {
-            index: 2,
-            role: 'trainee',
-            text: 'Hello',
-            createdAt: '2025-01-01T10:00:05.000Z',
-            source: 'trainee',
-          },
-          {
-            index: 3,
-            role: 'customer',
-            text: 'Hi',
-            createdAt: '2025-01-01T10:00:06.000Z',
-            source: 'live',
-          },
-          {
-            index: 4,
-            role: 'trainee',
-            text: 'Tell me more',
-            createdAt: '2025-01-01T10:00:07.000Z',
-            source: 'trainee',
-          },
-          {
-            index: 5,
-            role: 'customer',
-            text: 'Well',
-            createdAt: '2025-01-01T10:00:08.000Z',
-            source: 'live',
-          },
-        ],
-      }),
-    );
+    await open(twoReplies());
     const end = screen.getByRole('button', { name: 'End call' });
     await user.click(end);
     const dialog = screen.getByRole('dialog', { name: 'End this call?' });
@@ -503,6 +624,19 @@ describe('ending the call', () => {
     await user.click(end);
     await user.click(screen.getByRole('button', { name: 'End call and get feedback' }));
     expect(api.endSession).toHaveBeenCalledWith('session-1');
+    expect(await screen.findByText('Report page')).toBeVisible();
+  });
+
+  it('quiets the room while the call is being ended', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<SessionDTO>();
+    api.endSession.mockReturnValue(pending.promise);
+    await open(twoReplies());
+    await user.click(screen.getByRole('button', { name: 'End call' }));
+    await user.click(screen.getByRole('button', { name: 'End call and get feedback' }));
+    expect(document.querySelector('.ch')).toHaveAttribute('data-ending');
+    expect(screen.getByRole('button', { name: 'Ending call…' })).toBeDisabled();
+    await act(async () => pending.resolve(makeSession({ status: 'completed' })));
     expect(await screen.findByText('Report page')).toBeVisible();
   });
 
@@ -530,6 +664,7 @@ describe('ending the call', () => {
     await user.click(screen.getByRole('button', { name: 'End call and get feedback' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not end the call.');
     expect(screen.getByRole('dialog', { name: 'End this call?' })).toBeVisible();
+    expect(document.querySelector('.ch')).not.toHaveAttribute('data-ending');
   });
 
   it('lets a call with no messages be discarded, back to the home page', async () => {
@@ -590,6 +725,20 @@ describe('the wrap-up while the report is built', () => {
       ),
     ).toBeVisible();
     expect(screen.getByText(/it will be marked as ended early/)).toBeVisible();
+  });
+
+  it('holds the presence still where the call left it, and keeps it neutral in immersive practice', async () => {
+    api.getSession.mockResolvedValue(completing('scoring'));
+    const { unmount } = renderCall();
+    await screen.findByRole('heading', { level: 1, name: 'Wrapping up your call' });
+    expect(presence()).toHaveAttribute('data-frozen');
+    expect(presence()).toHaveAttribute('data-sig-mood', 'frustrated');
+    unmount();
+
+    api.getSession.mockResolvedValue(immersive(completing('scoring')));
+    renderCall();
+    await screen.findByRole('heading', { level: 1, name: 'Wrapping up your call' });
+    expect(presence()).toHaveAttribute('data-sig-mood', 'neutral');
   });
 
   it('says nothing about a short call when there were plenty of replies', async () => {

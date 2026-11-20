@@ -183,8 +183,8 @@ describe('a voice call', () => {
     await engine({ status: 'customer-speaking', customerSpeaking: true });
     await user.click(screen.getByRole('button', { name: "Stop Maya Okafor's voice" }));
     expect(fakeVoice.actions.stopSpeaking).toHaveBeenCalled();
-    // The customer's mouth moves while the voice plays.
-    expect(document.querySelector('svg.ill-customer')).toHaveAttribute('data-speaking', 'true');
+    // The presence stirs while the voice plays.
+    expect(document.querySelector('[data-sig="presence"]')).toHaveAttribute('data-typing');
   });
 
   it('says in words what is happening, and shows what is being heard as it is said', async () => {

@@ -3,12 +3,20 @@ import { REDACTION_LABELS, looksSensitive } from '#shared/domain/text.ts';
 import { useMediaQuery } from '../../lib/hooks.ts';
 import { Icon } from '../Icon.tsx';
 
-const MAX_HEIGHT = 160;
+// Whether the browser sizes a text box to what is typed in it by itself (field-sizing). Where it
+// does not, the box is measured after each change, which costs a layout per keystroke.
+const SIZES_ITSELF =
+  typeof CSS !== 'undefined' &&
+  typeof CSS.supports === 'function' &&
+  CSS.supports('field-sizing', 'content');
+
+const MAX_HEIGHT = 168;
 
 /**
- * The message box. Enter sends on desktop (Shift+Enter adds a line); on touch devices Enter adds a
- * line and the Send button sends, which is what people expect from a phone keyboard. The text is
- * owned by the call screen, so a starter phrase or recognised speech can be put into the box.
+ * Where the trainee speaks: an underlined line of serif at the end of the filament. Enter sends on
+ * a desktop keyboard (Shift+Enter adds a line); on a touch device Enter adds a line and Send
+ * sends, which is what a phone keyboard leads people to expect. The text is owned by the call
+ * screen, so a starter phrase or recognised speech can be put into the box.
  */
 export function Composer({
   value,
@@ -19,6 +27,7 @@ export function Composer({
   blockedMessage,
   turnsRemaining,
   onSend,
+  ideas,
   voiceBar,
   footerExtra,
 }: {
@@ -30,9 +39,11 @@ export function Composer({
   blockedMessage: string | null;
   turnsRemaining: number | null;
   onSend(text: string): Promise<unknown>;
-  /** The voice controls, shown inside the box above the text. */
+  /** Guided practice: a few starter phrases above the line. */
+  ideas?: ReactNode;
+  /** The voice controls, under the line. */
   voiceBar?: ReactNode;
-  /** Small extras at the end of the line under the text, such as the way to turn on voice. */
+  /** Small extras at the end of the line of help, such as the way to turn on voice. */
   footerExtra?: ReactNode;
 }) {
   const ownRef = useRef<HTMLTextAreaElement>(null);
@@ -45,6 +56,7 @@ export function Composer({
   const sensitive = trimmed.length > 5 ? looksSensitive(trimmed) : [];
 
   useLayoutEffect(() => {
+    if (SIZES_ITSELF) return;
     const el = ref.current;
     if (!el) return;
     el.style.height = 'auto';
@@ -72,81 +84,80 @@ export function Composer({
 
   return (
     <form
-      className="composer"
+      className="ch-composer"
+      data-busy={busy || undefined}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
-      {blocked ? (
-        <p className="callout callout-caution" role="status">
-          <Icon name="info" />
-          <span>{blockedMessage}</span>
-        </p>
-      ) : null}
-      {voiceBar}
-      <div className="composer-row">
-        <div className="composer-field">
-          <label htmlFor="reply" className="sr-only">
-            Your reply to the customer
-          </label>
-          <textarea
-            id="reply"
-            ref={ref}
-            className="textarea composer-input"
-            rows={1}
-            value={value}
-            placeholder="Type your response…"
-            onChange={(event) => onChange(event.target.value)}
-            onKeyDown={onKeyDown}
-            disabled={blocked}
-            aria-describedby={showCount ? `${hintId} ${countId}` : hintId}
-            aria-invalid={over || undefined}
-            autoComplete="off"
-            spellCheck
-          />
+      <label htmlFor="reply" className="ch-composer__label">
+        <span>Your reply</span>
+        <span className="sr-only"> to the customer</span>
+      </label>
+      <span className="ch-composer__mark" aria-hidden="true" />
+      <div className="ch-composer__main">
+        {blocked ? (
+          <p className="ch-composer__blocked" role="status">
+            <Icon name="info" size={16} />
+            <span>{blockedMessage}</span>
+          </p>
+        ) : null}
+        {ideas}
+        <textarea
+          id="reply"
+          ref={ref}
+          className="ch-composer__input"
+          rows={1}
+          value={value}
+          placeholder="Say what you would say."
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={onKeyDown}
+          disabled={blocked}
+          aria-describedby={showCount ? `${hintId} ${countId}` : hintId}
+          aria-invalid={over || undefined}
+          autoComplete="off"
+          spellCheck
+        />
+        <div className="ch-composer__row">
+          <div className="ch-composer__help">
+            <span id={hintId} className="ch-composer__keys">
+              {coarse ? (
+                'Tap Send to reply.'
+              ) : (
+                <>
+                  <kbd>Enter</kbd> to send, <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line.
+                </>
+              )}
+            </span>
+            {showCount ? (
+              <span id={countId} className={over ? 'ch-composer__over' : undefined}>
+                {over
+                  ? `${value.length - maxChars} characters over the ${maxChars} limit`
+                  : `${value.length} of ${maxChars}`}
+              </span>
+            ) : null}
+            {lowOnTurns ? (
+              <span>
+                {turnsRemaining} {turnsRemaining === 1 ? 'message' : 'messages'} left in this call
+              </span>
+            ) : null}
+            {footerExtra}
+          </div>
+          <button type="submit" className="ch-send" disabled={!canSend} aria-label="Send message">
+            <span aria-hidden="true">Send</span>
+            <Icon name="arrow-right" size={18} />
+          </button>
         </div>
-        <button
-          type="submit"
-          className="btn btn-primary composer-send"
-          disabled={!canSend}
-          aria-label="Send message"
-        >
-          <Icon name="send" size={20} />
-        </button>
-      </div>
-      <div className="composer-foot t-meta">
-        <span id={hintId} className="composer-keys">
-          {coarse ? (
-            'Tap Send to reply.'
-          ) : (
-            <>
-              <kbd className="kbd">Enter</kbd> to send, <kbd className="kbd">Shift</kbd> +{' '}
-              <kbd className="kbd">Enter</kbd> for a new line.
-            </>
-          )}
-        </span>
-        {showCount ? (
-          <span id={countId} className={over ? 'composer-over' : undefined}>
-            {over
-              ? `${value.length - maxChars} characters over the ${maxChars} limit`
-              : `${value.length} of ${maxChars}`}
-          </span>
+        {sensitive.length > 0 ? (
+          <p className="ch-composer__warning">
+            This looks like it contains{' '}
+            {sensitive.map((kind) => REDACTION_LABELS[kind]).join(' and ')}. Firefly removes it
+            before saving, but please never use real customer details.
+          </p>
         ) : null}
-        {lowOnTurns ? (
-          <span>
-            {turnsRemaining} {turnsRemaining === 1 ? 'message' : 'messages'} left in this call
-          </span>
-        ) : null}
-        {footerExtra}
+        {voiceBar}
       </div>
-      {sensitive.length > 0 ? (
-        <p className="t-meta composer-warning">
-          This looks like it contains{' '}
-          {sensitive.map((kind) => REDACTION_LABELS[kind]).join(' and ')}. Firefly removes it before
-          saving, but please never use real customer details.
-        </p>
-      ) : null}
     </form>
   );
 }
