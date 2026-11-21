@@ -46,7 +46,8 @@ const MESSAGES = {
   badOutput: 'The AI provider returned a reply Firefly could not use. Please try again.',
 };
 
-export const badOutput = () => new ProviderError('provider_bad_output', MESSAGES.badOutput, true);
+export const badOutput = (problems: readonly string[] = []) =>
+  new ProviderError('provider_bad_output', MESSAGES.badOutput, true, undefined, problems);
 const contentFiltered = () =>
   new ProviderError('provider_content_filtered', MESSAGES.filtered, false);
 const abortError = () => new DOMException('The request was cancelled.', 'AbortError');

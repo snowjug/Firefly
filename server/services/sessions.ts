@@ -8,10 +8,9 @@ import type {
   SendMessageRequest,
   SendMessageResponse,
   SessionDTO,
-  SessionListDTO,
   TranscriptDTO,
 } from '#shared/domain/api.ts';
-import { applyConfig } from '#shared/domain/config.ts';
+import { applyConfig, TIMES_OF_DAY } from '#shared/domain/config.ts';
 import {
   CoachingReportSchema,
   type CoachingReport,
@@ -25,7 +24,6 @@ import {
   PRACTICE_MODES,
   type DimensionId,
   type EvaluationPhase,
-  type SessionStatus,
   type TemperatureBandId,
 } from '#shared/domain/vocab.ts';
 import { classifyTurnRules } from '../engine/classifier.ts';
@@ -37,13 +35,13 @@ import { AppError, badRequest, conflict, isAbortError, notFound } from '../error
 import type { FailureHooks } from '../hooks.ts';
 import { shortId, type Logger } from '../log.ts';
 import { ProviderError, type ModelProvider } from '../providers/types.ts';
-import { moodAtTurn, speakerFor } from '../speech/direction.ts';
+import { moodAtTurn, recoveringAtTurn, speakerFor } from '../speech/direction.ts';
 import { SpeechError } from '../speech/types.ts';
 import type { Speaker } from '../speech/voices.ts';
 import type { Repository, SessionRow, TurnRow } from '../db/repository.ts';
 import { transaction } from '../db/database.ts';
 import type { DatabaseSync } from 'node:sqlite';
-import { toPublicScenario, toSessionDTO, toSummary } from './dto.ts';
+import { toPublicScenario, toSessionDTO } from './dto.ts';
 
 export const LIMITS = { maxMessageChars: MAX_MESSAGE_CHARS, maxTraineeTurns: 60 };
 const SHORT_CALL_TURNS = 6;
@@ -73,6 +71,8 @@ export const CreateSessionSchema = z.object({
   scenarioId: z.string().min(1).max(64),
   overrides: ScenarioOverridesSchema.optional(),
   mode: z.enum(PRACTICE_MODES).optional(),
+  // Which greeting fits ("Good morning"): the trainee's own clock, which the server cannot know.
+  timeOfDay: z.enum(TIMES_OF_DAY).optional(),
   clientRequestId: z.string().regex(idPattern).optional(),
 });
 
@@ -153,16 +153,23 @@ export class SessionService {
 
   createSession(profileId: string, request: CreateSessionRequest): SessionDTO {
     const { repo, provider, log } = this.deps;
-    const base = this.deps.library.find((s) => s.id === request.scenarioId && s.enabled);
-    if (!base) throw notFound('That scenario');
 
+    // A retried request returns the call it already created, even if its scenario has since been
+    // retired from the library: the library is only needed to start a new call.
     if (request.clientRequestId) {
       const existing = repo.findSessionByRequest(profileId, request.clientRequestId);
       if (existing) return this.loadDTO(existing);
     }
 
+    const base = this.deps.library.find((s) => s.id === request.scenarioId && s.enabled);
+    if (!base) throw notFound('That scenario');
+
     const seed = randomInt(1, 2 ** 31 - 1);
-    const scenario = applyConfig(base, request.overrides ?? {}, { mode: request.mode, seed });
+    const scenario = applyConfig(base, request.overrides ?? {}, {
+      mode: request.mode,
+      seed,
+      ...(request.timeOfDay ? { timeOfDay: request.timeOfDay } : {}),
+    });
     const runtime = createInitialRuntime(scenario);
     const startedAt = new Date().toISOString();
     const id = randomUUID();
@@ -239,45 +246,27 @@ export class SessionService {
   }
 
   /**
-   * The stored words of one customer turn and how they should sound: which speaker, and how hot the
-   * customer was when they said it. It is the only source of text for speech, so the browser can
-   * never supply words to be spoken.
+   * The stored words of one customer turn and how they should sound: which speaker, how hot the
+   * customer was when they said it, and whether they were cooling down. It is the only source of
+   * text for speech, so the browser can never supply words to be spoken.
    */
   getSpeakableTurn(
     profileId: string,
     sessionId: string,
     turnIndex: number,
-  ): { text: string; speaker: Speaker; mood: TemperatureBandId } {
+  ): { text: string; speaker: Speaker; mood: TemperatureBandId; recovering: boolean } {
     const { repo } = this.deps;
     const session = repo.getSession(sessionId, profileId);
     if (!session) throw notFound('That session');
     const turn = repo.getTurns(sessionId).find((t) => t.idx === turnIndex);
     if (!turn) throw notFound('That turn');
     if (turn.role !== 'customer') throw badRequest("Only the customer's turns can be spoken.");
+    const events = repo.getStateEvents(sessionId);
     return {
       text: turn.text,
       speaker: speakerFor(session.scenario.persona),
-      mood: moodAtTurn(session.scenario, repo.getStateEvents(sessionId), turnIndex),
-    };
-  }
-
-  listSessions(
-    profileId: string,
-    filters: {
-      status?: SessionStatus;
-      difficulty?: string;
-      scenarioId?: string;
-      limit?: number;
-      offset?: number;
-    },
-  ): SessionListDTO {
-    const { repo } = this.deps;
-    // Rows loaded by an earlier version's sample-data tool are never listed.
-    const { rows, total } = repo.listSessions(profileId, { ...filters, includeSamples: false });
-    const counts = repo.traineeTurnCounts(rows.map((r) => r.id));
-    return {
-      sessions: rows.map((r) => toSummary(r, counts.get(r.id) ?? 0)),
-      total,
+      mood: moodAtTurn(session.scenario, events, turnIndex),
+      recovering: recoveringAtTurn(session.scenario, events, turnIndex),
     };
   }
 
@@ -381,6 +370,9 @@ export class SessionService {
           turnIndex: trainee.idx,
           history,
           classify: () => Promise.resolve(stored),
+          // A model reads the question itself, so the cues that stand in for that in demo mode are
+          // not applied to its judgement.
+          matching: this.deps.provider.demo ? 'rules' : 'model',
           generate: (ctx) => {
             hooks.maybeFail('customer');
             return this.deps.provider.generateCustomer(ctx, signal);
@@ -389,10 +381,13 @@ export class SessionService {
       } catch (error) {
         if (isAbortError(error)) throw error;
         const app = toAppError(error);
+        // Codes only: which checks turned the model's replies down, never what the replies said.
+        const problems = error instanceof ProviderError ? error.problems : [];
         log.warn('message.failed', {
           sessionId: shortId(sessionId),
           code: app.code,
           ms: Date.now() - started,
+          ...(problems.length > 0 ? { problems } : {}),
         });
         throw new AppError(app.status, app.code, app.message, {
           retryable: app.retryable,
@@ -422,6 +417,7 @@ export class SessionService {
         ms: Date.now() - started,
         provider: this.deps.provider.kind,
         curveball: Boolean(result.curveballFired),
+        ...(result.customerRepaired.length > 0 ? { repaired: result.customerRepaired } : {}),
       });
       const updated = { ...session, runtime: result.runtime };
       return this.responseFor(updated, trainee, reply, redactions);

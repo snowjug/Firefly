@@ -54,11 +54,23 @@ export type ProviderErrorCode =
 export class ProviderError extends Error {
   readonly code: ProviderErrorCode;
   readonly retryable: boolean;
-  constructor(code: ProviderErrorCode, message: string, retryable: boolean, cause?: unknown) {
+  /**
+   * Why a reply was turned down, as codes only ("1:leaks", "2:invents"): never the reply, the prompt
+   * or a fact. It is for the log, so that a failure to produce a usable reply can be diagnosed.
+   */
+  readonly problems: readonly string[];
+  constructor(
+    code: ProviderErrorCode,
+    message: string,
+    retryable: boolean,
+    cause?: unknown,
+    problems: readonly string[] = [],
+  ) {
     super(message, cause === undefined ? undefined : { cause });
     this.name = 'ProviderError';
     this.code = code;
     this.retryable = retryable;
+    this.problems = problems;
   }
 }
 

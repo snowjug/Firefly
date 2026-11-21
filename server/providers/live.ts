@@ -9,8 +9,14 @@ import {
   CUSTOMER_REMINDERS,
 } from '../prompts/customer.ts';
 import { buildEvaluatorPrompt, EVALUATOR_PROMPT_VERSION } from '../prompts/evaluator.ts';
-import { factPolicy } from '../prompts/facts.ts';
 import type { PromptRequest } from '../prompts/types.ts';
+import {
+  blockingProblems,
+  guardsFor,
+  judgeReply,
+  repairReply,
+  type GuardProblem,
+} from './guards.ts';
 import {
   badOutput,
   createChatClient,
@@ -24,7 +30,6 @@ import {
   OutputProblem,
   parseClassification,
   parseEvaluationDraft,
-  replyProblem,
 } from './output.ts';
 import type { ClassifyArgs, ModelProvider, PromptVersions } from './types.ts';
 
@@ -92,11 +97,21 @@ async function completeJson<T>(
 }
 
 // ---------------------------------------------------------------------------------------
-// The customer's reply: one retry with a reminder, then give up
+// The customer's reply: one retry with a reminder, then keep what can be said safely
 
 function speakerNames(ctx: CustomerGenerationContext): string[] {
   const full = ctx.scenario.persona.name;
   return [full, full.split(' ')[0] ?? '', 'Customer'].filter(Boolean);
+}
+
+// The retry carries a generic reminder only: it never repeats the bad reply or what leaked.
+function reminderFor(problems: readonly GuardProblem[]): string {
+  const has = (...codes: GuardProblem[]) => codes.some((code) => problems.includes(code));
+  if (has('leaks')) return CUSTOMER_REMINDERS.facts;
+  if (has('invents')) return CUSTOMER_REMINDERS.unknown;
+  if (has('coaching', 'announces-facts')) return CUSTOMER_REMINDERS.coaching;
+  if (has('repeats-previous')) return CUSTOMER_REMINDERS.repeat;
+  return CUSTOMER_REMINDERS.reply;
 }
 
 async function customerReply(
@@ -104,28 +119,36 @@ async function customerReply(
   ctx: CustomerGenerationContext,
   signal?: AbortSignal,
 ): Promise<CustomerGeneration> {
-  const policy = factPolicy(ctx);
+  const guards = guardsFor(ctx);
+  const turnedDown: { text: string; problems: GuardProblem[] }[] = [];
+  const codes: string[] = [];
   let reminder: string | undefined;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  let bookkeeping: CustomerGeneration['bookkeeping'];
+  for (const attempt of [0, 1] as const) {
     const prompt = buildCustomerPrompt(ctx, reminder ? { reminder } : {});
+    bookkeeping = { timelineAsked: prompt.timelineAsked, followUpGiven: prompt.followUpGiven };
     const completion = await chat.complete(prompt.request, signal);
     const text = cleanCustomerText(completion.content, {
       finishReason: completion.finishReason,
       speakerNames: speakerNames(ctx),
     });
-    const problem = replyProblem(text);
-    const leaked = problem === null && policy.leaks(text);
-    if (problem === null && !leaked) {
-      return {
-        text,
-        source: 'live',
-        bookkeeping: { timelineAsked: prompt.timelineAsked, followUpGiven: prompt.followUpGiven },
-      };
+    // The pipeline conforms every reply again; the checks only decide whether this one is worth keeping.
+    const verdict = judgeReply(text, guards);
+    if (blockingProblems(verdict, attempt).length === 0) {
+      return { text, source: 'live', bookkeeping };
     }
-    // The retry carries a generic reminder only: it never repeats the bad reply or what leaked.
-    reminder = leaked ? CUSTOMER_REMINDERS.facts : CUSTOMER_REMINDERS.reply;
+    turnedDown.push({ text, problems: verdict.problems });
+    codes.push(...verdict.problems.map((problem) => `${attempt + 1}:${problem}`));
+    reminder = reminderFor(verdict.problems);
   }
-  throw badOutput();
+  // Neither reply was usable as it stood. Whatever of the latest can be said safely is kept
+  // rather than failing the same call forever; only a reply with nothing safe in it fails.
+  for (const { text, problems } of [...turnedDown].reverse()) {
+    const repaired = repairReply(text, guards);
+    if (repaired !== null)
+      return { text: repaired, source: 'live', bookkeeping, repaired: problems };
+  }
+  throw badOutput([...codes, 'repair:none']);
 }
 
 // ---------------------------------------------------------------------------------------

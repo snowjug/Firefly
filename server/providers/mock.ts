@@ -6,8 +6,8 @@ import type { ClassifyArgs, ModelProvider, PromptVersions } from './types.ts';
 // demo mode in the UI and in stored sessions, and never presented as a model.
 
 export const MOCK_PROMPTS: PromptVersions = {
-  customer: 'rules-customer-1',
-  classifier: 'rules-classifier-1',
+  customer: 'rules-customer-3',
+  classifier: 'rules-classifier-2',
   evaluator: 'rules-evaluator-1',
 };
 

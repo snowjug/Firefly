@@ -40,6 +40,19 @@ export const QUESTION_START =
 export const REQUEST_PHRASE =
   /\b(?:tell me|walk me through|talk me through|describe|explain (?:to me )?(?:what|how|when)|let me know|help me understand|i (?:need|want|would like|'d like|'m trying) to (?:know|understand|find out|ask|check|confirm|see|get)|read (?:me|it|that)|show me|share with me|i'?d like to (?:ask|know|understand)|could you (?:tell|share|describe|explain|confirm)|can you (?:tell|share|describe|explain|confirm|read))\b/;
 
+// A sentence that starts like a question but states something: "What caused it was an old password."
+const CLEFT =
+  /^(?:what|all)\s+(?!is\b|was\b|are\b|were\b|'s\b)[a-z']+\b[^?]*\b(?:was|is)\s+(?:an?|the|that|because|due|caused|your|our|likely|probably|simply|just|basically)\b/;
+
+/** Is this sentence asking something? Starting like a question is not enough when it ends as a statement. */
+export function isAsking(sentence: string): boolean {
+  const trimmed = sentence.trim();
+  if (trimmed.endsWith('?')) return true;
+  const lower = prep(sentence);
+  if (/[.!]$/.test(trimmed) && CLEFT.test(lower)) return false;
+  return QUESTION_START.test(lower) || REQUEST_PHRASE.test(lower);
+}
+
 // ---------------------------------------------------------------------------------------
 // Housekeeping questions keep a call running without exploring the problem: asking for something
 // to be repeated, asking leave to hold or call back, taking identity or contact details, checking
@@ -68,13 +81,16 @@ const HOUSEKEEPING: RegExp[] = [
   /^(?:would you (?:like|prefer) me to|do you want me to|shall i|should i) (?:phone|call|ring|email|text|send|explain|walk you|go through|stay|hold|open|log|raise)\b/,
   /^would you (?:prefer|like) (?:an? )?(?:e-?mail|call ?back|phone call|call|text)\b/,
   /^have you got a (?:pen|pencil|paper|notepad)\b/,
-  // Checking agreement, and the closing question
-  /^(?:does|do) (?:that|this|it|all of that|(?:that|this|the) plan) (?:make sense|work(?: for you)?|sound (?:good|right|okay|ok|fair|reasonable)|help)\b/,
-  /^(?:is|are) (?:that|this|everything|all of that) (?:ok|okay|alright|all right|fine|right|correct|clear|good|accurate)\b/,
+  // Checking agreement, and the closing question. Each is anchored to the check alone: "Does it work
+  // on your phone?" is a question about the problem, not a check that the plan suits the customer.
+  /^(?:does|do) (?:that|this|it|all of that|(?:that|this|the) plan) (?:make sense|work(?: for you)?|sound (?:good|right|okay|ok|fair|reasonable)|help)(?: so far| for you| to you)?\s*[?.!]*$/,
+  /^(?:is|are) (?:that|this|everything|all of that) (?:ok|okay|alright|all right|fine|right|correct|clear|good|accurate)(?: so far| for you| with you)?\s*[?.!]*$/,
   /^are you (?:happy|ok|okay|comfortable|alright|all right|fine) with (?:that|this|it|the plan)\b/,
   /^(?:is there )?anything (?:else )?(?:i|we) can (?:help|assist|do for you)\b/,
   /^how (?:can|may|could) (?:i|we) (?:help|assist)\b/,
-  /^how (?:are you|is your (?:day|morning|afternoon))\b/,
+  // A bare "how are you?" is a greeting. "How are you managing in the meantime?" and "How are you
+  // affected by this?" are questions about the problem, so only the greeting itself matches.
+  /^how (?:are you|is your (?:day|morning|afternoon))(?: doing| going| today| been| this (?:morning|afternoon|evening))?\s*[?.!]*$/,
   // Identity and contact details
   new RegExp(
     `^(?:what(?:'s| is| are)|can you (?:please )?(?:tell me|give me|confirm|provide|spell)|could (?:i|you) (?:please )?(?:have|get|take|confirm|give me|tell me)|may i (?:have|take|get)|can i (?:please )?(?:have|take|get|confirm)|is (?:that|this)) [^?]{0,12}?\\b${ID_NOUN}\\b${NO_SECOND_QUESTION}\\??$`,
@@ -105,7 +121,7 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bwhat you (?:are|were) (?:trying|doing|hoping|attempting)\b/,
     /\bwhat (?:seems|appears) to be\b/,
     /\b(?:describe|explain) (?:the|what|how)\b/,
-    /\bwhat (?:happens|happened) (?:when|if|after|as)\b/,
+    /\bwhat (?:happens?|happened) (?:when|if|after|as)\b/,
     /\bwhat (?:is|'s) (?:it|that|this) doing\b/,
     /\bhow (?:does|did) (?:it|this|that) (?:fail|break|go wrong|show up)\b/,
     /\bhow (?:is|does) it (?:behaving|look|work|feel)\b/,
@@ -133,7 +149,7 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bsince when\b/,
     /\bhow long (?:has|have|ago|is|was|did)\b/,
     /\bwhat time\b/,
-    /\b(?:first|last) (?:notice|noticed|time|worked|working|saw|seen)\b/,
+    /\b(?:first|last) (?:notice|noticed|time|worked|working|saw|seen)\b(?! (?:you(?:'ve| have)? (?:called|rung|rang|phoned|contacted|spoken|emailed|raised|logged|reported)|calling|contacting|that you (?:call|contact)))/,
     /\b(?:start|started|began|begin) (?:happening|failing|failing|occurring)\b/,
     /\bwhen did you (?:first )?(?:notice|see|start|try)\b/,
     /\bhow long\b/,
@@ -165,6 +181,8 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bhow many (?:people|users|staff|colleagues|team|machines|devices|locations|sites|offices|customers|accounts|of you)\b/,
     /\bwho (?:else|is|are) (?:affected|impacted|seeing|having|experiencing|able|unable)\b/,
     /\b(?:just|only) (?:you|your (?:account|laptop|computer|device|machine))\b/,
+    // "Is it only the three of you?", "Is it just a couple of people?"
+    /\b(?:just|only) (?:the )?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|a few|a couple of|several|some) (?:of )?(?:you|them|us|people|users|colleagues|staff|accounts|devices|machines)\b/,
     /\beveryone\b/,
     /\b(?:anyone|anybody|someone|somebody) else\b/,
     /\b(?:other|another) (?:users|people|colleagues|team ?members|staff|accounts)\b/,
@@ -177,7 +195,8 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\b(?:can|could|does|do|is|are|was|were) (?:anyone|anybody|someone|somebody|everyone|everybody|others|other (?:people|colleagues|members|users)|any of (?:you|your|them|the)|all of (?:you|your|them)|the (?:whole|entire|rest of the) (?:team|office|company|department|group))\b/,
     /\bwhich of (?:you|your|the|them)\b/,
     /\bwho (?:can|could|has|have|is able|are able|still)\b/,
-    /\b(?:for|to) (?:anyone|anybody|everyone|everybody|others)\b/,
+    // Not "Have you spoken to anyone about this?": that is about who the customer has contacted.
+    /(?<!\b(?:spoken|talked|spoke|talk|speak|speaking|written|wrote|reported|called|phoned|emailed|email|told|tell|escalated|complained|mentioned|reached out) )\b(?:for|to) (?:anyone|anybody|everyone|everybody|others)\b/,
     // How far the problem reaches beyond the one thing: "Is it only this workspace?", "Is email working?"
     /\b(?:only|just) (?:this|that|the|one) (?:workspace|app|application|site|system|service|tool|page|file|folder|portal|account|project)\b/,
     /\bother (?:tools|apps|applications|sites|systems|services|features|files|folders|workspaces|projects)\b/,
@@ -224,7 +243,9 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
     /\bdid you (?:try|already|attempt)\b/,
     /\banything (?:you've|you have|else you've) (?:tried|done|attempted)\b/,
     /\bwhat (?:steps|things|else) (?:have|did) you\b/,
-    /\bhave you (?:asked|checked with|spoken|talked|contacted|told|reached out|messaged|emailed|called)\b/,
+    // Asking whether the customer has been in touch with support is a question about the case, not
+    // about what they have tried.
+    /\bhave you (?:asked|checked with|spoken|talked|contacted|told|reached out|messaged|emailed|called)\b(?! (?:to |with )?(?:us|support|microsoft|our (?:team|support|help ?desk))\b)/,
     /\b(?:tried|attempted) (?:to|any|anything|so far)\b/,
     /\bso far\b/,
     // "Have you looked at the status page?", "Have you or a colleague had a go at resetting it?"
@@ -256,6 +277,11 @@ export const INTENT_PATTERNS: Record<DiscoveryIntent, RegExp[]> = {
   previous_contact: [
     /\b(?:previous(?:ly)?|earlier|last time|prior|before) (?:call|contact|case|ticket|time|conversation|advice|support)\b/,
     /\b(?:case|ticket|reference) (?:number|id|history|notes)\b/,
+    // "Is this about an existing case?", "Do you already have a ticket open?"
+    /\b(?:existing|open|ongoing|current) (?:case|ticket|incident)\b/,
+    /\b(?:already|currently) (?:have|got|opened|raised|logged) (?:an? |the )?(?:case|ticket|incident)\b/,
+    /\b(?:is|was) (?:this|it|that) (?:about|related to|linked to|connected to|part of|regarding) (?:an? |the |your )?(?:existing|earlier|previous|prior|open|ongoing|same) (?:case|ticket|incident|call|contact|issue|problem)\b/,
+    /\bfirst time (?:you(?:'ve| have)|you're|you are|calling|contacting|that you)\b/,
     /\b(?:contacted|called|spoke to|raised|logged|reported|emailed) (?:support|us|anyone|someone|it)\b/,
     /\b(?:spoken|talked|spoke|talk) to (?:anyone|someone|anybody|somebody|support|it)\b/,
     /\bwhat (?:were|was) you told\b/,
@@ -330,22 +356,22 @@ export const OWNERSHIP_CLEAR =
 export const OWNERSHIP_ACTION =
   /\bi(?:'ll| will|'m going to| am going to|'m gonna) (?:(?:now|just|go ahead and|straight away|right away|personally) )*(?:(?:unlock|reset|fix|restore|resolve|reinstate|reactivate|re-?enable|correct|repair|re-?issue|refund|escalate|expedite|arrange|organi[sz]e|sort)\b(?: (?:this|it|that|the \w+|your \w+))?(?: out)?|get (?:an? |the |our |some )?(?:engineers?|specialists?|developers?|team|colleagues?|manager|someone)\b[^.?!]{0,20}\b(?:on|to|involved|looking|working|help|fix)\b|get (?:the|your|this|it|that|everything)\b[^.?!]{0,25}?\b(?:unlocked|fixed|sorted|resolved|restored|reset|working|back|running|unblocked|reactivated|enabled|assigned|updated|corrected|raised|escalated|moving)\b|raise (?:this|it|that)\b|log (?:a|this|it) (?:case|ticket|incident|request|issue|fault)\b)/;
 export const OWNERSHIP_VAGUE =
-  /\b(?:(?:we|i)(?:'ll| will| can| might| could) (?:look|see|try|check|have a look|take a look|investigate|get back)|someone (?:will|should|can|might)|let me (?:see|check|look|try)|i'?ll (?:try|see)|hopefully|we should be able|i think we can|bear with me|(?:the|our) team (?:will|should))\b/;
+  /\b(?:(?:we|i)(?:'ll| will| can| might| could) (?:look|see (?:what|if|whether|about|how|to)|try|check|have a look|take a look|investigate|get back)|someone (?:will|should|can|might)|let me (?:see|check|look|try)|i'?ll (?:try|see)|hopefully|we should be able|i think we can|bear with me|(?:the|our) team (?:will|should))\b/;
 
 const TIME_PHRASE =
   /\b(?:(?:by|before|within|in|at|after|until|around) (?:the )?(?:end of (?:the )?(?:day|today|business|week)|eod|tomorrow|today|tonight|noon|midday|\d{1,2}(?::\d{2})?\s?(?:am|pm)?|\d+ ?(?:minutes?|mins?|hours?|hrs?|days?)|the next (?:hour|day|few hours|\d+)|(?:mon|tues|wednes|thurs|fri|satur|sun)day|this (?:morning|afternoon|evening))|next update|(?:call|email|update|contact|ring|message|check in with|get back to) you (?:back )?(?:at|by|in|within|before|tomorrow|today|this)|tomorrow (?:morning|afternoon)|\d{1,2}(?::\d{2})? ?(?:am|pm))\b/;
-const ACTION_COMMIT =
+export const ACTION_COMMIT =
   /\b(?:(?:i(?:'ll| will| am going to|'m going to)|we(?:'ll| will)) (?:call|phone|text|ping|buzz|email|update|contact|ring|message|check|review|investigate|send|escalate|raise|look|follow|arrange|schedule|get|come back|be back|be in touch|report back|reach out|circle back|check back|touch base|speak|have|let|confirm|test|restore|unlock|reset)|(?:expect|you(?:'ll| will) (?:get|receive|hear)) (?:an? )?(?:update|call|email|message|reply|response|word|call ?back))\b/;
 // A callback at a stated time is itself a committed next step, even in "I'll take this on and call you back at 2pm".
-const CALLBACK_WITH_TIME =
-  /\b(?:call|phone|text|ping|buzz|email|update|contact|ring|message|check in with) you (?:back )?(?:at|by|in|within|before|tomorrow|today|this|on)\b/;
+export const CALLBACK_WITH_TIME =
+  /\b(?:call|phone|text|ping|buzz|email|update|contact|ring|message|check in with) you (?:back )?(?:(?:at|by|in|within|before|tomorrow|today|this|on|every|each)\b|daily|hourly|twice a day)/;
 export const NEXT_STEPS_VAGUE =
   /\b(?:get back to you|follow up|be in touch|let you know|update you|keep you (?:posted|updated|in the loop)|shortly|soon|as soon as (?:possible|i can)|asap|in due course|sometime)\b/;
 
 // Durations people say aloud, which the numeric pattern above does not cover: "in half an hour",
 // "within a couple of hours", "in twenty minutes", "by ten o'clock".
 const TIME_PHRASE_SPOKEN =
-  /\b(?:(?:in|within|after|around|for the next) (?:about |roughly |around |just |only )?(?:half an hour|half hour|an hour|a quarter of an hour|a (?:couple|few) (?:of )?(?:minutes|hours)|(?:one|two|three|four|five|six|ten|fifteen|twenty|thirty|forty-?five|sixty) (?:minutes?|mins?|hours?|hrs?))|within the (?:hour|day)|(?:by|before) (?:lunch ?time|close of business|cob|close of play|end of play)|(?:at|by|around|before|until) (?:(?:quarter|half) (?:past|to) (?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)|(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) (?:o'?clock|am|pm|fifteen|thirty|forty-?five)))\b/;
+  /\b(?:(?:in|within|after|around|for the next) (?:about |roughly |around |just |only )?(?:half an hour|half hour|an hour|a quarter of an hour|a (?:couple|few) (?:of )?(?:minutes|hours)|(?:one|two|three|four|five|six|ten|fifteen|twenty|thirty|forty-?five|sixty) (?:minutes?|mins?|hours?|hrs?))|within the (?:hour|day)|(?:by|before) (?:lunch ?time|close of business|cob|close of play|end of play)|(?:at|by|around|before|until) (?:(?:quarter|half) (?:past|to) (?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)|(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) (?:o'?clock|am|pm|fifteen|thirty|forty-?five))|(?:every|each) (?:(?:\d+|one|two|three|four|five|six|ten|few|other|couple of|half) )?(?:minutes?|hours?|days?|mornings?|afternoons?|evenings?)|hourly|daily|twice a day)\b/;
 
 function hasTimePhrase(sentence: string): boolean {
   return TIME_PHRASE.test(sentence) || TIME_PHRASE_SPOKEN.test(sentence);
@@ -369,11 +395,14 @@ const RESOLUTION_WORD =
 export const PROMISE_UNVERIFIED_PHRASE =
   /\b(?:i (?:can )?(?:promise|guarantee|assure you)|(?:it|this|that)(?:'ll| will| should) (?:definitely|certainly|absolutely)?\s?(?:be )?(?:fixed|resolved|working|sorted|back)|(?:we|i)(?:'ll| will) (?:definitely|certainly|absolutely) (?:fix|resolve|solve|sort)|no (?:problem|worries),? (?:it|this)(?:'ll| will) be)\b/;
 
+// "I'll check whether it is fixed" asks about an outcome; it does not promise one.
+const OUTCOME_CHECK = /\b(?:whether|if)\b[^.?!,;]{0,40}/g;
+
 export function isUnverifiedPromise(sentence: string): boolean {
   if (PROMISE_REALISTIC.test(sentence)) return false;
   if (PROMISE_UNVERIFIED_PHRASE.test(sentence)) return true;
   return (
-    RESOLUTION_WORD.test(sentence) &&
+    RESOLUTION_WORD.test(sentence.replace(OUTCOME_CHECK, ' ')) &&
     hasTimePhrase(sentence) &&
     /\b(?:will|'ll|should|going to)\b/.test(sentence) &&
     !/\bupdate\b/.test(sentence)
@@ -382,6 +411,10 @@ export function isUnverifiedPromise(sentence: string): boolean {
 
 export const BLAME =
   /\b(?:you (?:should have|shouldn'?t have|need to (?:read|follow|make sure|be more)|failed to|forgot to|were supposed to|must have|probably (?:did|didn'?t|forgot))|(?:your|the customer'?s?) (?:fault|mistake|error|responsibility)|user error|that'?s (?:on you|your (?:side|end|problem|responsibility))|(?:not|isn'?t) (?:our|my) (?:problem|fault|issue|responsibility)|(?:another|other|a different|the) (?:team|department|vendor|provider) (?:is|are|was|were) (?:responsible|to blame|at fault)|(?:it'?s|that'?s) (?:a |an )?(?:network|your network|internal|your it) (?:issue|problem)|you (?:didn'?t|did not) (?:follow|read|tell|check|make sure))\b/;
+
+/** The engineer is playing back what they understood: "So to confirm, you changed your password." */
+export const RECAP_LEAD =
+  /^(?:and |ok(?:ay)?,? |right,? )?(?:so\b|just to (?:confirm|check|clarify|recap|summari[sz]e)|to (?:confirm|recap|summari[sz]e|clarify|check)|let me (?:just )?(?:confirm|recap|summari[sz]e|check|repeat)|if i(?:'ve| have) (?:understood|got)|what i(?:'ve| have) understood|as i understand)/;
 
 export const DISMISSIVE =
   /\b(?:calm down|don'?t worry about it|no (?:big|great) deal|it'?s (?:just|only|simply) (?:a |an )?(?:minor|small|simple|little)|that'?s not (?:a |that |really )?(?:big|major|serious|an issue|a problem|an emergency)|(?:you'?re|you are) (?:over ?reacting|exaggerating)|that (?:shouldn'?t|can'?t|cannot|doesn'?t) (?:be|happen|possible|work that way)|(?:that'?s|it'?s) (?:impossible|not possible)|there'?s nothing (?:i|we) can (?:do|say)|that'?s (?:just|simply) how it (?:works|is)|as i (?:said|told you|already said)|like i (?:said|told you)|i (?:already|have already) (?:told|explained))\b/;
@@ -422,7 +455,7 @@ export const SUMMARISES =
   /\b(?:(?:so|ok(?:ay)?|right|alright),? (?:just )?to (?:summaris|summariz|recap|confirm|make sure|check|clarify)\w*|let me (?:just )?(?:summaris|summariz|recap|repeat|play (?:it|that) back|confirm|make sure i)\w*|to (?:summaris|summariz|recap)\w*|if i(?:'ve| have)? (?:understood|got (?:this|that|it)|heard)|what i(?:'m| am) (?:hearing|understanding)|my understanding is|do i have (?:that|this|it) right|is that (?:right|correct|accurate|fair)|have i (?:got|understood)|so (?:what|if) you'?re saying|so (?:you|it)(?:'re| are| is| was| started|'s| have| had)|sounds like (?:you|it|the)|so (?:basically|essentially)|just so i(?:'m| am) (?:clear|sure|following))\b/;
 
 export const WRAPS_UP =
-  /\b(?:to (?:summaris|summariz|recap|wrap up)\w*|in summary|before (?:we|you) (?:go|finish|end|hang up)|let me (?:just )?(?:confirm|recap|summarise|summarize) (?:what|the|where)|(?:we'?ve|i'?ve) (?:covered|agreed|decided)|what we'?ve agreed|here'?s (?:what|where) (?:we|i)|that'?s (?:everything|all) (?:i|we)|we'?re (?:all )?(?:set|done|good))\b/;
+  /\b(?:to (?:summaris|summariz|recap|wrap up)\w*|in summary|before (?:we|you) (?:go|finish|end|hang up)|let me (?:just )?(?:confirm|recap|summarise|summarize) (?:what|the|where)|(?:we'?ve|i'?ve) (?:covered|agreed|decided)|what we'?ve agreed|here'?s (?:what|where) (?:we|i)(?:'ve| have)|that'?s (?:everything|all) (?:i|we)|we'?re (?:all )?(?:set|done|good))\b/;
 // Asking whether the customer needs anything else. Agreement check-ins such as "does that work?"
 // are not closing behaviour on their own, so they are deliberately not matched here.
 export const ANYTHING_ELSE =
@@ -452,8 +485,9 @@ export const JARGON_EXPLAINED =
 
 export const STRUCTURE_MARKERS =
   /\b(?:first(?:ly)?|then|next|after that|step (?:one|1|two|2)|here'?s (?:what|the plan)|so what (?:i|we)(?:'ll| will)|to (?:explain|summaris\w+|recap)|what (?:i|we)(?:'ll| will) do)\b/;
+// Fillers ("um", "uh") are how people think aloud, not a sign they are unsure, so they are not hedges.
 export const HEDGES =
-  /\b(?:maybe|perhaps|i think|kind of|sort of|probably|i guess|um+|uh+|i suppose|not sure|might be)\b/g;
+  /\b(?:maybe|perhaps|i think|kind of|sort of|probably|i guess|i suppose|not sure|might be)\b/g;
 
 export const STOPWORDS = new Set(
   'about above after again against being below between could doing during each from further have having here itself just more most other over same should some such than that their them then there these they this those through under until very were what when where which while with would your yours about because before just only also into onto upon'.split(
@@ -463,4 +497,163 @@ export const STOPWORDS = new Set(
 
 export function contentWords(text: string): string[] {
   return [...new Set(prep(text).match(/[a-z]{5,}/g) ?? [])].filter((w) => !STOPWORDS.has(w));
+}
+
+// ---------------------------------------------------------------------------------------
+// What the engineer asks the customer for, in any turn. A request is a question or a polite
+// instruction; a statement such as "my name is Sam" never counts.
+
+const REQUEST_SHAPE =
+  /\?\s*$|^(?:and |so |ok(?:ay)?,? |right,? |also |now |just |sorry,? )?(?:what|who|which|where|how|can|could|may|would|will|do|did|is|are|please|tell|give|confirm|spell|read)\b/;
+
+const NAME_NOUN =
+  /\b(?:your|the caller'?s?|the customer'?s?) (?:full |first |last |sur|family )?name\b|\bwho am i (?:speaking|talking) (?:with|to)\b|\bwhat should i call you\b|\bhow (?:would you like|should) (?:me )?to address you\b|\bmay i (?:ask|have|take|get) (?:your|a) name\b|\bwho(?:'s| is) (?:this|calling)\b|\bwhat name (?:should|shall|can|could|do|would) (?:i|we)\b/;
+const ORGANISATION_NOUN =
+  /\b(?:your|the) (?:company|organi[sz]ation|business|employer|firm|practice)(?: name)?\b|\bwhich (?:company|organi[sz]ation|business|firm) (?:are you|do you|is this)\b|\bwho do you work for\b|\bwhere do you work\b|\bwhat company\b|\bwhere are you calling from\b/;
+const ROLE_NOUN =
+  /\b(?:your|the) (?:job title|role|position|job)\b|\bwhat do you do\b|\bwhat(?:'s| is) your (?:job|role|position)\b/;
+const CASE_NOUN =
+  /\b(?:case|ticket|reference|incident|request)(?: |-)?(?:number|no\.?|id|reference|#)\b|\b(?:do you have|have you got|what(?:'s| is)|can you (?:give|tell|read) me|could you (?:give|tell|read) me) (?:a|the|your) (?:case|ticket|reference)\b/;
+
+export interface DetailRequests {
+  name: boolean;
+  organisation: boolean;
+  role: boolean;
+  caseReference: boolean;
+}
+
+/** Which personal details the engineer asked for in this message (already split into sentences). */
+export function detailsAsked(sentences: string[]): DetailRequests {
+  const out: DetailRequests = {
+    name: false,
+    organisation: false,
+    role: false,
+    caseReference: false,
+  };
+  for (const sentence of sentences) {
+    const text = prep(sentence);
+    if (!REQUEST_SHAPE.test(text)) continue;
+    if (NAME_NOUN.test(text)) out.name = true;
+    if (ORGANISATION_NOUN.test(text)) out.organisation = true;
+    if (ROLE_NOUN.test(text)) out.role = true;
+    if (CASE_NOUN.test(text)) out.caseReference = true;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------
+// What kind of question or statement a turn is, apart from the topic it is about. These decide
+// whether asking about something already answered is a repeat or a reasonable follow-up.
+
+/** The engineer checks that they have understood: a summary, or asking for a yes or no. */
+export const CONFIRMATION =
+  /\b(?:is that (?:right|correct|accurate|fair|ok(?:ay)?)|am i (?:right|correct)|have i (?:got|understood) (?:that|this|it)(?: right)?|did i (?:get|understand) (?:that|this|it)(?: right)?|just to confirm|to confirm|can you confirm|could you confirm|just checking|to be sure|to make sure)\b|\b(?:right|correct)\?\s*$/;
+/** The engineer asks what the customer meant, or for more detail about an answer they gave. */
+export const CLARIFICATION =
+  /\b(?:what do you mean|what(?:'s| is) that (?:mean|supposed)|when you say|do you mean|could you (?:clarify|elaborate|expand|be more specific)|can you (?:clarify|elaborate|expand|be more specific)|just to clarify|to clarify|in what way|how do you mean|which one (?:exactly|specifically)|(?:can|could) you tell me more about (?:that|this|it)|more (?:specifically|detail about (?:that|this)))\b/;
+/** The engineer corrects something they said or asked themselves. */
+export const SELF_CORRECTION =
+  /\b(?:sorry,? i meant|what i meant|i meant|let me (?:rephrase|reword|correct|put that differently)|correction|scratch that|ignore that|no,? sorry|i misspoke|i misheard|i misunderstood|my mistake)\b/;
+/** The engineer asks the customer to look something up or confirm it. */
+export const ASKS_TO_CHECK =
+  /\b(?:could|can|would|will) you (?:please |just )?(?:check|confirm|look|find out|have a look|take a look|verify|see (?:if|whether|what))\b|\bare you able to (?:check|confirm|look|find out)\b|\bis it possible (?:for you )?to (?:check|confirm|look)\b|\bwould you mind (?:checking|looking)\b/;
+/** A short yes: the engineer answering the customer's "so you'll do that?". */
+export const AFFIRMS =
+  /^(?:yes|yeah|yep|yup|correct|that'?s (?:right|correct|it)|exactly|right|absolutely|sure|of course|you(?:'ve| have) got it|that'?s what i said)\b/;
+
+// ---------------------------------------------------------------------------------------
+// What each call stage expects of the engineer (brief section 23).
+
+/** Follow-up and escalated calls: the engineer knows about the earlier contact. */
+export const PRIOR_CONTEXT =
+  /\b(?:(?:i|we)(?:'ve| have)? (?:can )?(?:see|seen|read|reviewed|looked at|checked) (?:that |the |your )?(?:case|notes|history|earlier|previous|ticket|you)|case notes|you (?:called|contacted|raised|reported|rang|emailed|spoke to us)(?: us)? (?:yesterday|earlier|last|on|before|in)|following up on (?:your|the)|(?:as|from) (?:the |our )?(?:previous|earlier|last) (?:call|contact|conversation)|since (?:yesterday|your (?:last|previous) call)|your (?:case|ticket|earlier call|previous call|report))\b/;
+/** Escalated calls: the engineer acknowledges what the customer has already been through. */
+export const ACKNOWLEDGES_HISTORY =
+  /\b(?:sorry (?:that )?you(?:'ve| have)(?: had to| been)|(?:i|we) (?:can )?see (?:that )?you(?:'ve| have)|you(?:'ve| have)(?: already)? (?:contacted|called|raised|reported|spoken|had to (?:call|chase|contact))|(?:this|it) (?:has|had|has already|had already) been (?:escalated|raised|logged)|(?:second|third|previous|earlier|last|repeated) (?:call|contact|time|calls|contacts)|(?:apologi[sz]e|sorry) for (?:the |this |that |your )?(?:earlier|previous|last|delay|wait|experience|inconvenience|repeated|trouble)|(?:read|reviewed|looked at|seen) (?:the|your) (?:case|notes|history)|case notes|not (?:the )?(?:service|experience) you should have had)\b/;
+/** Follow-up calls: the engineer gives the customer a progress update. */
+export const GIVES_UPDATE =
+  /\b(?:(?:an |the )?update (?:on|for|from)|here(?:'s| is) (?:an |the )?update|where (?:we|things|the case) (?:are|stand)|progress (?:so far|on)|the (?:latest|current status)|the (?:engineers?|team|specialists?) (?:have|has|are|is|found|confirmed|identified|worked|looked)|we(?:'ve| have) (?:found|identified|confirmed|escalated|checked|looked|made progress|been (?:working|investigating))|(?:i|we)(?:'ve| have) (?:an|some) (?:update|news)|so far (?:we|i)|(?:what|where) (?:we|i) (?:know|have got) so far)\b/;
+/** Escalated calls: the engineer says what the escalation is and who now has the case. */
+export const EXPLAINS_ESCALATION =
+  /\bescalat\w*\b[^.?!]{0,70}\b(?:to|with|team|engineers?|specialists?|senior|tier|level|means|so that|who will|they will|queue|priority)\b|\bwhat (?:escalation|escalating) means\b|\b(?:senior|specialist|escalation|resolver) (?:engineers?|team|support|group)\b/;
+/** Escalated calls: how often the customer will hear from the engineer. */
+export const CADENCE =
+  /\b(?:every|each) (?:\w+ )?(?:hour|hours|half hour|30 minutes|day|morning|afternoon|few hours)\b|\b(?:hourly|daily|twice a day|regular updates?|regular check-?ins?)\b|\bupdate you (?:every|each|daily|hourly)\b/;
+/** Closure calls: the engineer checks that the problem is really gone. */
+export const CONFIRMS_RESOLUTION =
+  /\b(?:is it|is everything|are you|has it|have you|does it|did it|can you confirm(?: that)?|could you confirm(?: that)?) (?:still )?(?:working|resolved|fixed|sorted|signing in|signed in|able to (?:sign|log|open|access|join)|(?:back )?to normal)\b|\bis the (?:issue|problem) (?:resolved|fixed|sorted|gone)\b|\b(?:confirm|check) (?:that )?(?:it(?:'s| is)|everything(?:'s| is)|you(?:'re| are)) (?:working|resolved|fixed|sorted)\b/;
+/** Closure calls: the engineer checks the customer agrees the case can be closed. */
+export const ASKS_AGREEMENT =
+  /\b(?:happy|comfortable|ok(?:ay)?|alright|ready|fine) (?:for (?:us|me) )?(?:to|if (?:we|i)) (?:close|resolve|wrap)\b|\b(?:are you|would you be) (?:happy|comfortable|ok(?:ay)?|alright) (?:with|for) (?:closing|us to close|the case (?:being )?closed)\b|\bagree (?:to|that we) close\b|\b(?:shall|can|may) (?:we|i) (?:go ahead and )?close\b|\bdo you agree\b/;
+/** Closure calls: a short explanation of what happened or what changed. */
+export const EXPLAINS_CAUSE =
+  /\b(?:the (?:cause|reason|root cause)|what (?:happened|changed|caused)|it (?:turned out|was (?:caused|because))|this (?:happened|was) (?:because|due)|that was (?:because|due)|(?:was|were) (?:caused|due) (?:by|to)|because (?:the|a|an|your|our))\b/;
+/** Asking the customer to start again from the beginning, which a repeat caller does not welcome. */
+export const FROM_SCRATCH =
+  /\b(?:from (?:the )?(?:beginning|start|scratch)|start (?:again|over)|tell me (?:everything|the whole (?:story|thing)) again|go (?:through|over) (?:it|everything|the whole thing) again|walk me through (?:it|everything) again|explain (?:it|everything|the whole thing) (?:to me )?again)\b/;
+/** Steps an expert has already done before calling. */
+export const BASICS =
+  /\b(?:restart|reboot|turn(?:ed)? (?:it|that|the \w+) off and (?:on|back on)|power cycle|clear (?:the |your )?(?:browser )?cache|check (?:your|the) (?:internet|connection|wi-?fi|cable)|is it plugged in|are you connected to the internet|have you tried (?:restarting|rebooting|turning))\b/;
+/** Technical products and terms a non-technical customer would not know (their own product excluded). */
+export const TECHNICAL_NAMES =
+  /\b(?:entra(?: id)?|azure ad|intune|defender|exchange online|power platform|power automate|power apps|conditional access|admin cent(?:er|re)|admin portal|tenant|mdm)\b/i;
+
+/** The first technical term, product name or acronym in the engineer's own words, or null. */
+const ACRONYM_SKIP = new Set(
+  'OK AM PM IT HR UK US ID PC TV VIP FAQ ASAP EOD FYI CEO CFO COO SIM USB'.split(' '),
+);
+export function unfamiliarTerm(original: string): string | null {
+  for (const match of original.matchAll(/\b[A-Z]{2,5}\b/g)) {
+    if (!ACRONYM_SKIP.has(match[0])) return match[0];
+  }
+  const technical = original.match(TECHNICAL_NAMES)?.[0];
+  if (technical) return technical;
+  const jargon = original.match(new RegExp(JARGON_TERMS.source, 'i'))?.[0];
+  return jargon ?? null;
+}
+
+// ---------------------------------------------------------------------------------------
+// What the customer expects of the engineer, in any stage (see expectation.ts).
+
+/** The engineer says what is going on, in their own words. */
+export const EXPLAINS_SITUATION =
+  /\b(?:what(?:'s| is) (?:happening|going on)|what (?:this|that|it) means|(?:it|this|that) (?:looks|sounds|seems|appears) (?:like|as if|to be)|(?:it|this|that) (?:means|is (?:because|due|caused)|could be|may be|might be)|(?:the|a) (?:likely |probable |possible )?(?:cause|reason|explanation) (?:is|was|could|may|might)|in (?:plain|simple) (?:words|terms|english)|what (?:happens|happened) is|basically|so what (?:happened|is happening))\b/;
+/** The engineer offers a way to carry on in the meantime. */
+export const OFFERS_INTERIM =
+  /\b(?:in the meantime|meanwhile|until (?:then|we|it(?:'s| is)|the (?:cause|fix))|for now|in the interim|temporary (?:fix|solution|workaround|way)|work ?around|stop-?gap|keep (?:working|going)|carry on (?:working|with)|you can (?:still|keep|use|work)|something (?:simple |quick )?(?:you|he|she) can try)\b/;
+
+// ---------------------------------------------------------------------------------------
+// Commitments: the time a promise names. The patterns above classify a sentence; this pulls out
+// the words the customer would repeat back ("by 3pm", "in an hour").
+
+const WEEKDAY = '(?:mon|tues|wednes|thurs|fri|satur|sun)day(?: (?:morning|afternoon))?';
+const CLOCK_WORD = '(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)';
+const DUE_PHRASES: RegExp[] = [
+  new RegExp(
+    String.raw`\b(?:by|before|at|around|until|after) (?:the )?(?:end of (?:the )?(?:day|today|business|week)|eod|cob|close of business|noon|midday|tomorrow(?: (?:morning|afternoon|evening))?|today|tonight|${WEEKDAY}|this (?:morning|afternoon|evening)|\d{1,2}(?::\d{2})?\s?(?:am|pm|o'?clock)?|${CLOCK_WORD}(?: o'?clock)?(?: (?:am|pm))?)\b`,
+  ),
+  new RegExp(
+    String.raw`\b(?:in|within|after|for the next) (?:about |roughly |around |just |only )?(?:half an hour|an hour|a couple of hours|a few hours|a quarter of an hour|\d+ ?(?:minutes?|mins?|hours?|hrs?|days?)|(?:one|two|three|four|five|ten|fifteen|twenty|thirty|forty-?five|sixty) (?:minutes?|hours?))\b`,
+  ),
+  /\b(?:tomorrow(?: (?:morning|afternoon))?|later today|first thing(?: tomorrow| in the morning)?|this (?:morning|afternoon|evening)|tonight)\b/,
+  /\b(?:every|each) (?:(?:\d+|one|two|three|four|five|six|ten|few|other|couple of|half) )?(?:minutes?|hours?|days?|mornings?|afternoons?|evenings?)\b|\b(?:hourly|daily|twice a day)\b/,
+  /\b\d{1,2}(?::\d{2})? ?(?:am|pm)\b/,
+];
+
+/** The time phrase of a promise as the engineer said it, or null when it names no time. */
+export function timePhraseIn(sentence: string): string | null {
+  const lower = prep(sentence);
+  let best: { index: number; text: string } | null = null;
+  for (const pattern of DUE_PHRASES) {
+    const found = pattern.exec(lower);
+    if (!found) continue;
+    if (
+      !best ||
+      found.index < best.index ||
+      (found.index === best.index && found[0].length > best.text.length)
+    ) {
+      best = { index: found.index, text: found[0] };
+    }
+  }
+  return best ? best.text.trim() : null;
 }

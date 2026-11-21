@@ -1,61 +1,28 @@
-import type { CommunicationStyle } from '#shared/domain/vocab.ts';
 import type { HiddenFact } from '#shared/domain/scenario.ts';
-import { unlockedKnownFacts, type TellItem, type WithholdReason } from '../engine/discovery.ts';
+import { unlockedKnownFacts } from '../engine/discovery.ts';
 import type { CustomerGenerationContext } from '../engine/pipeline.ts';
+import { isSilent, planReply, type Sayable } from '../engine/plan.ts';
+import { recordNotes } from '../engine/record.ts';
 import { firstSentenceOf } from '../engine/textutil.ts';
 
 // Which facts a customer request may contain, and how to check that a reply stays inside them.
 //
 // The rule: a hidden fact the trainee has not earned must not appear anywhere in a request: not its
 // statement, label, id or hint, and not as a "do not mention" list. The prompt builder reads hidden
-// facts only through `sayableThisTurn` and `alreadyShared`, so nothing else about them is in reach.
+// facts only through the engine's plan (`planReply`, which holds exactly what the customer may say
+// in this reply) and `alreadyShared`, so nothing else about them is in reach.
 //
 // `factPolicy` is the second line of defence. Scenario notes can restate a hidden fact (a setup
 // detail that gives the cause away, for example), and a model can still guess. The policy screens
-// such lines before they are sent and checks the reply for details that only an unearned fact holds.
+// such lines before they are sent and checks the reply for details that only an unearned fact holds,
+// and for specifics given in answer to something the customer does not know.
 
-export function isSilent(ctx: CustomerGenerationContext): boolean {
-  return ctx.curveball.fired?.type === 'go-silent' || ctx.runtime.customer.silentUntilEngaged;
-}
-
-export interface Sayable {
-  kind: 'full' | 'partial' | 'known' | 'hint';
-  text: string;
-  /** Optional extra colour for a talkative customer. */
-  colour?: string;
-}
-
-function fullStatement(fact: HiddenFact, style: CommunicationStyle): string {
-  if (style === 'terse') return fact.statementTerse ?? firstSentenceOf(fact.statement);
-  if (style === 'non-native') return fact.statementSimple ?? fact.statement;
-  return fact.statement;
-}
-
-function knownText(item: TellItem, style: CommunicationStyle): { text: string; colour?: string } {
-  if (style === 'terse') return { text: firstSentenceOf(item.text) };
-  if (style === 'non-native') return { text: item.simple ?? item.text };
-  if (style === 'talkative' && item.elaboration) {
-    return { text: item.text, colour: item.elaboration };
-  }
-  return { text: item.text };
-}
+export { isSilent };
+export type { Sayable };
 
 /** The only facts the customer may state in this reply: what the engine decided to reveal or tell. */
 export function sayableThisTurn(ctx: CustomerGenerationContext): Sayable[] {
-  if (isSilent(ctx) || ctx.classification.injectionAttempt) return [];
-  const style = ctx.scenario.config.style;
-  const items: Sayable[] = [];
-  for (const { fact, mode } of ctx.discovery.reveal) {
-    if (mode === 'full') items.push({ kind: 'full', text: fullStatement(fact, style) });
-    else if (fact.partialStatement) items.push({ kind: 'partial', text: fact.partialStatement });
-  }
-  for (const item of ctx.discovery.tell) {
-    if (!item.repeat) items.push({ kind: 'known', ...knownText(item, style) });
-  }
-  for (const fact of ctx.discovery.hints) {
-    if (fact.hint) items.push({ kind: 'hint', text: fact.hint });
-  }
-  return items;
+  return planReply(ctx).say;
 }
 
 // Mirrors the text that discovery.ts uses when the trainee asks about earlier contact.
@@ -68,17 +35,30 @@ function historyText(ctx: CustomerGenerationContext): string {
 
 function toldText(ctx: CustomerGenerationContext, id: string): string | null {
   const { scenario, runtime } = ctx;
+  if (id === 'impact') return scenario.impactVariant.summary;
   if (id === 'impact-detail') return scenario.impactVariant.detail;
   if (id === 'impact-deadline')
     return scenario.impactVariant.deadline ?? scenario.impactVariant.detail;
   if (id === 'history') return historyText(ctx);
+  if (id === 'prior-attempts') return recordNotes('tried', scenario, runtime).join(' ') || null;
+  if (id === 'recent-changes') return recordNotes('changes', scenario, runtime).join(' ') || null;
   if (id.startsWith('assumption-')) {
     return (
       scenario.incorrectAssumptions.find((a) => `assumption-${a.id}` === id)?.statement ?? null
     );
   }
+  const firm = id.endsWith('#confirmed');
+  const base = firm ? id.slice(0, -'#confirmed'.length) : id;
   const known = [...scenario.knownFacts, ...unlockedKnownFacts(scenario, runtime)];
-  return known.find((f) => f.id === id)?.text ?? null;
+  const vague = scenario.vagueFacts.find((f) => f.id === base);
+  return (
+    known.find((f) => f.id === base)?.text ??
+    (vague ? (firm ? (vague.confirmedText ?? vague.text) : vague.text) : null) ??
+    scenario.checkableFacts.find((f) => f.id === base)?.text ??
+    scenario.unknownFacts.find((f) => f.id === base)?.text ??
+    scenario.irrelevantFacts.find((f) => f.id === base)?.text ??
+    null
+  );
 }
 
 /** What the customer has already said in earlier turns, for consistency. */
@@ -100,12 +80,6 @@ export function alreadyShared(ctx: CustomerGenerationContext): string[] {
     if (text) lines.push(text);
   }
   return lines;
-}
-
-/** Why the customer is holding something back, without saying what it is. */
-export function withheldReasons(ctx: CustomerGenerationContext): WithholdReason[] {
-  if (isSilent(ctx) || ctx.classification.injectionAttempt) return [];
-  return [...new Set(ctx.discovery.withheld.map((w) => w.reason))];
 }
 
 // ---------------------------------------------------------------------------------------
@@ -285,16 +259,54 @@ function exemptText(ctx: CustomerGenerationContext): string {
     ]),
     ...ctx.history.map((t) => t.text),
     ctx.traineeText,
-    ...sayableThisTurn(ctx).flatMap((item) => [item.text, item.colour ?? '']),
+    ...sayableThisTurn(ctx).flatMap((item) => [
+      item.text,
+      item.colour ?? '',
+      item.checking ?? '',
+      item.whoKnows ?? '',
+    ]),
     ...alreadyShared(ctx),
   ].join('\n');
 }
+
+// Ways of saying "I don't have that": a reply to a question the customer cannot answer has one.
+const DONT_KNOW =
+  /\b(?:don'?t|do not|didn'?t|did not|doesn'?t|can'?t|cannot|couldn'?t|could not|wouldn'?t|haven'?t|have not|hasn'?t|no idea|not sure|unsure|no clue|not something|not one for me|one for|would know|would be able|have to ask|need to ask|ask (?:our|the|my)|off the top of my head|to hand|in front of me)\b/i;
+
+// What the customer may say in a reply that is an answer, as opposed to a clue, an aside or a belief.
+const ANSWER_KINDS: ReadonlySet<string> = new Set([
+  'known',
+  'vague',
+  'vague-firm',
+  'checkable',
+  'full',
+  'partial',
+  'record',
+  'detail',
+  'impact',
+  'reason',
+  'reminder',
+]);
 
 export interface FactPolicy {
   /** The reply states a number, code, name or phrase that only an unearned hidden fact contains. */
   leaks(text: string): boolean;
   /** The line is too close to an unearned hidden fact to show the model. */
   restates(text: string): boolean;
+  /**
+   * The reply gives a number or name that nothing in the call supports, in a reply that was also
+   * asked about something the customer does not know. When the unknown thing is all there is to
+   * answer, the reply must also say that the customer does not know it.
+   */
+  invents(text: string): boolean;
+  /** The text gives a number, code or name that nothing in the call supports. */
+  unsupported(text: string): boolean;
+  /** The customer has something they do not know to answer, and nothing else to answer with. */
+  mustAdmit(): boolean;
+  /** The text says, in some words, that the customer does not know or does not have it. */
+  admits(text: string): boolean;
+  /** The scenario's own first sentence for what the customer does not know, if the plan has one. */
+  admission(): string | null;
 }
 
 export function factPolicy(ctx: CustomerGenerationContext): FactPolicy {
@@ -308,6 +320,12 @@ export function factPolicy(ctx: CustomerGenerationContext): FactPolicy {
 
   const leaked = (t: FactTerms, a: Analysis) =>
     count(t.phrases, a.phrases) > 0 || count(t.singles, a.tokens) > 0;
+  const say = planReply(ctx).say;
+  const unknown = say.find((item) => item.kind === 'unknown');
+  const mustAdmit = unknown !== undefined && !say.some((item) => ANSWER_KINDS.has(item.kind));
+  const unsupported = (text: string) =>
+    [...analyse(text).singles].some((token) => !exempt.tokens.has(token));
+  const admits = (text: string) => DONT_KNOW.test(text);
   return {
     leaks: (text) => {
       const a = analyse(text);
@@ -317,5 +335,10 @@ export function factPolicy(ctx: CustomerGenerationContext): FactPolicy {
       const a = analyse(text);
       return unearned.some((t) => leaked(t, a) || count(t.words, a.tokens) >= 2);
     },
+    invents: (text) => unknown !== undefined && (unsupported(text) || (mustAdmit && !admits(text))),
+    unsupported: (text) => unknown !== undefined && unsupported(text),
+    mustAdmit: () => mustAdmit,
+    admits,
+    admission: () => (unknown ? firstSentenceOf(unknown.text) : null),
   };
 }

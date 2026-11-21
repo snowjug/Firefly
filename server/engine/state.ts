@@ -9,6 +9,10 @@ import {
   type StateKey,
 } from '#shared/domain/state.ts';
 import { FACT_WEIGHT, type DiscoveryIntent } from '#shared/domain/vocab.ts';
+import type { TurnKind } from './discovery.ts';
+import { expectationEffects } from './expectation.ts';
+import type { TurnAnalysis } from './memory.ts';
+import { stageEffects } from './stage.ts';
 import type { EngineRuntime } from './types.ts';
 
 // The customer-state engine. Given what the trainee did (a classification), it decides how the
@@ -17,9 +21,13 @@ import type { EngineRuntime } from './types.ts';
 
 export interface TurnAssessment {
   c: TurnClassification;
-  repeated: boolean; // every topic asked about had already been answered
+  repeated: boolean; // a real repeat of a question the customer had already answered
+  kind: TurnKind; // repeat, follow-up, summary, confirmation, correction...
   newInfoCount: number; // pieces of information the customer gave this turn
   answeredIntents: DiscoveryIntent[];
+  /** The customer answered from what the case already records: earlier contact, what was tried. */
+  fromRecord: boolean;
+  analysis: TurnAnalysis; // commitments, summary check, stage signals
 }
 
 export interface StateTurnInput {
@@ -28,6 +36,8 @@ export interface StateTurnInput {
   assessment: TurnAssessment;
   turnIndex: number; // conversation index of this trainee turn
   traineeTurnNumber: number; // 1-based count of trainee turns including this one
+  /** The engineer's turn number, not counting a first exchange that was only a greeting. */
+  effectiveTurn: number;
 }
 
 export interface Effect {
@@ -85,18 +95,39 @@ function quoteFor(c: TurnClassification, behaviours: EvidenceBehaviour[]): strin
   return c.evidence.find((e) => behaviours.includes(e.behaviour))?.quote;
 }
 
+export interface TurnEffects {
+  effects: Effect[];
+  /** Stage expectations met for the first time in this turn. */
+  stageMet: string[];
+}
+
 /** What the trainee's behaviour means for the customer, before any scaling. */
 export function effectsForTurn(input: StateTurnInput): Effect[] {
-  const { scenario, runtime, assessment, traineeTurnNumber } = input;
-  const c = assessment.c;
+  return buildEffects(input).effects;
+}
+
+function buildEffects(input: StateTurnInput): TurnEffects {
+  const { scenario, runtime, assessment, traineeTurnNumber, effectiveTurn: n } = input;
+  const { c, analysis } = assessment;
   const state = runtime.customer;
   const effects: Effect[] = [];
   const cfg = scenario.config;
   const unclearUrgency = cfg.impact === 'high' || state.urgency >= 70;
+  const sensitive =
+    unclearUrgency || cfg.startingTemperature !== 'calm' || cfg.style === 'demanding';
+  // An owner, an action and a time, said in a way the engineer can keep to.
+  const keepsPromise = Boolean(
+    analysis.commitment?.supported && analysis.commitment.clarity === 'clear',
+  );
+  const unsupportedTimeOnly = c.promise === 'unverified' && !keepsPromise;
+  const jargon =
+    c.jargon === 'none' && cfg.proficiency === 'novice' && analysis.term !== null
+      ? 'unexplained'
+      : c.jargon;
 
   if (c.injectionAttempt) {
     // Asking the customer to leave the role earns nothing and costs nothing.
-    return effects;
+    return { effects, stageMet: [] };
   }
 
   if (traineeTurnNumber === 1 && c.introduces) {
@@ -170,14 +201,42 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
     });
   }
 
-  if (c.summarises) {
+  if (c.summarises || analysis.wording === 'confirmation') {
+    if (analysis.summary.verdict === 'inaccurate') {
+      effects.push({
+        category: 'summary',
+        reason: 'The summary did not match what the customer had said',
+        quote: quoteFor(c, ['summary']),
+        temperature: 3,
+        trust: -3,
+        clarification: -8,
+      });
+    } else if (c.summarises) {
+      effects.push({
+        category: 'summary',
+        reason: 'Summarised their understanding',
+        quote: quoteFor(c, ['summary']),
+        temperature: -4,
+        trust: 4,
+        clarification: 10,
+      });
+    } else {
+      effects.push({
+        category: 'clarity',
+        reason: 'Checked that they had understood',
+        temperature: -1,
+        clarification: 4,
+      });
+    }
+  } else if (assessment.kind === 'clarification' || assessment.kind === 'correction') {
     effects.push({
-      category: 'summary',
-      reason: 'Summarised their understanding',
-      quote: quoteFor(c, ['summary']),
-      temperature: -4,
-      trust: 4,
-      clarification: 10,
+      category: 'clarity',
+      reason:
+        assessment.kind === 'correction'
+          ? 'Put right something they had said'
+          : 'Asked the customer to clarify an answer',
+      temperature: -1,
+      clarification: 4,
     });
   }
 
@@ -201,7 +260,9 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
     });
   }
 
-  if (c.nextSteps === 'specific') {
+  // A time only calms when it belongs to something the engineer will do. A promise about the
+  // outcome ("it will be fixed by three") names a time too, but it is not a plan.
+  if (c.nextSteps === 'specific' && !unsupportedTimeOnly) {
     effects.push({
       category: 'next-steps',
       reason: 'Gave specific next steps with a time',
@@ -213,10 +274,19 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
   } else if (c.nextSteps === 'vague' && c.ownership !== 'clear') {
     effects.push({
       category: 'next-steps',
-      reason: 'Next steps were vague',
+      reason: 'Gave a vague timeline',
       quote: quoteFor(c, ['next-steps-vague']),
-      temperature: unclearUrgency ? 2 : 0,
-      patience: unclearUrgency ? -4 : -1,
+      temperature: sensitive ? 2 : 1,
+      patience: sensitive ? -4 : -2,
+    });
+  }
+  if (analysis.conflict) {
+    effects.push({
+      category: 'next-steps',
+      reason: 'The time given changed from what was promised earlier',
+      temperature: 3,
+      trust: -4,
+      confidence: -3,
     });
   }
 
@@ -266,7 +336,7 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
     });
   }
 
-  if (c.jargon === 'unexplained') {
+  if (jargon === 'unexplained') {
     const sentences = c.evidence.filter((e) => e.behaviour === 'jargon-unexplained').length;
     if (cfg.proficiency === 'novice') {
       effects.push({
@@ -318,7 +388,7 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
 
   const earlyUnscopedFix =
     c.troubleshooting &&
-    traineeTurnNumber <= 2 &&
+    n <= 2 &&
     !state.impactAcknowledged &&
     !c.acknowledgesImpact &&
     Object.keys(runtime.discovery).length === 0 &&
@@ -332,9 +402,19 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
       trust: -4,
       patience: -3,
     });
+  } else if (analysis.basics && c.troubleshooting && cfg.proficiency === 'expert') {
+    effects.push({
+      category: 'premature-troubleshooting',
+      reason: 'Suggested basic steps the customer would already have tried',
+      quote: quoteFor(c, ['troubleshooting']),
+      temperature: 3,
+      trust: -2,
+      patience: -3,
+    });
   }
 
-  if (c.lowEffort) {
+  // A short yes to "so you'll call me at three?" is the answer to a question, not a thin reply.
+  if (c.lowEffort && !analysis.confirmsEcho) {
     effects.push({
       category: 'low-effort',
       reason: 'A very short reply that moved nothing forward',
@@ -342,7 +422,7 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
     });
   }
 
-  if ((c.wrapsUp || c.confirmsNextContact || c.asksAnythingElse) && traineeTurnNumber >= 3) {
+  if ((c.wrapsUp || c.confirmsNextContact || c.asksAnythingElse) && n >= 3) {
     effects.push({
       category: 'closing',
       reason: 'Closed with a summary or a check that everything is clear',
@@ -352,18 +432,27 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
     });
   }
 
-  if (
-    !state.impactAcknowledged &&
-    !c.acknowledgesImpact &&
-    (traineeTurnNumber === 3 || traineeTurnNumber === 6)
-  ) {
+  if (!state.impactAcknowledged && !c.acknowledgesImpact && (n === 3 || n === 6)) {
     effects.push({
       category: 'impact',
-      reason: `The impact still had not been acknowledged after ${traineeTurnNumber} replies`,
-      temperature: traineeTurnNumber === 3 ? 4 : 3,
+      reason: `The impact still had not been acknowledged after ${n} replies`,
+      temperature: n === 3 ? 4 : 3,
       patience: -4,
     });
   }
+
+  const stage = stageEffects({
+    scenario,
+    runtime,
+    signals: analysis.stage,
+    c,
+    effectiveTurn: n,
+    fromRecordOnly: assessment.fromRecord && assessment.newInfoCount === 0,
+    repeated: assessment.repeated,
+  });
+  effects.push(...stage.effects);
+  const expectation = expectationEffects({ scenario, runtime, c, analysis, effectiveTurn: n });
+  effects.push(...expectation.effects);
 
   const progressCategories = new Set([
     'discovery',
@@ -373,13 +462,12 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
     'next-steps',
     'summary',
     'closing',
+    'rapport',
   ]);
-  const madeProgress = effects.some(
-    (e) =>
-      progressCategories.has(e.category) &&
-      (e.temperature ?? 0) <= 0 &&
-      e.reason !== 'Next steps were vague',
-  );
+  // Saying hello when the customer has only said hello is not a wasted turn.
+  const madeProgress =
+    analysis.greetingOnly ||
+    effects.some((e) => progressCategories.has(e.category) && (e.temperature ?? 0) <= 0);
   if (!madeProgress && !c.blame && !c.dismissive) {
     effects.push({
       category: 'delay',
@@ -420,7 +508,7 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
 
   if (
     unclearUrgency &&
-    traineeTurnNumber >= 5 &&
+    n >= 5 &&
     !state.nextStepsStated &&
     c.nextSteps !== 'specific' &&
     traineeTurnNumber - runtime.asksForTimelineAtTurn >= 2
@@ -433,7 +521,7 @@ export function effectsForTurn(input: StateTurnInput): Effect[] {
     });
   }
 
-  return effects;
+  return { effects, stageMet: [...stage.met, ...expectation.met] };
 }
 
 interface Modifier {
@@ -553,12 +641,14 @@ export function applyEffects(
 export interface StateTurnResult extends ApplyResult {
   streaks: Record<string, number>;
   turnsWithoutEmpathy: number;
+  /** Stage expectations met for the first time in this turn (see stage.ts). */
+  stageMet: string[];
 }
 
 export function applyTraineeTurn(input: StateTurnInput): StateTurnResult {
   const { scenario, runtime, assessment, turnIndex } = input;
-  const c = assessment.c;
-  const effects = effectsForTurn(input);
+  const { c, analysis } = assessment;
+  const { effects, stageMet } = buildEffects(input);
   const { customer, events } = applyEffects(
     runtime.customer,
     effects,
@@ -567,19 +657,31 @@ export function applyTraineeTurn(input: StateTurnInput): StateTurnResult {
     runtime.behaviourStreak,
   );
 
+  const keepsPromise = Boolean(
+    analysis.commitment?.supported && analysis.commitment.clarity === 'clear',
+  );
   if (c.acknowledgesImpact && !c.injectionAttempt) customer.impactAcknowledged = true;
   if (c.ownership === 'clear') customer.ownershipStated = true;
-  if (c.nextSteps === 'specific') customer.nextStepsStated = true;
+  // A time that only belongs to a promise about the outcome is not a next step.
+  if (c.nextSteps === 'specific' && (c.promise !== 'unverified' || keepsPromise)) {
+    customer.nextStepsStated = true;
+  }
   customer.discoveryCoverage = weightedCoverage(scenario, runtime);
 
   const streaks: Record<string, number> = {};
   for (const e of effects) streaks[e.category] = (runtime.behaviourStreak[e.category] ?? 0) + 1;
 
-  const addressedFeelings = c.empathy !== 'none' || c.acknowledgesImpact || c.ownership === 'clear';
+  // Saying hello to a customer who has only said hello does not leave their feelings unaddressed.
+  const addressedFeelings =
+    c.empathy !== 'none' ||
+    c.acknowledgesImpact ||
+    c.ownership === 'clear' ||
+    analysis.greetingOnly;
   return {
     customer,
     events,
     streaks,
     turnsWithoutEmpathy: addressedFeelings ? 0 : runtime.turnsWithoutEmpathy + 1,
+    stageMet,
   };
 }

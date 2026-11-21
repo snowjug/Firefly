@@ -264,6 +264,16 @@ describe('rules classifier: summaries, closing and clarity', () => {
     expect(c.asksAnythingElse).toBe(true);
   });
 
+  it('does not take a progress update or a plan for the end of the call', () => {
+    for (const update of [
+      "Here's where we are: the team has confirmed what's behind it and we're working on a fix.",
+      "Here's what I'll do next: I'll call you at 3pm with an update.",
+    ]) {
+      expect(classify(update).wrapsUp, update).toBe(false);
+    }
+    expect(classify("Here's what we've agreed: I'll call you at 3pm.").wrapsUp).toBe(true);
+  });
+
   it('does not treat an agreement check as asking whether anything else is needed', () => {
     expect(
       classify("I'll call you back at 10:15 with an update. Does that work?").asksAnythingElse,
@@ -336,6 +346,41 @@ describe('rules classifier: everyday phrasing', () => {
     }
   });
 
+  it('matches a cue at the start of a word, never inside another word', () => {
+    // The cue may continue (a stem): "change" is found in "changed", "reinstall" in "reinstalled".
+    expect(cueMatches('did anything change this morning?', 'change')).toBe(true);
+    expect(cueMatches('has anyone changed the settings?', 'change')).toBe(true);
+    expect(cueMatches('have you reinstalled it yet?', 'reinstall')).toBe(true);
+    expect(cueMatches('what is the likely cause?', 'cause')).toBe(true);
+    expect(cueMatches('is the load balancer involved?', 'load')).toBe(true);
+    // It is not found where it is only part of a longer word.
+    expect(cueMatches('is this an exchange mailbox?', 'change')).toBe(false);
+    expect(cueMatches('it failed because of the update', 'cause')).toBe(false);
+    expect(cueMatches('did the upload finish?', 'load')).toBe(false);
+    expect(cueMatches('is it a smartphone?', 'phone')).toBe(false);
+    // A cue of several words still tolerates up to two words between them.
+    expect(cueMatches('is it possible to roll that change back?', 'roll back')).toBe(true);
+    expect(cueMatches('is it signed in anywhere else?', 'signed in anywhere')).toBe(true);
+    expect(cueMatches('is it designed in anywhere?', 'signed in anywhere')).toBe(false);
+  });
+
+  it('does not reveal a fact because a cue sits inside another word', () => {
+    const cued = {
+      ...scenario,
+      hiddenFacts: scenario.hiddenFacts.map((f) =>
+        f.id === 'hf-reset-timing'
+          ? { ...f, intents: ['account_details' as const], cues: ['change'] }
+          : f,
+      ),
+    };
+    const target = (text: string) =>
+      classifyTurnRules(text, { scenario: cued, traineeTurnNumber: 3 }).factTargets.some(
+        (t) => t.id === 'hf-reset-timing',
+      );
+    expect(target('Is the Exchange mailbox working for you?')).toBe(false);
+    expect(target('Did anything change before it stopped?')).toBe(true);
+  });
+
   it('finds a fact when the cue is worded with a word or two in between', () => {
     const c = classify('Is your work email also set up on any other kind of device?');
     expect(c.factTargets).toContainEqual({ id: 'hf-phone-old-password', strength: 'full' });
@@ -364,6 +409,22 @@ describe('rules classifier: everyday phrasing', () => {
       expect(c.discoveryIntents, text).toEqual([]);
       expect(c.factTargets, text).toEqual([]);
     }
+  });
+
+  it('treats only a bare greeting as small talk, so real questions that begin alike still reach discovery', () => {
+    for (const text of ['How are you?', 'How are you doing today?', 'How is your morning going?']) {
+      const c = classify(text);
+      expect(c.askedQuestion, text).toBe(true);
+      expect(c.discoveryIntents, text).toEqual([]);
+    }
+    expect(classify('How are you managing in the meantime?').discoveryIntents).toContain(
+      'workaround',
+    );
+    expect(classify('How are you affected by this?').discoveryIntents).toContain('affected_scope');
+    // The same holds for the agreement checks: only the check itself is housekeeping.
+    expect(classify('Does it work on your phone?').discoveryIntents).toContain('workaround');
+    expect(classify('Does that make sense?').discoveryIntents).toEqual([]);
+    expect(classify('Is that clear so far?').discoveryIntents).toEqual([]);
   });
 
   it('still counts a real question that sits beside a housekeeping one', () => {
@@ -443,6 +504,85 @@ describe('rules classifier: everyday phrasing', () => {
     }
     for (const text of ["I'll look into it.", "I'll call you back soon."]) {
       expect(classify(text).nextSteps, text).not.toBe('specific');
+    }
+  });
+});
+
+describe('rules classifier: wording found while playing real calls', () => {
+  it('does not read an observation about the case as taking it on', () => {
+    expect(classify('I can see your case from yesterday.').ownership).toBe('none');
+    expect(classify('I can see what we can do about that.').ownership).toBe('vague');
+  });
+
+  it('tells a question about earlier contact from a question about what was tried', () => {
+    const topics = (text: string) => classify(text).discoveryIntents;
+    for (const text of [
+      'Have you contacted us before?',
+      'Is this about an existing case?',
+      "Is this the first time you've called about this?",
+    ]) {
+      expect(topics(text), text).toContain('previous_contact');
+      expect(topics(text), text).not.toContain('already_tried');
+    }
+    expect(topics('Have you asked your IT admin?')).toContain('already_tried');
+    expect(topics('Have you spoken to anyone about this?')).not.toContain('affected_scope');
+  });
+
+  it('does not take a recap of what the customer said for blame', () => {
+    const recap =
+      'So to confirm, you changed your password this morning and now Outlook rejects it.';
+    expect(classify(recap).blame).toBe(false);
+    expect(
+      classify('You should have read the instructions before changing your password.').blame,
+    ).toBe(true);
+  });
+
+  it('does not take a statement that starts like a question for a question', () => {
+    const c = classify('What caused it was an old password saved on your phone.');
+    expect(c.askedQuestion).toBe(false);
+    expect(c.factTargets).toEqual([]);
+    expect(classify('What caused it?').askedQuestion).toBe(true);
+    expect(classify('What laptop are you using').askedQuestion).toBe(true);
+  });
+
+  it('reads how often the customer will hear as a specific time', () => {
+    expect(classify("I'll take ownership of this and update you every hour.").nextSteps).toBe(
+      'specific',
+    );
+    expect(classify("I'll update you daily.").nextSteps).toBe('specific');
+  });
+
+  it('does not take a check followed by a call back for a promise of the outcome', () => {
+    const plan = "I'll check whether it is fixed and call you back at nine.";
+    expect(classify(plan).promise).not.toBe('unverified');
+    expect(classify(plan).nextSteps).toBe('specific');
+    expect(classify("I'll see if it's resolved and ring you at 3pm.").promise).not.toBe(
+      'unverified',
+    );
+    // A promise that it will be fixed is still one.
+    expect(classify('It will be fixed by 9am.').promise).toBe('unverified');
+    expect(classify("I'll have it fixed by 9am and call you back.").promise).toBe('unverified');
+  });
+
+  it('does not count fillers as hedging', () => {
+    const c = classify('Um, uh, um, can you tell me what the message on the screen says?');
+    expect(c.clarity).not.toBe('unclear');
+    // Real hedging still can make a message hard to follow.
+    expect(
+      classify("Maybe it's perhaps something, I think, kind of like a setting, probably.").clarity,
+    ).toBe('unclear');
+  });
+
+  it('recognises scoping questions with a slip in agreement and a count', () => {
+    expect(classify('What happen when you type the password?').discoveryIntents).toContain(
+      'problem_description',
+    );
+    for (const text of [
+      'Is it only the three of you?',
+      'Is it just a couple of people?',
+      'Is it only the two of them?',
+    ]) {
+      expect(classify(text).discoveryIntents, text).toContain('affected_scope');
     }
   });
 });

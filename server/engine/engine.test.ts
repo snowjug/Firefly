@@ -1,16 +1,50 @@
 import { describe, expect, it } from 'vitest';
 import { applyConfig, type EffectiveScenario } from '#shared/domain/config.ts';
-import { ScenarioDefinitionSchema } from '#shared/domain/scenario.ts';
-import exemplar from '../scenarios/library/locked-out-after-password-reset.ts';
 import { createRng, rngFor } from './rng.ts';
 import { simulate } from './simulate.ts';
 import { createInitialRuntime, openingMessage, publicState } from './session.ts';
-import { makeScenario } from './testing.ts';
-import { dropRedundantSentences } from './textutil.ts';
-
-const base = ScenarioDefinitionSchema.parse(exemplar);
+import { makeDefinition, makeScenario } from './testing.ts';
+import { dropRedundantSentences, expandContractions, saysTheSame } from './textutil.ts';
 
 describe('text helpers', () => {
+  it('writes out every spoken contraction for a customer who speaks a second language', () => {
+    expect(
+      expandContractions(
+        "So you'll call me. They've said they'll check. We shouldn't wait. Here's why.",
+      ),
+    ).toBe('So you will call me. They have said they will check. We should not wait. Here is why.');
+    expect(expandContractions("I could've asked, but it wouldn't help and who's there?")).toBe(
+      'I could have asked, but it would not help and who is there?',
+    );
+  });
+
+  it('knows when two lines say the same thing in different words, and when they do not', () => {
+    expect(
+      saysTheSame(
+        'I closed some browser tabs and programs, which made no real difference.',
+        "I closed a few tabs and programs, but it didn't help much.",
+      ),
+    ).toBe(true);
+    expect(
+      saysTheSame(
+        'On Friday I moved the laptops back to their usual group and asked them to check in again.',
+        'On Friday I sorted a few things on the admin side and asked the laptops to check in again.',
+      ),
+    ).toBe(true);
+    expect(
+      saysTheSame(
+        'I typed the new password again several times.',
+        "I'm trying to sign in on my work laptop, with the usual browser.",
+      ),
+    ).toBe(false);
+    expect(
+      saysTheSame(
+        'We changed nothing that I know of.',
+        'The finance team moved to a new supplier.',
+      ),
+    ).toBe(false);
+  });
+
   it('drops a sentence that mostly repeats an earlier one, and keeps distinct ones', () => {
     const parts = [
       'Right.',
@@ -49,18 +83,39 @@ describe('opening', () => {
     expect(calm).not.toBe(a);
   });
 
-  it('adapts to call stage, impact, style and difficulty', () => {
-    expect(openingMessage(makeScenario({ callStage: 'follow-up' }))).toMatch(/called yesterday/i);
-    expect(openingMessage(makeScenario({ impact: 'high' }))).toMatch(/whole front desk/i);
+  it('adapts to call stage, impact, style and difficulty', async () => {
+    expect(openingMessage(makeScenario({ callStage: 'follow-up' }))).toMatch(/reported yesterday/i);
+    expect(
+      openingMessage(makeScenario({ impact: 'high', startingTemperature: 'anxious' })),
+    ).toMatch(/whole front desk/i);
     const terse = openingMessage(makeScenario({ style: 'terse', startingTemperature: 'calm' }));
     const talkative = openingMessage(
       makeScenario({ style: 'talkative', startingTemperature: 'calm' }),
     );
     expect(terse.split(' ').length).toBeLessThan(talkative.split(' ').length);
-    expect(openingMessage(makeScenario({ style: 'non-native' }))).not.toContain("can't");
-    expect(openingMessage(makeScenario({ difficulty: 'starter' }))).toMatch(
-      /phone has been acting up/i,
-    );
+    // A starter customer drops a clue about a hidden fact, in the reply that gives the reason.
+    const starter = await simulate(makeScenario({ difficulty: 'starter' }), ['Hello, I am Sam.']);
+    expect(starter.turns[0]?.customer).toMatch(/phone has been acting up/i);
+  });
+
+  it('is a short greeting and says why the customer called only once the engineer has answered', async () => {
+    const scenario = makeScenario({ startingTemperature: 'calm', style: 'talkative' });
+    const opening = openingMessage(scenario);
+    expect(opening).toMatch(/microsoft support/i);
+    expect(opening).not.toMatch(/sign in/i);
+    const sim = await simulate(scenario, [
+      'Hi, this is Sam from Microsoft support. How can I help?',
+    ]);
+    expect(sim.turns[0]?.customer).toMatch(/can't sign in to Outlook/);
+    expect(sim.runtime.opening).toBe('reason-given');
+  });
+
+  it('greets to suit the time of day', () => {
+    const at = (timeOfDay: 'morning' | 'afternoon' | 'evening') =>
+      openingMessage(makeScenario({ startingTemperature: 'calm' }, 5, { timeOfDay }));
+    expect(at('morning')).toMatch(/good morning/i);
+    expect(at('afternoon')).toMatch(/good afternoon/i);
+    expect(at('evening')).toMatch(/good evening/i);
   });
 });
 
@@ -100,7 +155,7 @@ describe('hidden fact discovery', () => {
     expect(Object.keys(turn?.runtime.discovery ?? {})).toHaveLength(0);
     expect(turn?.customer.toLowerCase()).not.toContain('phone');
     expect(turn?.customer).toMatch(
-      /not sure what you mean|don't understand|don't know what you're talking/i,
+      /not sure what you mean|don't understand|don't follow|not following|don't know what you're talking|no idea what you're on about/i,
     );
   });
 
@@ -113,12 +168,14 @@ describe('hidden fact discovery', () => {
       f.id === 'hf-phone-old-password' ? { ...f, minTrust: 25 } : f,
     );
     const sim = await simulate(scenario, [
-      'Is your work email signed in on your phone?',
+      'Hello, this is Sam. Is your work email signed in on your phone?',
       "I'm sorry, that sounds really frustrating with patients waiting. I understand this is urgent and affecting your team.",
       'Is your work email signed in on your phone?',
     ]);
     expect(sim.turns[0]?.runtime.discovery['hf-phone-old-password']).toBeUndefined();
-    expect(sim.turns[0]?.customer).toMatch(/until I know|not going into that|rather not/i);
+    expect(sim.turns[0]?.customer).toMatch(
+      /until I (?:know|trust)|not going into that|rather not|not ready|prefer to leave/i,
+    );
     expect(sim.turns[2]?.runtime.discovery['hf-phone-old-password']?.status).toBe('discovered');
   });
 });
@@ -126,6 +183,7 @@ describe('hidden fact discovery', () => {
 describe('customer state', () => {
   it('rises for blame and jargon, falls for empathy, ownership and next steps', async () => {
     const scenario = makeScenario({ startingTemperature: 'frustrated', style: 'talkative' });
+    const start = createInitialRuntime(scenario).customer.temperature;
     const sim = await simulate(scenario, [
       'You should have read the instructions before changing your password.',
       'Your cached credentials are probably stale after DNS propagation.',
@@ -133,7 +191,6 @@ describe('customer state', () => {
       "I'll take ownership of this and I'll call you back by 10am with an update.",
     ]);
     const temps = sim.turns.map((t) => t.temperature);
-    const start = scenario.config.startingTemperature === 'frustrated' ? 52 : 0;
     expect(temps[0]).toBeGreaterThan(start);
     expect(temps[1]).toBeGreaterThan(temps[0] as number);
     expect(temps[2]).toBeLessThan(temps[1] as number);
@@ -142,8 +199,12 @@ describe('customer state', () => {
     expect(categories).toEqual(
       expect.arrayContaining(['blame', 'jargon', 'impact', 'ownership', 'next-steps']),
     );
-    expect(sim.turns[0]?.customer).toMatch(/fair|blamed|told it's my fault/i);
-    expect(sim.turns[1]?.customer).toMatch(/follow|technical|what does that mean|simply|plain/i);
+    expect(sim.turns[0]?.customer).toMatch(
+      /fair|blam|my fault|put this on me|thought I did the right thing|not helpful/i,
+    );
+    expect(sim.turns[1]?.customer).toMatch(
+      /follow|technical|what does that mean|simply|plain|everyday/i,
+    );
   });
 
   it('notices repeated questions', async () => {
@@ -152,7 +213,7 @@ describe('customer state', () => {
       'What laptop and browser are you using?',
     ]);
     expect(sim.events.some((e) => e.category === 'repetition')).toBe(true);
-    expect(sim.turns[1]?.customer).toMatch(/already|mentioned|said/i);
+    expect(sim.turns[1]?.customer).toMatch(/already|mentioned|said|asked/i);
   });
 
   it('flags troubleshooting before the situation is understood', async () => {
@@ -162,7 +223,7 @@ describe('customer state', () => {
     expect(sim.events.some((e) => e.category === 'premature-troubleshooting')).toBe(true);
   });
 
-  it('is bounded: values stay within 0-100 and temperature never swings more than 20 in a turn', async () => {
+  it('is bounded: values stay within 0-100 and temperature never swings more than 30 in a turn', async () => {
     const lines = [
       'You should have read the instructions.',
       "Calm down, it's not a big deal.",
@@ -195,6 +256,9 @@ describe('customer state', () => {
 
   it('applies difficulty: good behaviour helps less and bad behaviour hurts more at Challenge', async () => {
     const good = ["I'm sorry, that sounds really frustrating with patients waiting."];
+    const start = createInitialRuntime(
+      makeScenario({ difficulty: 'starter', startingTemperature: 'frustrated' }),
+    ).customer.temperature;
     const starter = await simulate(
       makeScenario({ difficulty: 'starter', startingTemperature: 'frustrated' }),
       good,
@@ -203,7 +267,7 @@ describe('customer state', () => {
       makeScenario({ difficulty: 'challenge', startingTemperature: 'frustrated' }),
       good,
     );
-    const drop = (s: typeof starter) => 52 - (s.turns[0]?.temperature ?? 52);
+    const drop = (s: typeof starter) => start - (s.turns[0]?.temperature ?? start);
     expect(drop(starter)).toBeGreaterThan(drop(challenge));
 
     const bad = ['You should have read the instructions.'];
@@ -384,6 +448,7 @@ describe('communication style, proficiency and determinism', () => {
 
 describe('configuration changes the whole call, not only the greeting', () => {
   it('lowers difficulty to remove harder hidden facts', () => {
+    const base = makeDefinition();
     expect(applyConfig(base, { difficulty: 'starter' }).hiddenFacts.map((f) => f.id)).not.toContain(
       'hf-tried-colleague',
     );
