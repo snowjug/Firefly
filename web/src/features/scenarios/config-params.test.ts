@@ -1,27 +1,27 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { ScenarioOverridesSchema } from '#shared/domain/scenario.ts';
-import { CURVEBALL_LABELS } from '#shared/domain/vocab.ts';
 import {
   CONFIG_KEYS,
   briefPath,
   changedFromDefault,
-  complicationsChip,
   defaultConfig,
   editPath,
+  effectiveVoice,
   fitCurveballs,
   hintsOn,
   inspectConfig,
   parseConfig,
   parseConfigQuery,
   serializeConfig,
-  summarise,
   toOverrides,
   toSearch,
   withDifficulty,
   type CallConfig,
 } from './config-params.ts';
+import { curveballChoices } from './labels.ts';
 import { SAMPLE, publicScenarios, scenarioById } from './testing/fixtures.ts';
+import { defaultVoiceFor, VOICE_IDS } from './voice-choice.ts';
 
 const starter = scenarioById(SAMPLE.starter);
 const standard = scenarioById(SAMPLE.standard);
@@ -31,7 +31,7 @@ const query = (config: CallConfig, scenario = standard) =>
   toSearch(serializeConfig(config, scenario));
 
 describe('the query contract with the report page', () => {
-  it('reads exactly these eight keys', () => {
+  it("reads the report's eight keys, in order, and one more: the voice", () => {
     expect([...CONFIG_KEYS]).toEqual([
       'difficulty',
       'impact',
@@ -41,6 +41,7 @@ describe('the query contract with the report page', () => {
       'stage',
       'curveballs',
       'hints',
+      'voice',
     ]);
     const config = parseConfig(
       'difficulty=challenge&impact=low&temperature=anxious&proficiency=expert&style=vague&stage=closure&curveballs=deadline&hints=on',
@@ -55,7 +56,15 @@ describe('the query contract with the report page', () => {
       stage: 'closure',
       curveballs: { mode: 'choose', types: ['deadline'] },
       hints: true,
+      voice: null,
     });
+  });
+
+  it('is not disturbed by a link that has no voice, such as the ones the report writes', () => {
+    const fromReport =
+      'difficulty=standard&impact=medium&temperature=frustrated&proficiency=intermediate&style=talkative&stage=first-contact&curveballs=none&hints=off';
+    expect(inspectConfig(fromReport, standard).ignored).toEqual([]);
+    expect(parseConfig(fromReport, standard).voice).toBeNull();
   });
 
   it('accepts a leading question mark and a URLSearchParams', () => {
@@ -84,6 +93,37 @@ describe('the query contract with the report page', () => {
     ]);
     expect(params.get('curveballs')).toBe('none');
     expect(params.get('hints')).toBe('on');
+  });
+});
+
+describe('the voice', () => {
+  const own = defaultVoiceFor(standard.id);
+  const other = VOICE_IDS.find((id) => id !== own) ?? 'voice-a';
+
+  it('is the scenario\u2019s own until another is chosen, and the same every time', () => {
+    expect(defaultConfig(standard).voice).toBeNull();
+    expect(effectiveVoice(defaultConfig(standard), standard.id)).toBe(own);
+    expect(defaultVoiceFor(standard.id)).toBe(defaultVoiceFor(standard.id));
+    expect(effectiveVoice({ voice: other }, standard.id)).toBe(other);
+  });
+
+  it('travels in the address only when it differs from the scenario\u2019s own', () => {
+    expect(query({ ...defaultConfig(standard), voice: other })).toBe(`?voice=${other}`);
+    expect(query({ ...defaultConfig(standard), voice: own })).toBe('');
+    expect(parseConfig(`voice=${own}`, standard).voice).toBeNull();
+    expect(parseConfig(`voice=${other}`, standard).voice).toBe(other);
+  });
+
+  it('ignores a voice that does not exist, and says so', () => {
+    const { config, ignored } = inspectConfig('voice=voice-z', standard);
+    expect(config.voice).toBeNull();
+    expect(ignored).toEqual(['voice']);
+  });
+
+  it('is a change from the scenario, and is never sent to the server as a setting', () => {
+    const config: CallConfig = { ...defaultConfig(standard), voice: other };
+    expect(changedFromDefault(config, standard)).toEqual(['voice']);
+    expect(toOverrides(config, standard)).toEqual({ overrides: {}, mode: 'immersive' });
   });
 });
 
@@ -139,6 +179,7 @@ describe('invalid input is ignored, never thrown', () => {
         stage: 'closure',
         curveballs: 'anything, read later',
         hints: 'maybe',
+        voice: 'voice-z',
       }),
     ).toEqual({
       difficulty: undefined,
@@ -149,6 +190,7 @@ describe('invalid input is ignored, never thrown', () => {
       stage: 'closure',
       curveballs: 'anything, read later',
       hints: undefined,
+      voice: undefined,
     });
   });
 });
@@ -162,6 +204,7 @@ describe('serialising keeps URLs short', () => {
 
   it('round-trips every scenario with a mix of changes', () => {
     for (const scenario of publicScenarios()) {
+      const [offered] = curveballChoices(scenario);
       const config: CallConfig = {
         difficulty: scenario.difficulty === 'challenge' ? 'starter' : 'challenge',
         impact: scenario.impact === 'low' ? 'high' : 'low',
@@ -169,8 +212,9 @@ describe('serialising keeps URLs short', () => {
         proficiency: scenario.proficiency === 'expert' ? 'novice' : 'expert',
         style: scenario.style === 'terse' ? 'talkative' : 'terse',
         stage: scenario.callStage === 'closure' ? 'first-contact' : 'closure',
-        curveballs: { mode: 'choose', types: ['deadline'] },
+        curveballs: offered ? { mode: 'choose', types: [offered] } : { mode: 'none' },
         hints: true,
+        voice: null,
       };
       const normalised = parseConfig(serializeConfig(config, scenario), scenario);
       // Hints that say what the difficulty says anyway are the same as no value.
@@ -238,21 +282,6 @@ describe('curveballs', () => {
       dropped: ['ask-manager'],
     });
   });
-
-  it('says how many complications to expect, never which', () => {
-    expect(complicationsChip(defaultConfig(starter))).toBe('No complications');
-    expect(complicationsChip(defaultConfig(standard))).toBe('Up to one complication');
-    expect(complicationsChip(defaultConfig(challenge))).toBe('Up to two complications');
-    expect(complicationsChip({ ...defaultConfig(challenge), curveballs: { mode: 'none' } })).toBe(
-      'No complications',
-    );
-    expect(
-      complicationsChip({
-        ...defaultConfig(challenge),
-        curveballs: { mode: 'choose', types: ['deadline', 'go-silent'] },
-      }),
-    ).toBe('Two complications');
-  });
 });
 
 describe('live hints', () => {
@@ -293,8 +322,9 @@ describe('toOverrides', () => {
       proficiency: 'novice',
       style: 'vague',
       stage: 'closure',
-      curveballs: { mode: 'choose', types: ['go-silent'] },
+      curveballs: { mode: 'choose', types: ['deadline'] },
       hints: true,
+      voice: null,
     };
     expect(toOverrides(config, standard)).toEqual({
       overrides: {
@@ -304,7 +334,7 @@ describe('toOverrides', () => {
         proficiency: 'novice',
         style: 'vague',
         callStage: 'closure',
-        curveballs: ['go-silent'],
+        curveballs: ['deadline'],
       },
       mode: 'guided',
     });
@@ -365,40 +395,6 @@ describe('changedFromDefault', () => {
     const config = parseConfig('difficulty=starter', standard);
     expect(hintsOn(config)).toBe(true);
     expect(changedFromDefault(config, standard)).toEqual(['difficulty']);
-  });
-});
-
-describe('summarise', () => {
-  it('reads as plain sentences built from the shared descriptions', () => {
-    const config = parseConfig('temperature=frustrated&stage=follow-up', challenge);
-    expect(summarise(config, challenge)).toEqual([
-      'A frustrated, demanding customer with intermediate technical proficiency is following up on an open case.',
-      'The business impact is high: production outage or broad impact.',
-      'Expect up to two complications.',
-    ]);
-  });
-
-  it('changes with each choice', () => {
-    const text = (search: string) => summarise(parseConfig(search, standard), standard).join(' ');
-    expect(text('temperature=anxious')).toContain('An anxious');
-    expect(text('proficiency=novice')).toContain('with novice technical proficiency');
-    expect(text('impact=low')).toContain('The business impact is low: one user affected');
-    expect(text('stage=closure')).toContain('is calling to close the case');
-    expect(text('curveballs=none')).toContain('No complications are set.');
-    expect(text('style=non-native')).toContain('who is a non-native English speaker');
-  });
-
-  it('never names a curveball or says when one happens', () => {
-    for (const scenario of publicScenarios()) {
-      const config = parseConfig('curveballs=ask-manager,deadline&difficulty=challenge', scenario);
-      const text = summarise(config, scenario).join(' ').toLowerCase();
-      for (const { label } of Object.values(CURVEBALL_LABELS)) {
-        expect(text).not.toContain(label.toLowerCase());
-      }
-      expect(text).not.toMatch(
-        /manager|cancel|deadline|goes quiet|guarantee|credibility|trigger|hidden/,
-      );
-    }
   });
 });
 

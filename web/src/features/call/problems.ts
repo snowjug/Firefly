@@ -1,12 +1,22 @@
-import type { CallProblem, CallProblemCode } from './contract.ts';
+import { voiceError, type VoiceError } from '../voice/errors.ts';
 import type { BrowserFamily } from '../voice/support.ts';
+import type { CallProblem, CallProblemCode } from './contract.ts';
 
 // What the trainee reads when something goes wrong. Every problem says what happened, what was kept,
-// what to do (and what "Try again" does), and whether typing still works. Plain British English: no
-// raw provider text, no codes, no stack traces, and it never blames the trainee. The engine passes
-// only facts (a `context`); all the wording is here, so it can be read, reviewed and tested as one.
+// what to do (and what "Retry" does), and whether typing still works. Plain British English: no raw
+// provider text, no codes, no stack traces, and it never blames the trainee. The words are short on
+// purpose: the buttons under them (Retry, Use text, Replay, Continue without audio, End safely) say
+// what can be done, so the copy only says what happened and what was kept. The engine passes only
+// facts (a `context`); all the wording is here, so it can be read, reviewed and tested as one.
+//
+// Where the voice failed (the microphone, speech to text, the customer's voice), the words are the
+// voice layer's own (`voiceError` in ../voice/errors.ts), so a failure reads the same on the call
+// screen as in the voice preview and in the voice tests. Only what the voice layer cannot know is
+// added here: that nothing was recorded before the call began, and how to allow a blocked microphone
+// in the browser being used. The failures that are not the voice's (the model's reply, saving a
+// message, ending the call, loading the session) are written here and stay in the call machine.
 
-/** The step a problem happened in, which decides what "Try again" repeats. */
+/** The step a problem happened in, which decides what "Retry" repeats. */
 export type ProblemStep = 'load' | 'send' | 'transcribe' | 'speak' | 'end' | 'microphone';
 
 export interface ProblemContext {
@@ -22,7 +32,7 @@ export interface ProblemContext {
   timedOut?: boolean;
   /** Ending failed because no message was ever sent. */
   nothingToReview?: boolean;
-  /** The call does not exist (the server answered not found), so trying again cannot help. */
+  /** The call does not exist (the server answered not found), so retrying cannot help. */
   notFound?: boolean;
 }
 
@@ -56,16 +66,15 @@ const STEP_RETRY: Record<ProblemStep, NonNullable<CallProblem['retry']>> = {
   microphone: 'microphone',
 };
 
-const TYPE_INSTEAD = 'You can also carry on by typing.';
-
-function allowMicrophone(browser: BrowserFamily | undefined): string {
+/** How to allow the microphone: the one piece of advice that needs real steps. */
+function allowMicrophone(browser: BrowserFamily | undefined): string | null {
   switch (browser) {
     case 'edge':
-      return 'Select the lock icon at the left of the address bar, open Permissions for this site, set Microphone to Allow, then choose Try again.';
+      return 'Select the lock icon in the address bar, open Permissions for this site, set Microphone to Allow, then choose Retry.';
     case 'chrome':
-      return 'Select the icon at the left of the address bar (a lock or sliders), turn on Microphone, then choose Try again.';
+      return 'Select the icon at the left of the address bar, turn on Microphone, then choose Retry.';
     default:
-      return "Allow the microphone for this site in your browser's settings, then choose Try again.";
+      return null;
   }
 }
 
@@ -79,176 +88,168 @@ function waitFor(seconds: number | undefined): string {
 function keptDuring(step: ProblemStep | undefined): string {
   switch (step) {
     case 'send':
-      return 'Your message is kept here.';
-    case 'speak':
-      return 'Their reply is in the transcript.';
+      return 'Your message is kept.';
     case 'end':
-      return 'Your call is still open and your transcript is saved.';
+      return 'Your call is still open and saved.';
     case 'load':
       return 'Nothing in the call was changed.';
     default:
-      return 'Your transcript so far is saved.';
+      return 'Your transcript is saved.';
   }
 }
 
-/** What "Try again" does, in the step that failed. */
-function tryAgainDuring(step: ProblemStep | undefined): string {
+/** What "Retry" does, in the step that failed. */
+function retryDuring(step: ProblemStep | undefined): string {
   switch (step) {
     case 'send':
-      return 'Choose Try again to send your message. It will not be sent twice.';
-    case 'transcribe':
-      return 'Choose Try again to say it again.';
-    case 'speak':
-      return 'Choose Try again to hear the reply.';
+      return 'Retry sends it once, never twice.';
     case 'end':
-      return 'Choose Try again to end the call.';
+      return 'Retry to end the call.';
     case 'load':
-      return 'Choose Try again to open the call again.';
+      return 'Retry to open the call again.';
     default:
-      return 'Choose Try again once you are back online.';
+      return 'Retry once you are back online.';
   }
+}
+
+type Fields = Pick<CallProblem, 'retry' | 'textFallback' | 'severity'> &
+  Partial<Pick<CallProblem, 'title' | 'preserved' | 'advice'>>;
+
+/** A problem written in the voice layer's words, with only what this screen knows added to it. */
+function spoken(code: CallProblemCode, error: VoiceError, fields: Fields): CallProblem {
+  return {
+    code,
+    title: fields.title ?? error.message,
+    preserved: fields.preserved ?? error.kept,
+    advice: fields.advice ?? error.advice,
+    retry: fields.retry,
+    textFallback: fields.textFallback,
+    severity: fields.severity,
+    announce: error.announce,
+  };
+}
+
+/** A microphone that cannot be used: nothing is recorded before the call, and the steps depend on the browser. */
+function microphone(
+  code: CallProblemCode,
+  error: VoiceError,
+  context: ProblemContext,
+  fields: Fields,
+): CallProblem {
+  return spoken(code, error, {
+    ...fields,
+    ...(context.beforeCall ? { preserved: 'Nothing was recorded.' } : {}),
+  });
 }
 
 /** The full copy for one problem. Every field is set for every code. */
 export function describeProblem(code: CallProblemCode, context: ProblemContext = {}): CallProblem {
   switch (code) {
-    case 'microphone-denied':
-      return {
-        code,
-        title: 'The microphone is blocked for this site.',
-        preserved: context.beforeCall
-          ? 'Nothing has been recorded or sent.'
-          : 'Your transcript so far is saved.',
-        advice: `${allowMicrophone(context.browser)} ${TYPE_INSTEAD}`,
+    case 'microphone-denied': {
+      const steps = allowMicrophone(context.browser);
+      return microphone(code, voiceError('microphone-denied'), context, {
+        ...(steps ? { advice: steps } : {}),
         retry: 'microphone',
         textFallback: true,
         severity: 'blocking',
-      };
+      });
+    }
     case 'microphone-missing':
-      return {
-        code,
-        title: 'No microphone was found.',
-        preserved: context.beforeCall
-          ? 'Nothing has been recorded.'
-          : 'Your transcript so far is saved.',
-        advice: `Check that a microphone is connected and switched on, then choose Try again. ${TYPE_INSTEAD}`,
+      return microphone(code, voiceError('microphone-missing'), context, {
         retry: 'microphone',
         textFallback: true,
         severity: 'blocking',
-      };
+      });
     case 'microphone-busy':
-      return {
-        code,
-        title: context.timedOut
-          ? 'The microphone did not respond.'
-          : 'The microphone did not start.',
-        preserved: context.beforeCall
-          ? 'Nothing has been recorded.'
-          : 'Your transcript so far is saved.',
-        advice: `Another app may be using it. Close any app that uses the microphone, check the permission prompt near the address bar, then choose Try again. ${TYPE_INSTEAD}`,
+      return microphone(code, voiceError('microphone-busy'), context, {
+        ...(context.timedOut ? { title: 'The microphone did not respond.' } : {}),
         retry: 'microphone',
         textFallback: true,
         severity: 'blocking',
-      };
+      });
     case 'microphone-unsupported':
-      return {
-        code,
-        title: 'This browser cannot record your voice here.',
-        preserved: context.beforeCall
-          ? 'Nothing has been recorded.'
-          : 'Your transcript so far is saved.',
-        advice:
-          'A spoken call needs Microsoft Edge or Google Chrome on a secure (https) connection. You can carry on by typing.',
+      return microphone(code, voiceError('microphone-unsupported'), context, {
         retry: null,
         textFallback: true,
         severity: 'blocking',
-      };
+      });
     case 'transcription-failed':
-      return {
+      return spoken(
         code,
-        title: context.timedOut
-          ? 'Turning your speech into text took too long.'
-          : 'We could not turn your speech into text.',
-        preserved:
-          'Nothing was sent. Your recording was not kept, and your transcript so far is saved.',
-        advice: 'Choose Try again to say it again, or type your reply instead.',
-        retry: 'transcribe',
-        textFallback: true,
-        severity: 'degraded',
-      };
+        voiceError(context.timedOut ? 'transcription-timeout' : 'transcription-failed'),
+        { retry: 'transcribe', textFallback: true, severity: 'degraded' },
+      );
     case 'speech-service-unavailable':
-      return {
-        code,
-        title: 'The speech service is not available right now.',
-        preserved: 'Nothing was sent, and your transcript so far is saved.',
-        advice: 'Type your reply instead, or choose Try again to see whether it is back.',
-        retry: 'transcribe',
+      // Trying again cannot help, so only typing is offered.
+      return spoken(code, voiceError('speech-unavailable'), {
+        retry: null,
         textFallback: true,
         severity: 'degraded',
-      };
+      });
     case 'reply-failed':
       return {
         code,
         title: 'The customer could not reply.',
-        preserved: context.saved ? 'Your message was saved.' : 'Your message is kept here.',
-        advice: 'Choose Try again to send it again. It will not be sent twice.',
+        preserved: context.saved ? 'Your message was saved.' : 'Your message is kept.',
+        advice: 'Retry sends it once, never twice.',
         retry: 'send',
         textFallback: false,
         severity: 'blocking',
+        announce: 'polite',
       };
     case 'reply-timeout':
       return {
         code,
-        title: 'The customer is taking too long to reply.',
-        preserved: 'Your message is kept, and sending it again will not duplicate it.',
-        advice: 'Choose Try again to wait for the reply again.',
+        title: 'The customer is taking too long.',
+        preserved: 'Your message is kept.',
+        advice: 'Retry waits again and never sends it twice.',
         retry: 'send',
         textFallback: false,
         severity: 'blocking',
+        announce: 'polite',
       };
     case 'voice-generation-failed':
-      return {
-        code,
-        title: "The customer's voice could not be made this time.",
-        preserved: 'Their reply is in the transcript.',
-        advice: 'Read it there, or choose Try again to hear it. You can keep talking or typing.',
+      return spoken(code, voiceError(context.timedOut ? 'voice-timeout' : 'voice-failed'), {
         retry: 'speak',
         textFallback: true,
         severity: 'degraded',
-      };
+      });
     case 'playback-blocked':
-      return {
-        code,
-        title: "Your browser is blocking the customer's voice.",
-        preserved: 'Their reply is in the transcript.',
-        advice: 'Press Play to hear it, or read the reply and carry on.',
+      return spoken(code, voiceError('playback-blocked'), {
         retry: 'speak',
         textFallback: true,
         severity: 'degraded',
-      };
+      });
     case 'playback-failed':
-      return {
-        code,
-        title: "The customer's voice stopped unexpectedly.",
-        preserved: 'Their reply is in the transcript.',
-        advice: 'Read it there, or choose Try again to hear it again.',
+      return spoken(code, voiceError('playback-failed'), {
         retry: 'speak',
         textFallback: true,
         severity: 'degraded',
-      };
+      });
     case 'offline': {
       const step = context.during;
+      const retry = STEP_RETRY[step ?? 'send'];
       // A call that could not be ended is still open, so being offline there does not stop it: the
       // notice can be dismissed, and the call carries on.
-      const stillOpen = step === 'end';
+      const severity = step === 'end' ? 'degraded' : 'blocking';
+      // Speech to text and the customer's voice have their own words for losing the network, and
+      // typing still works while they are lost: only the voice is.
+      if (step === 'transcribe' || step === 'speak') {
+        return spoken(
+          code,
+          voiceError('offline', { stage: step === 'speak' ? 'voice' : 'transcription' }),
+          { retry, textFallback: true, severity: 'degraded' },
+        );
+      }
       return {
         code,
         title: 'You appear to be offline.',
         preserved: keptDuring(step),
-        advice: `Check your connection. ${tryAgainDuring(step)}`,
-        retry: STEP_RETRY[step ?? 'send'],
+        advice: `Check your connection. ${retryDuring(step)}`,
+        retry,
         textFallback: false,
-        severity: stillOpen ? 'degraded' : 'blocking',
+        severity,
+        announce: 'polite',
       };
     }
     case 'session-unavailable':
@@ -257,21 +258,21 @@ export function describeProblem(code: CallProblemCode, context: ProblemContext =
             code,
             title: 'We could not find this call.',
             preserved: 'Nothing was changed.',
-            advice:
-              'It may have been deleted, or the link may not be right. Go back to the scenarios to start a new call.',
+            advice: 'It may have been deleted. Go back to the scenarios to start a new call.',
             retry: null,
             textFallback: false,
             severity: 'blocking',
+            announce: 'polite',
           }
         : {
             code,
             title: 'This call could not be opened.',
             preserved: 'Nothing in the call was changed.',
-            advice:
-              'Check your connection and choose Try again, or go back and start the call again.',
+            advice: 'Check your connection and retry, or go back and start again.',
             retry: 'load',
             textFallback: false,
             severity: 'blocking',
+            announce: 'polite',
           };
     case 'session-ended':
       return {
@@ -282,42 +283,57 @@ export function describeProblem(code: CallProblemCode, context: ProblemContext =
         retry: null,
         textFallback: false,
         severity: 'blocking',
+        announce: 'polite',
       };
     case 'save-failed':
       return {
         code,
-        title: 'We could not be sure your message was saved.',
-        preserved: 'Your message is kept here.',
-        advice: 'Choose Try again. It will not be sent twice, even if it was saved.',
+        title: 'We could not confirm your message was saved.',
+        preserved: 'Your message is kept.',
+        advice: 'Retry sends it once, even if it was saved.',
         retry: 'send',
         textFallback: false,
         severity: 'blocking',
+        announce: 'polite',
       };
     case 'turn-limit':
       return {
         code,
-        title: 'This call has reached its message limit.',
+        title: 'This call reached its message limit.',
         preserved: 'Everything you said is saved.',
-        advice: 'End the call to see your coaching.',
+        advice: 'End the call to see your review.',
         retry: null,
         textFallback: false,
         severity: 'blocking',
+        announce: 'polite',
       };
     case 'rate-limited': {
-      const step = context.during === 'transcribe' ? 'transcribe' : 'send';
+      if (context.during === 'transcribe') {
+        // Speech to text has its own words for this, and typing still works while it waits.
+        const seconds = context.retryAfterSeconds;
+        return spoken(
+          code,
+          voiceError('rate-limited', {
+            stage: 'transcription',
+            ...(seconds === undefined ? {} : { retryAfterSeconds: seconds }),
+          }),
+          {
+            advice: `${waitFor(seconds)}, then choose Retry, or type your reply.`,
+            retry: 'transcribe',
+            textFallback: true,
+            severity: 'degraded',
+          },
+        );
+      }
       return {
         code,
-        title: 'Messages are going a little too fast.',
-        preserved:
-          step === 'transcribe'
-            ? 'Nothing was sent, and your transcript so far is saved.'
-            : 'Your message is kept here.',
-        advice: `${waitFor(context.retryAfterSeconds)}, then choose Try again${
-          step === 'transcribe' ? ' to say it again' : ''
-        }.`,
-        retry: STEP_RETRY[step],
+        title: 'Messages are going too fast.',
+        preserved: 'Your message is kept.',
+        advice: `${waitFor(context.retryAfterSeconds)}, then choose Retry.`,
+        retry: 'send',
         textFallback: false,
-        severity: step === 'transcribe' ? 'degraded' : 'blocking',
+        severity: 'blocking',
+        announce: 'polite',
       };
     }
     case 'end-failed':
@@ -325,20 +341,22 @@ export function describeProblem(code: CallProblemCode, context: ProblemContext =
         ? {
             code,
             title: 'There is nothing to review yet.',
-            preserved: 'No message has been sent, so there is no transcript.',
-            advice: 'Send a message to the customer first, or leave the call without a report.',
+            preserved: 'No message has been sent.',
+            advice: 'Send a message first, or leave without a report.',
             retry: null,
             textFallback: true,
             severity: 'degraded',
+            announce: 'polite',
           }
         : {
             code,
             title: 'We could not end the call.',
-            preserved: 'Your call is still open and your transcript is saved.',
-            advice: 'Choose Try again, or keep going and end it later.',
+            preserved: 'Your call is still open and saved.',
+            advice: 'Retry, or keep going and end it later.',
             retry: 'end',
             textFallback: true,
             severity: 'degraded',
+            announce: 'polite',
           };
   }
 }

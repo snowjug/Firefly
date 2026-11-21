@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api.ts';
 import { estimateSpeechMs } from '../voice/playback/speech-text.ts';
+import { speakTurnWithVoice } from '../voice/speech-client.ts';
 import {
   advance,
   apiError,
+  defaultOptions,
   FakeServer,
   flush,
   Harness,
@@ -24,8 +26,11 @@ vi.mock('../../lib/api.ts', async (importOriginal) => {
     },
   };
 });
+// The request that names a voice is the voice layer's own; here it is answered by the fake server.
+vi.mock('../voice/speech-client.ts', () => ({ speakTurnWithVoice: vi.fn() }));
 
 const mocked = vi.mocked(api);
+const withVoice = vi.mocked(speakTurnWithVoice);
 const h = new Harness(mocked);
 
 beforeEach(() => {
@@ -33,6 +38,10 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-03-02T10:00:30.000Z'));
   vi.clearAllMocks();
   h.setup();
+  withVoice.mockImplementation(async (id, turnIndex, language, signal) => ({
+    ...(await h.server.speakTurn(id, turnIndex, language, signal)),
+    voiceId: null,
+  }));
 });
 
 afterEach(() => {
@@ -52,7 +61,7 @@ describe('mute', () => {
 
     h.do(() => h.actions().toggleMute());
     expect(h.snap()).toMatchObject({ muted: true, phase: 'ready-for-next-turn', micLevel: 0 });
-    expect(h.snap().announcement?.text).toBe('Muted.');
+    expect(h.snap().announcement?.text).toBe('Your microphone is muted.');
     expect(h.env.audio.listeningWorklets()).toHaveLength(0);
     // The track is switched off but held, so the browser's recording indicator stays on.
     expect(h.env.mic.tracks.every((track) => !track.enabled)).toBe(true);
@@ -108,7 +117,7 @@ describe('pause', () => {
       phase: 'ready-for-next-turn',
       microphone: 'granted',
     });
-    expect(h.snap().announcement?.text).toBe('Call paused.');
+    expect(h.snap().announcement?.text).toBe('The call is paused.');
     expect(h.env.mic.openTracks()).toHaveLength(0);
     expect(captureContexts().every((context) => context.state === 'closed')).toBe(true);
     expect(h.env.audio.listeningWorklets()).toHaveLength(0);
@@ -141,13 +150,15 @@ describe('pause', () => {
     expect(element.paused).toBe(true);
     expect(h.env.urls.live()).toHaveLength(0);
     expect(h.snap().customerLevel).toBe(0);
-    // Pausing is not the trainee talking over the customer.
-    expect(h.snap().turns[0]?.interrupted).toBe(false);
+    // The voice was audible when pausing stopped it, so the reply is marked as cut off: until it is
+    // heard again from the start.
+    expect(h.snap().turns[0]?.interrupted).toBe(true);
 
     h.do(() => h.actions().togglePause());
     await flush();
     expect(h.server.spoken).toEqual([1, 1]);
     expect(phase()).toBe('customer-speaking');
+    expect(h.snap().turns[0]?.interrupted).toBe(false);
   });
 
   it('lets a message in flight finish while paused, and speaks the reply when resumed', async () => {
@@ -210,13 +221,28 @@ describe('interrupting the customer', () => {
     expect(phase()).toBe('customer-speaking');
   });
 
-  it('is what pressing Talk over the customer does: the voice stops and the microphone opens at once', async () => {
+  it('is refused by Talk: the voice plays on and the microphone stays closed, until the voice is stopped', async () => {
     await h.mount();
     await h.begin(true);
     h.do(() => h.actions().talk());
+    expect(phase()).toBe('customer-speaking');
+    expect(h.snap().stage).toBe('customer-speaking');
+    expect(h.env.element.latest().paused).toBe(false);
+    expect(h.env.audio.listeningWorklets()).toHaveLength(0);
+    expect(h.snap().turns[0]?.interrupted).toBe(false);
+    expect(h.snap().hint).toBe('Wait for the customer, or stop their audio.');
+
+    // Stopping the customer's audio first lets the trainee talk, and the two never overlap: the
+    // microphone opens once the customer's voice has been quiet for the settle.
+    h.do(() => h.actions().interrupt());
+    h.do(() => h.actions().talk());
     expect(phase()).toBe('listening');
     expect(h.env.element.latest().paused).toBe(true);
+    expect(h.env.audio.listeningWorklets()).toHaveLength(0);
+    expect(h.snap().micOpen).toBe(false);
+    await advance(400);
     expect(h.env.audio.listeningWorklets()).toHaveLength(1);
+    expect(h.snap().micOpen).toBe(true);
     expect(h.snap().turns[0]?.interrupted).toBe(true);
   });
 
@@ -260,7 +286,7 @@ describe('replay', () => {
 });
 
 describe('when speech cannot be turned into text', () => {
-  it('shows a problem the call can carry on from, and Try again opens the microphone to say it again', async () => {
+  it('shows a problem the call can carry on from, and Retry sends the same recording again, once', async () => {
     h.server.transcripts.push(apiError(502, 'speech_failed', true));
     await h.mount();
     await h.openCall();
@@ -271,8 +297,9 @@ describe('when speech cannot be turned into text', () => {
       retry: 'transcribe',
       severity: 'degraded',
       textFallback: true,
+      announce: 'polite',
     });
-    expect(h.snap().problem?.preserved).toMatch(/recording was not kept/);
+    expect(h.snap().problem?.preserved).toMatch(/transcript are safe/);
     // The utterance was never sent, and is not in the transcript.
     expect(h.snap().turns).toHaveLength(1);
     expect(mocked.sendMessage).not.toHaveBeenCalled();
@@ -280,11 +307,52 @@ describe('when speech cannot be turned into text', () => {
     await advance(10_000);
     expect(phase()).toBe('ready-for-next-turn');
 
+    // Retry does not ask the trainee to speak again: the recording that was kept goes again.
     h.do(() => h.actions().retry());
+    expect(phase()).toBe('transcribing');
+    expect(h.snap().problem).toBeNull();
+    await flush();
+    expect(mocked.transcribe).toHaveBeenCalledTimes(2);
+    expect(mocked.transcribe.mock.calls[1]?.[0]).toBe(mocked.transcribe.mock.calls[0]?.[0]);
+    expect(mocked.sendMessage).toHaveBeenCalledTimes(1);
+    // One message, under one id, however many times it was turned into text.
+    expect(h.snap().turns.filter((turn) => turn.role === 'trainee')).toHaveLength(1);
+    expect(h.server.sent).toHaveLength(1);
+    expect(h.server.sent[0]?.text).toBe('Spoken message 2');
+  });
+
+  it('shares one request for one Retry pressed twice, and lets go of the recording once it worked', async () => {
+    h.server.transcripts.push(apiError(502, 'speech_failed', true));
+    await h.mount();
+    await h.openCall();
+    await h.say();
+    h.do(() => {
+      h.actions().retry();
+      h.actions().retry();
+    });
+    await flush();
+    expect(mocked.transcribe).toHaveBeenCalledTimes(2);
+    expect(mocked.sendMessage).toHaveBeenCalledTimes(1);
+    // Once it worked the recording is let go: with the problem gone, Retry has nothing to send.
+    h.do(() => h.actions().retry());
+    expect(mocked.transcribe).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks the trainee to say it again when typing instead, or talking, lets go of the recording', async () => {
+    h.server.transcripts.push(apiError(502, 'speech_failed', true));
+    await h.mount();
+    await h.openCall();
+    await h.say();
+    expect(h.snap().problem?.code).toBe('transcription-failed');
+    // Talking clears the problem and drops the old recording: a new pass, a new utterance.
+    h.do(() => h.actions().talk());
     expect(phase()).toBe('listening');
     expect(h.snap().problem).toBeNull();
+    await advance(400);
     await h.say();
-    expect(mocked.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mocked.transcribe).toHaveBeenCalledTimes(2);
+    expect(mocked.transcribe.mock.calls[1]?.[0]).not.toBe(mocked.transcribe.mock.calls[0]?.[0]);
+    expect(h.server.sent).toHaveLength(1);
   });
 
   it('lets the trainee type instead, which clears the problem', async () => {
@@ -322,7 +390,7 @@ describe('when speech cannot be turned into text', () => {
     expect(h.snap().problem?.advice).toMatch(/Wait 5 seconds/);
   });
 
-  it('gives up after 20 seconds, aborts the request and ignores a late answer', async () => {
+  it('gives up after 19 seconds, aborts the request, keeps the recording for Retry and ignores a late answer', async () => {
     let answerLate: (value: {
       status: 'recognised';
       text: string;
@@ -335,9 +403,10 @@ describe('when speech cannot be turned into text', () => {
     await h.openCall();
     await h.say();
     expect(phase()).toBe('transcribing');
-    await advance(19_999);
+    // The transcriber's own deadline is a second before the machine's, so the recording is kept.
+    await advance(18_900);
     expect(phase()).toBe('transcribing');
-    await advance(2);
+    await advance(200);
     expect(phase()).toBe('ready-for-next-turn');
     expect(h.snap().problem).toMatchObject({ code: 'transcription-failed' });
     expect(h.snap().problem?.title).toMatch(/took too long/);
@@ -348,6 +417,12 @@ describe('when speech cannot be turned into text', () => {
     await flush();
     expect(mocked.sendMessage).not.toHaveBeenCalled();
     expect(h.snap().turns).toHaveLength(1);
+
+    // Retry sends the recording again, and this time it is answered.
+    h.do(() => h.actions().retry());
+    await flush();
+    expect(mocked.transcribe).toHaveBeenCalledTimes(2);
+    expect(mocked.sendMessage).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -361,7 +436,7 @@ describe('when a message cannot be sent', () => {
     return result;
   };
 
-  it('keeps the message as failed, says it was saved, and Try again resends it with the same id', async () => {
+  it('keeps the message as failed, says it was saved, and Retry resends it with the same id', async () => {
     h.server.sendSteps.push(() => apiError(502, 'provider_unavailable', true));
     await h.mount();
     await h.begin(false);
@@ -381,7 +456,7 @@ describe('when a message cannot be sent', () => {
     });
     // A different message is refused until this one has been answered.
     expect(await typeIn('Something else')).toBe(false);
-    expect(h.snap().hint).toMatch(/Choose Try again/);
+    expect(h.snap().hint).toMatch(/Retry your last message first/);
 
     h.do(() => h.actions().retry());
     await flush();
@@ -408,7 +483,7 @@ describe('when a message cannot be sent', () => {
       retry: 'send',
       severity: 'blocking',
     });
-    expect(h.snap().problem?.preserved).toBe('Your message is kept here.');
+    expect(h.snap().problem?.preserved).toBe('Your message is kept.');
     expect(h.snap().turns.at(-1)?.status).toBe('failed');
     h.do(() => h.actions().retry());
     await flush();
@@ -422,7 +497,7 @@ describe('when a message cannot be sent', () => {
     await h.begin(false);
     await typeIn('Hello');
     expect(h.snap().problem).toMatchObject({ code: 'rate-limited', retry: 'send' });
-    expect(h.snap().problem?.advice).toMatch(/Wait 4 seconds, then choose Try again/);
+    expect(h.snap().problem?.advice).toMatch(/Wait 4 seconds, then choose Retry/);
   });
 
   it('is not sure whether it was saved after an unexpected failure, and says retrying is safe', async () => {
@@ -431,7 +506,7 @@ describe('when a message cannot be sent', () => {
     await h.begin(false);
     await typeIn('Hello');
     expect(h.snap().problem).toMatchObject({ code: 'save-failed', retry: 'send' });
-    expect(h.snap().problem?.advice).toMatch(/will not be sent twice/);
+    expect(h.snap().problem?.advice).toMatch(/Retry sends it once/);
   });
 
   it('retries a conflict by itself, with growing waits, and then succeeds', async () => {
@@ -802,6 +877,43 @@ describe('language', () => {
   });
 });
 
+describe("the customer's chosen voice", () => {
+  it('is named in every request for the customer’s voice, and the plain request is not used', async () => {
+    await h.mount({ call: { voice: 'voice-c' } });
+    await h.begin(true);
+    expect(withVoice).toHaveBeenLastCalledWith(SESSION_ID, 1, 'en-GB', expect.any(AbortSignal), {
+      voice: 'voice-c',
+    });
+    h.do(() => h.actions().replay());
+    await flush();
+    expect(withVoice).toHaveBeenCalledTimes(2);
+    expect(withVoice).toHaveBeenLastCalledWith(SESSION_ID, 1, 'en-GB', expect.any(AbortSignal), {
+      voice: 'voice-c',
+    });
+    expect(mocked.speakTurn).not.toHaveBeenCalled();
+    expect(h.server.spoken).toEqual([1, 1]);
+  });
+
+  it('is not invented: without one, the request is the plain one it always was', async () => {
+    await h.mount();
+    await h.begin(true);
+    expect(withVoice).not.toHaveBeenCalled();
+    expect(mocked.speakTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('can arrive after the call has loaded, and is used from the next request', async () => {
+    await h.mount();
+    await h.begin(true);
+    expect(withVoice).not.toHaveBeenCalled();
+    h.do(() => h.call.rerender({ options: defaultOptions({ voice: 'voice-d' }) }));
+    h.do(() => h.actions().replay());
+    await flush();
+    expect(withVoice).toHaveBeenLastCalledWith(SESSION_ID, 1, 'en-GB', expect.any(AbortSignal), {
+      voice: 'voice-d',
+    });
+  });
+});
+
 describe('the microphone level', () => {
   it('moves while the trainee speaks, about 15 times a second, and reads 0 when nobody is listening', async () => {
     await h.mount();
@@ -855,11 +967,11 @@ describe('announcements', () => {
     h.do(() => h.actions().toggleMute());
     note();
     expect(seen.map((entry) => entry.text)).toEqual([
-      'The customer is speaking.',
-      'Listening.',
-      'The customer is speaking.',
-      'Listening.',
-      'Muted.',
+      'The customer is speaking. You can stop the response at any time.',
+      'Listening. Speak when you are ready.',
+      'The customer is speaking. You can stop the response at any time.',
+      'Listening. Speak when you are ready.',
+      'Your microphone is muted.',
       'Microphone on.',
     ]);
     const ids = seen.map((entry) => entry.id);
@@ -884,5 +996,159 @@ describe('a call that is resumed', () => {
     expect(h.snap().turns).toHaveLength(7);
     expect(h.snap().turns.at(-2)).toMatchObject({ index: 6, role: 'trainee' });
     expect(h.snap().turnsRemaining).toBe(57);
+  });
+});
+
+describe('text fallback as a mode', () => {
+  const typeIn = async (text: string) => {
+    let accepted = false;
+    h.do(() => {
+      void h
+        .actions()
+        .sendText(text)
+        .then((ok) => (accepted = ok));
+    });
+    await flush();
+    return accepted;
+  };
+
+  it('lets go of the microphone and the voice, sends typed messages as one message each, and goes back to voice', async () => {
+    await h.mount();
+    await h.openCall();
+    expect(h.env.mic.openTracks()).toHaveLength(1);
+
+    h.do(() => h.actions().useText());
+    expect(h.snap()).toMatchObject({ mode: 'text', stage: 'ready', phase: 'ready-for-next-turn' });
+    expect(h.snap().announcement?.text).toBe('You are typing your replies.');
+    expect(h.env.mic.openTracks()).toHaveLength(0);
+    expect(h.env.audio.listeningWorklets()).toHaveLength(0);
+    // Hands-free does not reopen a microphone that has been given up.
+    await advance(30_000);
+    expect(phase()).toBe('ready-for-next-turn');
+
+    expect(await typeIn('Typed from the fallback')).toBe(true);
+    expect(h.server.sent.map((request) => [request.text, request.inputMode])).toEqual([
+      ['Typed from the fallback', 'text'],
+    ]);
+    expect(h.snap().turns.filter((turn) => turn.role === 'trainee')).toHaveLength(1);
+    // Replies are captions in a typed call: only the opening line was ever spoken.
+    expect(h.server.spoken).toEqual([1]);
+    expect(h.snap().stage).toBe('ready');
+
+    // Back to voice: the microphone returns, and the call listens again.
+    await h.begin(true);
+    expect(h.snap()).toMatchObject({ mode: 'voice', microphone: 'granted' });
+    expect(h.env.mic.openTracks()).toHaveLength(1);
+    await advance(400);
+    expect(phase()).toBe('listening');
+  });
+
+  it('stops a customer voice that is playing, and keeps what the customer said', async () => {
+    await h.mount();
+    await h.begin(true);
+    expect(phase()).toBe('customer-speaking');
+    const before = h.snap().turns.map((turn) => turn.text);
+    h.do(() => h.actions().useText());
+    expect(h.snap()).toMatchObject({ mode: 'text', phase: 'ready-for-next-turn' });
+    expect(h.env.element.latest().paused).toBe(true);
+    expect(h.snap().turns.map((turn) => turn.text)).toEqual(before);
+    // The voice was audible when the trainee gave it up for typing: the reply was cut off.
+    expect(h.snap().turns[0]?.interrupted).toBe(true);
+  });
+
+  it('waits out a sentence that is being transcribed, so nothing the trainee said is lost', async () => {
+    h.server.transcripts.push('hang');
+    await h.mount();
+    await h.openCall();
+    await h.say();
+    expect(phase()).toBe('transcribing');
+    h.do(() => h.actions().useText());
+    expect(phase()).toBe('transcribing');
+    expect(h.snap().mode).toBe('voice');
+  });
+});
+
+describe('the customer audio', () => {
+  it('can be switched off in the middle of a reply, and the next replies are captions', async () => {
+    await h.mount();
+    await h.begin(true);
+    expect(phase()).toBe('customer-speaking');
+    h.do(() => h.actions().setAudio(false));
+    expect(h.snap()).toMatchObject({ audio: 'off', phase: 'ready-for-next-turn' });
+    expect(h.snap().announcement?.text).toBe('Customer audio off.');
+    expect(h.env.element.latest().paused).toBe(true);
+    expect(h.snap().turns[0]?.interrupted).toBe(true);
+
+    await advance(400);
+    expect(phase()).toBe('listening');
+    await h.say();
+    expect(h.server.spoken).toEqual([1]);
+    expect(h.snap().turns.at(-1)).toMatchObject({ role: 'customer', status: 'sent' });
+    expect(h.snap().stage).toBe('ready');
+    await advance(400);
+    expect(h.snap().stage).toBe('listening');
+
+    h.do(() => h.actions().setAudio(true));
+    expect(h.snap().audio).toBe('on');
+    await h.say();
+    expect(h.server.spoken).toEqual([1, 5]);
+  });
+
+  it('is none, and cannot be switched on, in a browser that has no voice at all', async () => {
+    await h.mount({ fakes: { audioElement: false } });
+    await h.begin(true);
+    expect(h.snap().audio).toBe('none');
+    h.do(() => h.actions().setAudio(true));
+    expect(h.snap().audio).toBe('none');
+  });
+});
+
+describe('coming back online', () => {
+  const typeIn = async (text: string) => {
+    h.do(() => {
+      void h.actions().sendText(text);
+    });
+    await flush();
+  };
+
+  it('sends a message that failed because the network was gone again, by itself, once and never twice', async () => {
+    h.server.sendSteps.push(() => networkError());
+    await h.mount();
+    await h.begin(false);
+    await typeIn('Hello');
+    expect(h.snap()).toMatchObject({ stage: 'offline', problem: { code: 'offline' } });
+    expect(h.snap().turns.at(-1)).toMatchObject({ status: 'failed', text: 'Hello' });
+
+    h.do(() => {
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('online'));
+    });
+    await flush();
+    const ids = h.server.sent.map((request) => request.clientMessageId);
+    expect(ids).toHaveLength(2);
+    expect(ids[1]).toBe(ids[0]);
+    expect(h.snap().problem).toBeNull();
+    expect(h.snap().turns.map((turn) => [turn.role, turn.status])).toEqual([
+      ['customer', 'sent'],
+      ['trainee', 'sent'],
+      ['customer', 'sent'],
+    ]);
+  });
+
+  it('leaves everything else for the trainee to retry, and does nothing once the call is gone', async () => {
+    h.server.transcripts.push(networkError());
+    await h.mount();
+    await h.openCall();
+    await h.say();
+    expect(h.snap().problem).toMatchObject({ code: 'offline', retry: 'transcribe' });
+    h.do(() => window.dispatchEvent(new Event('online')));
+    await flush();
+    expect(h.snap().problem?.code).toBe('offline');
+    expect(mocked.sendMessage).not.toHaveBeenCalled();
+
+    h.server.sendSteps.push(() => networkError());
+    h.call.unmount();
+    window.dispatchEvent(new Event('online'));
+    expect(mocked.sendMessage).not.toHaveBeenCalled();
   });
 });

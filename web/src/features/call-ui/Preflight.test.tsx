@@ -1,284 +1,296 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { wordCount } from '#shared/domain/scenario.ts';
+import { MICROPHONE_NOTICE, PRIVACY_DETAILS_LABEL } from '../voice/privacy.ts';
+import { VOICE_STATE_TEXT } from '../voice/states.ts';
 import { FIXTURES, type FixtureName } from './call-fixtures.ts';
-import { announced, clearViewport, renderCall, snapshotOf, WIDTH } from './test-utils.tsx';
+import { clock } from './call-model.ts';
+import { announced, clearViewport, renderCall, WIDTH } from './test-utils.tsx';
 
 afterEach(() => {
   cleanup();
   clearViewport();
-  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
-const WAITING =
-  'Waiting for you to allow the microphone. Look for the prompt near the address bar.';
-const PREFLIGHT: FixtureName[] = [
-  'preflight-voice',
-  'preflight-text',
-  'preflight-browser-speech',
-  'preflight-unsupported',
-  'preflight-resume',
-  'requesting-microphone',
-  'microphone-denied',
-];
+const rows = () =>
+  Object.fromEntries(
+    within(screen.getByRole('list', { name: 'What is ready' }))
+      .getAllByRole('listitem')
+      .map((item) => [
+        item.querySelector('.cw-pre__check-label')?.textContent,
+        item.querySelector('.cw-pre__check-value')?.textContent,
+      ]),
+  );
 
-const row = (label: string) => {
-  const item = screen.getByText(label, { selector: 'span' }).closest('li') as HTMLElement;
-  return within(item);
-};
-const actionButtons = () =>
-  screen
-    .getAllByRole('button')
-    .map((button) => button.textContent)
-    .filter(Boolean);
-
-describe('the pre-flight step', () => {
-  it('says who the customer is and that they are fictional, and names the scenario', () => {
+describe('the step before the call', () => {
+  it('introduces the customer, as made-up, by name, role and organisation, with the scenario and product', () => {
     renderCall('preflight-voice');
+    expect(screen.getByRole('heading', { level: 1, name: 'Ready to call?' })).toBeInTheDocument();
+    expect(screen.getByText('Priya Raman')).toBeInTheDocument();
+    expect(screen.getByText('IT coordinator, Harbourline Logistics')).toBeInTheDocument();
+    expect(screen.getByText('Synthetic customer')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Ready to start the call?' }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Maya Okafor')).toBeInTheDocument();
-    expect(screen.getByText('Front-desk coordinator, Fabrikam Dental Group')).toBeInTheDocument();
-    expect(screen.getByText('Fictional customer')).toBeInTheDocument();
-    expect(screen.getByText('Locked out after a password reset')).toBeInTheDocument();
-  });
-
-  it('tells the truth about what is ready, row by row', () => {
-    renderCall('preflight-voice');
-    expect(
-      row('Microphone').getByText('Not requested yet. Firefly asks only when you choose to start.'),
-    ).toBeInTheDocument();
-    expect(row('Speech recognition').getByText('Azure AI Speech')).toBeInTheDocument();
-    expect(row('Customer voice').getByText('Azure AI Speech')).toBeInTheDocument();
-    expect(
-      row('AI customer').getByText("Demo mode: Firefly's built-in rules engine"),
+      screen.getByText('Microsoft Teams: Meeting audio drops for one team'),
     ).toBeInTheDocument();
   });
 
-  it('names a live model by its own label, never as demo mode', () => {
-    renderCall('preflight-browser-speech');
-    expect(row('AI customer').getByText('Live model: Azure OpenAI (gpt-4o)')).toBeInTheDocument();
-    expect(screen.queryByText(/Demo mode/)).not.toBeInTheDocument();
-  });
-
-  it('never presents the browser’s own recognition as reliable', () => {
-    renderCall('preflight-browser-speech');
-    const recognition = row('Speech recognition');
-    expect(
-      recognition.getByText(
-        'Browser speech recognition (online). It can miss words, so you can always type your reply.',
-      ),
-    ).toBeInTheDocument();
-    // The browser voice has not spoken yet, so it is named as the browser's, nothing more.
-    expect(row('Customer voice').getByText('Browser voice')).toBeInTheDocument();
-    // The speech service's recognition carries no such caveat.
-    cleanup();
-    clearViewport();
-    renderCall('preflight-voice');
-    expect(row('Speech recognition').queryByText(/can miss words/)).not.toBeInTheDocument();
-  });
-
-  it('says where speech is processed and that Firefly does not keep audio', () => {
-    const { unmount } = renderCall('preflight-voice');
-    const privacy = () => screen.getByText(/does not store audio/).closest('p') as HTMLElement;
-    expect(privacy()).toHaveTextContent(
-      'Firefly opens your microphone only during the call and does not store audio. You can mute or stop it at any time.',
-    );
-    expect(privacy()).toHaveTextContent(
-      "Your speech goes to Firefly's server, which passes it to Azure AI Speech to be turned into text. Firefly does not keep the audio.",
-    );
-    unmount();
-    clearViewport();
-
-    renderCall('preflight-browser-speech');
-    expect(privacy()).toHaveTextContent(
-      "Your browser's online speech service turns your speech into text, so your audio goes to the browser's vendor. Firefly does not keep it.",
-    );
-    cleanup();
-    clearViewport();
-
-    renderCall('preflight-unsupported');
-    expect(privacy()).toHaveTextContent(
-      'Speech recognition is not available here, so nothing is recorded and you will type your replies.',
-    );
-  });
-
-  it('says plainly that the scripted demonstration does not understand audio', () => {
-    renderCall('preflight-demo-speech');
-    expect(
-      row('Speech recognition').getByText(
-        'Demo speech (scripted). It does not understand audio and returns scripted text instead of what you say, so it is for trying the call out. You can always type your reply.',
-      ),
-    ).toBeInTheDocument();
-    expect(
-      row('Customer voice').getByText(
-        "Demo speech (scripted). A placeholder sound stands in for the customer's voice, so read the transcript.",
-      ),
-    ).toBeInTheDocument();
-    const privacy = screen.getByText(/does not store audio/).closest('p') as HTMLElement;
-    expect(privacy).toHaveTextContent('scripted demonstration');
-    expect(privacy).toHaveTextContent('answers with scripted text instead of what you said');
-    expect(privacy).not.toHaveTextContent('to be turned into text');
-  });
-
-  it('leads with the spoken call and starts it from a click', async () => {
+  it('leads with the voice call and offers the typed call beside it, and says what each does', async () => {
+    const user = userEvent.setup();
     const { actions } = renderCall('preflight-voice');
-    expect(actionButtons()).toEqual(['Allow microphone and start', 'Start text-only call']);
-    await userEvent.click(screen.getByRole('button', { name: 'Allow microphone and start' }));
-    expect(actions.begin).toHaveBeenCalledWith({ voice: true });
-    await userEvent.click(screen.getByRole('button', { name: 'Start text-only call' }));
+    const voice = screen.getByRole('button', { name: 'Start voice call' });
+    const text = screen.getByRole('button', { name: 'Start text call' });
+    expect(voice).toHaveClass('ff-button--primary');
+    expect(text).not.toHaveClass('ff-button--primary');
+    expect(voice.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(voice);
+    expect(actions.begin).toHaveBeenCalledExactlyOnceWith({ voice: true });
+    await user.click(text);
     expect(actions.begin).toHaveBeenLastCalledWith({ voice: false });
   });
 
-  it('leads with the typed call when the address asks for it', async () => {
-    const { actions } = renderCall('preflight-text');
-    expect(actionButtons()).toEqual(['Start text-only call', 'Allow microphone and start']);
-    await userEvent.click(screen.getByRole('button', { name: 'Start text-only call' }));
-    expect(actions.begin).toHaveBeenCalledWith({ voice: false });
+  it('leads with the typed call when the address asked for one', () => {
+    renderCall('preflight-text');
+    const text = screen.getByRole('button', { name: 'Start text call' });
+    const voice = screen.getByRole('button', { name: 'Start voice call' });
+    expect(text).toHaveClass('ff-button--primary');
+    expect(voice).not.toHaveClass('ff-button--primary');
+    expect(text.compareDocumentPosition(voice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('links back to the brief with the choices the call was made with', () => {
-    renderCall('preflight-voice');
-    const href = screen.getByRole('link', { name: 'Back to brief' }).getAttribute('href')!;
-    expect(href.startsWith('/scenarios/locked-out-after-password-reset/brief?')).toBe(true);
-    expect(href).toContain('difficulty=starter');
-    expect(href).toContain('hints=off');
-  });
-
-  it('leaves out the spoken call, and says why, when voice is not available', async () => {
-    const { actions } = renderCall('preflight-unsupported');
-    expect(screen.getByText('A spoken call is not available here')).toBeInTheDocument();
+  it('offers only the typed call where this browser cannot hold a spoken one, and says why', () => {
+    renderCall('preflight-unsupported');
+    expect(screen.queryByRole('button', { name: /voice call/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Start text call' })).toHaveClass(
+      'ff-button--primary',
+    );
+    expect(screen.getByText('Voice is not available here')).toBeInTheDocument();
     expect(
       screen.getByText('This browser cannot use a microphone. You can still type your replies.'),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Allow microphone/ })).not.toBeInTheDocument();
-    expect(row('Microphone').getByText('Not available in this browser')).toBeInTheDocument();
-    expect(
-      row('Speech recognition').getByText('Not available in this browser'),
-    ).toBeInTheDocument();
-    expect(row('Customer voice').getByText('Captions only')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Start text-only call' }));
-    expect(actions.begin).toHaveBeenCalledWith({ voice: false });
+    expect(rows()).toMatchObject({ Speech: 'Unavailable', 'Customer voice': 'Captions only' });
   });
 
-  it('resumes a call that already has turns, with the time so far and the transcript below', () => {
-    renderCall('preflight-resume');
-    expect(screen.getByRole('heading', { level: 1, name: 'Resume your call' })).toBeInTheDocument();
-    expect(screen.getByText(/Time so far: 6:32/)).toBeInTheDocument();
-    const transcript = screen
-      .getByRole('heading', { name: 'Transcript so far' })
-      .closest('section') as HTMLElement;
-    expect(within(transcript).getAllByRole('listitem')).toHaveLength(
-      FIXTURES['preflight-resume'].snapshot.turns.length,
-    );
-    expect(screen.getByRole('button', { name: 'Allow microphone and resume' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Resume as a text-only call' })).toBeInTheDocument();
+  it('opens neither the microphone nor any sound until a button is pressed', () => {
+    const { actions } = renderCall('preflight-voice');
+    for (const action of Object.values(actions)) expect(action).not.toHaveBeenCalled();
   });
 
-  it('shows no transcript on a call that has not begun', () => {
+  it('goes back to the brief of this scenario, with the choices the call was made with', () => {
     renderCall('preflight-voice');
-    expect(screen.queryByText('Transcript so far')).not.toBeInTheDocument();
-    expect(screen.queryByText(/I can't sign in to the staff portal/)).not.toBeInTheDocument();
+    const link = screen.getByRole('link', { name: 'Back to brief' });
+    const url = new URL(link.getAttribute('href') as string, 'https://firefly.test');
+    expect(url.pathname).toBe('/scenarios/fixture-teams-audio-drops/brief');
+    expect(url.searchParams.get('difficulty')).toBe('standard');
   });
 
-  it('waits for the browser’s prompt in words, and keeps a typed call open as a way out', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const { actions } = renderCall('requesting-microphone');
-    expect(screen.getByText(WAITING, { selector: 'p' })).toBeInTheDocument();
-    expect(announced()).toBe(WAITING);
-    const waiting = screen.getByRole('button', { name: 'Waiting for the microphone' });
-    expect(waiting).toHaveAttribute('aria-busy', 'true');
-    await userEvent.click(waiting);
-    expect(actions.begin).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Start text-only call' }));
-    expect(actions.begin).toHaveBeenCalledWith({ voice: false });
+  it('goes where the page says when it is given a place to go back to', () => {
+    renderCall('preflight-voice', { briefTo: '/scenarios/x/brief?hints=on' });
+    expect(screen.getByRole('link', { name: 'Back to brief' })).toHaveAttribute(
+      'href',
+      '/scenarios/x/brief?hints=on',
+    );
+  });
+});
+
+describe('what is ready', () => {
+  it('lists the microphone, the customer’s voice, the speech and who writes the replies', () => {
+    renderCall('preflight-voice');
+    expect(rows()).toEqual({
+      Microphone: 'Not requested',
+      'Customer voice': 'Azure AI Speech',
+      Speech: 'Azure AI Speech',
+      'Customer AI': "Demo mode: Firefly's built-in rules engine",
+    });
   });
 
-  it('moves the keyboard to the notice when the browser’s prompt is declined', () => {
-    const { update } = renderCall('requesting-microphone');
-    const waiting = screen.getByRole('button', { name: 'Waiting for the microphone' });
-    waiting.focus();
-    expect(waiting).toHaveFocus();
-    update(FIXTURES['microphone-denied'].snapshot);
-    // The pressed button is gone, and the first action of the notice about it takes the keyboard.
-    expect(screen.getByRole('button', { name: 'Try again' })).toHaveFocus();
+  it('never calls the browser’s own recognition a sure thing, and names a live model as one', () => {
+    renderCall('preflight-browser-speech');
+    expect(rows()).toMatchObject({
+      'Customer voice': 'Browser voice',
+      Speech: 'Browser speech recognition (online)',
+      'Customer AI': 'Live model: Azure OpenAI (gpt-4o)',
+    });
+    expect(document.querySelector('.cw-pre__check--info .cw-pre__check-value')).not.toBeNull();
   });
 
-  it('shows a blocked microphone with its advice and two ways on', async () => {
-    const { actions } = renderCall('microphone-denied');
-    expect(screen.getByText('The microphone is blocked for this site.')).toBeInTheDocument();
-    expect(screen.getByText('Nothing has been recorded or sent.')).toBeInTheDocument();
-    expect(
-      screen.getByText(/Select the lock icon at the left of the address bar/),
-    ).toBeInTheDocument();
-    expect(row('Microphone').getByText('Blocked in this browser')).toBeInTheDocument();
-    // The usual two buttons give way to the problem's own.
-    expect(
-      screen.queryByRole('button', { name: 'Allow microphone and start' }),
-    ).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(actions.retry).toHaveBeenCalledTimes(1);
-    await userEvent.click(screen.getByRole('button', { name: 'Start a text-only call' }));
-    expect(actions.begin).toHaveBeenCalledWith({ voice: false });
+  it('calls scripted speech a demonstration: a placeholder voice and a scripted recogniser', () => {
+    renderCall('preflight-demo-speech');
+    expect(rows()).toMatchObject({
+      'Customer voice': 'Placeholder sound (demo)',
+      Speech: 'Demo speech (scripted): scripted',
+    });
   });
 
-  it('can be used from a phone and from a wide screen alike', () => {
-    for (const width of [WIDTH.narrow, WIDTH.wide]) {
-      const { unmount } = renderCall('preflight-voice', { width });
-      expect(
-        screen.getByRole('button', { name: 'Allow microphone and start' }),
-      ).toBeInTheDocument();
-      unmount();
-      clearViewport();
+  it('gives each row a word and an icon as well as a colour', () => {
+    renderCall('preflight-voice');
+    for (const item of within(screen.getByRole('list', { name: 'What is ready' })).getAllByRole(
+      'listitem',
+    )) {
+      expect(item.querySelector('svg')).not.toBeNull();
+      expect(item.querySelector('.cw-pre__check-value')?.textContent).toBeTruthy();
     }
   });
 });
 
-describe('before the call begins', () => {
-  it('never touches the microphone, audio or the speech APIs', () => {
-    const getUserMedia = vi.fn();
-    const audio = vi.fn();
-    const audioContext = vi.fn();
-    const recognition = vi.fn();
-    const speak = vi.fn();
-    vi.stubGlobal('Audio', audio);
-    vi.stubGlobal('AudioContext', audioContext);
-    vi.stubGlobal('webkitAudioContext', audioContext);
-    vi.stubGlobal('SpeechRecognition', recognition);
-    vi.stubGlobal('webkitSpeechRecognition', recognition);
-    vi.stubGlobal('speechSynthesis', { speak, getVoices: vi.fn(() => []), cancel: vi.fn() });
-    Object.defineProperty(navigator, 'mediaDevices', {
-      value: { getUserMedia, enumerateDevices: vi.fn() },
-      configurable: true,
+describe('what is said about the voice', () => {
+  const toggle = () => screen.getByRole('button', { name: PRIVACY_DETAILS_LABEL });
+  const items = () =>
+    [...document.querySelectorAll('.cw-pre__privacy-item')].map((item) => ({
+      label: item.querySelector('.cw-pre__privacy-label')?.textContent,
+      text: item.querySelector('.cw-pre__detail')?.textContent,
+    }));
+
+  it('says, before the microphone is asked for, what it is for and what not to share, in the voice layer’s own words', () => {
+    renderCall('preflight-voice');
+    expect(screen.getByText(MICROPHONE_NOTICE)).toBeVisible();
+    // Before the buttons, not after: it is read before the choice is made.
+    const notice = screen.getByText(MICROPHONE_NOTICE);
+    const start = screen.getByRole('button', { name: 'Start voice call' });
+    expect(notice.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('says nothing about a microphone where this browser cannot use one', () => {
+    renderCall('preflight-unsupported');
+    expect(screen.queryByText(MICROPHONE_NOTICE)).toBeNull();
+  });
+
+  it('keeps how the voice is handled one step further in, closed until it is asked for', () => {
+    renderCall('preflight-voice');
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+    expect(items()).toHaveLength(8);
+    expect(document.querySelector('.cw-pre__privacy-item')).not.toBeVisible();
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true');
+    expect(document.querySelector('.cw-pre__privacy-item')).toBeVisible();
+    expect(items()[0]?.label).toBe('Synthetic scenarios only');
+  });
+
+  it.each([
+    [
+      'preflight-voice',
+      'Who handles your audio: Azure AI Speech',
+      /sent through this Firefly server to Azure AI Speech/,
+      /held in memory only until it has been turned into text/,
+    ],
+    [
+      'preflight-demo-speech',
+      'Who handles your audio: Demo speech (scripted)',
+      /scripted demonstration/,
+      /held in memory only/,
+    ],
+    [
+      'preflight-browser-speech',
+      'Who handles your audio: Your browser',
+      /Firefly never receives the audio[^.]*\. In Edge and Chrome this is normally an online service/,
+      /Firefly never receives or keeps your audio on this path/,
+    ],
+    [
+      'preflight-unsupported',
+      'Who handles your audio: No speech service',
+      /you type your replies and no audio is recorded/,
+      /Nothing is recorded/,
+    ],
+  ] as const)(
+    'says only what is true of the speech path in use in %s',
+    (name, who, handled, kept) => {
+      renderCall(name);
+      const list = items();
+      const last = list[list.length - 1];
+      expect(last?.label).toBe(who);
+      expect(last?.text).toMatch(handled);
+      expect(list.find((item) => item.label === 'Your recording is discarded')?.text).toMatch(kept);
+    },
+  );
+});
+
+describe('asking for the microphone', () => {
+  it('shows the wait on the button and in the row, said once, in the voice layer’s words', () => {
+    vi.useFakeTimers();
+    renderCall('requesting-permission');
+    const button = screen.getByRole('button', {
+      name: VOICE_STATE_TEXT['requesting-permission'].label,
     });
-
-    for (const name of PREFLIGHT) {
-      const { unmount } = renderCall(name, { width: WIDTH.wide });
-      unmount();
-      clearViewport();
-    }
-
-    expect(getUserMedia).not.toHaveBeenCalled();
-    expect(audio).not.toHaveBeenCalled();
-    expect(audioContext).not.toHaveBeenCalled();
-    expect(recognition).not.toHaveBeenCalled();
-    expect(speak).not.toHaveBeenCalled();
-    Reflect.deleteProperty(navigator, 'mediaDevices');
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(rows().Microphone).toBe('Waiting for permission');
+    expect(announced()).toBe(VOICE_STATE_TEXT['requesting-permission'].announcement);
   });
 
-  it('only calls begin from a press', async () => {
-    const { actions } = renderCall('preflight-voice');
-    expect(actions.begin).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Allow microphone and start' }));
-    expect(actions.begin).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps a call that is already open out of the pre-flight', () => {
-    renderCall(snapshotOf('ready-for-next-turn'));
+  it('explains a blocked microphone in one card with the way to fix it, and offers Retry and Use text', () => {
+    const { actions } = renderCall('permission-denied');
+    expect(rows().Microphone).toBe('Blocked');
+    const card = document.querySelector('.cw-recovery') as HTMLElement;
+    expect(card).toHaveTextContent('The microphone is blocked, so Firefly cannot hear you.');
+    expect(card).toHaveTextContent('Nothing was recorded.');
+    // The one failure that interrupts: it is an alert, and it is not read a second time.
+    expect(card).toHaveAttribute('role', 'alert');
+    const fix = within(card).getByRole('button', { name: 'How to fix' });
+    expect(fix).toHaveAttribute('aria-expanded', 'false');
+    // In the order they are drawn: the advice is part of the text, the actions follow it.
     expect(
-      screen.queryByRole('heading', { name: 'Ready to start the call?' }),
-    ).not.toBeInTheDocument();
+      within(card)
+        .getAllByRole('button')
+        .map((item) => item.textContent?.trim()),
+    ).toEqual(['How to fix', 'Retry', 'Use text']);
+    // The two start buttons give way to the card: there is one way forward on the screen.
+    expect(screen.queryByRole('button', { name: 'Start voice call' })).toBeNull();
+    fireEvent.click(within(card).getByRole('button', { name: 'Retry' }));
+    expect(actions.retry).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(card).getByRole('button', { name: 'Use text' }));
+    expect(actions.begin).toHaveBeenCalledExactlyOnceWith({ voice: false });
+  });
+
+  it('puts the keyboard on the notice’s first action when the prompt was declined', () => {
+    renderCall('permission-denied');
+    expect(screen.getByRole('button', { name: 'Retry' })).toHaveFocus();
+  });
+
+  it('says a missing microphone in the row and the card', () => {
+    renderCall('microphone-unavailable');
+    expect(rows().Microphone).toBe('Unavailable');
+    expect(screen.getByText('No microphone was found.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use text' })).toBeInTheDocument();
+  });
+});
+
+describe('a call that is picked up again', () => {
+  it('says Resume, shows the time so far and the transcript so far, and the same two ways in', async () => {
+    const user = userEvent.setup();
+    const { actions } = renderCall('preflight-resume');
+    const { snapshot } = FIXTURES['preflight-resume'];
+    expect(screen.getByRole('heading', { level: 1, name: 'Resume call' })).toBeInTheDocument();
+    expect(screen.getByText('Time so far').parentElement).toHaveTextContent(
+      clock(snapshot.elapsedSeconds),
+    );
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Transcript so far' }),
+    ).toBeInTheDocument();
+    expect(document.querySelectorAll('.cw-pre__transcript .cw-turn')).toHaveLength(
+      snapshot.turns.length,
+    );
+    await user.click(screen.getByRole('button', { name: 'Resume voice call' }));
+    expect(actions.begin).toHaveBeenCalledExactlyOnceWith({ voice: true });
+    await user.click(screen.getByRole('button', { name: 'Resume with text' }));
+    expect(actions.begin).toHaveBeenLastCalledWith({ voice: false });
+  });
+});
+
+describe('the step at each width', () => {
+  const names: FixtureName[] = ['preflight-voice', 'permission-denied', 'preflight-resume'];
+  it.each(
+    names.flatMap((name) => [WIDTH.narrow, WIDTH.wide].map((width) => [name, width] as const)),
+  )('%s has one heading, one start path and no instructions at %i px', (name, width) => {
+    renderCall(name, { width });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(document.querySelectorAll('.cw-pre__actions, .cw-recovery').length).toBeGreaterThan(0);
+    for (const paragraph of document.querySelectorAll('.cw-pre__card p')) {
+      // The notice is the voice layer's exact sentence; the card and the details have their own copy.
+      if (paragraph.closest('.cw-recovery, .ff-disclosure, .cw-pre__notice')) continue;
+      expect(
+        wordCount(paragraph.textContent ?? ''),
+        paragraph.textContent ?? '',
+      ).toBeLessThanOrEqual(12);
+    }
   });
 });

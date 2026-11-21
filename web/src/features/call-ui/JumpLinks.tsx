@@ -12,11 +12,11 @@ function focusWithin(id: string) {
 }
 
 /**
- * "Jump to" links for the three places a call keeps its work: the controls, the transcript and the
- * reply box. They come right after the page's own skip link, show only while focused, and move
- * focus without touching the address bar or the history.
+ * "Jump to" links for the places a call keeps its work: the controls, the transcript and, in a
+ * typed call, the reply box. They come right after the page's own skip link, show only while
+ * focused, and move focus without touching the address bar or the history.
  */
-export function JumpLinks({ onReply }: { onReply(): void }) {
+export function JumpLinks({ reply }: { reply: boolean }) {
   const jump = (id: string) => (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     focusWithin(id);
@@ -25,7 +25,7 @@ export function JumpLinks({ onReply }: { onReply(): void }) {
     <nav aria-label="Jump to" className="cw-jump">
       <ul role="list" className="cw-jump__list">
         <li>
-          <a className="skip-link" href="#cw-controls-zone" onClick={jump('cw-controls-zone')}>
+          <a className="skip-link" href="#cw-controls" onClick={jump('cw-controls')}>
             Jump to the call controls
           </a>
         </li>
@@ -34,18 +34,13 @@ export function JumpLinks({ onReply }: { onReply(): void }) {
             Jump to the transcript
           </a>
         </li>
-        <li>
-          <a
-            className="skip-link"
-            href="#cw-reply"
-            onClick={(event) => {
-              event.preventDefault();
-              onReply();
-            }}
-          >
-            Jump to the reply box
-          </a>
-        </li>
+        {reply ? (
+          <li>
+            <a className="skip-link" href="#cw-reply" onClick={jump('cw-reply')}>
+              Jump to the reply box
+            </a>
+          </li>
+        ) : null}
       </ul>
     </nav>
   );

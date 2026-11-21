@@ -2,7 +2,6 @@ import { render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { RouterProvider, createMemoryRouter, useLocation } from 'react-router';
 import { vi } from 'vitest';
-import type { SessionSummaryDTO } from '#shared/domain/api.ts';
 import { AnnouncerProvider } from '../../../design/index.ts';
 import { ApiError, api } from '../../../lib/api.ts';
 import { ConfigProvider } from '../../../lib/config.tsx';
@@ -11,10 +10,10 @@ import { ScenarioWorkspace } from '../ScenarioWorkspace.tsx';
 import { appConfig, publicScenarios } from './fixtures.ts';
 
 // Shared setup for the component tests. The test file mocks `lib/api.ts` (so `api` here is the
-// mock), and this file gives each test the same real scenarios, a router with stand-ins for the
+// mock), and this file gives each test the same fixture scenarios, a router with stand-ins for the
 // pages the screens link to, and a way to pretend the window is wide or narrow.
 
-/** Pretends the window is wide (the list and the details side by side) or narrow (a sheet). */
+/** Pretends the window is wide (the list and the details side by side) or narrow (list, then details). */
 export function stubViewport(wide: boolean): void {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: query.includes('min-width: 64em') ? wide : false,
@@ -42,12 +41,9 @@ export function networkError(): ApiError {
 
 export interface ApiSetup {
   config?: ReturnType<typeof appConfig>;
-  sessions?: SessionSummaryDTO[];
-  /** The one call in progress, as the active-call lookup answers. */
-  active?: SessionSummaryDTO | null;
 }
 
-/** The API as it normally answers: the real scenarios, a demo-mode server, no calls yet. */
+/** The API as it normally answers: the fixture scenarios and a demo-mode server. */
 export function mockApi(setup: ApiSetup = {}): void {
   const scenarios = publicScenarios();
   vi.mocked(api.scenarios).mockResolvedValue(scenarios);
@@ -57,13 +53,6 @@ export function mockApi(setup: ApiSetup = {}): void {
     return found;
   });
   vi.mocked(api.config).mockResolvedValue(setup.config ?? appConfig());
-  vi.mocked(api.listSessions).mockImplementation(async (params = {}) => {
-    if (params.status === 'active') {
-      return setup.active ? { sessions: [setup.active], total: 1 } : { sessions: [], total: 0 };
-    }
-    const sessions = setup.sessions ?? [];
-    return { sessions: sessions.slice(0, params.limit ?? sessions.length), total: sessions.length };
-  });
 }
 
 /** A page the screens link to: it says where it is, so a test can see where a link led. */

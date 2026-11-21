@@ -1,39 +1,44 @@
-/* The call brief page: the briefing, with "Before you start" beside it from 64em and under it below. */
+/* The case brief: six short rows, the voice and microphone beside them, and the way to start. */
 
 .brf-page {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
-  padding-block: var(--sp-1) var(--sp-12);
+  gap: var(--sp-4);
+  padding-block: var(--sp-4) var(--sp-10);
 }
 .brf-page--centred {
   align-items: center;
-  padding-block: var(--sp-10);
+  padding-block: var(--sp-16);
 }
 .brf-head {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-3);
 }
-.brf-head__subtitle {
-  color: var(--fg-2);
+.brf-title {
+  font-family: var(--font-display);
   font-size: var(--fs-subtitle1);
   line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
 }
-
+.brf-subtitle {
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+  color: var(--fg-2);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+}
 .brf-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-6);
-  align-items: start;
-  min-inline-size: 0;
-}
-.brf-side {
+  gap: var(--sp-4);
   min-inline-size: 0;
 }
 @media (min-width: 64em) {
   .brf-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(21rem, 25rem);
+    grid-template-columns: minmax(0, 1fr) 24rem;
+    align-items: start;
+    gap: var(--sp-6);
   }
   .brf-side {
     position: sticky;
@@ -41,24 +46,389 @@
   }
 }
 
-.brf-skeleton {
+/* ---- The case --------------------------------------------------------------------------- */
+.brf-case,
+.brf-side {
+  min-inline-size: 0;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  box-shadow: var(--shadow-2);
+}
+.brf-rows {
+  margin: 0;
+}
+.brf-row {
+  display: grid;
+  gap: var(--sp-1) var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
+  border-block-end: var(--stroke-w) solid var(--stroke-3);
+  /* The rows come in one after another, quickly: a short fade and a small lift. */
+  animation: brf-in var(--dur-normal) var(--ease-decelerate) both;
+}
+.brf-row:nth-child(2) {
+  animation-delay: 40ms;
+}
+.brf-row:nth-child(3) {
+  animation-delay: 80ms;
+}
+.brf-row:nth-child(4) {
+  animation-delay: 120ms;
+}
+.brf-row:nth-child(5) {
+  animation-delay: 160ms;
+}
+.brf-row:nth-child(6) {
+  animation-delay: 200ms;
+  border-block-end: 0;
+}
+@keyframes brf-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (min-width: 36em) {
+  .brf-row {
+    grid-template-columns: 7rem minmax(0, 1fr);
+  }
+}
+.brf-row__term {
+  color: var(--fg-3);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+.brf-row__value {
+  min-inline-size: 0;
+  color: var(--fg-1);
+}
+.brf-sub {
+  display: block;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.brf-person {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
+  align-items: center;
+  gap: var(--sp-3);
+  margin-block-end: var(--sp-1);
+}
+.brf-impact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-2);
+}
+.brf-more {
+  padding: var(--sp-1) var(--sp-4);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.brf-more .ff-disclosure:last-child {
+  border-block-end: 0;
+}
+.brf-detail {
+  color: var(--fg-1);
 }
 
+/* ---- The voice call --------------------------------------------------------------------- */
+.brf-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+}
+.brf-side__title {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.brf-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1h);
+  min-inline-size: 0;
+}
+.brf-label {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.brf-voice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.brf-voice .ff-select {
+  flex: 1 1 11rem;
+  min-inline-size: 0;
+}
+/* The sample button and its waveform wrap together, so the waveform is never left on a line alone. */
+.brf-voice__test {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.brf-note,
+.brf-voice-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.brf-voice-note {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+/* A compact waveform: the bars move while a sample plays, and rest otherwise. */
+.brf-wave {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  block-size: 1.25rem;
+  color: var(--voice-customer);
+  opacity: 0.4;
+  transition: opacity var(--dur-fast) var(--ease-easy);
+}
+.brf-wave > span {
+  inline-size: 3px;
+  block-size: 100%;
+  border-radius: 2px;
+  background: currentColor;
+  transform: scaleY(var(--rest, 0.5));
+}
+.brf-wave > span:nth-child(1) {
+  --rest: 0.4;
+}
+.brf-wave > span:nth-child(2) {
+  --rest: 0.8;
+}
+.brf-wave > span:nth-child(3) {
+  --rest: 1;
+}
+.brf-wave > span:nth-child(4) {
+  --rest: 0.65;
+}
+.brf-wave > span:nth-child(5) {
+  --rest: 0.45;
+}
+.brf-wave[data-active] {
+  opacity: 1;
+}
+.brf-wave[data-active] > span {
+  animation: brf-wave 900ms var(--ease-easy) infinite;
+}
+.brf-wave[data-active] > span:nth-child(2) {
+  animation-delay: -300ms;
+}
+.brf-wave[data-active] > span:nth-child(3) {
+  animation-delay: -600ms;
+}
+.brf-wave[data-active] > span:nth-child(4) {
+  animation-delay: -150ms;
+}
+.brf-wave[data-active] > span:nth-child(5) {
+  animation-delay: -450ms;
+}
+@keyframes brf-wave {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* ---- Privacy ---------------------------------------------------------------------------- */
+.brf-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3);
+  border: var(--stroke-w) solid var(--status-info-border);
+  border-radius: var(--r-lg);
+  background: var(--status-info-bg);
+}
+.brf-notice__icon {
+  margin-block-start: 0.125rem;
+  color: var(--status-info-fg);
+}
+.brf-notice__body {
+  min-inline-size: 0;
+}
+.brf-notice__text {
+  color: var(--fg-1);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.brf-notice > .ff-button {
+  grid-column: 2;
+  justify-self: start;
+}
+.brf-privacy {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+ul.brf-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 0;
+  list-style: none;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.brf-details__label {
+  display: block;
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- The microphone --------------------------------------------------------------------- */
+.brf-ready {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-quiet);
+  transition:
+    border-color var(--dur-fast) var(--ease-easy),
+    background-color var(--dur-fast) var(--ease-easy);
+}
+.brf-ready__status {
+  display: flex;
+  flex: 1 1 10rem;
+  align-items: center;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+  color: var(--fg-1);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.brf-ready__status .ff-icon {
+  flex: none;
+  color: var(--fg-2);
+}
+.brf-ready[data-tone='success'] .ff-icon {
+  color: var(--status-success-fg);
+}
+.brf-ready[data-tone='warning'] .ff-icon {
+  color: var(--status-warning-fg);
+}
+.brf-ready[data-tone='danger'] .ff-icon {
+  color: var(--status-danger-fg);
+}
+.brf-ready__check {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.brf-ready__check .ff-button {
+  flex: none;
+  white-space: nowrap;
+}
+/* The level while the microphone is being checked: a bar that grows from its left end. It sits
+   after the button, so while it is hidden it leaves nothing to push the button sideways. */
+.brf-meter {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  max-inline-size: 8rem;
+  block-size: 0.375rem;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--bg-strong);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-easy);
+}
+.brf-meter[data-active] {
+  opacity: 1;
+}
+.brf-meter__bar {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--voice-trainee);
+  transform: scaleX(var(--level, 0));
+  transform-origin: left center;
+  transition: transform 60ms linear;
+}
+/* Pointing at (or tabbing to) the Start button lights up what it will use. */
+.brf-side:has(.brf-start:is(:hover, :focus-visible)) .brf-ready {
+  border-color: var(--brand-stroke);
+  background: var(--brand-tint);
+}
+
+/* ---- The way on ------------------------------------------------------------------------- */
+.brf-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* ---- Loading and unavailable ------------------------------------------------------------ */
+.brf-case--loading {
+  padding-block: var(--sp-2);
+}
 .brf-unavailable {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--sp-3);
-  max-inline-size: 32rem;
+  max-inline-size: 28rem;
+  padding: var(--sp-8) var(--sp-6);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-2);
+  text-align: center;
 }
 .brf-unavailable__icon {
   color: var(--status-warning-fg);
 }
-.brf-unavailable__text {
-  color: var(--fg-2);
-  font-size: var(--fs-reading);
-  line-height: var(--lh-reading);
+.brf-unavailable__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+}
+
+@media print {
+  .brf-row,
+  .brf-wave > span {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .brf-case,
+  .brf-side,
+  .brf-ready,
+  .brf-notice,
+  .brf-unavailable {
+    border-color: ButtonText;
+    box-shadow: none;
+  }
+  .brf-meter {
+    border: 1px solid ButtonText;
+    background: Canvas;
+  }
+  .brf-meter__bar,
+  .brf-wave > span {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
 }

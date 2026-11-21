@@ -1,411 +1,849 @@
 import { describe, expect, it } from 'vitest';
 import type { PublicStateDTO } from '#shared/domain/api.ts';
-import type { CallPhase, CallProblem, CallStatePoint, CallTurn } from '../call/contract.ts';
+import { wordCount } from '#shared/domain/scenario.ts';
+import { TEMPERATURE_BANDS, type TemperatureBandId } from '#shared/domain/vocab.ts';
 import {
+  CALL_STAGES,
+  type CallProblem,
+  type CallStatePoint,
+  type CallTurn,
+} from '../call/contract.ts';
+import { describeProblem, PROBLEM_CODES } from '../call/problems.ts';
+import { voiceError } from '../voice/errors.ts';
+import { VOICE_STATE_TEXT } from '../voice/states.ts';
+import {
+  adviceIsLong,
   briefPathFor,
   clock,
   clockSince,
   composerGate,
+  describeCase,
   describeConnection,
+  describeControls,
   describeCustomerState,
   describeStatus,
-  describeTalkControl,
+  isEndFailure,
+  latestCustomerTurn,
   preferredLanguage,
   providerDescription,
+  recoveryOptions,
+  SHORT_CALL_TURNS,
   stateChangeSentence,
-  traceSummary,
-  tracePoints,
+  timeMarks,
   traineeTurnCount,
+  unsavedMessage,
+  type ControlsInput,
   type StatusInput,
 } from './call-model.ts';
-import { FIXTURES } from './call-fixtures.ts';
+import { FIXTURES, SCENARIO } from './call-fixtures.ts';
 
-const status = (overrides: Partial<StatusInput> = {}) =>
-  describeStatus({
-    phase: 'ready-for-next-turn',
-    mode: 'voice',
-    muted: false,
-    paused: false,
-    speechDetected: false,
-    handsFree: false,
-    ...overrides,
-  });
-
-const state = (
-  band: PublicStateDTO['band']['id'],
-  trend: PublicStateDTO['trend'],
+const publicState = (
+  band: TemperatureBandId,
+  trend: PublicStateDTO['trend'] = 'steady',
 ): PublicStateDTO => ({
-  band: { id: band, label: band.charAt(0).toUpperCase() + band.slice(1) },
+  band: { id: band, label: TEMPERATURE_BANDS.find((candidate) => candidate.id === band)!.label },
   trend,
   discoveredCount: 0,
   silent: false,
   shifts: 0,
 });
 
-const points = (...bands: CallStatePoint['band'][]): CallStatePoint[] =>
-  bands.map((band, index) => ({ turnIndex: index * 2 + 1, band, label: band }));
-
-const problem = (overrides: Partial<CallProblem>): CallProblem => ({
-  code: 'offline',
-  title: 'Title.',
-  preserved: 'Kept.',
-  advice: 'Do this.',
-  retry: null,
-  textFallback: false,
-  severity: 'blocking',
-  ...overrides,
+const point = (band: TemperatureBandId, turnIndex = 1): CallStatePoint => ({
+  turnIndex,
+  band,
+  label: band,
 });
 
-describe('the status line', () => {
-  it('says what is happening in each stage of a turn', () => {
-    expect(status({ phase: 'idle' }).label).toBe('Connecting');
-    expect(status({ phase: 'ready' }).label).toBe('Connecting');
-    expect(status({ phase: 'listening' }).label).toBe('Listening');
-    expect(status({ phase: 'listening', speechDetected: true }).label).toBe('Hearing you');
-    expect(status({ phase: 'transcribing' }).label).toBe('Transcribing what you said');
-    expect(status({ phase: 'processing' }).label).toBe('The customer is thinking');
-    expect(status({ phase: 'customer-speaking' }).label).toBe('The customer is speaking');
-    expect(status({ phase: 'ready-for-next-turn' }).label).toBe('Your turn');
+describe('the status of the call', () => {
+  const status = (overrides: Partial<StatusInput> = {}) =>
+    describeStatus({
+      stage: 'ready',
+      mode: 'voice',
+      phase: 'ready-for-next-turn',
+      speechDetected: false,
+      microphone: 'granted',
+      problem: null,
+      ...overrides,
+    }).id;
+
+  const problem = (code: Parameters<typeof describeProblem>[0], context = {}) =>
+    describeProblem(code, context);
+
+  it('maps every machine stage to a status, and the end of the call always wins', () => {
+    for (const stage of CALL_STAGES) {
+      const result = describeStatus({
+        stage,
+        mode: 'voice',
+        phase: 'ready-for-next-turn',
+        speechDetected: false,
+        microphone: 'granted',
+      });
+      expect(result.stage, stage).toBe(stage);
+      expect(wordCount(result.label), result.label).toBeLessThanOrEqual(3);
+    }
+    for (const stage of ['ending', 'evaluating', 'completed'] as const) {
+      const ended = status({ stage, online: false, problem: problem('offline') });
+      expect(ended).toBe(stage === 'completed' ? 'completed' : stage);
+    }
   });
 
-  it('gives the four stages their own icon, colour and waveform', () => {
-    const stages = [
-      status({ phase: 'listening', speechDetected: true }),
-      status({ phase: 'transcribing' }),
-      status({ phase: 'processing' }),
-      status({ phase: 'customer-speaking' }),
+  it('says Microphone ready on the trainee’s turn and Connecting while the opening line is made', () => {
+    expect(status()).toBe('mic-ready');
+    expect(status({ phase: 'ready' })).toBe('connecting');
+    expect(status({ mode: 'text' })).toBe('text-fallback');
+    expect(status({ mode: 'text', phase: 'ready' })).toBe('text-fallback');
+  });
+
+  it('tells apart hearing nothing yet, hearing the trainee, and finishing the sentence', () => {
+    expect(status({ stage: 'listening' })).toBe('listening');
+    expect(status({ stage: 'listening', speechDetected: true })).toBe('speech-detected');
+    expect(status({ stage: 'endpointing', speechDetected: true })).toBe('processing-speech');
+    expect(status({ stage: 'transcribing' })).toBe('processing-speech');
+    expect(status({ stage: 'processing' })).toBe('generating-reply');
+    expect(status({ stage: 'customer-speaking' })).toBe('customer-speaking');
+  });
+
+  it('does not say Listening until the microphone is really open', () => {
+    expect(status({ stage: 'listening', micOpen: false })).toBe('mic-ready');
+    // Said "not open" and speech detected cannot both be true: the microphone heard it.
+    expect(status({ stage: 'listening', micOpen: true })).toBe('listening');
+    expect(status({ stage: 'listening', micOpen: true, speechDetected: true })).toBe(
+      'speech-detected',
+    );
+    // Only listening is held back: nothing else depends on it.
+    expect(status({ stage: 'transcribing', micOpen: false })).toBe('processing-speech');
+  });
+
+  it('says each state in the voice layer’s own words', () => {
+    const label = (input: Partial<StatusInput>) =>
+      describeStatus({
+        stage: 'ready',
+        mode: 'voice',
+        phase: 'ready-for-next-turn',
+        speechDetected: false,
+        microphone: 'granted',
+        ...input,
+      }).label;
+    expect(label({})).toBe(VOICE_STATE_TEXT['microphone-ready'].label);
+    expect(label({ stage: 'listening' })).toBe(VOICE_STATE_TEXT.listening.label);
+    expect(label({ stage: 'listening', speechDetected: true })).toBe(
+      VOICE_STATE_TEXT['speech-detected'].label,
+    );
+    expect(label({ stage: 'transcribing' })).toBe(VOICE_STATE_TEXT['processing-speech'].label);
+    expect(label({ stage: 'processing' })).toBe(
+      VOICE_STATE_TEXT['generating-customer-reply'].label,
+    );
+    expect(label({ stage: 'customer-speaking' })).toBe(VOICE_STATE_TEXT['customer-speaking'].label);
+    expect(label({ stage: 'paused' })).toBe(VOICE_STATE_TEXT.paused.label);
+    expect(label({ stage: 'muted' })).toBe(VOICE_STATE_TEXT.muted.label);
+    expect(label({ mode: 'text' })).toBe(VOICE_STATE_TEXT['text-fallback'].label);
+    expect(label({ stage: 'ending', phase: 'ending' })).toBe(VOICE_STATE_TEXT['ending-call'].label);
+    expect(label({ stage: 'evaluating', phase: 'ending' })).toBe(VOICE_STATE_TEXT.evaluating.label);
+    expect(label({ stage: 'completed', phase: 'completed' })).toBe(
+      VOICE_STATE_TEXT.completed.label,
+    );
+    // The states the voice layer has no word for keep ours.
+    expect(label({ stage: 'retrying' })).toBe('Retrying');
+    expect(label({ stage: 'ready', online: false })).toBe('Offline');
+  });
+
+  it('puts being offline above a pause, and a pause above a problem, so it never lies about whose turn it is', () => {
+    expect(status({ stage: 'paused', online: false })).toBe('offline');
+    expect(status({ stage: 'paused', problem: problem('reply-failed') })).toBe('paused');
+    expect(status({ stage: 'ready', online: false })).toBe('offline');
+    expect(status({ stage: 'muted', online: false })).toBe('offline');
+  });
+
+  it('shows a failed message as Try again instead of Microphone ready or Muted', () => {
+    for (const stage of ['ready', 'muted', 'offline'] as const) {
+      expect(status({ stage, problem: problem('reply-failed') }), stage).toBe('retry-required');
+    }
+    expect(status({ stage: 'offline', problem: problem('offline') })).toBe('retry-required');
+  });
+
+  it('says Message limit for a full call, and Call ended for a call another tab closed', () => {
+    expect(status({ problem: problem('turn-limit') })).toBe('limit-reached');
+    expect(status({ problem: problem('session-ended') })).toBe('completed');
+  });
+
+  it('does not stop a call that lost its microphone: it carries on in text, or as it was', () => {
+    expect(status({ mode: 'text', problem: problem('microphone-missing') })).toBe('text-fallback');
+    expect(status({ problem: problem('microphone-busy') })).toBe('mic-ready');
+  });
+
+  it('says Try again, as the voice layer does, when speech or the customer’s voice failed on the trainee’s turn', () => {
+    for (const code of [
+      'transcription-failed',
+      'voice-generation-failed',
+      'playback-blocked',
+      'playback-failed',
+    ] as const) {
+      expect(status({ problem: problem(code) }), code).toBe('retry-required');
+    }
+    expect(status({ problem: problem('rate-limited', { during: 'transcribe' }) })).toBe(
+      'retry-required',
+    );
+    // A typed call stays typing, and an open microphone is listening: neither is waiting for a retry.
+    expect(status({ mode: 'text', problem: problem('voice-generation-failed') })).toBe(
+      'text-fallback',
+    );
+    expect(status({ stage: 'listening', problem: problem('voice-generation-failed') })).toBe(
+      'listening',
+    );
+  });
+
+  it('does not let a degraded problem that is not a voice step change the status (the card says it instead)', () => {
+    expect(status({ problem: problem('end-failed') })).toBe('mic-ready');
+    expect(status({ problem: problem('offline', { during: 'end' }) })).toBe('mic-ready');
+  });
+
+  it('says Retrying while a retry works', () => {
+    expect(status({ stage: 'retrying' })).toBe('retrying');
+  });
+
+  it('describes the microphone row before the call from what the browser said', () => {
+    const before = { stage: 'idle', phase: 'idle', microphone: 'unknown' } as const;
+    expect(status({ ...before })).toBe('mic-not-requested');
+    expect(status({ ...before, stage: 'mic-permission', phase: 'requesting-microphone' })).toBe(
+      'requesting-permission',
+    );
+    expect(status({ ...before, problem: problem('microphone-denied', { beforeCall: true }) })).toBe(
+      'permission-denied',
+    );
+    for (const code of [
+      'microphone-missing',
+      'microphone-busy',
+      'microphone-unsupported',
+    ] as const) {
+      expect(status({ ...before, problem: problem(code, { beforeCall: true }) }), code).toBe(
+        'mic-unavailable',
+      );
+    }
+  });
+
+  it('gives each of the four stages of a turn its own label and icon', () => {
+    const turn = [
+      describeStatus({
+        stage: 'listening',
+        mode: 'voice',
+        phase: 'listening',
+        speechDetected: false,
+        microphone: 'granted',
+      }),
+      describeStatus({
+        stage: 'transcribing',
+        mode: 'voice',
+        phase: 'transcribing',
+        speechDetected: false,
+        microphone: 'granted',
+      }),
+      describeStatus({
+        stage: 'processing',
+        mode: 'voice',
+        phase: 'processing',
+        speechDetected: false,
+        microphone: 'granted',
+      }),
+      describeStatus({
+        stage: 'customer-speaking',
+        mode: 'voice',
+        phase: 'customer-speaking',
+        speechDetected: false,
+        microphone: 'granted',
+      }),
     ];
-    expect(new Set(stages.map((entry) => entry.icon)).size).toBe(4);
-    expect(new Set(stages.map((entry) => entry.label)).size).toBe(4);
-    expect(stages.map((entry) => entry.wave)).toEqual([
-      'trainee',
-      'transcribing',
-      'thinking',
-      'customer',
-    ]);
-    expect(stages.map((entry) => entry.who)).toEqual([
-      'trainee',
-      'trainee',
-      'customer',
-      'customer',
-    ]);
-  });
-
-  it('lets mute speak only while the microphone would otherwise be waiting', () => {
-    expect(status({ phase: 'ready-for-next-turn', muted: true }).label).toBe('Microphone muted');
-    expect(status({ phase: 'listening', muted: true }).label).toBe('Microphone muted');
-    expect(status({ phase: 'transcribing', muted: true }).label).toBe('Transcribing what you said');
-    expect(status({ phase: 'customer-speaking', muted: true }).label).toBe(
-      'The customer is speaking',
-    );
-  });
-
-  it('lets a pause win over everything but the end of the call', () => {
-    expect(status({ phase: 'processing', paused: true }).label).toBe('Call paused');
-    expect(status({ phase: 'listening', paused: true, muted: true }).label).toBe('Call paused');
-    expect(status({ phase: 'ending', paused: true }).label).toBe('Ending the call');
-  });
-
-  it('does not promise that hands-free will reopen the microphone once nothing was heard', () => {
-    const quiet = status({ handsFree: true });
-    expect(quiet.detail).toMatch(/^Hands-free opens the microphone by itself/);
-    const afterSilence = status({
-      handsFree: true,
-      hint: 'Nothing was heard. Check that the right microphone is selected, then speak again, or type your reply.',
-    });
-    expect(afterSilence.label).toBe('Your turn');
-    expect(afterSilence.detail).toBe('Press Talk and speak, or type a reply.');
-  });
-
-  it('describes a typed call', () => {
-    expect(status({ mode: 'text' }).label).toBe('Text-only call. Type your reply.');
-    expect(status({ mode: 'text', phase: 'processing' }).label).toBe('The customer is thinking');
-  });
-
-  it('never claims it is the trainee’s turn while a problem stops the call', () => {
-    const limit = status({ problem: problem({ code: 'turn-limit' }) });
-    expect(limit.label).toBe('Message limit reached');
-    expect(limit.who).toBe('alert');
-    expect(status({ problem: problem({ code: 'offline' }) }).label).toBe('You are offline');
-    expect(status({ problem: problem({ code: 'reply-failed' }) }).label).toBe(
-      'The customer has not replied',
-    );
-    expect(
-      status({ problem: problem({ code: 'microphone-missing', textFallback: true }) }).label,
-    ).toBe('Microphone unavailable');
-    // A problem the call can carry on through leaves the status alone.
-    expect(
-      status({ problem: problem({ code: 'transcription-failed', severity: 'degraded' }) }).label,
-    ).toBe('Your turn');
+    expect(new Set(turn.map((item) => item.label)).size).toBe(4);
+    expect(new Set(turn.map((item) => item.icon)).size).toBe(4);
   });
 });
 
 describe('the connection badge', () => {
-  const base = { mode: 'voice', muted: false, paused: false, problem: null } as const;
-
-  it('says live, muted, paused, typed, reconnecting or offline', () => {
-    expect(describeConnection(base, true).label).toBe('Live call');
-    expect(describeConnection({ ...base, muted: true }, true).label).toBe('Muted');
-    expect(describeConnection({ ...base, paused: true }, true).label).toBe('Paused');
-    expect(describeConnection({ ...base, mode: 'text' }, true).label).toBe('Text-only call');
-    expect(describeConnection({ ...base, problem: problem({ code: 'offline' }) }, true).label).toBe(
-      'Reconnecting',
-    );
-    expect(describeConnection(base, false).label).toBe('Offline');
+  it('says Live when the browser is online, and Offline above everything else', () => {
+    expect(describeConnection({ online: true })).toMatchObject({ key: 'live', label: 'Live' });
+    expect(describeConnection({ online: false })).toMatchObject({
+      key: 'offline',
+      label: 'Offline',
+    });
+    expect(describeConnection({ online: false, reconnecting: true }).key).toBe('offline');
   });
 
-  it('gives every state its own icon, so colour is never the only cue', () => {
-    const entries = [
-      describeConnection(base, true),
-      describeConnection({ ...base, muted: true }, true),
-      describeConnection({ ...base, paused: true }, true),
-      describeConnection({ ...base, mode: 'text' }, true),
-      describeConnection({ ...base, problem: problem({ code: 'offline' }) }, true),
-      describeConnection(base, false),
+  it('says Reconnecting while a step that failed has not been sent again', () => {
+    expect(describeConnection({ online: true, reconnecting: true })).toMatchObject({
+      key: 'reconnecting',
+      label: 'Reconnecting',
+    });
+  });
+
+  it('never relies on colour: each state has its own icon', () => {
+    const icons = [
+      describeConnection({ online: true }).icon,
+      describeConnection({ online: true, reconnecting: true }).icon,
+      describeConnection({ online: false }).icon,
     ];
-    expect(new Set(entries.map((entry) => entry.icon)).size).toBe(entries.length);
+    expect(new Set(icons).size).toBe(3);
   });
 });
 
 describe('the customer’s state', () => {
-  it('names the band, the trend and a plain line, never a number', () => {
-    const view = describeCustomerState(state('frustrated', 'rising'), points('calm', 'frustrated'));
-    expect(view?.label).toBe('Frustrated');
-    expect(view?.trendWord).toBe('rising');
-    expect(view?.description).toBe('Getting more frustrated');
-    expect(JSON.stringify(view)).not.toMatch(/\d/);
-  });
-
-  it('uses the words rising, steady and easing', () => {
-    expect(describeCustomerState(state('calm', 'steady'), [])?.trendWord).toBe('steady');
-    expect(
-      describeCustomerState(state('concerned', 'falling'), points('concerned'))?.trendWord,
-    ).toBe('easing');
-  });
-
-  it('is recovering only when easing after a higher band', () => {
-    const recovering = describeCustomerState(
-      state('frustrated', 'falling'),
-      points('calm', 'angry', 'frustrated'),
-    );
-    expect(recovering?.recovering).toBe(true);
-    expect(recovering?.tone).toBe('recovering');
-    expect(recovering?.label).toBe('Recovering');
-    expect(recovering?.description).toBe('Still frustrated, but easing');
-
-    // Easing, but never hotter: not recovering.
-    expect(
-      describeCustomerState(state('frustrated', 'falling'), points('calm', 'frustrated'))
-        ?.recovering,
-    ).toBe(false);
-    // Calm is never "recovering", even after a worse moment.
-    expect(
-      describeCustomerState(state('calm', 'falling'), points('concerned', 'calm'))?.recovering,
-    ).toBe(false);
-    // Rising after a higher band is not recovering either.
-    expect(
-      describeCustomerState(state('frustrated', 'rising'), points('angry', 'frustrated'))
-        ?.recovering,
-    ).toBe(false);
-  });
-
-  it('gives each state its own icon', () => {
-    const bands = ['calm', 'concerned', 'frustrated', 'angry', 'escalating'] as const;
-    const tones = bands.map((band) => describeCustomerState(state(band, 'steady'), [])?.tone);
-    expect(tones).toEqual([...bands]);
-  });
-
-  it('has nothing to say before there is a state, and never says why it changed', () => {
+  it('is nothing before the customer has a state', () => {
     expect(describeCustomerState(null, [])).toBeNull();
-    const view = describeCustomerState(state('angry', 'rising'), [])!;
-    expect(stateChangeSentence(view)).toBe('The customer now seems angry.');
-    expect(stateChangeSentence(view)).not.toMatch(/because|since|after/i);
-  });
-});
-
-describe('the temperature trace', () => {
-  it('lists the points in order and names them', () => {
-    const list = tracePoints(points('calm', 'concerned', 'angry'), null);
-    expect(list.map((entry) => entry.after)).toEqual(['Opening line', 'Reply 2', 'Reply 3']);
   });
 
-  it('starts from the current state when there is no history', () => {
-    expect(tracePoints([], state('concerned', 'steady'))).toHaveLength(1);
-    expect(tracePoints([], null)).toEqual([]);
-  });
-
-  it('summarises where the customer started, where they are and which way', () => {
-    const list = tracePoints(points('calm', 'concerned', 'frustrated'), null);
-    const view = describeCustomerState(state('frustrated', 'rising'), points('calm', 'frustrated'));
-    expect(traceSummary(list, view)).toBe(
-      'Customer temperature over 3 points: started calm, now frustrated, rising.',
+  it('is "Recovering" only when the customer is easing after being hotter earlier', () => {
+    const easing = publicState('frustrated', 'falling');
+    expect(
+      describeCustomerState(easing, [point('calm'), point('angry'), point('frustrated')]),
+    ).toMatchObject({
+      label: 'Recovering',
+      tone: 'recovering',
+      recovering: true,
+      trendWord: 'easing',
+    });
+    // Easing, but never hotter than now: that is just a customer calming down.
+    expect(describeCustomerState(easing, [point('calm'), point('concerned')])).toMatchObject({
+      label: 'Frustrated',
+      recovering: false,
+    });
+    // A calm customer is never "recovering".
+    expect(describeCustomerState(publicState('calm', 'falling'), [point('angry')])).toMatchObject({
+      label: 'Calm',
+      recovering: false,
+    });
+    // Hotter now is not recovering.
+    expect(describeCustomerState(publicState('angry', 'rising'), [point('calm')])?.recovering).toBe(
+      false,
     );
-    expect(traceSummary([], null)).toMatch(/no points/);
+  });
+
+  it('names the trend in words and gives it an icon', () => {
+    const rising = describeCustomerState(publicState('concerned', 'rising'), []);
+    expect(rising).toMatchObject({ trendWord: 'rising', trendIcon: 'trend-up' });
+    expect(describeCustomerState(publicState('concerned', 'steady'), [])).toMatchObject({
+      trendWord: 'steady',
+      trendIcon: 'trend-flat',
+    });
+  });
+
+  it('says a change in one sentence, with no number and never why', () => {
+    const angry = describeCustomerState(publicState('angry'), [])!;
+    expect(stateChangeSentence(angry)).toBe('The customer now seems angry.');
+    const recovering = describeCustomerState(publicState('frustrated', 'falling'), [
+      point('angry'),
+    ])!;
+    expect(stateChangeSentence(recovering)).toBe('The customer seems to be recovering.');
   });
 });
 
 describe('times and counts', () => {
-  it('formats m:ss and guards bad input', () => {
+  it('writes minutes and seconds, and never goes below zero or to NaN', () => {
     expect(clock(0)).toBe('0:00');
+    expect(clock(5)).toBe('0:05');
     expect(clock(65.9)).toBe('1:05');
     expect(clock(3600)).toBe('60:00');
     expect(clock(-4)).toBe('0:00');
     expect(clock(Number.NaN)).toBe('0:00');
+    expect(clock(Number.POSITIVE_INFINITY)).toBe('0:00');
   });
 
-  it('measures a turn from the start of the call', () => {
-    expect(clockSince('2026-11-21T09:00:00.000Z', '2026-11-21T09:02:05.000Z')).toBe('2:05');
-    expect(clockSince('2026-11-21T09:00:10.000Z', '2026-11-21T09:00:00.000Z')).toBe('0:00');
-    expect(clockSince('not a date', '2026-11-21T09:02:05.000Z')).toBe('');
+  it('measures a turn from the start of the call, and says nothing for a date it cannot read', () => {
+    expect(clockSince('2026-11-21T09:00:00.000Z', '2026-11-21T09:03:07.000Z')).toBe('3:07');
+    expect(clockSince('2026-11-21T09:00:00.000Z', 'later')).toBe('');
+    expect(clockSince('', '2026-11-21T09:03:07.000Z')).toBe('');
   });
 
-  it('counts only the trainee’s turns that the server holds', () => {
-    const turn = (role: CallTurn['role'], status: CallTurn['status']): CallTurn => ({
-      key: `${role}-${status}`,
-      index: 1,
-      role,
-      text: 'x',
-      inputMode: 'text',
-      createdAt: '2026-11-21T09:00:00.000Z',
+  const turnAt = (key: string, seconds: number): CallTurn => ({
+    key,
+    index: 1,
+    role: 'customer',
+    text: key,
+    inputMode: 'text',
+    createdAt: new Date(Date.parse('2026-11-21T09:00:00.000Z') + seconds * 1000).toISOString(),
+    status: 'sent',
+    clientMessageId: null,
+    interrupted: false,
+  });
+
+  it('stamps the first turn and then one every minute, counted from the last stamp', () => {
+    const turns = [
+      turnAt('a', 0),
+      turnAt('b', 20),
+      turnAt('c', 59),
+      turnAt('d', 60),
+      turnAt('e', 100),
+      turnAt('f', 121),
+    ];
+    expect([...timeMarks(turns, '2026-11-21T09:00:00.000Z')]).toEqual([
+      ['a', '0:00'],
+      ['d', '1:00'],
+      ['f', '2:01'],
+    ]);
+  });
+
+  it('skips a turn whose time cannot be read, and has no marks without turns', () => {
+    const broken = { ...turnAt('x', 0), createdAt: 'nonsense' };
+    expect([...timeMarks([broken, turnAt('y', 5)], '2026-11-21T09:00:00.000Z').keys()]).toEqual([
+      'y',
+    ]);
+    expect(timeMarks([], '2026-11-21T09:00:00.000Z').size).toBe(0);
+  });
+
+  it('counts only the trainee’s turns the server holds, and spots a message that was never saved', () => {
+    const trainee = (status: CallTurn['status'], index: number | null): CallTurn => ({
+      ...turnAt(`t${status}${index}`, 1),
+      role: 'trainee',
       status,
-      clientMessageId: null,
-      interrupted: false,
+      index,
     });
-    expect(
-      traineeTurnCount([
-        turn('customer', 'sent'),
-        turn('trainee', 'sent'),
-        turn('trainee', 'sending'),
-        turn('trainee', 'failed'),
-        turn('trainee', 'transcribing'),
-        turn('trainee', 'sent'),
-      ]),
-    ).toBe(2);
+    const turns = [
+      turnAt('c', 0),
+      trainee('sent', 2),
+      trainee('sending', null),
+      trainee('failed', null),
+    ];
+    expect(traineeTurnCount(turns)).toBe(1);
+    expect(unsavedMessage(turns)).toBe(true);
+    // A failed turn the server already has (a failed reply, not a failed save) is not unsaved.
+    expect(unsavedMessage([turnAt('c', 0), trainee('failed', 4)])).toBe(false);
+    expect(unsavedMessage([turnAt('c', 0), trainee('sent', 2)])).toBe(false);
+  });
+
+  it('finds the customer’s latest turn', () => {
+    expect(latestCustomerTurn([turnAt('a', 0), turnAt('b', 5)])?.key).toBe('b');
+    expect(latestCustomerTurn([])).toBeUndefined();
+    expect(SHORT_CALL_TURNS).toBeGreaterThan(0);
   });
 });
 
-describe('the large round control', () => {
-  const talk = (phase: CallPhase, extra: Partial<Parameters<typeof describeTalkControl>[0]> = {}) =>
-    describeTalkControl({ phase, muted: false, paused: false, limitReached: false, ...extra });
-
-  it('is Talk on the trainee’s turn, Stop talking while listening and Interrupt while the customer speaks', () => {
-    expect(talk('ready-for-next-turn')).toMatchObject({
-      kind: 'talk',
-      label: 'Talk',
-      disabled: false,
-    });
-    expect(talk('listening')).toMatchObject({
-      kind: 'stop',
-      label: 'Stop talking',
-      disabled: false,
-      pressed: true,
-    });
-    expect(talk('customer-speaking')).toMatchObject({ kind: 'interrupt', label: 'Interrupt' });
-  });
-
-  it('is disabled, with its reason in words, while the call is busy', () => {
-    expect(talk('transcribing')).toMatchObject({ disabled: true });
-    expect(talk('transcribing').reason).toMatch(/speech into text/);
-    expect(talk('processing').reason).toMatch(/customer to reply/);
-    expect(talk('ready-for-next-turn', { muted: true }).reason).toMatch(/muted/);
-    expect(talk('ready-for-next-turn', { paused: true }).reason).toMatch(/paused/);
-    expect(talk('ready-for-next-turn', { limitReached: true }).reason).toMatch(/limit/);
-    expect(talk('ending').reason).toMatch(/ending/);
-  });
-
-  it('is never pressed unless the microphone is open', () => {
-    expect(talk('ready-for-next-turn').pressed).toBe(false);
-    expect(talk('customer-speaking').pressed).toBeUndefined();
-  });
-});
-
-describe('when the composer must wait', () => {
-  it('waits only while the customer replies, at the limit, while ending, or on a problem', () => {
-    expect(composerGate({ phase: 'ready-for-next-turn', problem: null })).toEqual({
-      canSend: true,
-      reason: null,
-    });
-    expect(composerGate({ phase: 'listening', problem: null }).canSend).toBe(true);
-    expect(composerGate({ phase: 'customer-speaking', problem: null }).canSend).toBe(true);
-    expect(composerGate({ phase: 'processing', problem: null }).reason).toMatch(
-      /customer to reply/,
-    );
-    expect(composerGate({ phase: 'ending', problem: null }).canSend).toBe(false);
-    expect(
-      composerGate({ phase: 'ready-for-next-turn', problem: problem({ code: 'turn-limit' }) })
-        .reason,
-    ).toMatch(/limit/);
-  });
-
-  it('says why a blocking problem stops sending, and lets typing carry on when it can', () => {
-    const offline = composerGate({
+describe('the controls', () => {
+  const controls = (overrides: Partial<ControlsInput> = {}) =>
+    describeControls({
       phase: 'ready-for-next-turn',
-      problem: problem({ code: 'offline' }),
+      stage: 'ready',
+      mode: 'voice',
+      muted: false,
+      paused: false,
+      audio: 'on',
+      canReplay: true,
+      blocked: false,
+      limitReached: false,
+      ...overrides,
     });
-    expect(offline.canSend).toBe(false);
-    expect(offline.reason).toMatch(/offline/);
-    expect(
-      composerGate({
-        phase: 'ready-for-next-turn',
-        problem: problem({ code: 'reply-failed', retry: 'send' }),
-      }).reason,
-    ).toMatch(/Try again/);
-    expect(
-      composerGate({
-        phase: 'ready-for-next-turn',
-        problem: problem({ code: 'microphone-denied', textFallback: true }),
-      }).canSend,
-    ).toBe(true);
-    expect(
-      composerGate({
-        phase: 'ready-for-next-turn',
-        problem: problem({ code: 'voice-generation-failed', severity: 'degraded' }),
-      }).canSend,
-    ).toBe(true);
+
+  it('is Talk on the trainee’s turn, with everything else in its place', () => {
+    const view = controls();
+    expect(view.talk).toMatchObject({ kind: 'talk', label: 'Talk', disabled: false });
+    expect(view.mute).toEqual({ visible: true, pressed: false, disabled: false });
+    expect(view.stopAudio).toEqual({ visible: true, disabled: true });
+    expect(view.text).toEqual({ visible: true, disabled: false });
+    expect(view.pause).toEqual({ visible: true, resume: false, disabled: false });
+    expect(view.replay).toEqual({ visible: true, disabled: false });
+  });
+
+  it('waits for the customer’s voice: Talk is off, and Stop customer audio is the way to take the turn', () => {
+    const speaking = controls({ phase: 'customer-speaking', stage: 'customer-speaking' });
+    expect(speaking.talk.disabled).toBe(true);
+    expect(speaking.stopAudio.disabled).toBe(false);
+    // The opening line has not started yet, but it is about to: it can be skipped too.
+    const opening = controls({ phase: 'ready', stage: 'ready' });
+    expect(opening.talk.disabled).toBe(true);
+    expect(opening.stopAudio.disabled).toBe(false);
+  });
+
+  it('becomes Done speaking while the microphone is open, off while the sentence is being finished', () => {
+    expect(controls({ phase: 'listening', stage: 'listening' }).talk).toMatchObject({
+      kind: 'done',
+      label: 'Done speaking',
+      disabled: false,
+      busy: false,
+    });
+    expect(controls({ phase: 'listening', stage: 'endpointing' }).talk).toMatchObject({
+      kind: 'done',
+      disabled: true,
+    });
+  });
+
+  it('keeps Talk, working, until the microphone is really open, and only then offers Done speaking', () => {
+    const opening = controls({ phase: 'listening', stage: 'listening', micOpen: false });
+    expect(opening.talk).toMatchObject({ kind: 'talk', label: 'Talk', disabled: true, busy: true });
+    const open = controls({ phase: 'listening', stage: 'listening', micOpen: true });
+    expect(open.talk).toMatchObject({ kind: 'done', busy: false });
+    // Nothing else waits for it.
+    expect(controls({ micOpen: false }).talk).toMatchObject({ kind: 'talk', busy: false });
+    expect(controls({ mode: 'text', micOpen: false }).talk.busy).toBe(false);
+  });
+
+  it('turns Talk off for a mute, a pause, a problem and a full call, never removing it', () => {
+    expect(controls({ muted: true, stage: 'muted' }).talk).toMatchObject({
+      kind: 'talk',
+      disabled: true,
+    });
+    expect(controls({ paused: true, stage: 'paused' }).talk.disabled).toBe(true);
+    expect(controls({ blocked: true }).talk.disabled).toBe(true);
+    expect(controls({ limitReached: true }).talk.disabled).toBe(true);
+    for (const phase of ['processing', 'transcribing', 'ending', 'completed'] as const) {
+      expect(controls({ phase }).talk.disabled, phase).toBe(true);
+    }
+  });
+
+  it('shows Mute as a toggle that reports itself, and Resume once paused', () => {
+    expect(controls({ muted: true, stage: 'muted' }).mute.pressed).toBe(true);
+    expect(controls({ paused: true, stage: 'paused' }).pause.resume).toBe(true);
+    expect(controls({ paused: true, stage: 'paused' }).replay.disabled).toBe(true);
+  });
+
+  it('keeps Mute and Pause off before the call has begun and once it is closing', () => {
+    for (const phase of ['idle', 'requesting-microphone', 'ending', 'completed'] as const) {
+      const view = controls({ phase });
+      expect(view.mute.disabled, phase).toBe(true);
+      expect(view.pause.disabled, phase).toBe(true);
+    }
+    expect(controls({ phase: 'processing' }).text.disabled).toBe(true);
+  });
+
+  it('hides Replay when there is no customer audio, and turns it off when there is nothing to replay', () => {
+    expect(controls({ audio: 'off' }).replay.visible).toBe(false);
+    expect(controls({ audio: 'none' }).replay.visible).toBe(false);
+    expect(controls({ canReplay: false }).replay).toEqual({ visible: true, disabled: true });
+    expect(controls({ phase: 'processing' }).replay.disabled).toBe(true);
+  });
+
+  it('is only Return to voice in a typed call: no dead voice buttons', () => {
+    const view = controls({ mode: 'text' });
+    expect(view.talk).toMatchObject({ kind: 'voice', label: 'Return to voice', disabled: false });
+    expect(view.mute.visible).toBe(false);
+    expect(view.stopAudio.visible).toBe(false);
+    expect(view.text.visible).toBe(false);
+    expect(view.pause.visible).toBe(false);
+    expect(view.replay.visible).toBe(false);
+    // Going back to voice waits for the customer's reply, and for a full call.
+    expect(controls({ mode: 'text', phase: 'processing' }).talk.disabled).toBe(true);
+    expect(controls({ mode: 'text', limitReached: true }).talk.disabled).toBe(true);
+  });
+
+  it('keeps every label to three words or fewer', () => {
+    const labels = [
+      controls().talk.label,
+      controls({ stage: 'listening', phase: 'listening' }).talk.label,
+      controls({ mode: 'text' }).talk.label,
+    ];
+    for (const label of labels) expect(wordCount(label), label).toBeLessThanOrEqual(3);
   });
 });
 
-describe('who writes the replies, the language and the way back', () => {
-  it('labels demo mode as the built-in rules engine and a live model with its own name', () => {
-    expect(providerDescription({ demo: true, label: 'Demo mode (built-in rules engine)' })).toBe(
-      "Demo mode: Firefly's built-in rules engine",
+describe('recovery', () => {
+  const labels = (
+    code: Parameters<typeof describeProblem>[0],
+    mode: 'voice' | 'text',
+    context = {},
+  ) => recoveryOptions(describeProblem(code, context), { mode }).map((option) => option.label);
+
+  it('offers a voice that could not be made Retry, one that could not be played Replay, and both a way to carry on without it', () => {
+    expect(labels('voice-generation-failed', 'voice'), 'made').toEqual([
+      'Retry',
+      'Continue without audio',
+    ]);
+    expect(labels('voice-generation-failed', 'voice', { timedOut: true }), 'timed out').toEqual([
+      'Retry',
+      'Continue without audio',
+    ]);
+    for (const code of ['playback-blocked', 'playback-failed'] as const) {
+      expect(labels(code, 'voice'), code).toEqual(['Replay', 'Continue without audio']);
+    }
+    // Losing the network while the voice was being made is the same kind of problem.
+    expect(labels('offline', 'voice', { during: 'speak' })).toEqual([
+      'Retry',
+      'Continue without audio',
+    ]);
+  });
+
+  it('offers a failed message Retry and End safely, and never Use text (the message is waiting to be sent)', () => {
+    for (const code of ['reply-failed', 'reply-timeout', 'save-failed'] as const) {
+      expect(labels(code, 'voice'), code).toEqual(['Retry', 'End safely']);
+      expect(labels(code, 'text'), code).toEqual(['Retry', 'End safely']);
+    }
+  });
+
+  it('offers a lost microphone Retry and Use text, and in a typed call only Retry', () => {
+    for (const code of ['microphone-denied', 'microphone-missing', 'microphone-busy'] as const) {
+      expect(labels(code, 'voice'), code).toEqual(['Retry', 'Use text']);
+      expect(labels(code, 'text'), code).toEqual(['Retry']);
+    }
+    expect(labels('microphone-unsupported', 'voice')).toEqual(['Use text']);
+  });
+
+  it('offers failed speech Retry and Use text, and speech that is not available only Use text', () => {
+    expect(labels('transcription-failed', 'voice')).toEqual(['Retry', 'Use text']);
+    expect(labels('offline', 'voice', { during: 'transcribe' })).toEqual(['Retry', 'Use text']);
+    // Trying again cannot help a service that is not there.
+    expect(labels('speech-service-unavailable', 'voice')).toEqual(['Use text']);
+  });
+
+  it('offers what the voice layer offers for the failures that are its', () => {
+    const asLabel = { retry: 'Retry', replay: 'Replay', 'use-text': 'Use text' } as const;
+    const pairs: Array<[Parameters<typeof describeProblem>[0], Parameters<typeof voiceError>[0]]> =
+      [
+        ['microphone-denied', 'microphone-denied'],
+        ['microphone-missing', 'microphone-missing'],
+        ['microphone-busy', 'microphone-busy'],
+        ['microphone-unsupported', 'microphone-unsupported'],
+        ['transcription-failed', 'transcription-failed'],
+        ['speech-service-unavailable', 'speech-unavailable'],
+        ['voice-generation-failed', 'voice-failed'],
+        ['playback-blocked', 'playback-blocked'],
+        ['playback-failed', 'playback-failed'],
+      ];
+    for (const [code, voice] of pairs) {
+      const offered = labels(code, 'voice');
+      for (const action of voiceError(voice).recovery) {
+        if (action === 'continue-without-audio') {
+          expect(offered, `${code} ${action}`).toContain('Continue without audio');
+        } else {
+          expect(offered, `${code} ${action}`).toContain(asLabel[action]);
+        }
+      }
+    }
+  });
+
+  it('offers Retry only while offline or rate limited, and End call for a full call', () => {
+    expect(labels('offline', 'voice', { during: 'send' })).toEqual(['Retry']);
+    expect(labels('rate-limited', 'text', { during: 'send' })).toEqual(['Retry']);
+    expect(labels('turn-limit', 'text')).toEqual(['End call']);
+  });
+
+  it('offers use-text before the call by the call’s own start (the pre-flight is not a mode yet)', () => {
+    const options = recoveryOptions(describeProblem('microphone-denied', { beforeCall: true }), {
+      mode: 'text',
+      begun: false,
+    });
+    expect(options.map((option) => option.label)).toEqual(['Retry', 'Use text']);
+  });
+
+  it('never offers Retry when retrying cannot help, and Use text only where typing works', () => {
+    for (const code of PROBLEM_CODES) {
+      const problem = describeProblem(code, {});
+      for (const mode of ['voice', 'text'] as const) {
+        const actions = recoveryOptions(problem, { mode }).map((option) => option.action);
+        if (problem.retry === null && !['turn-limit'].includes(code)) {
+          expect(actions, `${code} ${mode}`).not.toContain('retry');
+        }
+        if (!problem.textFallback) expect(actions, `${code} ${mode}`).not.toContain('use-text');
+        if (mode === 'text') expect(actions, `${code} ${mode}`).not.toContain('use-text');
+      }
+    }
+  });
+
+  it('gives every problem a way forward, except the ones where the page moves on by itself', () => {
+    const none: string[] = [];
+    for (const code of PROBLEM_CODES) {
+      if (
+        recoveryOptions(describeProblem(code, { notFound: true }), { mode: 'voice' }).length === 0
+      ) {
+        none.push(code);
+      }
+    }
+    // The call has already ended (the report opens), or it does not exist (the page says so, with a way back).
+    expect(none.sort()).toEqual(['session-ended', 'session-unavailable']);
+  });
+
+  it('labels every action with one to three words', () => {
+    for (const code of PROBLEM_CODES) {
+      for (const option of recoveryOptions(describeProblem(code, {}), { mode: 'voice' })) {
+        expect(wordCount(option.label), option.label).toBeLessThanOrEqual(3);
+      }
+    }
+  });
+
+  it('puts long advice behind "How to fix" and keeps short advice in the card', () => {
+    expect(adviceIsLong(describeProblem('microphone-denied', { browser: 'edge' }).advice)).toBe(
+      true,
     );
-    expect(providerDescription({ demo: false, label: 'Azure OpenAI (gpt-4o)' })).toBe(
-      'Live model: Azure OpenAI (gpt-4o)',
+    expect(adviceIsLong(describeProblem('microphone-denied', { browser: 'chrome' }).advice)).toBe(
+      false,
+    );
+    expect(adviceIsLong(describeProblem('reply-failed').advice)).toBe(false);
+    expect(
+      adviceIsLong(
+        'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen',
+      ),
+    ).toBe(false);
+    expect(
+      adviceIsLong(
+        'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen',
+      ),
+    ).toBe(true);
+  });
+
+  it('knows a failure to end the call, even one that happened offline, and nothing else', () => {
+    expect(isEndFailure(describeProblem('end-failed'))).toBe(true);
+    expect(isEndFailure(describeProblem('end-failed', { nothingToReview: true }))).toBe(true);
+    expect(isEndFailure(describeProblem('offline', { during: 'end' }))).toBe(true);
+    expect(isEndFailure(describeProblem('offline', { during: 'send' }))).toBe(false);
+    expect(isEndFailure(describeProblem('reply-failed'))).toBe(false);
+    expect(isEndFailure(null)).toBe(false);
+  });
+});
+
+describe('the reply box', () => {
+  const gate = (
+    phase: Parameters<typeof composerGate>[0]['phase'],
+    problem: CallProblem | null = null,
+  ) => composerGate({ phase, problem });
+
+  it('sends on the trainee’s turn and says nothing', () => {
+    expect(gate('ready-for-next-turn')).toEqual({ canSend: true, reason: null });
+    expect(gate('ready')).toEqual({ canSend: true, reason: null });
+  });
+
+  it('waits, in a few words, while the customer replies and while the call closes', () => {
+    expect(gate('processing')).toEqual({ canSend: false, reason: 'Waiting for the customer.' });
+    expect(gate('ending').reason).toBe('The call is ending.');
+    expect(gate('completed').canSend).toBe(false);
+  });
+
+  it('waits for a problem that needs handling first, and says which', () => {
+    expect(gate('ready-for-next-turn', describeProblem('reply-failed'))).toEqual({
+      canSend: false,
+      reason: 'Retry your last message first.',
+    });
+    expect(gate('ready-for-next-turn', describeProblem('offline', { during: 'send' })).reason).toBe(
+      'You are offline.',
+    );
+    expect(gate('ready-for-next-turn', describeProblem('turn-limit')).reason).toBe(
+      'Message limit reached.',
+    );
+    expect(gate('ready-for-next-turn', describeProblem('session-ended')).reason).toBe(
+      'This call has ended.',
     );
   });
 
-  it('picks the first browser language that speech supports', () => {
-    expect(preferredLanguage(['fr-FR', 'en-us', 'en-GB'])).toBe('en-US');
-    expect(preferredLanguage(['de-DE'])).toBeUndefined();
-    expect(preferredLanguage([])).toBeUndefined();
+  it('keeps sending for problems that typing gets around, and for degraded ones', () => {
+    expect(gate('ready-for-next-turn', describeProblem('microphone-missing')).canSend).toBe(true);
+    expect(gate('ready-for-next-turn', describeProblem('voice-generation-failed')).canSend).toBe(
+      true,
+    );
+    expect(gate('ready-for-next-turn', describeProblem('transcription-failed')).canSend).toBe(true);
   });
 
-  it('builds the brief address with the choices the call was made with', () => {
-    const session = FIXTURES['preflight-voice'].snapshot.session!;
+  it('keeps every reason to five words or fewer', () => {
+    const reasons = [
+      gate('processing'),
+      gate('ending'),
+      gate('ready', describeProblem('reply-failed')),
+      gate('ready', describeProblem('offline')),
+      gate('ready', describeProblem('turn-limit')),
+      gate('ready', describeProblem('session-ended')),
+      gate('ready', describeProblem('session-unavailable', { notFound: true })),
+    ];
+    for (const { reason } of reasons)
+      expect(wordCount(reason ?? ''), reason ?? '').toBeLessThanOrEqual(5);
+  });
+});
+
+describe('the case', () => {
+  it('reads the public brief: product, reference, issue, the impact’s own line, stage and objective', () => {
+    const facts = describeCase(SCENARIO);
+    expect(facts.product).toEqual({
+      name: 'Microsoft Teams',
+      area: 'Meetings',
+      family: 'Microsoft 365',
+    });
+    expect(facts.caseReference).toBe('FX-20418');
+    expect(facts.issue).toMatch(/Audio cuts out/);
+    expect(facts.impact).toEqual({
+      label: 'Medium',
+      detail: 'The warehouse team cannot hold its daily handover meeting.',
+    });
+    expect(facts.callStage).toBe('First contact');
+    expect(facts.objective).toMatch(/Find what changed/);
+    expect(facts.more.map((item) => item.label)).toEqual([
+      'Known context',
+      'Previous contact',
+      'Environment',
+    ]);
+  });
+
+  it('follows the impact the call was configured with', () => {
+    const high = describeCase({ ...SCENARIO, config: { ...SCENARIO.config, impact: 'high' } });
+    expect(high.impact.label).toBe('High');
+    expect(high.impact.detail).toMatch(/Shift handovers/);
+  });
+
+  it('guesses nothing for a call saved before public briefs: older goal, the impact’s description', () => {
+    const facts = describeCase({
+      ...SCENARIO,
+      product: null,
+      caseReference: null,
+      publicBrief: null,
+    });
+    expect(facts.product).toBeNull();
+    expect(facts.caseReference).toBeNull();
+    expect(facts.issue).toBeNull();
+    expect(facts.objective).toBe('Find what changed, then agree a next step.');
+    expect(facts.impact.detail.length).toBeGreaterThan(0);
+    expect(facts.more).toEqual([]);
+  });
+
+  it('leaves out the details a brief does not have', () => {
+    const facts = describeCase({
+      ...SCENARIO,
+      publicBrief: { ...SCENARIO.publicBrief!, knownContext: '', environment: '' },
+    });
+    expect(facts.more.map((item) => item.label)).toEqual(['Previous contact']);
+  });
+});
+
+describe('where the call goes next', () => {
+  const session = FIXTURES['mic-ready'].snapshot.session!;
+
+  it('takes Back to brief to the brief of this scenario with the choices the call was made with', () => {
     const path = briefPathFor(session);
-    expect(path.startsWith('/scenarios/locked-out-after-password-reset/brief?')).toBe(true);
-    const query = new URLSearchParams(path.split('?')[1]);
-    // The fixture was made with no complications, which the brief must not turn back on.
-    expect(session.scenario.config.curveballsEnabled).toBe(false);
-    expect(Object.fromEntries(query)).toEqual({
-      difficulty: 'starter',
-      impact: 'low',
-      temperature: 'calm',
-      proficiency: 'novice',
-      style: 'talkative',
+    const url = new URL(path, 'https://firefly.test');
+    expect(url.pathname).toBe('/scenarios/fixture-teams-audio-drops/brief');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      difficulty: 'standard',
+      impact: 'medium',
+      temperature: 'anxious',
+      proficiency: 'intermediate',
+      style: 'demanding',
       stage: 'first-contact',
       hints: 'off',
-      curveballs: 'none',
     });
-    const withCurveballs = {
+  });
+
+  it('carries guided practice and switched-off complications', () => {
+    const guided = FIXTURES['guided-hints'].snapshot.session!;
+    expect(new URL(briefPathFor(guided), 'https://firefly.test').searchParams.get('hints')).toBe(
+      'on',
+    );
+    const quiet = {
       ...session,
       scenario: {
         ...session.scenario,
-        config: { ...session.scenario.config, curveballsEnabled: true },
+        config: { ...session.scenario.config, curveballsEnabled: false },
       },
     };
-    const again = new URLSearchParams(briefPathFor(withCurveballs).split('?')[1]);
-    expect(again.has('curveballs')).toBe(false);
+    expect(
+      new URL(briefPathFor(quiet), 'https://firefly.test').searchParams.get('curveballs'),
+    ).toBe('none');
+  });
+
+  it('escapes a scenario id that is not made of safe characters', () => {
+    const odd = { ...session, scenarioId: 'a b/c' };
+    expect(briefPathFor(odd)).toContain('/scenarios/a%20b%2Fc/brief?');
+  });
+});
+
+describe('the speech language and the provider', () => {
+  it('uses the first language of the browser that speech supports, whatever its case', () => {
+    expect(preferredLanguage(['fr-FR', 'en-us', 'en-GB'])).toBe('en-US');
+    expect(preferredLanguage(['de', 'fr'])).toBeUndefined();
+    expect(preferredLanguage([])).toBeUndefined();
+  });
+
+  it('calls the built-in rules a demo and a model a live model, never the other way round', () => {
+    expect(providerDescription({ demo: true, label: 'Anything' })).toMatch(/^Demo mode/);
+    expect(providerDescription({ demo: false, label: 'Azure OpenAI (gpt-4o)' })).toBe(
+      'Live model: Azure OpenAI (gpt-4o)',
+    );
   });
 });

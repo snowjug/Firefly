@@ -1,149 +1,193 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { ISSUE_TYPES, ISSUE_TYPE_LABELS, DIFFICULTY_RANK } from '#shared/domain/vocab.ts';
+import {
+  DIFFICULTIES,
+  DIFFICULTY_RANK,
+  ISSUE_TYPES,
+  PRODUCT_FAMILIES,
+  PRODUCT_IDS,
+} from '#shared/domain/vocab.ts';
 import {
   NO_FILTERS,
   activeFilterCount,
   countLabel,
+  difficultyOptions,
   filterScenarios,
-  groupByIssue,
-  listOrder,
-  matchesQuery,
+  issueOptions,
+  matchesFilters,
+  productGroups,
   readFilters,
+  sortScenarios,
   writeFilters,
   type Filters,
 } from './catalogue.ts';
 import { defaultConfig, parseConfig } from './config-params.ts';
 import { SAMPLE, publicScenarios, scenarioById } from './testing/fixtures.ts';
+import { defaultVoiceFor } from './voice-choice.ts';
 import { normaliseSearch, workspaceSearch } from './workspace-url.ts';
 
 const all = publicScenarios();
-const titles = (list: readonly { title: string }[]) => list.map((s) => s.title);
+const ids = (list: readonly { id: string }[]) => list.map((scenario) => scenario.id);
 
-describe('search', () => {
-  it('finds a scenario by words in its title, summary, tags, customer and issue type', () => {
-    const one = scenarioById(SAMPLE.challenge);
-    expect(matchesQuery(one, 'checkout')).toBe(true);
-    expect(matchesQuery(one, one.summary.split(' ').slice(2, 4).join(' '))).toBe(true);
-    expect(matchesQuery(one, one.tags[0] as string)).toBe(true);
-    expect(matchesQuery(one, one.persona.name.split(' ')[1] as string)).toBe(true);
-    expect(matchesQuery(one, one.persona.role)).toBe(true);
-    expect(matchesQuery(one, one.persona.organisation)).toBe(true);
-    expect(matchesQuery(one, ISSUE_TYPE_LABELS[one.issueType])).toBe(true);
-  });
-
-  it('needs every word, in any order, ignoring case and accents', () => {
-    const one = scenarioById(SAMPLE.challenge);
-    expect(matchesQuery(one, '  CLOCK   checkout ')).toBe(true);
-    expect(matchesQuery(one, 'checkout banana')).toBe(false);
-    expect(matchesQuery(one, 'Dèclan')).toBe(true);
-    expect(matchesQuery(one, '')).toBe(true);
-    expect(matchesQuery(one, '   ')).toBe(true);
-  });
-
-  it('narrows the real library', () => {
-    expect(filterScenarios(all, { ...NO_FILTERS, q: 'invoice' }).map((s) => s.id)).toContain(
-      'invoice-shock-and-cancellation-threat',
-    );
-    expect(filterScenarios(all, { ...NO_FILTERS, q: 'zzzz-no-such-thing' })).toEqual([]);
+describe('the library the tests use', () => {
+  it('has at least twelve scenarios across the products and all three difficulties', () => {
+    expect(all.length).toBeGreaterThanOrEqual(12);
+    expect(new Set(all.map((scenario) => scenario.product.id)).size).toBeGreaterThanOrEqual(10);
+    expect(new Set(all.map((scenario) => scenario.difficulty))).toEqual(new Set(DIFFICULTIES));
   });
 });
 
 describe('filters', () => {
-  it('combine, and each narrows on its own', () => {
-    const byIssue = filterScenarios(all, { ...NO_FILTERS, issue: 'slow-performance' });
-    expect(byIssue.length).toBeGreaterThan(0);
-    expect(byIssue.every((s) => s.issueType === 'slow-performance')).toBe(true);
+  it('each narrow on their own, and together', () => {
+    const teams = filterScenarios(all, { ...NO_FILTERS, product: 'teams' });
+    expect(teams.length).toBeGreaterThan(1);
+    expect(teams.every((scenario) => scenario.product.id === 'teams')).toBe(true);
 
-    const byDifficulty = filterScenarios(all, { ...NO_FILTERS, difficulty: 'challenge' });
-    expect(byDifficulty.every((s) => s.difficulty === 'challenge')).toBe(true);
+    const challenge = filterScenarios(all, { ...NO_FILTERS, difficulty: 'challenge' });
+    expect(challenge.every((scenario) => scenario.difficulty === 'challenge')).toBe(true);
 
-    const byImpact = filterScenarios(all, { ...NO_FILTERS, impact: 'low' });
-    expect(byImpact.every((s) => s.impact === 'low')).toBe(true);
+    const slow = filterScenarios(all, { ...NO_FILTERS, issue: 'slow-performance' });
+    expect(slow.every((scenario) => scenario.issueType === 'slow-performance')).toBe(true);
 
-    const both = filterScenarios(all, {
-      ...NO_FILTERS,
-      issue: 'slow-performance',
-      difficulty: 'challenge',
-    });
-    expect(titles(both)).toEqual(titles(byIssue.filter((s) => s.difficulty === 'challenge')));
-    expect(both.length).toBeLessThan(byIssue.length);
+    const both = filterScenarios(all, { product: 'teams', issue: null, difficulty: 'challenge' });
+    expect(ids(both)).toEqual(ids(teams.filter((scenario) => scenario.difficulty === 'challenge')));
+    expect(both.length).toBeLessThan(teams.length);
   });
 
-  it('read from the address, ignoring what is not valid', () => {
+  it('match a scenario only when every filter set matches it', () => {
+    const one = scenarioById(SAMPLE.standard);
+    expect(matchesFilters(one, NO_FILTERS)).toBe(true);
+    expect(
+      matchesFilters(one, { product: 'teams', issue: 'data-missing', difficulty: 'standard' }),
+    ).toBe(true);
+    expect(matchesFilters(one, { ...NO_FILTERS, product: 'outlook' })).toBe(false);
+    expect(matchesFilters(one, { ...NO_FILTERS, difficulty: 'starter' })).toBe(false);
+  });
+
+  it('are read from the address, ignoring what is not valid', () => {
     const filters = readFilters(
-      new URLSearchParams('q=billing&f_issue=how-to&f_difficulty=hard&f_impact=high'),
+      new URLSearchParams('f_product=teams&f_issue=how-to&f_difficulty=hard&q=old&f_impact=high'),
     );
-    expect(filters).toEqual({ q: 'billing', issue: 'how-to', difficulty: null, impact: 'high' });
-    expect(readFilters(new URLSearchParams('difficulty=challenge&impact=high'))).toEqual(
+    expect(filters).toEqual({ product: 'teams', issue: 'how-to', difficulty: null });
+    expect(readFilters(new URLSearchParams('f_product=notes&difficulty=challenge'))).toEqual(
       NO_FILTERS,
     );
   });
 
   it('use keys that never clash with the call configuration', () => {
     const params = new URLSearchParams();
-    writeFilters({ q: 'x', issue: 'how-to', difficulty: 'starter', impact: 'low' }, params);
-    expect([...params.keys()]).toEqual(['q', 'f_issue', 'f_difficulty', 'f_impact']);
+    writeFilters({ product: 'azure', issue: 'how-to', difficulty: 'starter' }, params);
+    expect([...params.keys()]).toEqual(['f_product', 'f_issue', 'f_difficulty']);
   });
 
-  it('are counted, and a search of spaces is not a filter', () => {
+  it('are counted', () => {
     expect(activeFilterCount(NO_FILTERS)).toBe(0);
-    expect(activeFilterCount({ ...NO_FILTERS, q: '   ' })).toBe(0);
-    expect(
-      activeFilterCount({ q: 'a', issue: 'how-to', difficulty: 'starter', impact: 'low' }),
-    ).toBe(4);
+    expect(activeFilterCount({ product: 'teams', issue: null, difficulty: 'starter' })).toBe(2);
   });
 });
 
 describe('order', () => {
-  const groups = groupByIssue(all);
+  const sorted = sortScenarios(all);
 
-  it('groups by issue type in the vocabulary order and leaves out empty groups', () => {
-    const order = groups.map((g) => g.issueType);
-    expect(order).toEqual(ISSUE_TYPES.filter((type) => all.some((s) => s.issueType === type)));
-    expect(groupByIssue([])).toEqual([]);
-    expect(groups.every((g) => g.label === ISSUE_TYPE_LABELS[g.issueType])).toBe(true);
-  });
-
-  it('puts the gentlest first inside a group, then by title', () => {
-    for (const group of groups) {
-      for (let i = 1; i < group.scenarios.length; i++) {
-        const a = group.scenarios[i - 1];
-        const b = group.scenarios[i];
-        if (!a || !b) continue;
-        const ranks = DIFFICULTY_RANK[a.difficulty] - DIFFICULTY_RANK[b.difficulty];
-        expect(ranks <= 0).toBe(true);
-        if (ranks === 0) expect(a.title.localeCompare(b.title)).toBeLessThanOrEqual(0);
-      }
+  it('goes by product family, then product, then the gentlest first, then title', () => {
+    const rank = (list: readonly string[], item: string) => list.indexOf(item);
+    for (let i = 1; i < sorted.length; i++) {
+      const a = sorted[i - 1];
+      const b = sorted[i];
+      if (!a || !b) continue;
+      const families =
+        rank(PRODUCT_FAMILIES, a.product.family) - rank(PRODUCT_FAMILIES, b.product.family);
+      expect(families).toBeLessThanOrEqual(0);
+      if (families !== 0) continue;
+      const products = rank(PRODUCT_IDS, a.product.id) - rank(PRODUCT_IDS, b.product.id);
+      expect(products).toBeLessThanOrEqual(0);
+      if (products !== 0) continue;
+      const levels = DIFFICULTY_RANK[a.difficulty] - DIFFICULTY_RANK[b.difficulty];
+      expect(levels).toBeLessThanOrEqual(0);
+      if (levels === 0) expect(a.title.localeCompare(b.title, 'en')).toBeLessThanOrEqual(0);
     }
   });
 
-  it('lists every scenario exactly once', () => {
-    expect(listOrder(groups)).toHaveLength(all.length);
-    expect(new Set(listOrder(groups).map((s) => s.id)).size).toBe(all.length);
+  it('lists every scenario once, and leaves the input as it was', () => {
+    const before = ids(all);
+    expect(sorted).toHaveLength(all.length);
+    expect(new Set(ids(sorted)).size).toBe(all.length);
+    expect(ids(all)).toEqual(before);
+  });
+});
+
+describe('the counts the filters show', () => {
+  it('group the products by family, in order, with a count each', () => {
+    const groups = productGroups(all, NO_FILTERS);
+    expect(groups.map((group) => group.family)).toEqual(
+      PRODUCT_FAMILIES.filter((family) =>
+        all.some((scenario) => scenario.product.family === family),
+      ),
+    );
+    expect(groups.find((group) => group.family === 'microsoft-365')?.label).toBe('Microsoft 365');
+    const options = groups.flatMap((group) => group.options);
+    expect(options.reduce((sum, option) => sum + option.count, 0)).toBe(all.length);
+    expect(options.find((option) => option.value === 'teams')?.count).toBe(2);
+    expect(options.find((option) => option.value === 'teams')?.label).toBe('Microsoft Teams');
   });
 
-  it('counts in words', () => {
-    expect(countLabel(13, 13)).toBe('13 scenarios');
-    expect(countLabel(3, 13)).toBe('3 of 13 scenarios');
-    expect(countLabel(0, 13)).toBe('0 of 13 scenarios');
+  it('count each filter against the others, never against itself', () => {
+    const filters: Filters = { product: 'teams', issue: null, difficulty: 'challenge' };
+    // Choosing Teams does not hide the other products' counts: they show what choosing one would give.
+    const challenge = productGroups(all, filters)
+      .flatMap((group) => group.options)
+      .reduce((sum, option) => sum + option.count, 0);
+    expect(challenge).toBe(all.filter((scenario) => scenario.difficulty === 'challenge').length);
+
+    const byDifficulty = difficultyOptions(all, filters);
+    expect(byDifficulty.map((option) => [option.value, option.count])).toEqual([
+      ['starter', 0],
+      ['standard', 1],
+      ['challenge', 1],
+    ]);
+    expect(byDifficulty.map((option) => option.label)).toEqual([
+      'Starter',
+      'Standard',
+      'Challenge',
+    ]);
+  });
+
+  it('keep a choice with nothing behind it in the list, with a count of zero', () => {
+    const groups = productGroups(all, { ...NO_FILTERS, difficulty: 'starter' });
+    expect(
+      groups.flatMap((group) => group.options).find((option) => option.value === 'teams')?.count,
+    ).toBe(0);
+    const issues = issueOptions(all, { ...NO_FILTERS, product: 'teams' });
+    expect(issues.find((option) => option.value === 'how-to')?.count).toBe(0);
+    expect(issues.find((option) => option.value === 'data-missing')?.count).toBe(1);
+  });
+
+  it('list the issue types in the vocabulary order, and only those the library has', () => {
+    const issues = issueOptions(all, NO_FILTERS);
+    expect(issues.map((option) => option.value)).toEqual(
+      ISSUE_TYPES.filter((type) => all.some((scenario) => scenario.issueType === type)),
+    );
+    expect(issues.reduce((sum, option) => sum + option.count, 0)).toBe(all.length);
+  });
+
+  it('say how many scenarios there are, in words', () => {
+    expect(countLabel(16, 16)).toBe('16 scenarios');
+    expect(countLabel(3, 16)).toBe('3 of 16 scenarios');
+    expect(countLabel(0, 16)).toBe('0 of 16 scenarios');
     expect(countLabel(1, 1)).toBe('1 scenario');
   });
 });
 
 describe('the workspace address', () => {
   const scenario = scenarioById(SAMPLE.standard);
-  const filters: Filters = {
-    q: 'team access',
-    issue: 'sign-in-access',
-    difficulty: null,
-    impact: 'medium',
-  };
+  const filters: Filters = { product: 'teams', issue: 'data-missing', difficulty: null };
 
   it('writes filters, then the scenario, then its configuration, in a fixed order', () => {
-    const config = parseConfig('hints=on&difficulty=challenge', scenario);
+    // A voice that is the scenario's own is left out, so the test names one that is not.
+    const other = defaultVoiceFor(scenario.id) === 'voice-d' ? 'voice-c' : 'voice-d';
+    const config = parseConfig(`hints=on&difficulty=challenge&voice=${other}`, scenario);
     expect(workspaceSearch(filters, { scenarioId: scenario.id, scenario, config })).toBe(
-      `?q=team+access&f_issue=sign-in-access&f_impact=medium&scenario=${scenario.id}&difficulty=challenge&hints=on`,
+      `?f_product=teams&f_issue=data-missing&scenario=${scenario.id}&difficulty=challenge&hints=on&voice=${other}`,
     );
   });
 

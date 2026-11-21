@@ -1,110 +1,49 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
 import { useAppSection } from '../../app/section.tsx';
-import { Button, Dialog, Icon, MessageBar, Skeleton } from '../../design/index.ts';
+import { Button } from '../../design/primitives/Button.tsx';
+import { MessageBar } from '../../design/primitives/MessageBar.tsx';
 import { api, errorMessage } from '../../lib/api.ts';
 import { useApi, useDocumentTitle, useMediaQuery, useOnline } from '../../lib/hooks.ts';
 import {
   NO_FILTERS,
   activeFilterCount,
   countLabel,
+  difficultyOptions,
   filterScenarios,
-  groupByIssue,
+  issueOptions,
+  productGroups,
   readFilters,
+  sortScenarios,
   type Filters,
 } from './catalogue.ts';
-import { ConfigurationPanel } from './ConfigurationPanel.tsx';
-import { defaultConfig, parseConfig, type CallConfig } from './config-params.ts';
-import { InProgressBanner, RecentCallsDialog, useActiveCall } from './RecentCalls.tsx';
-import { ScenarioDetail } from './ScenarioDetail.tsx';
+import { briefPath, defaultConfig, parseConfig, type CallConfig } from './config-params.ts';
+import { FilterBar, type FilterPatch } from './FilterBar.tsx';
 import { ScenarioList, ScenarioListEmpty, ScenarioListSkeleton } from './ScenarioList.tsx';
-import { ScenarioToolbar, type FilterPatch } from './ScenarioToolbar.tsx';
-import { SummaryBar } from './SummaryBar.tsx';
+import { PaneEmpty, PaneSkeleton, ScenarioPane } from './ScenarioPane.tsx';
+import { useVoiceOptions } from './use-voice-options.ts';
 import { useWorkspaceSearch } from './use-workspace-search.ts';
 import { normaliseSearch, workspaceSearch } from './workspace-url.ts';
 import './workspace.css';
 
-/** From here the list and the details sit side by side; below it the details open in a sheet. */
+/** From here the list and the details sit side by side; below it the list leads to the details. */
 const WIDE_QUERY = '(min-width: 64em)';
 
-interface PaneProps {
-  scenario: PublicScenarioDTO;
-  config: CallConfig;
-  onChange(config: CallConfig): void;
-  onReset(): void;
-}
-
-/** The chosen scenario's details and setup, on its own scroll area, with the next step pinned under it. */
-function ScenarioPane({ scenario, config, onChange, onReset }: PaneProps) {
-  const titleId = useId();
-  return (
-    <section className="scn-pane" aria-labelledby={titleId}>
-      <div className="scn-pane__scroll">
-        <div className="scn-pane__content">
-          <ScenarioDetail scenario={scenario} stage={config.stage} titleId={titleId} />
-          <ConfigurationPanel
-            key={scenario.id}
-            scenario={scenario}
-            config={config}
-            onChange={onChange}
-            onReset={onReset}
-          />
-        </div>
-      </div>
-      <div className="scn-pane__bar">
-        <SummaryBar scenario={scenario} config={config} />
-      </div>
-    </section>
-  );
-}
-
-function PaneSkeleton() {
-  return (
-    <div className="scn-pane scn-pane--quiet" aria-hidden="true">
-      <div className="scn-pane__scroll">
-        <div className="scn-pane__content">
-          <Skeleton width="30%" />
-          <Skeleton width="70%" height="1.75rem" />
-          <div className="scn-pane__persona">
-            <Skeleton variant="circle" width="3.5rem" height="3.5rem" />
-            <Skeleton lines={2} width="12rem" />
-          </div>
-          <Skeleton lines={3} />
-          <Skeleton variant="rect" height="7rem" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PaneEmpty() {
-  return (
-    <section className="scn-pane scn-pane--quiet scn-pane--empty" aria-label="Selected scenario">
-      <Icon name="document" size={28} />
-      <p className="scn-pane__empty-title">No scenario selected</p>
-      <p className="scn-pane__empty-text">
-        Choose a scenario from the list to read its brief and set up the call.
-      </p>
-    </section>
-  );
-}
-
 /**
- * The scenario workspace: the list on the left, the chosen scenario and its call setup on the
- * right. What is chosen lives in the address (search, filters, the scenario and every setting), so a
- * view can be shared and survives a refresh. On narrow screens the details open in a full-screen
- * sheet from the list.
+ * The scenario workspace: filters and the list on the left, the chosen scenario on the right. What
+ * is chosen lives in the address (filters, the scenario and every setting), so a view can be shared
+ * and survives a refresh. On a narrow screen the list leads to the details, and Back returns.
  */
 export function ScenarioWorkspace() {
-  useDocumentTitle('Choose a scenario');
+  useDocumentTitle('Scenarios');
   useAppSection('Scenarios');
 
   const wide = useMediaQuery(WIDE_QUERY);
   const online = useOnline();
-  const { search, address, settled, replace, tidy } = useWorkspaceSearch();
+  const voices = useVoiceOptions();
+  const { search, address, settled, replace, open, back, tidy } = useWorkspaceSearch();
   const loaded = useApi((signal) => api.scenarios(signal), []);
   const scenarios = loaded.data;
-  const activeCall = useActiveCall();
 
   // ---- What the address says -------------------------------------------------------------
   // (`search` is the address, or a choice the address is still catching up with.)
@@ -112,25 +51,22 @@ export function ScenarioWorkspace() {
   const filters = useMemo(() => readFilters(params), [params]);
   const urlId = params.get('scenario');
 
-  const visible = useMemo(
-    () => (scenarios ? filterScenarios(scenarios, filters) : []),
-    [scenarios, filters],
-  );
-  const groups = useMemo(() => groupByIssue(visible), [visible]);
-  const first = groups[0]?.scenarios[0] ?? null;
+  const sorted = useMemo(() => (scenarios ? sortScenarios(scenarios) : []), [scenarios]);
+  const visible = useMemo(() => filterScenarios(sorted, filters), [sorted, filters]);
 
-  // The chosen scenario is the one in the address if it is in the list; on wide screens, with none
-  // chosen, the first one is. Its settings are read from the address only when it is the one named
-  // there, so one scenario's changes never carry over to another.
+  // On a wide screen a scenario is always chosen (the first, when the address names none). On a
+  // narrow one the address names a scenario exactly when its details are open. Settings are read
+  // from the address only for the scenario it names, so one scenario's changes never carry to another.
   const named = visible.find((scenario) => scenario.id === urlId) ?? null;
-  const selected = named ?? (wide ? first : null);
+  const selected = named ?? (wide ? (visible[0] ?? null) : null);
   const config = useMemo(
     () => (selected ? (named ? parseConfig(params, selected) : defaultConfig(selected)) : null),
     [selected, named, params],
   );
+  const detailOpen = !wide && named !== null;
 
   // Keep the address tidy and true to what is on screen. It is replaced, never added to, so the
-  // Back button leaves the workspace instead of stepping through every keystroke and choice.
+  // Back button leaves the workspace instead of stepping through every choice.
   const wanted =
     scenarios && (!selected || config)
       ? workspaceSearch(
@@ -143,111 +79,114 @@ export function ScenarioWorkspace() {
     tidy(wanted);
   }, [wanted, address, settled, tidy]);
 
-  const go = (nextFilters: Filters, nextId: string | null, nextConfig: CallConfig | null) => {
+  const searchFor = (
+    nextFilters: Filters,
+    nextId: string | null,
+    nextConfig: CallConfig | null,
+  ) => {
     const scenario = nextId ? scenarios?.find((item) => item.id === nextId) : undefined;
-    replace(
-      workspaceSearch(
-        nextFilters,
-        scenario && nextConfig ? { scenarioId: scenario.id, scenario, config: nextConfig } : null,
-      ),
+    return workspaceSearch(
+      nextFilters,
+      scenario && nextConfig ? { scenarioId: scenario.id, scenario, config: nextConfig } : null,
     );
   };
+  const go = (nextFilters: Filters, nextId: string | null, nextConfig: CallConfig | null) =>
+    replace(searchFor(nextFilters, nextId, nextConfig));
 
-  // ---- Search ----------------------------------------------------------------------------
-  // The box holds what was typed, and follows the address when something else changes it.
-  const [draft, setDraft] = useState(filters.q);
-  const [seenQuery, setSeenQuery] = useState(filters.q);
-  if (filters.q !== seenQuery) {
-    setSeenQuery(filters.q);
-    if (filters.q !== draft) setDraft(filters.q);
-  }
-  const searchRef = useRef<HTMLInputElement>(null);
-
-  const onQuery = (value: string) => {
-    setDraft(value);
-    go({ ...filters, q: value }, selected?.id ?? null, config);
-  };
+  // ---- Filters ---------------------------------------------------------------------------
+  const filterBar = useRef<HTMLDivElement>(null);
+  const filtered = activeFilterCount(filters) > 0;
   const onFilter = (patch: FilterPatch) =>
     go({ ...filters, ...patch }, selected?.id ?? null, config);
   const clearFilters = () => {
-    setDraft('');
     go(NO_FILTERS, selected?.id ?? null, config);
-    searchRef.current?.focus();
+    // The Clear button goes away: focus moves to the first filter, not to the top of the page.
+    const first = [
+      ...(filterBar.current?.querySelectorAll<HTMLElement>('select, button') ?? []),
+    ].find((element) => !element.closest('[hidden]'));
+    first?.focus();
   };
 
   // ---- Choosing and configuring ----------------------------------------------------------
-  // On narrow screens the sheet is open for one scenario at a time. A page opened with a scenario in
-  // its address (the way back from the brief, or a shared link) starts with its sheet open.
-  const [sheetFor, setSheetFor] = useState<string | null>(() => (wide ? null : urlId));
-  const sheetOpen = !wide && selected !== null && sheetFor === selected.id;
-
-  const select = (id: string) => {
-    if (id === selected?.id) return;
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+  const firstSelect = (id: string): CallConfig | null => {
     const next = scenarios?.find((scenario) => scenario.id === id);
-    if (next) go(filters, id, defaultConfig(next));
+    return next ? defaultConfig(next) : null;
   };
+  const select = (id: string) => {
+    if (id !== selected?.id) go(filters, id, firstSelect(id));
+  };
+  const openScenario = (id: string) => open(searchFor(filters, id, firstSelect(id)));
+  const closeDetail = () => back(searchFor(filters, null, null));
   const changeConfig = (next: CallConfig) => go(filters, selected?.id ?? null, next);
   const resetConfig = () => {
     if (selected) go(filters, selected.id, defaultConfig(selected));
   };
 
-  const [recentOpen, setRecentOpen] = useState(false);
+  // Where focus goes as the details open and close on a narrow screen: the title, then the row.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const wasOpen = useRef(detailOpen);
+  const lastOpened = useRef<string | null>(named?.id ?? null);
+  useEffect(() => {
+    if (named) lastOpened.current = named.id;
+    if (detailOpen && !wasOpen.current) heading.current?.focus();
+    if (!detailOpen && wasOpen.current) {
+      const row = [...document.querySelectorAll<HTMLElement>('[data-scenario]')].find(
+        (element) => element.dataset.scenario === lastOpened.current,
+      );
+      row?.querySelector<HTMLElement>('a')?.focus();
+    }
+    wasOpen.current = detailOpen;
+  }, [detailOpen, named]);
+
+  // An old link can name a scenario that has gone: say so once, then show what there is.
+  const [wantedId] = useState(urlId);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  const gone =
+    scenarios && wantedId && !noticeDismissed && !scenarios.some((item) => item.id === wantedId);
 
   // ---- What to show ----------------------------------------------------------------------
-  const filtered = activeFilterCount(filters) > 0;
   const total = scenarios?.length ?? 0;
-  const countText = scenarios ? countLabel(visible.length, total) : '';
   const failed = !loaded.loading && !scenarios;
+  const countText = scenarios ? countLabel(visible.length, total) : '';
+  const hrefFor = (id: string) => searchFor(filters, id, firstSelect(id));
 
   let list;
   if (loaded.loading && !scenarios) list = <ScenarioListSkeleton />;
-  else if (visible.length === 0)
-    list = <ScenarioListEmpty filtered={filtered} onClear={clearFilters} />;
-  else {
+  else if (visible.length === 0) {
+    list = <ScenarioListEmpty filtered={filtered} onClear={clearFilters} onRetry={loaded.reload} />;
+  } else {
     list = (
       <ScenarioList
-        groups={groups}
+        scenarios={visible}
         selectedId={selected?.id ?? null}
+        mode={wide ? 'select' : 'open'}
         onSelect={select}
-        onPointerChoose={wide ? undefined : setSheetFor}
-        scrollable={wide}
+        searchFor={hrefFor}
+        onOpen={openScenario}
       />
     );
   }
 
-  let pane = null;
-  if (wide) {
-    if (loaded.loading && !scenarios) pane = <PaneSkeleton />;
-    else if (selected && config) {
-      pane = (
-        <ScenarioPane
-          scenario={selected}
-          config={config}
-          onChange={changeConfig}
-          onReset={resetConfig}
-        />
-      );
-    } else pane = <PaneEmpty />;
-  }
+  const pane = (scenario: PublicScenarioDTO, scenarioConfig: CallConfig, titleLevel: 1 | 2 = 2) => (
+    <ScenarioPane
+      scenario={scenario}
+      config={scenarioConfig}
+      voices={voices}
+      titleLevel={titleLevel}
+      onChange={changeConfig}
+      onReset={resetConfig}
+      customiseOpen={customiseOpen}
+      onCustomiseOpenChange={setCustomiseOpen}
+      briefTo={briefPath(scenario.id, scenarioConfig, scenario)}
+      headingRef={heading}
+    />
+  );
 
-  return (
-    <div className="l-page scn-page">
-      <header className="scn-head">
-        <div className="scn-head__text">
-          <h1 className="t-title2">Choose a scenario</h1>
-          <p className="scn-head__lead">
-            Pick a customer situation, set how demanding the call should be, then review the brief
-            before you start.
-          </p>
-        </div>
-        <Button icon="clock" onClick={() => setRecentOpen(true)}>
-          Recent calls
-        </Button>
-      </header>
-
-      {activeCall ? <InProgressBanner call={activeCall} /> : null}
-
-      {failed ? (
+  if (failed) {
+    return (
+      <div className="l-page scn-page">
+        <h1 className="scn-title">Scenarios</h1>
         <MessageBar
           intent="error"
           title="Scenarios could not be loaded"
@@ -257,78 +196,67 @@ export function ScenarioWorkspace() {
             ? errorMessage(loaded.error)
             : 'You are offline, so the scenarios could not be loaded. Reconnect, then choose Try again.'}
         </MessageBar>
-      ) : (
-        <>
-          <ScenarioToolbar
-            query={draft}
-            filters={filters}
-            wide={wide}
-            searchRef={searchRef}
-            onQuery={onQuery}
-            onFilter={onFilter}
-          />
-          <div className="scn-split">
-            <div className="scn-listpane">
-              <div className="scn-listhead">
-                <p className="scn-count" role="status" aria-live="polite" aria-atomic="true">
-                  {countText}
-                </p>
-                {filtered && scenarios ? (
-                  <Button appearance="outline" size="small" onClick={clearFilters}>
-                    Clear filters
-                  </Button>
-                ) : null}
-              </div>
-              {list}
+      </div>
+    );
+  }
+
+  if (detailOpen && named && config) {
+    return (
+      <div className="l-page scn-page scn-page--detail">
+        <Button appearance="subtle" icon="arrow-left" className="scn-back" onClick={closeDetail}>
+          Scenarios
+        </Button>
+        {pane(named, config, 1)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="l-page scn-page">
+      <div className="scn-split">
+        <div className="scn-side">
+          <header className="scn-head">
+            <h1 className="scn-title">Scenarios</h1>
+            <p className="scn-count" role="status" aria-live="polite" aria-atomic="true">
+              <span className="scn-n" key={countText}>
+                {countText}
+              </span>
+            </p>
+            {filtered ? (
+              <Button size="small" appearance="subtle" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : null}
+          </header>
+          {gone ? (
+            <MessageBar intent="info" onDismiss={() => setNoticeDismissed(true)}>
+              That scenario is no longer in the library. Choose another.
+            </MessageBar>
+          ) : null}
+          {scenarios ? (
+            <div ref={filterBar}>
+              <FilterBar
+                filters={filters}
+                products={productGroups(sorted, filters)}
+                issues={issueOptions(sorted, filters)}
+                difficulties={difficultyOptions(sorted, filters)}
+                wide={wide}
+                onFilter={onFilter}
+              />
             </div>
-            {pane}
-          </div>
-        </>
-      )}
-
-      {/* It stays in the page while the sheet it opens is showing, so closing the sheet can give
-          focus back to this very button instead of losing it to the top of the page. */}
-      {!wide && selected ? (
-        <div className="scn-selected">
-          <p className="scn-selected__text">
-            <span className="scn-selected__label">Selected</span>
-            <span className="scn-selected__title">{selected.title}</span>
-          </p>
-          <Button appearance="primary" onClick={() => setSheetFor(selected.id)}>
-            Review and set up
-          </Button>
+          ) : null}
+          <div className="scn-scroll">{list}</div>
         </div>
-      ) : null}
-
-      {sheetOpen && selected && config ? (
-        <Dialog
-          open
-          title={selected.title}
-          onClose={() => setSheetFor(null)}
-          size="lg"
-          mobile="fullscreen"
-          className="scn-sheet"
-          closeLabel="Back to scenarios"
-          actions={<SummaryBar scenario={selected} config={config} />}
-        >
-          <div className="scn-sheet__content">
-            <ScenarioDetail scenario={selected} stage={config.stage} showTitle={false} />
-            <ConfigurationPanel
-              key={selected.id}
-              scenario={selected}
-              config={config}
-              onChange={changeConfig}
-              onReset={resetConfig}
-            />
-          </div>
-        </Dialog>
-      ) : null}
-
-      <RecentCallsDialog
-        open={recentOpen}
-        onClose={() => setRecentOpen(false)}
-        scenarios={scenarios}
-      />
+        {wide ? (
+          loaded.loading && !scenarios ? (
+            <PaneSkeleton />
+          ) : selected && config ? (
+            pane(selected, config)
+          ) : (
+            <PaneEmpty />
+          )
+        ) : null}
+      </div>
     </div>
   );
 }

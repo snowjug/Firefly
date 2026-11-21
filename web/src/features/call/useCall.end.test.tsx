@@ -70,7 +70,7 @@ describe('endCall', () => {
     expect(outcome).toEqual({ sessionId: SESSION_ID });
     expect(phase()).toBe('completed');
     expect(h.snap().session?.status).toBe('completing');
-    expect(h.snap().announcement?.text).toBe('The call has ended.');
+    expect(h.snap().announcement?.text).toBe('The call is complete.');
     expect(h.server.endCalls).toBe(1);
     // Everything the call opened is closed: the call is over, nothing waits for the screen to leave.
     expectNothingOpen(h.env);

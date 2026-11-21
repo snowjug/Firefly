@@ -5,71 +5,100 @@ import type {
   TurnDTO,
 } from '#shared/domain/api.ts';
 import type { TemperatureBandId } from '#shared/domain/vocab.ts';
+import { hintText } from '../call/hints.ts';
+import { describeProblem, type ProblemContext } from '../call/problems.ts';
 import type {
   CallProblem,
+  CallProblemCode,
   CallSnapshot,
   CallStatePoint,
   CallSupport,
   CallTurn,
 } from '../call/contract.ts';
+import type { StatusId } from './call-model.ts';
 import type { InitialUi } from './CallWorkspace.tsx';
 
-// Typed snapshots for every state the call screen can be in, built from the real scenario "Locked
-// out after a password reset" (a fictional front-desk coordinator, Maya Okafor). They feed the dev
-// gallery (`gallery-call.html?state=<name>`), the tests and the screenshots. Nothing here talks to a
-// server: each fixture is a plain `CallSnapshot`, which is the whole contract between the call
-// engine and the screen. The words of every problem are the engine's own.
+// Typed snapshots for every state the call screen can be in, built from a made-up scenario (a
+// Microsoft Teams audio problem reported by Priya Raman, an IT coordinator at the fictional
+// Harbourline Logistics). They feed the dev gallery (`gallery-call.html?state=<name>`), the tests
+// and the screenshots. Nothing here talks to a server, and nothing depends on the scenario library:
+// each fixture is a plain `CallSnapshot`, which is the whole contract between the call engine and the
+// screen. The words of every problem and hint are the engine's own.
 
 export const FIXTURE_START = '2026-11-21T09:00:00.000Z';
 const at = (seconds: number) => new Date(Date.parse(FIXTURE_START) + seconds * 1000).toISOString();
 
 // ---- The scenario -------------------------------------------------------------------------------
 
-const SCENARIO: SessionScenarioView = {
-  scenarioId: 'locked-out-after-password-reset',
-  title: 'Locked out after a password reset',
+export const SCENARIO: SessionScenarioView = {
+  scenarioId: 'fixture-teams-audio-drops',
+  title: 'Meeting audio drops for one team',
   summary:
-    'A front-desk coordinator cannot sign in to the staff portal after changing her password this morning.',
-  issueType: 'sign-in-access',
-  tags: ['sign-in', 'password', 'single user'],
+    'Several people on a warehouse team lose audio in Teams meetings. The IT coordinator wants to know what changed and when it will stop.',
+  issueType: 'feature-not-working',
+  tags: ['meetings', 'audio'],
   estimatedMinutes: 8,
+  product: {
+    id: 'teams',
+    name: 'Microsoft Teams',
+    family: 'microsoft-365',
+    familyLabel: 'Microsoft 365',
+    area: 'Meetings',
+  },
+  caseReference: 'FX-20418',
+  publicBrief: {
+    issue: 'Audio cuts out for several people on the warehouse team during Teams meetings.',
+    impact: {
+      low: 'One person is affected and a workaround exists.',
+      medium: 'The warehouse team cannot hold its daily handover meeting.',
+      high: 'Shift handovers across two sites are failing.',
+    },
+    objective: 'Find what changed, then agree a next step and when the customer hears back.',
+    knownContext: 'The team joins from shared Windows desktop PCs with USB headsets.',
+    previousContact: 'None. This is the first contact.',
+    environment: 'Teams desktop app on Windows 11, wired network.',
+  },
   persona: {
-    name: 'Maya Okafor',
-    role: 'Front-desk coordinator',
-    organisation: 'Fabrikam Dental Group',
+    name: 'Priya Raman',
+    role: 'IT coordinator',
+    organisation: 'Harbourline Logistics',
   },
   brief: {
-    situation:
-      'A front-desk coordinator is calling because she cannot sign in to the staff portal. She is polite and a little worried about holding up her morning.',
-    goal: 'Understand what is happening and why, then agree how she will get back in.',
-    groundRules: [
-      'The customer, organisation and product are fictional.',
-      'Ask questions to find out what you need; the customer will not volunteer everything.',
-    ],
+    situation: 'An IT coordinator reports that audio drops during Teams meetings.',
+    goal: 'Find what changed, then agree a next step.',
+    groundRules: ['The customer and organisation are fictional.'],
   },
   config: {
-    impact: 'low',
-    startingTemperature: 'calm',
-    proficiency: 'novice',
-    style: 'talkative',
+    impact: 'medium',
+    startingTemperature: 'anxious',
+    proficiency: 'intermediate',
+    style: 'demanding',
     callStage: 'first-contact',
-    difficulty: 'starter',
+    difficulty: 'standard',
     mode: 'immersive',
-    curveballsEnabled: false,
+    curveballsEnabled: true,
   },
   expectedDiscoveryAreas: [
-    'The exact message on screen',
-    'Other devices using the account',
     'When it started',
+    'Which headsets and app versions',
+    'What changed recently',
     'What has been tried',
   ],
   coachingFocus: ['scoping-discovery', 'clarity'],
 };
 
+/** A call saved before scenarios named a product or had a public brief. */
+const LEGACY_SCENARIO: SessionScenarioView = {
+  ...SCENARIO,
+  product: null,
+  caseReference: null,
+  publicBrief: null,
+};
+
 // ---- Turns --------------------------------------------------------------------------------------
 
-type Spoken = 'voice' | 'text';
-type Line = readonly [seconds: number, text: string, how?: Spoken];
+type How = 'voice' | 'text';
+type Line = readonly [seconds: number, text: string, how?: How];
 
 function customerTurn(index: number, seconds: number, text: string): CallTurn {
   return {
@@ -85,7 +114,7 @@ function customerTurn(index: number, seconds: number, text: string): CallTurn {
   };
 }
 
-function traineeTurn(index: number, seconds: number, text: string, how: Spoken): CallTurn {
+function traineeTurn(index: number, seconds: number, text: string, how: How): CallTurn {
   return {
     key: `t${index}`,
     index,
@@ -99,190 +128,98 @@ function traineeTurn(index: number, seconds: number, text: string, how: Spoken):
   };
 }
 
+const CUSTOMER: readonly Line[] = [
+  [
+    0,
+    'Hello, yes. We have a problem with Teams audio. It cuts out for people on our warehouse team during meetings.',
+  ],
+  [
+    38,
+    'Since Monday. Four or five people, all on the shared desktop PCs. The sound drops for a few seconds, comes back, then drops again.',
+  ],
+  [
+    76,
+    'They use USB headsets, the same ones as before. Nothing changed on our side as far as I know.',
+  ],
+  [
+    118,
+    'We did get a Windows update pushed last week. Could that be it? I can ask the desktop team.',
+  ],
+  [
+    160,
+    'The daily handover meeting is at six this evening. If it keeps dropping, about forty people miss their shift notes.',
+  ],
+  [203, 'Okay. I will ask them for the driver version. How long will you need after that?'],
+  [246, 'That works. Could you send me what you need in writing so I can forward it?'],
+  [289, 'Yes, I have the desktop team on another line. Give me a moment.'],
+  [331, 'They say the headset driver was updated on Monday morning, version 10.0.22621.'],
+  [372, 'Right. So do we roll it back, or wait for you?'],
+  [415, 'Understood. And will you tell me before six whether it is safe to roll back?'],
+  [458, 'Good. That is what I needed to hear. Thank you for taking this seriously.'],
+];
+
+const TRAINEE: readonly Line[] = [
+  [
+    19,
+    "Hello Priya, thanks for calling Microsoft support. I'm sorry the audio is cutting out. When did it start?",
+  ],
+  [58, 'Thanks, that is clear. Which headsets and which Teams version are those people using?'],
+  [98, 'Understood. Did anything change on those PCs or the network around Monday?'],
+  [
+    140,
+    "Good thought. A recent update could matter, so let's check it. Meanwhile I'll look at the meeting quality data.",
+    'text',
+  ],
+  [
+    183,
+    "I understand the pressure of the six o'clock handover. I'll own this case and update you by 3 PM.",
+  ],
+  [226, 'Once you have the driver version, send it over and I will compare it with known issues.'],
+  [268, "Of course. I'll email the questions now so you can forward them to the desktop team."],
+  [310, "Take your time, I'll stay on the line."],
+  [352, 'Thank you. Let me check whether that driver version matches the pattern you describe.'],
+  [394, "Please hold off on a rollback for now. I'll confirm the safe next step within the hour."],
+  [437, 'Yes. I will call you back before six, whatever I find.'],
+  [480, "You're welcome. I'll speak to you shortly."],
+];
+
 /** Alternates customer and trainee lines, the customer opening, numbering turns from 1. */
-function conversation(
-  customer: readonly Line[],
-  trainee: readonly Line[],
-  count: number,
-): CallTurn[] {
+function conversation(count: number, customer = CUSTOMER, trainee = TRAINEE): CallTurn[] {
   const turns: CallTurn[] = [];
   for (let index = 1; index <= count; index += 1) {
     const isCustomer = index % 2 === 1;
     const pool = isCustomer ? customer : trainee;
     const line = pool[Math.floor((index - 1) / 2) % pool.length] as Line;
     const [seconds, text, how = 'voice'] = line;
-    turns.push(
-      isCustomer ? customerTurn(index, seconds, text) : traineeTurn(index, seconds, text, how),
-    );
+    // Lines repeat in a long call: each turn gets its own place in time.
+    const lap = Math.floor((index - 1) / (2 * pool.length));
+    const when = seconds + lap * 520;
+    turns.push(isCustomer ? customerTurn(index, when, text) : traineeTurn(index, when, text, how));
   }
   return turns;
 }
 
-const MAYA: readonly Line[] = [
-  [
-    0,
-    "Hello? Hi, yes, I can't sign in to the staff portal. It stopped letting me in after I changed my password this morning.",
-  ],
-  [
-    36,
-    "Oh, thank you. It says something about waiting and trying again later, I think. Sorry, I'm not very technical. I just type my new password and it doesn't let me in.",
-  ],
-  [
-    74,
-    'It was fine yesterday. I changed my password at about ten past eight because the system said it was about to expire, and it has not let me in since.',
-  ],
-  [
-    117,
-    "Well, my work email is on my phone too. It keeps asking me to re-enter my password, but I've just been tapping it away.",
-  ],
-  [161, "Oh, okay. Is that bad? I hope I haven't broken something."],
-  [
-    205,
-    'That makes sense, I suppose. So the phone has been trying the old password again and again?',
-  ],
-  [
-    247,
-    'I did not know it did that in the background. I thought it only asked when I opened the app.',
-  ],
-  [
-    290,
-    "Okay. And how long does the lock last? The first patients arrive at nine and I can't check anyone in without the portal.",
-  ],
-  [333, "That's a relief, thank you. Will it unlock by itself, or do you have to do something?"],
-  [
-    372,
-    "Right, yes, I can see the app on my phone. It's the little envelope with the blue circle.",
-  ],
-  [410, 'Do I delete the account, or just change the password on it?'],
-  [
-    451,
-    "Okay, I'm opening the settings now. It's asking me which account, and there are two listed.",
-  ],
-  [492, 'The second one, the one that ends with fabrikamdental. Is that the right one?'],
-  [531, "Done. It says it's syncing now. Should I try the portal again?"],
-  [570, "It worked! I'm in. Oh, thank you so much, that was really helpful."],
-  [609, 'Will it happen again the next time my password changes?'],
-  [648, "That's good to know. I'll tell the others at the desk so they do the same."],
-  [
-    690,
-    'Actually, one more thing. My colleague Dan changed his password this morning too, and he is locked out as well.',
-  ],
-  [730, "I think so, yes. He's always on his phone between patients."],
-  [772, "I'll ask him now. Hold on a moment."],
-  [811, 'He says he has done it. What should he do next?'],
-  [851, 'He is in! He says thank you.'],
-  [890, 'Will you send us something so we remember for next time?'],
-  [930, 'That would be perfect, thank you.'],
-  [968, "No, I think that's everything for now."],
-  [1004, 'Thank you. Bye for now.'],
-  [1042, 'Sorry, one last thing. Does he need to do anything on his laptop as well?'],
-  [1080, 'Okay, I will let him know. Thanks again.'],
-  [1118, 'That is all from me. Have a lovely day.'],
-  [1156, 'Goodbye.'],
-];
-
-const YOU: readonly Line[] = [
-  [
-    19,
-    "Hi Maya, thanks for calling Northwind support. I'm sorry you're locked out first thing. Can you tell me what the sign-in screen says when you try?",
-  ],
-  [
-    58,
-    "That's fine, you're describing it really clearly. When did it last work, and what happened between then and now?",
-  ],
-  [
-    98,
-    'Thanks. Is your work email or the portal signed in on any other device, like your phone, that might still have the old password?',
-  ],
-  [140, 'That could well be the cause. Let me check the account on my side while we talk.', 'text'],
-  [
-    183,
-    "It isn't bad at all, and you haven't broken anything. Your phone has been trying the old password in the background, and after enough tries the account locks itself to protect you.",
-  ],
-  [
-    226,
-    'Exactly. Each time the phone tries, the account sees another failed sign-in, so it locked for a short time.',
-  ],
-  [268, "Most mail apps do that, so it's a really common thing. It's easy to fix."],
-  [
-    311,
-    'I understand the pressure with the first patients. The lock is only temporary, and I can clear it from my side now. I will confirm in a minute.',
-  ],
-  [352, "I'll unlock it for you now. It's done on my side, so you don't need to wait."],
-  [
-    391,
-    "Great. Before you try again, let's fix the phone so it doesn't lock you out again. Can you open your mail app?",
-  ],
-  [431, 'Change the password on it rather than deleting the account, so you keep your mail.'],
-  [472, 'Which accounts can you see listed in the settings?'],
-  [511, "That's the one, yes. Tap it and enter the new password you chose this morning."],
-  [551, 'Yes, give the portal a go now, and tell me what you see.'],
-  [590, "Wonderful. I'm glad you're back in. Just so we're sure, can you open today's bookings?"],
-  [
-    628,
-    'Not if the phone has the new password. The lock only happens when an old password keeps being tried.',
-  ],
-  [670, "That's a good idea. Passing it on will save them the same trouble."],
-  [710, 'Thanks for telling me. Does Dan also have his work email on a phone or a tablet?'],
-  [
-    752,
-    "Then it's very likely the same cause. Can he change the password on his phone first, before we unlock him?",
-  ],
-  [791, 'Of course, take your time. I will stay on the line.'],
-  [831, "Great. I'll unlock his account now, and then he can try the portal again."],
-  [871, "Lovely. I'll add both accounts to the case notes so the team knows what happened."],
-  [911, "Yes, I'll send a short note by email with the steps, so you can share it with the desk."],
-  [950, "You're welcome. Is there anything else you'd like to check before we finish?"],
-  [988, "Then I'll let you get to your first patients. Thanks for your patience, Maya."],
-  [1022, 'Take care.', 'text'],
-  [1060, 'No, he only needs to change it on the phone. The laptop is fine.'],
-  [1098, 'You are welcome. Glad we could sort it out.'],
-  [1136, 'Anything else, just call again.'],
-  [1174, 'Bye for now.', 'text'],
-];
-
-/** A harder call: the customer's patience runs out. Used for the angry and escalating fixtures. */
-const TENSE_CUSTOMER: readonly Line[] = [
-  [
-    0,
-    "I've already explained this to two people this morning. I can't get into the portal and nobody has told me anything.",
-  ],
-  [41, "Yes! That's what I just said. Can you just fix it? The first patients are already here."],
-  [88, "I don't have time to read you screens. I need this unlocked now, not twenty questions."],
-  [139, 'It says too many attempts. There. Now what? How long is this going to take?'],
-  [
-    193,
-    "You said that last time. I want to speak to someone more senior if this isn't sorted in five minutes.",
-  ],
-  [
-    249,
-    "That is not good enough. I have people waiting at the desk and I'm writing their names on paper.",
-  ],
-  [
-    301,
-    "Why does nobody here know what is going on? I'm going to put this in writing to my manager.",
-  ],
-  [352, 'Fine. Do it. But I want a name and a time that someone will call me back.'],
-];
-
-const TENSE_YOU: readonly Line[] = [
-  [
-    17,
-    "I'm sorry about that, Maya. Let me make sure I have this right. You can't sign in, and it began after your password change this morning?",
-  ],
-  [66, 'I understand, and I will do what I can quickly. What does the screen say when you try?'],
-  [
-    116,
-    "I'm hearing that it's urgent. I'll check the account while you tell me what the message says.",
-  ],
-  [166, 'Thank you, that helps. I can see the account is locked, and I can clear it in a moment.'],
-  [221, "That's fair. I'll unlock it now and stay with you until you're back in.", 'text'],
-  [
-    276,
-    'I hear you, and I am sorry the desk is waiting. The account is unlocked now; please try again.',
-  ],
-  [327, 'Understood. I will note this on the case and give you my name now.'],
-];
+/** A message that has not been answered: being transcribed, sent or kept after a failure. */
+function exchange(
+  seconds: number,
+  text: string,
+  status: CallTurn['status'],
+  how: How,
+  extra: Partial<CallTurn> = {},
+): CallTurn {
+  return {
+    key: 'exchange-1',
+    index: null,
+    role: 'trainee',
+    text,
+    inputMode: how,
+    createdAt: at(seconds),
+    status,
+    clientMessageId: 'exchange-1',
+    interrupted: false,
+    ...extra,
+  };
+}
 
 // ---- The customer's state -----------------------------------------------------------------------
 
@@ -317,11 +254,13 @@ function history(...bands: TemperatureBandId[]): CallStatePoint[] {
   }));
 }
 
-// ---- Support, problems ---------------------------------------------------------------------------
+// ---- Support and problems -----------------------------------------------------------------------
 
 const SERVER_SPEECH: CallSupport = {
   capture: 'server-speech',
   playback: 'server-speech',
+  provider: 'azure-speech',
+  chromium: true,
   secureContext: true,
   reason: null,
   captureLabel: 'Azure AI Speech',
@@ -329,6 +268,7 @@ const SERVER_SPEECH: CallSupport = {
 };
 const DEMO_SPEECH: CallSupport = {
   ...SERVER_SPEECH,
+  provider: 'mock',
   captureLabel: 'Demo speech (scripted)',
   playbackLabel: 'Demo speech (scripted)',
   speechDemo: true,
@@ -336,6 +276,8 @@ const DEMO_SPEECH: CallSupport = {
 const BROWSER_SPEECH: CallSupport = {
   capture: 'browser-recognition',
   playback: 'browser-synthesis',
+  provider: 'none',
+  chromium: true,
   secureContext: true,
   reason: null,
   captureLabel: 'Browser speech recognition (online)',
@@ -344,124 +286,23 @@ const BROWSER_SPEECH: CallSupport = {
 const NO_VOICE: CallSupport = {
   capture: 'none',
   playback: 'none',
+  provider: 'none',
+  chromium: true,
   secureContext: true,
   reason: 'This browser cannot use a microphone. You can still type your replies.',
   captureLabel: 'Typed replies only',
   playbackLabel: 'Captions only',
 };
 
-const PROBLEMS = {
-  voiceGenerationFailed: {
-    code: 'voice-generation-failed',
-    title: "The customer's voice could not be made this time.",
-    preserved: 'Their reply is in the transcript.',
-    advice: 'Read it there, or choose Try again to hear it. You can keep talking or typing.',
-    retry: 'speak',
-    textFallback: true,
-    severity: 'degraded',
-  },
-  playbackBlocked: {
-    code: 'playback-blocked',
-    title: "Your browser is blocking the customer's voice.",
-    preserved: 'Their reply is in the transcript.',
-    advice: 'Press Play to hear it, or read the reply and carry on.',
-    retry: 'speak',
-    textFallback: true,
-    severity: 'degraded',
-  },
-  transcriptionFailed: {
-    code: 'transcription-failed',
-    title: 'We could not turn your speech into text.',
-    preserved:
-      'Nothing was sent. Your recording was not kept, and your transcript so far is saved.',
-    advice: 'Choose Try again to say it again, or type your reply instead.',
-    retry: 'transcribe',
-    textFallback: true,
-    severity: 'degraded',
-  },
-  replyFailed: {
-    code: 'reply-failed',
-    title: 'The customer could not reply.',
-    preserved: 'Your message is kept here.',
-    advice: 'Choose Try again to send it again. It will not be sent twice.',
-    retry: 'send',
-    textFallback: false,
-    severity: 'blocking',
-  },
-  offline: {
-    code: 'offline',
-    title: 'You appear to be offline.',
-    preserved: 'Your message is kept here.',
-    advice:
-      'Check your connection. Choose Try again to send your message. It will not be sent twice.',
-    retry: 'send',
-    textFallback: false,
-    severity: 'blocking',
-  },
-  turnLimit: {
-    code: 'turn-limit',
-    title: 'This call has reached its message limit.',
-    preserved: 'Everything you said is saved.',
-    advice: 'End the call to see your coaching.',
-    retry: null,
-    textFallback: false,
-    severity: 'blocking',
-  },
-  microphoneDenied: {
-    code: 'microphone-denied',
-    title: 'The microphone is blocked for this site.',
-    preserved: 'Nothing has been recorded or sent.',
-    advice:
-      'Select the lock icon at the left of the address bar, open Permissions for this site, set Microphone to Allow, then choose Try again. You can also carry on by typing.',
-    retry: 'microphone',
-    textFallback: true,
-    severity: 'blocking',
-  },
-  microphoneLost: {
-    code: 'microphone-missing',
-    title: 'No microphone was found.',
-    preserved: 'Your transcript so far is saved.',
-    advice:
-      'Check that a microphone is connected and switched on, then choose Try again. You can also carry on by typing.',
-    retry: 'microphone',
-    textFallback: true,
-    severity: 'blocking',
-  },
-  endFailed: {
-    code: 'end-failed',
-    title: 'We could not end the call.',
-    preserved: 'Your call is still open and your transcript is saved.',
-    advice: 'Choose Try again, or keep going and end it later.',
-    retry: 'end',
-    textFallback: true,
-    severity: 'degraded',
-  },
-  nothingToReview: {
-    code: 'end-failed',
-    title: 'There is nothing to review yet.',
-    preserved: 'No message has been sent, so there is no transcript.',
-    advice: 'Send a message to the customer first, or leave the call without a report.',
-    retry: null,
-    textFallback: true,
-    severity: 'degraded',
-  },
-  sessionUnavailable: {
-    code: 'session-unavailable',
-    title: 'This call could not be opened.',
-    preserved: 'Nothing in the call was changed.',
-    advice: 'Check your connection and choose Try again, or go back and start the call again.',
-    retry: 'load',
-    textFallback: false,
-    severity: 'blocking',
-  },
-} as const satisfies Record<string, CallProblem>;
+/** The engine's own copy for a problem, so the fixtures read exactly as the real screen does. */
+const problem = (code: CallProblemCode, context: ProblemContext = {}): CallProblem =>
+  describeProblem(code, context);
 
-// The engine's own words for soft guidance (`web/src/features/call/hints.ts`), so the fixtures read
-// exactly as the real screen does.
-const NOTHING_HEARD =
-  'Nothing was heard. Check that the right microphone is selected, then speak again, or type your reply.';
-const NO_WORDS =
-  'Your voice was picked up, but no words could be made out. Speak again, or type your reply.';
+/** What the engine announces: a whole sentence, politely unless the microphone is the problem. */
+const said = (
+  text: string,
+  politeness: 'polite' | 'assertive' = 'polite',
+): NonNullable<CallSnapshot['announcement']> => ({ id: 1, text, politeness });
 
 // ---- Building a snapshot ------------------------------------------------------------------------
 
@@ -477,28 +318,32 @@ function toTurnDTO(turn: CallTurn): TurnDTO {
 }
 
 interface Build {
-  turns?: CallTurn[];
+  scenario?: SessionScenarioView;
   /** Overrides on the session's scenario configuration. */
   config?: Partial<SessionScenarioView['config']>;
-  state?: PublicStateDTO;
+  sessionStatus?: SessionDTO['status'];
 }
 
-function sessionFor(turns: readonly CallTurn[], build: Build): SessionDTO {
+function sessionFor(
+  turns: readonly CallTurn[],
+  customerState: PublicStateDTO,
+  build: Build,
+): SessionDTO {
   const stored = turns.filter((turn) => turn.status === 'sent');
-  const publicState = build.state ?? state('concerned', 'steady');
+  const scenario = build.scenario ?? SCENARIO;
   return {
-    id: 'ses_fixture_maya',
-    scenarioId: SCENARIO.scenarioId,
-    scenarioTitle: SCENARIO.title,
-    issueType: SCENARIO.issueType,
-    difficulty: SCENARIO.config.difficulty,
-    startingTemperature: SCENARIO.config.startingTemperature,
-    impact: SCENARIO.config.impact,
-    style: SCENARIO.config.style,
-    mode: build.config?.mode ?? SCENARIO.config.mode,
+    id: 'ses_fixture_priya',
+    scenarioId: scenario.scenarioId,
+    scenarioTitle: scenario.title,
+    issueType: scenario.issueType,
+    difficulty: scenario.config.difficulty,
+    startingTemperature: scenario.config.startingTemperature,
+    impact: scenario.config.impact,
+    style: scenario.config.style,
+    mode: build.config?.mode ?? scenario.config.mode,
     providerKind: 'mock',
     providerLabel: 'Demo mode (built-in rules engine)',
-    status: 'active',
+    status: build.sessionStatus ?? 'active',
     startedAt: FIXTURE_START,
     endedAt: null,
     durationSeconds: null,
@@ -506,9 +351,9 @@ function sessionFor(turns: readonly CallTurn[], build: Build): SessionDTO {
     completion: null,
     overallScore: null,
     dimensionScores: null,
-    scenario: { ...SCENARIO, config: { ...SCENARIO.config, ...build.config } },
+    scenario: { ...scenario, config: { ...scenario.config, ...build.config } },
     turns: stored.map(toTurnDTO),
-    state: publicState,
+    state: customerState,
     awaitingReply: null,
     evaluationPhase: null,
     evaluationError: null,
@@ -522,25 +367,28 @@ function snapshotOf(
   build: Build = {},
 ): CallSnapshot {
   const turns = overrides.turns;
-  const customerState = overrides.customerState ?? build.state ?? state('concerned', 'steady');
+  const customerState = overrides.customerState ?? state('concerned', 'steady');
   const lastAt =
     turns.length > 0 ? Date.parse(turns[turns.length - 1]!.createdAt) : Date.parse(FIXTURE_START);
-  const base: CallSnapshot = {
+  return {
     loading: false,
     loadProblem: null,
-    session: sessionFor(turns, { ...build, state: customerState }),
+    session: sessionFor(turns, customerState, build),
     phase: 'ready-for-next-turn',
+    stage: 'ready',
     mode: 'voice',
     microphone: 'granted',
     muted: false,
     paused: false,
     handsFree: false,
+    audio: 'on',
     speechDetected: false,
+    micOpen: false,
     micLevel: 0,
     customerLevel: 0,
     interim: '',
     customerState,
-    stateHistory: history('calm', 'calm', 'concerned', 'concerned'),
+    stateHistory: history('calm', 'concerned', 'concerned', 'concerned'),
     problem: null,
     hint: null,
     elapsedSeconds: Math.round((lastAt - Date.parse(FIXTURE_START)) / 1000) + 6,
@@ -550,43 +398,17 @@ function snapshotOf(
     announcement: null,
     ...overrides,
   };
-  return base;
 }
 
-const OPENING = conversation(MAYA, YOU, 1);
-const EARLY = conversation(MAYA, YOU, 3);
-const MIDDLE = conversation(MAYA, YOU, 7);
-const LONGER = conversation(MAYA, YOU, 9);
-
-function pending(
-  index: number,
-  seconds: number,
-  text: string,
-  status: CallTurn['status'],
-  how: Spoken,
-): CallTurn {
-  return {
-    key: `pending-${index}`,
-    index: null,
-    role: 'trainee',
-    text,
-    inputMode: how,
-    createdAt: at(seconds),
-    status,
-    clientMessageId: `pending-${index}`,
-    interrupted: false,
-  };
-}
+const OPENING = conversation(1);
+const EARLY = conversation(3);
+const MIDDLE = conversation(7);
+const LONGER = conversation(13);
 
 // ---- The fixtures -------------------------------------------------------------------------------
 
 export type FixtureGroup =
-  | 'Screens'
-  | 'Stages of a turn'
-  | 'Call modes'
-  | 'Problems'
-  | 'Customer state'
-  | 'Content and dialogs';
+  'Screens' | 'Stages of a turn' | 'Modes' | 'Problems' | 'Customer state' | 'Dialogs';
 
 export interface CallFixture {
   title: string;
@@ -598,15 +420,15 @@ export interface CallFixture {
     preferText?: boolean;
     initialUi?: InitialUi;
     provider?: { demo: boolean; label: string };
+    showInputMode?: boolean;
   };
 }
-
-const NO_STATE_YET = null;
 
 const idle = (overrides: Partial<CallSnapshot> = {}): CallSnapshot =>
   snapshotOf({
     turns: OPENING,
     phase: 'idle',
+    stage: 'idle',
     microphone: 'unknown',
     customerState: state('calm', 'steady'),
     stateHistory: history('calm'),
@@ -614,7 +436,57 @@ const idle = (overrides: Partial<CallSnapshot> = {}): CallSnapshot =>
     ...overrides,
   });
 
-const tense = conversation(TENSE_CUSTOMER, TENSE_YOU, 15);
+const speakingTurns = MIDDLE;
+
+/** The speaking customer's reply is the last turn and is already in the transcript. */
+const speaking = snapshotOf({
+  turns: speakingTurns,
+  phase: 'customer-speaking',
+  stage: 'customer-speaking',
+  customerLevel: 0.55,
+  customerState: state('concerned', 'rising'),
+  announcement: said('The customer is speaking. You can stop the response at any time.'),
+});
+
+/** A harder call: the customer's patience runs out. Used for the frustrated, angry and escalating fixtures. */
+const TENSE_CUSTOMER: readonly Line[] = [
+  [
+    0,
+    "I've already explained this to two people this morning. The audio keeps dropping and nobody has told me anything.",
+  ],
+  [41, "Yes! That's what I just said. Can you just fix it? The handover is at six."],
+  [
+    88,
+    "I don't have time for twenty questions. I need this working, not a list of things to check.",
+  ],
+  [139, 'It says the headset is disconnected. There. Now what? How long is this going to take?'],
+  [
+    193,
+    "You said that last time. I want to speak to someone more senior if this isn't sorted in an hour.",
+  ],
+  [
+    249,
+    'That is not good enough. Forty people are waiting on notes and I am sending them by email.',
+  ],
+  [301, 'Fine. But I want a time. An actual time, not "soon".'],
+  [352, 'Then say it. By when will you call me?'],
+];
+
+const TENSE_TRAINEE: readonly Line[] = [
+  [19, "I'm sorry about that, Priya. I have the case in front of me now. When did it start?"],
+  [58, 'I understand. One quick question so I can point you the right way: which headsets?'],
+  [98, 'That is fair. Let me give you the short version of what I am checking first.'],
+  [160, 'I hear you. I will not make you repeat yourself, and I am checking the driver now.'],
+  [215, "I'll note your request. My aim is to have an answer for you within the hour."],
+  [
+    270,
+    "You're right to expect more. Here is what I will do: I will own this and call you by 3 PM.",
+  ],
+  [320, 'I will call you by 3 PM, and again before six if the fix is not in place.'],
+  [372, 'By 3 PM. I will call you on this number.'],
+];
+
+const tense = conversation(15, TENSE_CUSTOMER, TENSE_TRAINEE);
 const angryHistory = history(
   'calm',
   'concerned',
@@ -626,14 +498,7 @@ const angryHistory = history(
   'angry',
 );
 
-/** The speaking customer's reply is the last turn and is already in the transcript. */
-const speaking = snapshotOf({
-  turns: MIDDLE,
-  phase: 'customer-speaking',
-  customerLevel: 0.55,
-  customerState: state('concerned', 'rising'),
-  announcement: { id: 1, text: 'The customer is speaking.' },
-});
+const SPOKEN_WORDS = 'Thanks Priya. Can I check which headset model and which Teams version';
 
 const DEFINITIONS = {
   // ---- Screens before and around the workspace ---------------------------------------------
@@ -645,9 +510,10 @@ const DEFINITIONS = {
       turns: [],
       loading: true,
       session: null,
-      customerState: NO_STATE_YET,
+      customerState: null,
       stateHistory: [],
       phase: 'idle',
+      stage: 'idle',
       microphone: 'unknown',
       elapsedSeconds: 0,
     }),
@@ -655,15 +521,16 @@ const DEFINITIONS = {
   'load-error': {
     title: 'Could not load',
     group: 'Screens',
-    description: 'The session could not be loaded at all: what happened, nothing lost, Try again.',
+    description: 'The session could not be loaded at all: what happened, nothing lost, Retry.',
     snapshot: snapshotOf({
       turns: [],
       session: null,
-      customerState: NO_STATE_YET,
+      customerState: null,
       stateHistory: [],
       phase: 'idle',
+      stage: 'idle',
       microphone: 'unknown',
-      loadProblem: PROBLEMS.sessionUnavailable,
+      loadProblem: problem('session-unavailable', { during: 'load' }),
       elapsedSeconds: 0,
     }),
   },
@@ -674,17 +541,24 @@ const DEFINITIONS = {
     snapshot: snapshotOf({
       turns: [],
       session: null,
-      customerState: NO_STATE_YET,
+      customerState: null,
       stateHistory: [],
       phase: 'idle',
+      stage: 'idle',
       microphone: 'unknown',
       elapsedSeconds: 0,
     }),
   },
-  'preflight-voice': {
-    title: 'Pre-flight: voice',
+  'report-opening': {
+    title: 'The call is over',
     group: 'Screens',
-    description: 'Before the call, with a spoken call as the main action.',
+    description: 'The call has already ended: shown for the moment before the report opens.',
+    snapshot: snapshotOf({ turns: MIDDLE }, { sessionStatus: 'completing' }),
+  },
+  'preflight-voice': {
+    title: 'Pre-flight: microphone not requested',
+    group: 'Screens',
+    description: 'Before the call: nothing has asked for the microphone, and voice leads.',
     snapshot: idle(),
   },
   'preflight-text': {
@@ -704,429 +578,495 @@ const DEFINITIONS = {
   'preflight-demo-speech': {
     title: 'Pre-flight: demo speech',
     group: 'Screens',
-    description:
-      'The server runs the scripted demonstration: it does not understand audio, and says so.',
+    description: 'The server runs the scripted demonstration: it does not understand audio.',
     snapshot: idle({ support: DEMO_SPEECH }),
   },
   'preflight-unsupported': {
     title: 'Pre-flight: voice unavailable',
     group: 'Screens',
-    description:
-      'This browser cannot hold a spoken call: the reason, and a typed call as the way on.',
+    description: 'This browser cannot hold a spoken call: the reason, and text as the way on.',
     snapshot: idle({ support: NO_VOICE, microphone: 'unavailable' }),
   },
   'preflight-resume': {
     title: 'Pre-flight: resume',
     group: 'Screens',
-    description: 'The call already has turns from the trainee: the transcript so far and the time.',
-    snapshot: idle({
-      turns: LONGER,
-      elapsedSeconds: 392,
-      stateHistory: history('calm', 'calm', 'concerned', 'concerned', 'concerned'),
-    }),
+    description: 'The call already has turns from the trainee: the time and the transcript.',
+    snapshot: idle({ turns: LONGER, elapsedSeconds: 392 }),
   },
-  'requesting-microphone': {
-    title: 'Waiting for the microphone',
+  'requesting-permission': {
+    title: 'Waiting for permission',
     group: 'Screens',
     description: "The browser's permission prompt is open.",
-    snapshot: idle({ phase: 'requesting-microphone', microphone: 'prompt' }),
+    snapshot: idle({
+      phase: 'requesting-microphone',
+      stage: 'mic-permission',
+      microphone: 'prompt',
+    }),
   },
-  'microphone-denied': {
+  'permission-denied': {
     title: 'Microphone blocked',
     group: 'Screens',
-    description: 'A blocking microphone problem before the call, with its advice and two ways on.',
-    snapshot: idle({ microphone: 'denied', problem: PROBLEMS.microphoneDenied }),
+    description: 'Permission was refused before the call: what was kept, Retry and Use text.',
+    snapshot: idle({
+      microphone: 'denied',
+      problem: problem('microphone-denied', { beforeCall: true, browser: 'edge' }),
+      announcement: said(
+        'The microphone is blocked. You can type your replies instead.',
+        'assertive',
+      ),
+    }),
+  },
+  'microphone-unavailable': {
+    title: 'No microphone',
+    group: 'Screens',
+    description: 'No microphone was found before the call.',
+    snapshot: idle({
+      microphone: 'unavailable',
+      problem: problem('microphone-missing', { beforeCall: true }),
+    }),
   },
 
   // ---- The stages of a turn -----------------------------------------------------------------
-  ready: {
+  connecting: {
     title: 'Connecting',
     group: 'Stages of a turn',
     description: 'The microphone is allowed and the customer is about to speak their opening line.',
     snapshot: snapshotOf({
       turns: OPENING,
       phase: 'ready',
+      stage: 'ready',
       customerState: state('calm', 'steady'),
       stateHistory: history('calm'),
       elapsedSeconds: 4,
-      announcement: { id: 1, text: 'Asking for the microphone.' },
+    }),
+  },
+  'mic-ready': {
+    title: 'Microphone ready (your turn)',
+    group: 'Stages of a turn',
+    description: 'Push to talk: the microphone is allowed and waits for Talk.',
+    snapshot: snapshotOf({ turns: EARLY, announcement: said('Microphone ready.') }),
+  },
+  'mic-opening': {
+    title: 'Opening the microphone',
+    group: 'Stages of a turn',
+    description:
+      'Talk was pressed and the microphone is not open yet: Talk works, and nothing says Listening.',
+    snapshot: snapshotOf({
+      turns: EARLY,
+      phase: 'listening',
+      stage: 'listening',
+      micOpen: false,
     }),
   },
   listening: {
-    title: 'Listening (waiting for you)',
+    title: 'Listening',
     group: 'Stages of a turn',
     description: 'The microphone is open and nobody is speaking yet.',
     snapshot: snapshotOf({
       turns: EARLY,
       phase: 'listening',
-      micLevel: 0.12,
-      customerState: state('calm', 'steady'),
-      stateHistory: history('calm', 'calm'),
+      stage: 'listening',
+      handsFree: true,
+      micOpen: true,
+      micLevel: 0.06,
+      announcement: said('Listening. Speak when you are ready.'),
     }),
   },
   'speech-detected': {
     title: 'Hearing you',
     group: 'Stages of a turn',
-    description:
-      'The trainee is speaking: their level, and their words so far under the transcript.',
+    description: 'The trainee is speaking: the waveform moves and their words appear as they go.',
     snapshot: snapshotOf({
-      turns: MIDDLE,
+      turns: EARLY,
       phase: 'listening',
+      stage: 'listening',
+      handsFree: true,
+      micOpen: true,
       speechDetected: true,
-      micLevel: 0.66,
-      interim: 'Okay, I can see the account has been locked because of too many',
-      customerState: state('concerned', 'steady'),
+      micLevel: 0.6,
+      interim: SPOKEN_WORDS,
     }),
   },
-  transcribing: {
-    title: 'Transcribing',
+  'processing-speech': {
+    title: 'Processing speech',
     group: 'Stages of a turn',
-    description: 'The trainee stopped speaking; the speech is being turned into text.',
+    description: 'The utterance is being turned into text: a shimmer, never a percentage.',
     snapshot: snapshotOf({
-      turns: [...MIDDLE, pending(8, 140, '', 'transcribing', 'voice')],
+      turns: [...EARLY, exchange(98, '', 'transcribing', 'voice')],
       phase: 'transcribing',
-      customerState: state('concerned', 'steady'),
+      stage: 'transcribing',
+      announcement: said('Turning your speech into text.'),
     }),
   },
-  processing: {
-    title: 'The customer is thinking',
+  'transcript-available': {
+    title: 'Transcript available, customer replying',
     group: 'Stages of a turn',
-    description: 'The text was sent and the customer’s reply is being produced.',
+    description: "The words are in the transcript and the customer's reply is being made.",
     snapshot: snapshotOf({
       turns: [
-        ...MIDDLE,
-        pending(
-          8,
-          140,
-          'That could well be the cause. Let me check the account on my side while we talk.',
+        ...EARLY,
+        exchange(
+          98,
+          'Did anything change on those PCs or the network on Monday?',
           'sending',
           'voice',
         ),
       ],
       phase: 'processing',
-      customerState: state('concerned', 'steady'),
+      stage: 'processing',
+      announcement: said('The customer is preparing a reply.'),
     }),
   },
   'customer-speaking': {
-    title: 'The customer is speaking',
-    group: 'Stages of a turn',
-    description: 'The customer’s voice plays; their words are already in the transcript.',
-    snapshot: speaking,
-  },
-  'ready-for-next-turn': {
-    title: 'Your turn',
-    group: 'Stages of a turn',
-    description: 'The customer finished; push-to-talk, a standard call with no hints.',
-    snapshot: snapshotOf({ turns: LONGER, customerState: state('concerned', 'steady') }),
-  },
-  'hands-free': {
-    title: 'Hands-free',
-    group: 'Stages of a turn',
-    description: 'Hands-free is on: the microphone reopens by itself.',
-    snapshot: snapshotOf({
-      turns: LONGER,
-      handsFree: true,
-      customerState: state('concerned', 'steady'),
-    }),
-  },
-  interrupted: {
-    title: 'Customer interrupted',
+    title: 'Customer speaking',
     group: 'Stages of a turn',
     description:
-      'The trainee stopped the customer’s voice: the full reply stays in the transcript.',
+      'The customer\u2019s voice plays: Stop customer audio is the way to take the turn.',
+    snapshot: speaking,
+  },
+  paused: {
+    title: 'Paused',
+    group: 'Stages of a turn',
+    description: 'The voice loop is paused: no listening, and the customer is on hold.',
     snapshot: snapshotOf({
-      turns: MIDDLE.map((turn, index) =>
-        index === MIDDLE.length - 1 ? { ...turn, interrupted: true } : turn,
-      ),
-      customerState: state('concerned', 'rising'),
+      turns: MIDDLE,
+      paused: true,
+      stage: 'paused',
+      announcement: said('The call is paused.'),
     }),
   },
   muted: {
     title: 'Muted',
     group: 'Stages of a turn',
-    description: 'The microphone is muted.',
+    description: 'The microphone is muted while it would otherwise wait for the trainee.',
     snapshot: snapshotOf({
-      turns: LONGER,
+      turns: MIDDLE,
       muted: true,
-      customerState: state('concerned', 'steady'),
+      stage: 'muted',
+      announcement: said('Your microphone is muted.'),
     }),
   },
-  paused: {
-    title: 'Paused',
+  retrying: {
+    title: 'Retrying',
     group: 'Stages of a turn',
-    description: 'The whole voice loop is paused.',
+    description: 'A message that failed is being sent again, under the same id.',
     snapshot: snapshotOf({
-      turns: LONGER,
-      paused: true,
-      customerState: state('concerned', 'steady'),
+      turns: [
+        ...MIDDLE,
+        exchange(310, 'Take your time, I will stay on the line.', 'sending', 'voice'),
+      ],
+      phase: 'processing',
+      stage: 'retrying',
+      announcement: said('Retrying.'),
     }),
   },
-  'nothing-heard': {
-    title: 'Nothing was heard',
-    group: 'Stages of a turn',
-    description: 'A soft hint, not an error, beside the controls: nothing was picked up.',
-    snapshot: snapshotOf({
-      turns: LONGER,
-      hint: NOTHING_HEARD,
-      customerState: state('concerned', 'steady'),
-      announcement: { id: 2, text: NOTHING_HEARD },
-    }),
-  },
-  'no-words': {
-    title: 'A voice, but no words',
+  'retry-required': {
+    title: 'Try again (message not sent)',
     group: 'Stages of a turn',
     description:
-      'The microphone heard a voice but recognition found no words: speak again, or type.',
+      'The customer could not reply: the message stays in the transcript, Retry is offered.',
     snapshot: snapshotOf({
-      turns: LONGER,
-      support: BROWSER_SPEECH,
-      hint: NO_WORDS,
-      customerState: state('concerned', 'steady'),
-      announcement: { id: 2, text: NO_WORDS },
+      turns: [
+        ...MIDDLE,
+        exchange(310, 'Take your time, I will stay on the line.', 'failed', 'voice'),
+      ],
+      problem: problem('reply-failed'),
+      announcement: said('Problem: The customer could not reply. Your message is kept.'),
+    }),
+  },
+  offline: {
+    title: 'Offline',
+    group: 'Stages of a turn',
+    description: 'The browser reports it has no network.',
+    snapshot: snapshotOf({
+      turns: [
+        ...MIDDLE,
+        exchange(310, 'Take your time, I will stay on the line.', 'failed', 'voice'),
+      ],
+      stage: 'offline',
+      problem: problem('offline', { during: 'send' }),
+    }),
+    view: { online: false },
+  },
+  reconnecting: {
+    title: 'Reconnecting',
+    group: 'Stages of a turn',
+    description: 'The browser is back but the step that failed has not been sent again yet.',
+    snapshot: snapshotOf({
+      turns: [
+        ...MIDDLE,
+        exchange(310, 'Take your time, I will stay on the line.', 'failed', 'voice'),
+      ],
+      stage: 'offline',
+      problem: problem('offline', { during: 'send' }),
+    }),
+  },
+  ending: {
+    title: 'Ending call',
+    group: 'Stages of a turn',
+    description: 'A message in flight is being finished before the call closes.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      phase: 'ending',
+      stage: 'ending',
+      announcement: said('Ending the call.'),
+    }),
+  },
+  evaluating: {
+    title: 'Preparing review',
+    group: 'Stages of a turn',
+    description: 'The call is being closed and the review prepared.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      phase: 'ending',
+      stage: 'evaluating',
+      announcement: said('Preparing your review.'),
+    }),
+  },
+  completed: {
+    title: 'Call ended',
+    group: 'Stages of a turn',
+    description: 'The call is closed; the report opens next.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      phase: 'completed',
+      stage: 'completed',
+      announcement: said('The call is complete.'),
     }),
   },
 
-  // ---- Call modes ---------------------------------------------------------------------------
-  'text-only': {
-    title: 'Text-only call',
-    group: 'Call modes',
-    description: 'The call was started without the microphone: the composer is always open.',
+  // ---- Modes ---------------------------------------------------------------------------------
+  'text-fallback': {
+    title: 'Typing',
+    group: 'Modes',
+    description: 'The reply box is the way to hold the call; Return to voice is one press away.',
     snapshot: snapshotOf({
-      turns: conversation(MAYA, YOU, 5).map((turn) =>
-        turn.role === 'trainee' ? { ...turn, inputMode: 'text' as const } : turn,
-      ),
+      turns: MIDDLE,
       mode: 'text',
-      microphone: 'unknown',
-      support: { ...BROWSER_SPEECH, playback: 'none', playbackLabel: 'Captions only' },
-      customerState: state('concerned', 'steady'),
+      stage: 'ready',
+      announcement: said('You are typing your replies.'),
     }),
   },
-  'text-only-thinking': {
-    title: 'Text-only: the customer is thinking',
-    group: 'Call modes',
-    description: 'A typed message was sent: Send waits, with its reason.',
+  'text-thinking': {
+    title: 'Typing: the customer is replying',
+    group: 'Modes',
+    description: 'A typed message is being answered. Sending waits, the draft is kept.',
     snapshot: snapshotOf({
       turns: [
-        ...conversation(MAYA, YOU, 5).map((turn) =>
-          turn.role === 'trainee' ? { ...turn, inputMode: 'text' as const } : turn,
-        ),
-        pending(6, 230, 'Is your work email on a phone or a tablet as well?', 'sending', 'text'),
+        ...MIDDLE,
+        exchange(310, 'Take your time, I will stay on the line.', 'sending', 'text'),
       ],
       mode: 'text',
-      microphone: 'unknown',
       phase: 'processing',
-      support: { ...BROWSER_SPEECH, playback: 'none', playbackLabel: 'Captions only' },
-      customerState: state('concerned', 'steady'),
+      stage: 'processing',
+    }),
+    view: { initialUi: { draft: 'Is the driver version on that PC' } },
+  },
+  'text-limit': {
+    title: 'Typing: message limit',
+    group: 'Modes',
+    description: 'The call has reached its message limit: End call is the way on.',
+    snapshot: snapshotOf({
+      turns: LONGER,
+      mode: 'text',
+      turnsRemaining: 0,
+      problem: problem('turn-limit'),
     }),
   },
-  'composer-open': {
-    title: 'Typing on a voice call',
-    group: 'Call modes',
-    description: 'The reply box opened on a spoken call, with a draft.',
-    snapshot: snapshotOf({ turns: LONGER, customerState: state('concerned', 'steady') }),
-    view: {
-      initialUi: {
-        composerOpen: true,
-        draft:
-          'Thanks, Maya. Could you open the mail app on your phone and tell me which accounts you can see listed?',
-      },
-    },
+  'text-microphone-lost': {
+    title: 'Typing after the microphone was lost',
+    group: 'Modes',
+    description: 'The microphone stopped mid-call: the call carries on by typing, and says why.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      mode: 'text',
+      microphone: 'unavailable',
+      problem: problem('microphone-missing'),
+    }),
   },
-  'composer-limit': {
-    title: 'Typing near the limit',
-    group: 'Call modes',
-    description: 'The counter has appeared and the message is over the limit.',
-    snapshot: snapshotOf({ turns: LONGER, customerState: state('concerned', 'steady') }),
-    view: {
-      initialUi: {
-        composerOpen: true,
-        draft: 'Maya, '.concat(
-          'here is a very long explanation of how the account locks and why the phone tries again. '.repeat(
-            18,
-          ),
-        ),
-      },
-    },
+  'audio-off': {
+    title: 'Customer audio off',
+    group: 'Modes',
+    description: 'The trainee continued without audio: replies are captions.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      audio: 'off',
+      hint: hintText({ code: 'no-voice' }),
+    }),
+  },
+  'captions-only': {
+    title: 'Captions only',
+    group: 'Modes',
+    description: 'This browser cannot speak the customer\u2019s replies at all.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      audio: 'none',
+      support: { ...BROWSER_SPEECH, playback: 'none', playbackLabel: 'Captions only' },
+      hint: hintText({ code: 'captions-only' }),
+    }),
+  },
+  interrupted: {
+    title: 'Customer audio stopped',
+    group: 'Modes',
+    description:
+      'The trainee stopped the customer\u2019s voice: the full reply is in the transcript.',
+    snapshot: snapshotOf({
+      turns: MIDDLE.map((turn) => (turn.index === 7 ? { ...turn, interrupted: true } : turn)),
+      announcement: said('Microphone ready.'),
+    }),
+  },
+  'nothing-heard': {
+    title: 'Nothing heard',
+    group: 'Modes',
+    description: 'The microphone heard nothing: a soft hint, and Talk to try again.',
+    snapshot: snapshotOf({ turns: MIDDLE, hint: hintText({ code: 'nothing-heard' }) }),
   },
   'guided-hints': {
-    title: 'Guided practice (hints on)',
-    group: 'Call modes',
-    description: 'Guided practice: the context-found count and the areas worth exploring.',
+    title: 'Guided practice',
+    group: 'Modes',
+    description: 'Guided practice adds the areas worth exploring to the case.',
     snapshot: snapshotOf(
-      {
-        turns: LONGER,
-        customerState: state('concerned', 'steady', 2),
-      },
+      { turns: MIDDLE, customerState: state('concerned', 'steady', 3) },
       { config: { mode: 'guided' } },
     ),
   },
   'live-model': {
     title: 'Live model',
-    group: 'Call modes',
-    description: 'A live provider is labelled with its real name, never as demo mode.',
-    snapshot: snapshotOf({ turns: LONGER, customerState: state('concerned', 'steady') }),
+    group: 'Modes',
+    description: 'A live model writes the customer: the bar says so and not "demo".',
+    snapshot: snapshotOf({ turns: MIDDLE }),
     view: { provider: { demo: false, label: 'Azure OpenAI (gpt-4o)' } },
   },
-  'browser-voice': {
-    title: 'Browser voice and recognition',
-    group: 'Call modes',
-    description:
-      "The browser's own voice and recognition: the label says which voice spoke, and that recognition can miss words.",
+  'legacy-call': {
+    title: 'A call saved before Microsoft scenarios',
+    group: 'Modes',
+    description: 'No product and no public brief: nothing is guessed, the older goal is used.',
+    snapshot: snapshotOf({ turns: MIDDLE }, { scenario: LEGACY_SCENARIO }),
+  },
+  'long-transcript': {
+    title: 'A long call',
+    group: 'Modes',
+    description: 'Sixty-four turns: the transcript stays responsive.',
     snapshot: snapshotOf({
-      turns: LONGER,
-      support: {
-        ...BROWSER_SPEECH,
-        playbackLabel: 'Browser voice (on this device): Microsoft David, en-US',
-      },
-      voiceDetails: { voice: null, style: null, language: 'en-GB' },
-      customerState: state('concerned', 'steady'),
+      turns: conversation(64),
+      stateHistory: angryHistory,
+      customerState: state('frustrated', 'falling'),
     }),
-    view: { initialUi: { settingsOpen: true } },
+  },
+  notes: {
+    title: 'Private notes',
+    group: 'Modes',
+    description: 'The trainee\u2019s own notes, only on this screen.',
+    snapshot: snapshotOf({ turns: MIDDLE }),
+    view: { initialUi: { notes: 'Driver 10.0.22621 updated Monday. Ask for the rollback plan.' } },
   },
 
-  // ---- Problems -----------------------------------------------------------------------------
-  'problem-voice-generation-failed': {
-    title: 'Problem: the customer’s voice failed',
+  // ---- Problems ------------------------------------------------------------------------------
+  'problem-voice-generation': {
+    title: 'The customer\u2019s voice could not be made',
     group: 'Problems',
-    description: 'A problem the call can carry on through.',
+    description:
+      'A voice problem: Retry and Continue without audio. The reply is in the transcript.',
+    snapshot: snapshotOf({ turns: MIDDLE, problem: problem('voice-generation-failed') }),
+  },
+  'problem-voice-timeout': {
+    title: 'The customer\u2019s voice took too long',
+    group: 'Problems',
+    description: 'The voice was not ready in time: the same two ways forward, said differently.',
     snapshot: snapshotOf({
       turns: MIDDLE,
-      problem: PROBLEMS.voiceGenerationFailed,
-      customerState: state('concerned', 'rising'),
-      announcement: { id: 3, text: `Problem: ${PROBLEMS.voiceGenerationFailed.title}` },
+      problem: problem('voice-generation-failed', { timedOut: true }),
     }),
   },
-  'problem-playback-blocked': {
-    title: 'Problem: the browser blocked the voice',
+  'problem-voice-offline': {
+    title: 'The connection dropped during the voice',
     group: 'Problems',
-    description: 'A visible Play customer reply button.',
+    description: 'Offline while the voice was made: Retry once back, or Continue without audio.',
     snapshot: snapshotOf({
       turns: MIDDLE,
-      problem: PROBLEMS.playbackBlocked,
-      customerState: state('concerned', 'rising'),
-    }),
-  },
-  'problem-transcription-failed': {
-    title: 'Problem: speech could not be turned into text',
-    group: 'Problems',
-    description: 'Nothing was sent; Try again or type instead.',
-    snapshot: snapshotOf({
-      turns: LONGER,
-      problem: PROBLEMS.transcriptionFailed,
-      customerState: state('concerned', 'steady'),
-    }),
-  },
-  'problem-reply-failed': {
-    title: 'Problem: the customer could not reply (can carry on)',
-    group: 'Problems',
-    description: 'A failed trainee turn, kept, with its own Try again.',
-    snapshot: snapshotOf({
-      turns: [
-        ...MIDDLE,
-        {
-          ...pending(
-            8,
-            140,
-            'That could well be the cause. Let me check the account on my side while we talk.',
-            'failed',
-            'voice',
-          ),
-        },
-      ],
-      problem: { ...PROBLEMS.replyFailed, severity: 'degraded' },
-      customerState: state('concerned', 'steady'),
-    }),
-  },
-  'blocking-reply-failed': {
-    title: 'Blocking: the customer could not reply',
-    group: 'Problems',
-    description: 'As the engine reports it: the controls area gives way to the problem.',
-    snapshot: snapshotOf({
-      turns: [
-        ...MIDDLE,
-        pending(
-          8,
-          140,
-          'That could well be the cause. Let me check the account on my side while we talk.',
-          'failed',
-          'voice',
-        ),
-      ],
-      problem: PROBLEMS.replyFailed,
-      customerState: state('concerned', 'steady'),
-    }),
-  },
-  'problem-offline': {
-    title: 'Offline',
-    group: 'Problems',
-    description: 'The browser is offline: the badge says so and Send waits.',
-    snapshot: snapshotOf({
-      turns: [
-        ...MIDDLE,
-        pending(
-          8,
-          140,
-          'That could well be the cause. Let me check the account on my side while we talk.',
-          'failed',
-          'voice',
-        ),
-      ],
-      problem: PROBLEMS.offline,
-      customerState: state('concerned', 'steady'),
+      stage: 'offline',
+      problem: problem('offline', { during: 'speak' }),
     }),
     view: { online: false },
   },
-  'problem-microphone-lost': {
-    title: 'The microphone stopped working',
+  'problem-playback-blocked': {
+    title: 'The browser blocked the voice',
     group: 'Problems',
-    description:
-      'The microphone was lost during the call, so the call carries on typed, with a way to try the microphone again.',
+    description: 'Autoplay was refused: Replay is a press, which the browser allows.',
+    snapshot: snapshotOf({ turns: MIDDLE, problem: problem('playback-blocked') }),
+  },
+  'problem-playback-failed': {
+    title: 'The voice could not be played',
+    group: 'Problems',
+    description: 'The sound started and failed: Replay, or Continue without audio.',
+    snapshot: snapshotOf({ turns: MIDDLE, problem: problem('playback-failed') }),
+  },
+  'problem-transcription-failed': {
+    title: 'Transcribing failed',
+    group: 'Problems',
+    description: 'Nothing was sent: Retry to say it again, or Use text.',
+    snapshot: snapshotOf({ turns: MIDDLE, problem: problem('transcription-failed') }),
+  },
+  'problem-transcription-timeout': {
+    title: 'Transcribing took too long',
+    group: 'Problems',
+    description: 'The recording is kept for one more try: Retry sends the same recording.',
     snapshot: snapshotOf({
-      turns: LONGER,
-      mode: 'text',
-      microphone: 'unavailable',
-      problem: PROBLEMS.microphoneLost,
-      customerState: state('concerned', 'steady'),
+      turns: MIDDLE,
+      problem: problem('transcription-failed', { timedOut: true }),
     }),
   },
-  'turn-limit': {
-    title: 'Message limit reached',
+  'problem-speech-unavailable': {
+    title: 'Speech is not available',
     group: 'Problems',
-    description: 'Voice and typing are off; End call is the way on.',
+    description: 'The server has no speech service: Retry would not help, so only Use text.',
+    snapshot: snapshotOf({ turns: MIDDLE, problem: problem('speech-service-unavailable') }),
+  },
+  'problem-save-failed': {
+    title: 'The message may not be saved',
+    group: 'Problems',
+    description: 'Retry sends it once even if it was saved; End safely is the other way out.',
     snapshot: snapshotOf({
-      turns: conversation(MAYA, YOU, 29),
-      problem: PROBLEMS.turnLimit,
-      turnsRemaining: 0,
-      customerState: state('calm', 'steady'),
-      stateHistory: history('calm', 'calm', 'concerned', 'calm', 'calm', 'calm', 'calm'),
+      turns: [
+        ...MIDDLE,
+        exchange(310, 'Take your time, I will stay on the line.', 'failed', 'text'),
+      ],
+      mode: 'text',
+      problem: problem('save-failed'),
     }),
+  },
+  'problem-turn-limit': {
+    title: 'Message limit',
+    group: 'Problems',
+    description: 'The limit was reached: End call is the one action.',
+    snapshot: snapshotOf({ turns: LONGER, turnsRemaining: 0, problem: problem('turn-limit') }),
   },
 
-  // ---- The customer's state -----------------------------------------------------------------
+  // ---- The customer's state -------------------------------------------------------------------
   'state-calm': {
-    title: 'State: calm',
+    title: 'Calm',
     group: 'Customer state',
-    description: 'Calm and steady.',
+    description: 'A calm customer.',
     snapshot: snapshotOf({
-      turns: LONGER,
+      turns: EARLY,
       customerState: state('calm', 'steady'),
-      stateHistory: history('calm', 'calm', 'calm', 'calm', 'calm'),
+      stateHistory: history('calm', 'calm'),
     }),
   },
   'state-concerned': {
-    title: 'State: concerned',
+    title: 'Concerned',
     group: 'Customer state',
-    description: 'Concerned and rising.',
+    description: 'A concerned customer, getting more worried.',
     snapshot: snapshotOf({
-      turns: LONGER,
+      turns: EARLY,
       customerState: state('concerned', 'rising'),
-      stateHistory: history('calm', 'calm', 'concerned', 'concerned', 'concerned'),
+      stateHistory: history('calm', 'concerned'),
     }),
   },
   'state-frustrated': {
-    title: 'State: frustrated',
+    title: 'Frustrated',
     group: 'Customer state',
-    description: 'Frustrated and rising.',
+    description: 'A frustrated customer.',
     snapshot: snapshotOf({
       turns: tense.slice(0, 9),
       customerState: state('frustrated', 'rising'),
@@ -1134,180 +1074,132 @@ const DEFINITIONS = {
     }),
   },
   'state-angry': {
-    title: 'State: angry',
+    title: 'Angry',
     group: 'Customer state',
-    description: 'Angry after a longer, tenser call.',
+    description: 'An angry customer.',
     snapshot: snapshotOf({
-      turns: tense.slice(0, 13),
-      customerState: state('angry', 'rising'),
-      stateHistory: angryHistory.slice(0, 7),
+      turns: tense,
+      customerState: state('angry', 'steady'),
+      stateHistory: angryHistory,
     }),
   },
   'state-escalating': {
-    title: 'State: escalating',
+    title: 'Escalating',
     group: 'Customer state',
-    description: 'Escalating: the deepest red token, its own icon shape and its own word.',
+    description: 'A very upset customer: the label and the icon change, nothing flashes or shakes.',
     snapshot: snapshotOf({
       turns: tense,
       customerState: state('escalating', 'rising'),
-      stateHistory: history(
-        'calm',
-        'concerned',
-        'frustrated',
-        'angry',
-        'angry',
-        'escalating',
-        'escalating',
-        'escalating',
-      ),
+      stateHistory: [...angryHistory, { turnIndex: 17, band: 'escalating', label: 'Escalating' }],
     }),
   },
   'state-recovering': {
-    title: 'State: recovering',
+    title: 'Recovering',
     group: 'Customer state',
-    description: 'The customer is easing after a higher band: recovering, with its arrow.',
+    description: 'The customer is easing after being angrier earlier.',
     snapshot: snapshotOf({
       turns: tense,
       customerState: state('frustrated', 'falling'),
-      stateHistory: history(
-        'calm',
-        'concerned',
-        'frustrated',
-        'angry',
-        'angry',
-        'frustrated',
-        'frustrated',
-        'frustrated',
-      ),
+      stateHistory: angryHistory,
     }),
   },
 
-  // ---- Content and dialogs ------------------------------------------------------------------
-  'long-transcript': {
-    title: 'A 60-turn transcript',
-    group: 'Content and dialogs',
-    description:
-      'A long call: older turns are laid out lazily and the log still follows the newest.',
-    snapshot: snapshotOf({
-      turns: conversation(MAYA, YOU, 60),
-      customerState: state('calm', 'falling'),
-      stateHistory: history(
-        'calm',
-        'calm',
-        'concerned',
-        'concerned',
-        'frustrated',
-        'concerned',
-        'concerned',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-        'calm',
-      ),
-      elapsedSeconds: 1190,
-    }),
-  },
+  // ---- Dialogs -------------------------------------------------------------------------------
   'end-confirm': {
     title: 'End the call?',
-    group: 'Content and dialogs',
-    description: 'The question before a call ends: facts and what happens next.',
-    snapshot: snapshotOf({
-      turns: conversation(MAYA, YOU, 13),
-      customerState: state('calm', 'steady'),
-    }),
+    group: 'Dialogs',
+    description: 'The question: the accurate length, messages and state; Continue call has focus.',
+    snapshot: snapshotOf({ turns: LONGER }),
     view: { initialUi: { endOpen: true } },
   },
   'end-confirm-short': {
-    title: 'End the call? (a short call)',
-    group: 'Content and dialogs',
-    description: 'Fewer than six turns from the trainee: the note about limited evidence.',
+    title: 'End the call? (short call)',
+    group: 'Dialogs',
+    description: 'A short call says its review will rest on limited evidence.',
+    snapshot: snapshotOf({ turns: EARLY }),
+    view: { initialUi: { endOpen: true } },
+  },
+  'end-unsaved': {
+    title: 'End the call? (a message was not sent)',
+    group: 'Dialogs',
+    description:
+      'The last message never reached the server: ending now leaves it out of the review.',
     snapshot: snapshotOf({
-      turns: EARLY,
-      customerState: state('calm', 'steady'),
-      stateHistory: history('calm', 'calm'),
+      turns: [
+        ...MIDDLE,
+        exchange(310, 'Take your time, I will stay on the line.', 'failed', 'text'),
+      ],
+      problem: problem('reply-failed'),
     }),
     view: { initialUi: { endOpen: true } },
   },
   'end-failed': {
-    title: 'End the call: it failed',
-    group: 'Content and dialogs',
-    description: 'Ending did not work: the problem and Try again, inside the dialog.',
-    snapshot: snapshotOf({
-      turns: conversation(MAYA, YOU, 13),
-      // A spoken call carries on paused after a failed ending: the microphone was let go of.
-      paused: true,
-      problem: PROBLEMS.endFailed,
-      customerState: state('calm', 'steady'),
-    }),
+    title: 'Ending failed',
+    group: 'Dialogs',
+    description: 'The call is still open: the failure is told in the dialog, with Retry.',
+    snapshot: snapshotOf({ turns: MIDDLE, problem: problem('end-failed') }),
     view: { initialUi: { endOpen: true } },
   },
   'end-nothing-to-review': {
-    title: 'End the call: nothing to review',
-    group: 'Content and dialogs',
-    description:
-      'No message was ever sent, so there is no report: carry on, or leave without a report.',
+    title: 'Nothing to review',
+    group: 'Dialogs',
+    description: 'No message was ever sent: carry on, or leave without a report.',
     snapshot: snapshotOf({
       turns: OPENING,
-      paused: true,
-      problem: PROBLEMS.nothingToReview,
-      customerState: state('calm', 'steady'),
-      stateHistory: history('calm'),
+      problem: problem('end-failed', { nothingToReview: true }),
     }),
     view: { initialUi: { endOpen: true } },
   },
-  ending: {
-    title: 'Ending the call',
-    group: 'Content and dialogs',
-    description: 'The call is closing: never blank, with the heading focused.',
-    snapshot: snapshotOf({
-      turns: conversation(MAYA, YOU, 13),
-      phase: 'ending',
-      customerState: state('calm', 'steady'),
-      announcement: { id: 9, text: 'Ending the call.' },
-    }),
-  },
-  'details-open': {
-    title: 'Call details sheet',
-    group: 'Content and dialogs',
-    description: 'The context as a sheet, below 80em (open it with Details).',
-    snapshot: snapshotOf({ turns: LONGER, customerState: state('concerned', 'steady') }),
-    view: { initialUi: { detailsOpen: true } },
+  'case-sheet': {
+    title: 'Case (sheet)',
+    group: 'Dialogs',
+    description: 'Below 80em the case opens as a sheet from the bar.',
+    snapshot: snapshotOf({ turns: MIDDLE }),
+    view: { initialUi: { caseOpen: true } },
   },
   'voice-settings': {
     title: 'Voice settings',
-    group: 'Content and dialogs',
-    description: 'Hands-free, the language and a plain read-out of what is really in use.',
-    snapshot: snapshotOf({ turns: LONGER, customerState: state('concerned', 'steady') }),
+    group: 'Dialogs',
+    description: 'Hands-free, customer audio, language and what is really in use.',
+    snapshot: snapshotOf({ turns: MIDDLE, handsFree: true }),
     view: { initialUi: { settingsOpen: true } },
   },
 } satisfies Record<string, CallFixture>;
 
 export type FixtureName = keyof typeof DEFINITIONS;
 
-/** Every fixture, typed as a `CallFixture` so that the optional `view` can be read from any of them. */
 export const FIXTURES: Record<FixtureName, CallFixture> = DEFINITIONS;
 
 export const FIXTURE_NAMES = Object.keys(FIXTURES) as FixtureName[];
 
 export function isFixtureName(name: string | null): name is FixtureName {
-  return name !== null && Object.hasOwn(FIXTURES, name);
+  return name !== null && Object.prototype.hasOwnProperty.call(FIXTURES, name);
 }
+
+/**
+ * The fixture that shows each status label, so a test can walk every state of the call. "Transcript
+ * available" is the trainee's turn showing its words while the status says the customer is thinking.
+ */
+export const STATUS_FIXTURES: Record<StatusId, FixtureName> = {
+  'mic-not-requested': 'preflight-voice',
+  'requesting-permission': 'requesting-permission',
+  'permission-denied': 'permission-denied',
+  'mic-unavailable': 'microphone-unavailable',
+  connecting: 'connecting',
+  'mic-ready': 'mic-ready',
+  listening: 'listening',
+  'speech-detected': 'speech-detected',
+  'processing-speech': 'processing-speech',
+  'generating-reply': 'transcript-available',
+  'customer-speaking': 'customer-speaking',
+  paused: 'paused',
+  muted: 'muted',
+  'retry-required': 'retry-required',
+  retrying: 'retrying',
+  'limit-reached': 'problem-turn-limit',
+  'text-fallback': 'text-fallback',
+  offline: 'offline',
+  ending: 'ending',
+  evaluating: 'evaluating',
+  completed: 'completed',
+};

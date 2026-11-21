@@ -1,5 +1,6 @@
 import type { InputMode } from '#shared/domain/speech.ts';
 import type { RedactionKind } from '#shared/domain/text.ts';
+import { CAPTURE_TUNING } from '../voice/capture/tuning.ts';
 import type { CallPhase, CallProblemCode, MicrophoneState } from './contract.ts';
 import { describeProblem, type ProblemContext } from './problems.ts';
 
@@ -33,8 +34,11 @@ export const TIMINGS = {
   finish: 5_000,
   transcribe: 20_000,
   reply: 45_000,
-  /** The pause after the customer's voice, so the microphone does not hear its tail. */
-  settle: 350,
+  /**
+   * The pause after the customer's voice, so the microphone does not hear its tail. It is the voice
+   * layer's own figure (`CAPTURE_TUNING`), which the capture guard also holds the microphone for.
+   */
+  settle: CAPTURE_TUNING.settleAfterPlaybackMs,
   /** The call is ready but nothing has started. */
   ready: 5_000,
   /** Waiting for a message in flight before ending the call. */
@@ -63,7 +67,8 @@ export type HintCode =
   | 'discarded-muted'
   | 'discarded-paused'
   | 'no-voice'
-  | 'not-started';
+  | 'not-started'
+  | 'wait-customer';
 
 export interface Hint {
   code: HintCode;
@@ -202,7 +207,8 @@ export type TranscribeFailure =
   | { kind: 'offline' }
   | { kind: 'service-unavailable' }
   | { kind: 'rate-limited'; retryAfterSeconds?: number }
-  | { kind: 'failed' };
+  /** `timedOut`: the speech service did not answer in time, rather than failing outright. */
+  | { kind: 'failed'; timedOut?: boolean };
 
 export type SendFailure =
   /** Another message was still being processed, and the retries ran out. */
@@ -248,7 +254,16 @@ export type MachineEvent =
   | { type: 'toggle-mute' }
   | { type: 'toggle-pause' }
   | { type: 'set-hands-free'; on: boolean }
+  /** Text fallback as a mode: the microphone and the customer's voice stop, typing carries on. */
+  | { type: 'use-text' }
+  /** The customer's voice on or off. `available` is whether anything can speak (it gates `on`). */
+  | { type: 'set-audio'; on: boolean; available: boolean }
   | { type: 'interrupt' }
+  /**
+   * The customer's voice was cut off while it was audible: said by the engine after it stopped the
+   * voice (`PlaybackStop.interrupted`), whatever made it stop. The words are in the transcript in full.
+   */
+  | { type: 'customer-cut-off'; turnIndex: number }
   | { type: 'replay' }
   | { type: 'send-text'; id: string; text: string; createdAt: string }
   | { type: 'retry-send' }
@@ -264,6 +279,11 @@ export type MachineEvent =
   | { type: 'transcribe-done'; id: string; text: string }
   | { type: 'transcribe-empty'; id: string }
   | { type: 'transcribe-failed'; id: string | null; failure: TranscribeFailure }
+  /**
+   * Retry after speech could not be turned into text, and the recording was kept: the same
+   * utterance, under the same id, is turned into text again. Nothing is recorded.
+   */
+  | { type: 'transcribe-retry'; id: string; createdAt: string }
   // Sending
   | {
       type: 'send-done';
@@ -316,6 +336,16 @@ const REPLY_PROBLEMS: readonly CallProblemCode[] = [
   'rate-limited',
 ];
 
+/** A problem of turning speech into text, which Retry may answer by sending the kept recording again. */
+export function isTranscriptionProblem(problem: ProblemState | null): boolean {
+  if (!problem) return false;
+  return (
+    TRANSCRIPTION_PROBLEMS.includes(problem.code) ||
+    ((problem.code === 'offline' || problem.code === 'rate-limited') &&
+      problem.context.during === 'transcribe')
+  );
+}
+
 const MIC_PROBLEM_CODE: Record<MicReason, CallProblemCode> = {
   denied: 'microphone-denied',
   missing: 'microphone-missing',
@@ -362,7 +392,8 @@ function yourTurn(state: MachineState): MachineState {
 function startSpeech(state: MachineState, turnIndex: number, phase: CallPhase): MachineState {
   const token = state.speechSeq + 1;
   return {
-    ...state,
+    // Heard again from the start, so it is no longer a reply that was cut off.
+    ...withoutInterrupted(state, turnIndex),
     phase,
     speech: { turnIndex, token, status: 'preparing', estimateMs: 0 },
     speechSeq: token,
@@ -571,9 +602,13 @@ function step(state: MachineState, event: MachineEvent): MachineState {
     case 'talk': {
       if (!state.begun || !state.voice || state.limitReached || state.sessionEnded) return state;
       if (phase === 'listening') return step(state, { type: 'stop-talking' });
-      if (phase !== 'ready-for-next-turn' && phase !== 'customer-speaking' && phase !== 'ready') {
-        return state;
+      // Controlled turn-taking: barge-in is not supported, so Talk never opens the microphone while
+      // the customer's voice is being prepared or played. The trainee waits for the voice to end, or
+      // stops it with `interrupt`, and then talks.
+      if (phase === 'ready' || phase === 'customer-speaking') {
+        return state.speech ? { ...state, hint: { code: 'wait-customer' } } : state;
       }
+      if (phase !== 'ready-for-next-turn') return state;
       if (state.paused) return { ...state, hint: { code: 'paused' } };
       if (state.muted) return { ...state, hint: { code: 'muted' } };
       if (!state.micHeld) return state;
@@ -582,9 +617,11 @@ function step(state: MachineState, event: MachineEvent): MachineState {
           ? { ...state, hint: { code: 'retry-first' } }
           : state;
       }
-      let next = state;
-      if (next.speech) next = withInterrupted(next, next.speech.turnIndex);
-      next = withoutProblems(next, [...TRANSCRIPTION_PROBLEMS, ...VOICE_PROBLEMS], 'transcribe');
+      const next = withoutProblems(
+        state,
+        [...TRANSCRIPTION_PROBLEMS, ...VOICE_PROBLEMS],
+        'transcribe',
+      );
       return {
         ...next,
         phase: 'listening',
@@ -658,10 +695,47 @@ function step(state: MachineState, event: MachineEvent): MachineState {
         ? state
         : { ...state, handsFree: event.on, silentRetries: event.on ? 0 : state.silentRetries };
 
-    case 'interrupt': {
-      if (!state.speech) return state;
-      return yourTurn(withInterrupted({ ...state, pendingSpeech: null }, state.speech.turnIndex));
+    case 'use-text': {
+      if (!state.begun || !state.voice || state.sessionEnded) return state;
+      if (
+        phase !== 'ready' &&
+        phase !== 'listening' &&
+        phase !== 'customer-speaking' &&
+        phase !== 'ready-for-next-turn'
+      ) {
+        return state;
+      }
+      // Typing needs neither the microphone nor the voice: both are let go of, the problems that
+      // belonged to them go with them, and nothing already said or sent is touched.
+      const next = withoutProblems(
+        { ...state, voice: false, micHeld: false, muted: false, paused: false },
+        [...MICROPHONE_PROBLEMS, ...TRANSCRIPTION_PROBLEMS, ...VOICE_PROBLEMS],
+        'transcribe',
+      );
+      return yourTurn({ ...next, pendingSpeech: null, silentRetries: 0, hint: null });
     }
+
+    case 'set-audio': {
+      if (event.on) {
+        return state.canSpeak || !event.available ? state : { ...state, canSpeak: true };
+      }
+      if (!state.canSpeak && state.speech === null && state.pendingSpeech === null) return state;
+      const next = withoutProblems(
+        { ...state, canSpeak: false, pendingSpeech: null },
+        VOICE_PROBLEMS,
+      );
+      return next.speech ? yourTurn(next) : next;
+    }
+
+    case 'interrupt': {
+      // Whether the customer was really cut off is the engine's to say, once it has stopped the
+      // voice (`customer-cut-off`): a voice that had not started has nothing to cut off.
+      if (!state.speech) return state;
+      return yourTurn({ ...state, pendingSpeech: null });
+    }
+
+    case 'customer-cut-off':
+      return withInterrupted(state, event.turnIndex);
 
     case 'replay': {
       if (!state.begun || !state.canSpeak || state.sessionEnded) return state;
@@ -693,7 +767,6 @@ function step(state: MachineState, event: MachineEvent): MachineState {
         return state;
       }
       let next = state;
-      if (next.speech) next = withInterrupted(next, next.speech.turnIndex);
       next = withoutProblems(next, [...TRANSCRIPTION_PROBLEMS, ...VOICE_PROBLEMS], 'transcribe');
       return {
         ...next,
@@ -897,9 +970,43 @@ function step(state: MachineState, event: MachineEvent): MachineState {
             }),
           });
         case 'failed':
-          return yourTurn({ ...cleared, problem: problem('transcription-failed') });
+          return yourTurn({
+            ...cleared,
+            problem: problem('transcription-failed', failure.timedOut ? { timedOut: true } : {}),
+          });
       }
       return state;
+    }
+
+    case 'transcribe-retry': {
+      // Retry for a recording that was kept: the same utterance, under the same id, goes to be turned
+      // into text again, exactly as if it had just been said. Only after a problem of that step.
+      if (phase !== 'ready-for-next-turn' || state.exchange) return state;
+      if (state.sessionEnded || state.limitReached || !isTranscriptionProblem(state.problem)) {
+        return state;
+      }
+      return withoutProblems(
+        {
+          ...state,
+          phase: 'transcribing',
+          speechDetected: false,
+          heard: false,
+          finishing: false,
+          hint: null,
+          exchange: {
+            id: event.id,
+            text: '',
+            inputMode: 'voice',
+            createdAt: event.createdAt,
+            status: 'transcribing',
+            attempt: 0,
+            saved: false,
+            index: null,
+          },
+        },
+        TRANSCRIPTION_PROBLEMS,
+        'transcribe',
+      );
     }
 
     case 'send-done': {
@@ -1056,7 +1163,7 @@ function onTimeout(state: MachineState, id: number): MachineState {
       return yourTurn({
         ...state,
         pendingSpeech: null,
-        problem: problem('voice-generation-failed'),
+        problem: problem('voice-generation-failed', { timedOut: true }),
       });
     case 'speak-play':
       // A voice that never reports its end: hand the turn to the trainee.
@@ -1189,9 +1296,11 @@ export function targets(state: MachineState): Targets {
   const draining = state.phase === 'ending' && state.ending === 'draining';
   // The microphone only records in `listening` (and finishes a recording in `transcribing`), never
   // while the customer speaks, so it cannot hear the customer's own voice. Speaking over the
-  // customer (barge-in by voice) is NOT implemented: echo cancellation cannot be relied on (it does
-  // not cover the browser's own speech synthesis or its recogniser). The trainee takes the turn
-  // with `interrupt()` or by pressing Talk instead.
+  // customer (barge-in) is NOT supported: echo cancellation cannot be relied on (it does not cover
+  // the browser's own speech synthesis or its recogniser), and an unreliable barge-in is worse than
+  // none. Turn-taking is controlled: the trainee stops the customer's voice with `interrupt()` and
+  // then talks, or waits for the voice to end. `talk` is refused while the voice is being prepared or
+  // played.
   const recording =
     state.phase === 'listening'
       ? state.finishing

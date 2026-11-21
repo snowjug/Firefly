@@ -19,6 +19,9 @@ export function useRescueFocus(trigger: unknown, find: () => HTMLElement | null)
   }, [trigger, find]);
 }
 
-/** The area that holds the status line and the voice controls, which can take focus when nothing else can. */
-export const findControlsZone = (): HTMLElement | null =>
-  document.getElementById('cw-controls-zone');
+/** The call controls, which can take focus when nothing else can (a control that held it is gone). */
+export const findControlsZone = (): HTMLElement | null => document.getElementById('cw-controls');
+
+/** The microphone control, where focus goes when the trainee goes back to voice. */
+export const findTalkControl = (): HTMLElement | null =>
+  document.querySelector<HTMLElement>('[data-cw-talk]');

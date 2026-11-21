@@ -1,217 +1,162 @@
-/* The transcript: whole turns in the reading size, the trainee's own turns on a quiet ground. */
+/* The transcript: whole turns, who spoke, a timestamp now and then. A turn that arrives fades in with
+   a short rise; the customer's turn that is being spoken is marked. Rows far back skip layout. */
 
 .cw-log-wrap {
   position: relative;
+  display: flex;
   flex: 1 1 0px;
   min-block-size: 0;
 }
 .cw-log-scroll {
-  position: absolute;
-  inset: 0;
-  box-sizing: border-box;
-  padding: var(--sp-4) var(--sp-5) var(--sp-5);
-  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  padding: var(--sp-4) var(--sp-5);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.cw-log-scroll:focus-visible {
-  outline-offset: -2px;
-  box-shadow: none;
-}
 .cw-log__empty {
   color: var(--fg-3);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
 }
-
 .cw-turns {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-5);
+  gap: var(--sp-4);
   margin: 0;
   padding: 0;
-  list-style: none;
 }
+
 .cw-turn {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr);
-  align-items: start;
-  column-gap: var(--sp-3);
-  min-inline-size: 0;
-  animation: cw-turn-in var(--dur-normal) var(--ease-decelerate);
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-2);
+  margin-inline: calc(var(--sp-2) * -1);
+  border-radius: var(--r-lg);
+  transition: background-color var(--dur-normal) var(--ease-easy);
 }
-/* Older turns are skipped by the browser until they are scrolled to, so a long call stays smooth. */
+/* The newest turns are always laid out; older ones are skipped until they are scrolled to. */
 .cw-turn--old {
   content-visibility: auto;
-  contain-intrinsic-size: auto 5rem;
-  animation: none;
+  contain-intrinsic-size: auto 4.5rem;
 }
-@keyframes cw-turn-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.25rem);
-  }
+.cw-turn--enter {
+  animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+}
+/* The customer's turn being spoken: a tint and an edge, so it never depends on colour alone. */
+.cw-turn--current {
+  background: color-mix(in srgb, var(--voice-customer) 8%, var(--bg-canvas));
+  box-shadow: inset 3px 0 0 var(--voice-customer);
 }
 
 .cw-turn__you {
   display: inline-flex;
-  flex: none;
   align-items: center;
   justify-content: center;
   inline-size: 2rem;
   block-size: 2rem;
   border-radius: var(--r-pill);
-  background: var(--bg-strong);
-  color: var(--fg-2);
+  background: var(--brand-tint);
+  color: var(--brand-fg-2);
 }
 .cw-turn__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-0h);
   min-inline-size: 0;
 }
-.cw-turn--trainee .cw-turn__body {
-  padding: var(--sp-2) var(--sp-3) var(--sp-2h);
-  border: var(--stroke-w) solid var(--stroke-3);
-  border-radius: var(--r-xl);
-  background: var(--bg-quiet);
-}
-
 .cw-turn__meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-0h) var(--sp-3);
+  gap: var(--sp-0h) var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
 }
 .cw-turn__who {
   color: var(--fg-1);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
+  font-size: var(--fs-compact);
   font-weight: var(--fw-semibold);
 }
 .cw-turn__time {
-  color: var(--fg-3);
-  font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
   font-variant-numeric: tabular-nums;
 }
 .cw-turn__tag {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
+  padding-inline: var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--bg-section);
   color: var(--fg-2);
-  font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
 }
-.cw-turn__tag--busy {
-  font-weight: var(--fw-semibold);
+.cw-turn__tag--alert {
+  border: var(--stroke-w) solid var(--status-warning-border);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
 }
 .cw-turn__text {
-  color: var(--fg-1);
   font-size: var(--fs-reading);
   line-height: var(--lh-reading);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.cw-turn__skeleton {
+  inline-size: min(12rem, 60%);
+  margin-block-start: var(--sp-1);
+}
 .cw-turn--sending .cw-turn__text,
 .cw-turn--transcribing .cw-turn__text {
   color: var(--fg-2);
 }
-.cw-turn--transcribing .cw-turn__text {
+.cw-turn--failed .cw-turn__text {
+  color: var(--fg-1);
+}
+
+/* The words the trainee is saying now, before they are a turn. Hidden from assistive technology. */
+.cw-interim {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: var(--sp-3);
+  margin-block-start: var(--sp-4);
+  color: var(--fg-2);
   font-style: italic;
 }
-.cw-turn__skeleton.ff-skeleton {
-  inline-size: 60%;
-  margin-block: var(--sp-1h);
-}
-
-.cw-turn__failed {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2) var(--sp-3);
-  margin-block-start: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  border: var(--stroke-w) solid var(--status-warning-border);
-  border-radius: var(--r-lg);
-  background: var(--status-warning-bg);
-}
-.cw-turn__failed-text {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  color: var(--fg-1);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  font-weight: var(--fw-semibold);
-}
-.cw-turn__failed-text .ff-icon {
-  color: var(--status-warning-fg);
-}
-.cw-turn__note {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-block-start: var(--sp-1);
-  color: var(--fg-2);
-  font-size: var(--fs-compact);
-  line-height: var(--lh-compact);
-}
-
-/* What the trainee is saying right now: under the log, italic, and silent for assistive technology. */
-.cw-interim {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-0h);
-  margin-block-start: var(--sp-5);
-  margin-inline-start: 2.75rem;
-  min-inline-size: 0;
-}
-.cw-interim__label {
-  color: var(--fg-3);
+.cw-interim__who {
+  grid-column: 1 / -1;
   font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
+  font-style: normal;
   font-weight: var(--fw-semibold);
 }
 .cw-interim__text {
-  color: var(--fg-2);
+  grid-column: 2;
   font-size: var(--fs-reading);
   line-height: var(--lh-reading);
-  font-style: italic;
   overflow-wrap: anywhere;
 }
 
 .ff-button.cw-log__jump {
   position: absolute;
   inset-block-end: var(--sp-3);
-  inset-inline-start: 50%;
-  translate: -50% 0;
+  inset-inline-end: var(--sp-5);
   box-shadow: var(--shadow-8);
 }
 
-@media (max-width: 40em) {
+@media (max-width: 63.99em) {
   .cw-log-scroll {
     padding-inline: var(--sp-4);
-  }
-  .cw-turn {
-    grid-template-columns: 1.75rem minmax(0, 1fr);
-    column-gap: var(--sp-2);
-  }
-  .cw-turn__you,
-  .cw-turn .ff-avatar {
-    inline-size: 1.75rem;
-    block-size: 1.75rem;
-  }
-  .cw-interim {
-    margin-inline-start: 2.25rem;
   }
 }
 
 @media (forced-colors: active) {
-  .cw-turn--trainee .cw-turn__body {
-    border-color: CanvasText;
+  .cw-turn--current {
+    box-shadow: none;
+    border-inline-start: 3px solid Highlight;
   }
-  .cw-turn__failed {
-    border-color: CanvasText;
+  .cw-turn__you {
+    border: 1px solid ButtonText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .cw-turn__tag {
+    border: 1px solid GrayText;
+    background: Canvas;
   }
 }

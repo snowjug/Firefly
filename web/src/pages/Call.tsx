@@ -1,6 +1,7 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import type { AppConfigDTO } from '#shared/domain/api.ts';
+import { defaultVoiceFor, isVoiceId } from '#shared/domain/voices.ts';
 import { preferredLanguage } from '../features/call-ui/call-model.ts';
 import { CallWorkspace } from '../features/call-ui/CallWorkspace.tsx';
 import { CallLoadError, CallSkeleton, COULD_NOT_OPEN } from '../features/call-ui/CallStates.tsx';
@@ -46,14 +47,23 @@ function CallSession({ sessionId, config }: { sessionId: string; config: AppConf
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const online = useOnline();
+  // The voice the trainee chose arrives in the address (`?voice=`); a call opened without one, or
+  // with one that is not a voice, speaks in its scenario's own. The scenario is only known once the
+  // call has loaded, so it is read back from the snapshot, in the render that follows.
+  const asked = params.get('voice');
+  const [scenarioId, setScenarioId] = useState<string | null>(null);
+  const voice = isVoiceId(asked) ? asked : scenarioId === null ? null : defaultVoiceFor(scenarioId);
   const { snapshot, actions } = useCall(sessionId, {
     serverSpeech: config.speech,
     language: preferredLanguage(
       typeof navigator === 'undefined' ? [] : (navigator.languages ?? [navigator.language]),
     ),
     maxTraineeTurns: config.limits.maxTraineeTurns,
+    ...(voice ? { voice } : {}),
   });
   const { session } = snapshot;
+  const loadedScenario = session?.scenarioId ?? null;
+  if (loadedScenario !== scenarioId) setScenarioId(loadedScenario);
 
   useDocumentTitle(session ? `Call with ${session.scenario.persona.name}` : 'Call');
 
@@ -87,6 +97,7 @@ function CallSession({ sessionId, config }: { sessionId: string; config: AppConf
       maxMessageChars={config.limits.maxMessageChars}
       online={online}
       preferText={params.get('input') === 'text'}
+      showInputMode={config.features.devDiagnostics}
       onEnded={(endedId) => navigate(reportPath(endedId), { replace: true })}
       onDiscard={discard}
     />

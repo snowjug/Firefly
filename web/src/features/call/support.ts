@@ -1,4 +1,8 @@
-import type { SpeechCapabilitiesDTO, SpeechLanguage } from '#shared/domain/speech.ts';
+import type {
+  SpeechCapabilitiesDTO,
+  SpeechLanguage,
+  SpeechProviderKind,
+} from '#shared/domain/speech.ts';
 import { normaliseLang } from '../voice/playback/voices.ts';
 import type { RecognitionMode } from '../voice/capture/recognition.ts';
 import type { CaptureKind, PlaybackKind, VoiceFeatures } from '../voice/support.ts';
@@ -20,6 +24,8 @@ export interface SpokenVoice {
 
 export interface SupportInput {
   speech: Pick<SpeechCapabilitiesDTO, 'label' | 'transcribe' | 'synthesize'> & {
+    /** Which speech provider the server runs (`/api/config`), for what the privacy details say. */
+    provider?: SpeechProviderKind;
     /** The scripted demonstration provider (see `CallSupport.speechDemo`). */
     demo?: boolean;
   };
@@ -110,6 +116,8 @@ export function describeCallSupport(input: SupportInput): CallSupport {
   return {
     capture: input.capture,
     playback: input.playback,
+    provider: input.speech.provider ?? 'none',
+    chromium: input.chromium === true,
     secureContext: input.features.secureContext,
     reason: input.capture === 'none' ? whyNoVoice(input) : null,
     captureLabel: captureLabel(input),

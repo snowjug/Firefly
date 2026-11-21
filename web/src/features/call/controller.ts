@@ -14,15 +14,11 @@ import {
 import { LEVEL_INTERVAL_MS, smoothLevel } from '../voice/capture/levels.ts';
 import { createRecognitionCapture, type RecognitionCapture } from '../voice/capture/recognition.ts';
 import { createServerCapture } from '../voice/capture/server-capture.ts';
-import {
-  MicrophoneError,
-  type Capture,
-  type CaptureFailure,
-  type CaptureSession,
-} from '../voice/capture/types.ts';
+import { MicrophoneError, type Capture, type CaptureSession } from '../voice/capture/types.ts';
 import { createBrowserPlayback } from '../voice/playback/browser-playback.ts';
 import { createServerPlayback } from '../voice/playback/server-playback.ts';
 import type { Playback, PlaybackJob } from '../voice/playback/types.ts';
+import { speakTurnWithVoice } from '../voice/speech-client.ts';
 import {
   browserFamily,
   chooseCapture,
@@ -32,7 +28,13 @@ import {
   type CaptureKind,
   type PlaybackKind,
 } from '../voice/support.ts';
-import { announcementFor } from './announce.ts';
+import {
+  createTranscriber,
+  type TranscribeOutcome,
+  type Transcriber,
+} from '../voice/transcriber.ts';
+import { createTurnGate, gatePlayback, guardCapture, type TurnGate } from '../voice/turn-taking.ts';
+import { announcementFor, listeningAnnouncement, type Announcement } from './announce.ts';
 import type {
   CallActions,
   CallSnapshot,
@@ -41,11 +43,12 @@ import type {
   UseCallOptions,
 } from './contract.ts';
 import {
+  classifyCaptureFailure,
   classifyEndError,
   classifyLoadError,
   classifySendError,
-  classifyTranscribeError,
   CONFLICT_RETRY_DELAYS_MS,
+  failureFromVoice,
   isRetryableConflict,
 } from './errors.ts';
 import { hintText } from './hints.ts';
@@ -55,17 +58,19 @@ import {
   initialState,
   isCurrentSend,
   isCurrentTranscription,
+  isTranscriptionProblem,
   reduce,
   targets,
+  TIMINGS,
   type Exchange,
   type MachineEvent,
   type MachineState,
   type MicReason,
   type ProblemState,
   type Targets,
-  type TranscribeFailure,
 } from './machine.ts';
 import { describeProblem } from './problems.ts';
+import { stageOf } from './stage.ts';
 import { describeCallSupport } from './support.ts';
 import {
   appendStatePoint,
@@ -140,7 +145,7 @@ interface Store {
     /** A reply has been spoken, so the details above are what really spoke. */
     spoken: boolean;
   };
-  announcement: { id: number; text: string } | null;
+  announcement: ({ id: number } & Announcement) | null;
 }
 
 export function createCallController(
@@ -152,6 +157,10 @@ export function createCallController(
   let features = detectFeatures();
   let store: Store = freshStore();
   let attached = false;
+  // Whose turn it is to make sound. The capture and the playback are both wrapped by it, so the
+  // microphone never opens while the customer's voice is wanted or has only just stopped, whatever
+  // asks it to: the machine refuses too, and this is the part that holds even if it were wrong.
+  let gate: TurnGate = createTurnGate();
 
   function freshStore(): Store {
     features = detectFeatures();
@@ -226,8 +235,7 @@ export function createCallController(
   }
 
   function buildSnapshot(): CallSnapshot {
-    const recognition =
-      mic.capture?.engine === 'browser-recognition' ? (mic.capture as RecognitionCapture) : null;
+    const recognition = mic.recognition;
     return {
       loading: store.loading,
       loadProblem: store.loadProblem
@@ -235,12 +243,16 @@ export function createCallController(
         : null,
       session: store.session,
       phase: machine.phase,
+      stage: stageOf(machine),
       mode: machine.voice ? 'voice' : 'text',
       microphone: machine.microphone,
       muted: machine.muted,
       paused: machine.paused,
       handsFree: machine.handsFree,
+      audio:
+        store.playbackKind === 'none' ? 'none' : machine.begun && !machine.canSpeak ? 'off' : 'on',
       speechDetected: machine.speechDetected,
+      micOpen: machine.phase === 'listening' && pass.open,
       micLevel: store.micLevel,
       customerLevel: store.customerLevel,
       interim: store.interim,
@@ -314,7 +326,7 @@ export function createCallController(
     if (next === previous) return;
     machine = next;
     const said = announcementFor(previous, next);
-    if (said) store.announcement = { id: ++announcementSeq, text: said };
+    if (said) store.announcement = { id: ++announcementSeq, ...said };
     if (next.phase !== 'listening' && next.phase !== 'transcribing') store.interim = '';
     sync();
     settleResolvers();
@@ -328,6 +340,7 @@ export function createCallController(
     speaking.job?.stop();
     speaking.job = null;
     speaking.token = null;
+    speaking.turnIndex = null;
     speaking.engine?.dispose();
     speaking.engine = null;
     setCustomerLevel(0);
@@ -377,7 +390,10 @@ export function createCallController(
     handle: MicrophoneHandle | null;
     attempt: { cancelled: boolean; abort: AbortController } | null;
     offEnded: (() => void) | null;
+    /** The capture that listens, behind the turn gate. */
     capture: Capture | null;
+    /** The browser's own recognition, when that is what listens (it reports where it runs). */
+    recognition: RecognitionCapture | null;
     /** Browser recognition, made inside the click so it can get on-device recognition ready. */
     prepared: RecognitionCapture | null;
   } = {
@@ -386,6 +402,7 @@ export function createCallController(
     attempt: null,
     offEnded: null,
     capture: null,
+    recognition: null,
     prepared: null,
   };
 
@@ -438,7 +455,9 @@ export function createCallController(
 
     if (!features.microphone) {
       // The browser's own recognition can ask for the microphone by itself.
-      mic.capture = recognitionCapture();
+      const recognition = recognitionCapture();
+      mic.recognition = recognition;
+      mic.capture = guardCapture(recognition, gate);
       mic.status = 'held';
       mic.attempt = null;
       dispatch({ type: 'permission-granted' });
@@ -452,6 +471,7 @@ export function createCallController(
           return;
         }
         let engine: Capture | null = null;
+        let recognition: RecognitionCapture | null = null;
         if (kind === 'server-speech') {
           if (handle.worklet) {
             engine = createServerCapture({ microphone: handle, maxUtteranceMs: maxUtteranceMs() });
@@ -460,7 +480,10 @@ export function createCallController(
             kind = features.recognition ? 'browser-recognition' : 'none';
           }
         }
-        if (kind === 'browser-recognition') engine = recognitionCapture();
+        if (kind === 'browser-recognition') {
+          recognition = recognitionCapture();
+          engine = recognition;
+        }
         if (!engine) {
           handle.release();
           store.captureKind = 'none';
@@ -469,7 +492,8 @@ export function createCallController(
         }
         store.captureKind = kind;
         mic.handle = handle;
-        mic.capture = engine;
+        mic.recognition = recognition;
+        mic.capture = guardCapture(engine, gate);
         mic.status = 'held';
         mic.attempt = null;
         mic.offEnded = handle.onEnded(() => dispatch({ type: 'mic-lost' }));
@@ -492,6 +516,7 @@ export function createCallController(
     cancelCapturePass();
     mic.capture?.dispose();
     mic.capture = null;
+    mic.recognition = null;
     mic.offEnded?.();
     mic.offEnded = null;
     mic.handle?.release();
@@ -508,16 +533,34 @@ export function createCallController(
     finishRequested: boolean;
     language: SpeechLanguage | null;
     utterance: string | null;
-  } = { session: null, id: 0, finishRequested: false, language: null, utterance: null };
+    /** The capture said the microphone is really open for this pass (`onListening`). */
+    open: boolean;
+  } = {
+    session: null,
+    id: 0,
+    finishRequested: false,
+    language: null,
+    utterance: null,
+    open: false,
+  };
   let pendingAudio: { id: string; blob: Blob } | null = null;
+  /** A pass that was refused because it was not yet the trainee's turn is tried again then. */
+  let listenRetry: ReturnType<typeof setTimeout> | null = null;
+
+  function clearListenRetry(): void {
+    if (listenRetry !== null) clearTimeout(listenRetry);
+    listenRetry = null;
+  }
 
   function cancelCapturePass(): void {
     if (pass.session) pass.session.cancel();
+    clearListenRetry();
     pass.session = null;
     pass.id++;
     pass.finishRequested = false;
     pass.language = null;
     pass.utterance = null;
+    pass.open = false;
   }
 
   function stopCapture(want: Targets): void {
@@ -533,11 +576,6 @@ export function createCallController(
       // The language changed while listening: the recogniser takes it when a pass starts.
       if (pass.language !== store.language) cancelCapturePass();
     }
-  }
-
-  function captureFailure(failure: CaptureFailure): TranscribeFailure {
-    if (failure.kind === 'microphone') return { kind: 'microphone', reason: failure.reason };
-    return failure.reason === 'language' ? { kind: 'service-unavailable' } : { kind: 'failed' };
   }
 
   function startCapture(want: Targets): void {
@@ -558,7 +596,32 @@ export function createCallController(
       pass.finishRequested = false;
       pass.language = store.language;
       pass.utterance = null;
+      pass.open = false;
       pass.session = engine.listen({
+        onListening: () => {
+          if (!current()) return;
+          // Only now may the screen say "Listening": the recording indicator is on.
+          pass.open = true;
+          const said = listeningAnnouncement();
+          if (said) store.announcement = { id: ++announcementSeq, ...said };
+          emit();
+        },
+        onBlocked: () => {
+          later(() => {
+            if (!current()) return;
+            // It is not yet the trainee's turn to make sound (the customer's voice has only just
+            // stopped), so nothing was opened: the pass is tried again when it is.
+            pass.session = null;
+            pass.id++;
+            const wait = gate.waitMs();
+            if (!Number.isFinite(wait)) return;
+            clearListenRetry();
+            listenRetry = setTimeout(() => {
+              listenRetry = null;
+              later(() => sync());
+            }, wait + 10);
+          });
+        },
         onSpeechStart: () => {
           if (current()) dispatch({ type: 'speech-start' });
         },
@@ -606,7 +669,7 @@ export function createCallController(
             dispatch({
               type: 'transcribe-failed',
               id: id && isCurrentTranscription(machine, id) ? id : null,
-              failure: captureFailure(failure),
+              failure: classifyCaptureFailure(failure),
             });
           });
         },
@@ -620,42 +683,88 @@ export function createCallController(
 
   // ---- turning speech into text ----------------------------------------------------------
 
-  let transcription: { id: string; controller: AbortController } | null = null;
+  // One utterance is turned into words once, under its id, however often it is asked for: the
+  // transcriber shares a request that is running, remembers an answer it already has, gives up after
+  // a timeout, and holds the recording only while Retry could still send it again.
+  let transcriber: Transcriber = newTranscriber();
+  /** The utterance being turned into text now. */
+  let transcribing: string | null = null;
+  /** The utterance whose recording is kept for Retry, after a failure that sending again could fix. */
+  let kept: string | null = null;
+
+  function newTranscriber(): Transcriber {
+    return createTranscriber({
+      transcribe: (audio, language, signal) => api.transcribe(audio, language, signal),
+      // A little before the machine's own deadline, so the failure that comes back can keep the recording.
+      timeoutMs: TIMINGS.transcribe - 1000,
+    });
+  }
 
   function stopTranscription(want: Targets): void {
-    if (transcription && transcription.id !== want.transcribe) {
-      transcription.controller.abort();
-      transcription = null;
+    if (transcribing && transcribing !== want.transcribe) {
+      transcriber.discard(transcribing);
+      transcribing = null;
     }
     // Audio that is no longer wanted is dropped, so it can be garbage collected.
     if (pendingAudio && pendingAudio.id !== want.transcribe) pendingAudio = null;
+    // A recording is only worth keeping while the problem that Retry would fix is on the screen.
+    if (kept && kept !== want.transcribe && !isTranscriptionProblem(machine.problem)) {
+      transcriber.discard(kept);
+      kept = null;
+    }
   }
 
   function startTranscription(want: Targets): void {
     const id = want.transcribe;
-    if (!id || transcription || !pendingAudio || pendingAudio.id !== id) return;
-    const controller = new AbortController();
-    transcription = { id, controller };
-    const audio = pendingAudio.blob;
-    pendingAudio = null;
-    api.transcribe(audio, store.language, controller.signal).then(
-      (result) => {
-        if (transcription?.id !== id) return;
-        transcription = null;
-        if (!isCurrentTranscription(machine, id)) return;
-        if (result.status === 'no-speech' || !result.text.trim()) {
+    if (!id || transcribing === id) return;
+    let work: Promise<TranscribeOutcome | null>;
+    if (pendingAudio?.id === id) {
+      const audio = pendingAudio.blob;
+      pendingAudio = null;
+      work = transcriber.run(id, audio, store.language);
+    } else if (kept === id) {
+      work = transcriber.retry(id);
+    } else {
+      return;
+    }
+    transcribing = id;
+    void work.then((outcome) => settleTranscription(id, outcome));
+  }
+
+  function settleTranscription(id: string, outcome: TranscribeOutcome | null): void {
+    if (transcribing !== id) return;
+    transcribing = null;
+    if (outcome?.kind === 'cancelled') return;
+    if (!isCurrentTranscription(machine, id)) {
+      transcriber.discard(id);
+      return;
+    }
+    // Nothing left to send again (the recording was let go): the trainee speaks again.
+    if (outcome === null) {
+      kept = null;
+      dispatch({ type: 'transcribe-failed', id, failure: { kind: 'failed' } });
+      return;
+    }
+    switch (outcome.kind) {
+      case 'transcript':
+        kept = null;
+        dispatch({ type: 'transcribe-done', id, text: outcome.text });
+        return;
+      case 'no-speech':
+        kept = null;
+        dispatch({ type: 'transcribe-empty', id });
+        return;
+      case 'failed':
+        // Words that were only filler sounds are the same as hearing nothing.
+        if (outcome.error.code === 'poor-transcription') {
+          kept = null;
           dispatch({ type: 'transcribe-empty', id });
-        } else {
-          dispatch({ type: 'transcribe-done', id, text: result.text });
+          return;
         }
-      },
-      (error: unknown) => {
-        if (isAbort(error) || transcription?.id !== id) return;
-        transcription = null;
-        if (!isCurrentTranscription(machine, id)) return;
-        dispatch({ type: 'transcribe-failed', id, failure: classifyTranscribeError(error) });
-      },
-    );
+        kept = transcriber.holds(id) ? id : null;
+        dispatch({ type: 'transcribe-failed', id, failure: failureFromVoice(outcome.error) });
+        return;
+    }
   }
 
   // ---- sending ---------------------------------------------------------------------------
@@ -754,33 +863,53 @@ export function createCallController(
 
   // ---- the customer's voice --------------------------------------------------------------
 
-  const speaking: { engine: Playback | null; job: PlaybackJob | null; token: number | null } = {
+  const speaking: {
+    engine: Playback | null;
+    job: PlaybackJob | null;
+    token: number | null;
+    /** The customer turn the job speaks, so a cut-off can be said of the right one. */
+    turnIndex: number | null;
+  } = {
     engine: null,
     job: null,
     token: null,
+    turnIndex: null,
   };
 
   function playbackEngine(kind: PlaybackKind): Playback | null {
     if (speaking.engine) return speaking.engine;
+    let engine: Playback | null = null;
     if (kind === 'server-speech') {
-      speaking.engine = createServerPlayback({
-        // The chosen language goes to the server, which picks a voice for it.
-        speakTurn: (id, turnIndex, language, signal) =>
-          api.speakTurn(id, turnIndex, language, signal),
+      engine = createServerPlayback({
+        // The chosen language goes to the server, which picks a voice for it. A voice the trainee
+        // chose is named too; without one the request is the plain one it always was.
+        speakTurn: (id, turnIndex, language, signal, speakOptions) =>
+          speakOptions?.voice
+            ? speakTurnWithVoice(id, turnIndex, language, signal, speakOptions)
+            : api.speakTurn(id, turnIndex, language, signal),
       });
     } else if (kind === 'browser-synthesis') {
-      speaking.engine = createBrowserPlayback();
+      engine = createBrowserPlayback();
     }
+    // Behind the gate, so the microphone is shut from the moment the voice is asked for.
+    speaking.engine = engine ? gatePlayback(engine, gate) : null;
     return speaking.engine;
   }
 
   function stopPlayback(want: Targets): void {
     if (speaking.token === null) return;
     if (want.playback && want.playback.token === speaking.token) return;
-    speaking.job?.stop();
+    const turnIndex = speaking.turnIndex;
+    const stopped = speaking.job?.stop();
     speaking.job = null;
     speaking.token = null;
+    speaking.turnIndex = null;
     setCustomerLevel(0);
+    // The customer was cut off only if the voice was audible and had not ended: whatever made it
+    // stop (Stop customer audio, typing, pausing), a voice that never began has nothing to cut off.
+    if (stopped?.interrupted && turnIndex !== null) {
+      dispatch({ type: 'customer-cut-off', turnIndex });
+    }
   }
 
   function startPlayback(want: Targets): void {
@@ -788,6 +917,7 @@ export function createCallController(
     if (!target || speaking.token !== null) return;
     const token = target.token;
     speaking.token = token;
+    speaking.turnIndex = target.turnIndex;
     const turn = store.confirmed.find(
       (candidate) => candidate.role === 'customer' && candidate.index === target.turnIndex,
     );
@@ -805,6 +935,7 @@ export function createCallController(
         language: store.language,
         mood: store.customerState?.band.id ?? 'calm',
         voiceSeed: store.session?.scenario.persona.name ?? sessionId,
+        ...(options.voice ? { voice: options.voice } : {}),
       },
       {
         onStart: ({ estimateMs }) => {
@@ -1144,9 +1275,15 @@ export function createCallController(
         if (machine.begun) dispatch({ type: 'retry-microphone' });
         else void begin({ voice: true });
         return;
-      case 'transcribe':
-        dispatch({ type: 'talk' });
+      case 'transcribe': {
+        // A recording that was kept is sent again, as it was; otherwise the trainee says it again.
+        const before = machine;
+        if (kept && transcriber.holds(kept)) {
+          dispatch({ type: 'transcribe-retry', id: kept, createdAt: new Date().toISOString() });
+        }
+        if (machine === before) dispatch({ type: 'talk' });
         return;
+      }
       case 'send':
         dispatch({ type: 'retry-send' });
         return;
@@ -1177,6 +1314,8 @@ export function createCallController(
       sync();
       emit();
     },
+    useText: () => dispatch({ type: 'use-text' }),
+    setAudio: (on) => dispatch({ type: 'set-audio', on, available: store.playbackKind !== 'none' }),
     interrupt: () => dispatch({ type: 'interrupt' }),
     replay: () => dispatch({ type: 'replay' }),
     sendText,
@@ -1185,13 +1324,29 @@ export function createCallController(
     endCall,
   };
 
+  // ---- coming back online ----------------------------------------------------------------
+
+  // A message that could not be sent because the network was gone is sent again, by itself, the
+  // moment the browser says it is back. It is the same message under the same id, so the server
+  // never holds it twice. Anything else that failed for the same reason waits for the trainee.
+  function onOnline(): void {
+    const failed = machine.problem;
+    if (failed?.code !== 'offline') return;
+    if (describeProblem(failed.code, failed.context).retry === 'send') {
+      dispatch({ type: 'retry-send' });
+    }
+  }
+
   // ---- lifecycle -------------------------------------------------------------------------
 
   function dispose(): void {
+    if (typeof window !== 'undefined') window.removeEventListener('online', onOnline);
     loading?.controller.abort();
     loading = null;
-    transcription?.controller.abort();
-    transcription = null;
+    transcriber.dispose();
+    transcriber = newTranscriber();
+    transcribing = null;
+    kept = null;
     pendingAudio = null;
     sending?.controller.abort();
     sending = null;
@@ -1207,6 +1362,7 @@ export function createCallController(
     mic.prepared?.dispose();
     mic.prepared = null;
     releasePlayback();
+    gate = createTurnGate();
     queue.length = 0;
     phaseWaiters.clear();
     for (const id of [...resolvers.keys()]) resolveSend(id, false);
@@ -1241,6 +1397,7 @@ export function createCallController(
     attach() {
       attached = true;
       features = detectFeatures();
+      if (typeof window !== 'undefined') window.addEventListener('online', onOnline);
       void load();
     },
     detach() {

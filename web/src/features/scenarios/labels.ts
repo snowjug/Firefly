@@ -5,7 +5,6 @@ import {
   IMPACT_LABELS,
   START_TEMPERATURE_LABELS,
   type BusinessImpact,
-  type CallStage,
   type CurveballType,
   type Difficulty,
   type StartTemperature,
@@ -25,29 +24,24 @@ export const START_STATE: Record<StartTemperature, StartState> = {
   angry: 'angry',
 };
 
-/** "frustrated", "angry": the first word of the label, for use inside a sentence. */
-export function temperatureWord(temperature: StartTemperature): string {
+/** "Calm", "Anxious", "Frustrated" or "Angry": the first word of the vocabulary's label. */
+export function moodLabel(temperature: StartTemperature): string {
   const label = START_TEMPERATURE_LABELS[temperature].label;
-  return (label.split('/')[0] ?? label).trim().toLowerCase();
+  return label.split(/[\s/]/)[0] ?? label;
 }
 
-/** "Starts frustrated". */
-export function startsLabel(temperature: StartTemperature): string {
-  return `Starts ${temperatureWord(temperature)}`;
-}
-
-/** "High impact". */
+/** "High". */
 export function impactLabel(impact: BusinessImpact): string {
-  return `${IMPACT_LABELS[impact].label} impact`;
+  return IMPACT_LABELS[impact].label;
 }
 
 export function difficultyLabel(difficulty: Difficulty): string {
   return DIFFICULTY_PROFILES[difficulty].label;
 }
 
-/** "About 12 min" in a list row, "About 12 minutes" in a sentence. */
-export function minutesLabel(minutes: number, long = false): string {
-  return `About ${minutes} ${long ? (minutes === 1 ? 'minute' : 'minutes') : 'min'}`;
+/** "About 12 min". */
+export function minutesLabel(minutes: number): string {
+  return `About ${minutes} min`;
 }
 
 const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four'];
@@ -72,19 +66,7 @@ export function curveballChoices(scenario: {
   return CURVEBALL_TYPES.filter((type) => offered.includes(type));
 }
 
-/**
- * What the trainee is told about the case, as paragraphs: the scenario's situation, then the note
- * for the chosen call stage (which is empty for some first contacts). A server that does not send
- * the stage notes yet gives just the situation.
- */
-export function situationParagraphs(
-  scenario: {
-    brief: Pick<PublicScenarioDTO['brief'], 'situation'>;
-    stageBriefs?: Partial<Record<CallStage, string>>;
-  },
-  stage: CallStage,
-): string[] {
-  return [scenario.brief.situation, scenario.stageBriefs?.[stage]]
-    .map((text) => text?.trim() ?? '')
-    .filter(Boolean);
+/** The product as one line: "Microsoft Teams · Meetings". */
+export function productLine(product: PublicScenarioDTO['product']): string {
+  return [product.name, product.area].filter(Boolean).join(' \u00b7 ');
 }

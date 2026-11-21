@@ -1,8 +1,14 @@
-import { act, cleanup, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CallSnapshot } from '../call/contract.ts';
-import { FIXTURE_NAMES, FIXTURES, type FixtureName } from './call-fixtures.ts';
+import { cleanup, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { wordCount } from '#shared/domain/scenario.ts';
+import {
+  describeStatus,
+  STATUS_IDS,
+  stateChangeSentence,
+  describeCustomerState,
+  type StatusId,
+} from './call-model.ts';
+import { FIXTURE_NAMES, FIXTURES, STATUS_FIXTURES, type FixtureName } from './call-fixtures.ts';
 import {
   announced,
   clearViewport,
@@ -15,437 +21,504 @@ import {
 afterEach(() => {
   cleanup();
   clearViewport();
-  vi.useRealTimers();
 });
 
-const zone = () => screen.getByRole('group', { name: 'Call status and controls' });
-const stateCard = () => screen.getByRole('group', { name: 'Customer state' });
-// Testing Library treats every <header> as a banner, and the command bar is the first one on the page.
-const bar = () => screen.getAllByRole('banner')[0]!;
+/** The fixtures that are the whole screen, not the workspace (loading, errors, the pre-flight). */
+const NOT_THE_WORKSPACE: readonly FixtureName[] = [
+  'loading',
+  'load-error',
+  'unavailable',
+  'report-opening',
+  'preflight-voice',
+  'preflight-text',
+  'preflight-browser-speech',
+  'preflight-demo-speech',
+  'preflight-unsupported',
+  'preflight-resume',
+  'requesting-permission',
+  'permission-denied',
+  'microphone-unavailable',
+];
+const WORKSPACE = FIXTURE_NAMES.filter((name) => !NOT_THE_WORKSPACE.includes(name));
+const BEFORE_THE_CALL: readonly StatusId[] = [
+  'mic-not-requested',
+  'requesting-permission',
+  'permission-denied',
+  'mic-unavailable',
+];
 
-// What the large status line says in each fixture that shows the workspace.
-const STATUS: Partial<Record<FixtureName, string>> = {
-  ready: 'Connecting',
-  listening: 'Listening',
-  'speech-detected': 'Hearing you',
-  transcribing: 'Transcribing what you said',
-  processing: 'The customer is thinking',
-  'customer-speaking': 'The customer is speaking',
-  'ready-for-next-turn': 'Your turn',
-  'hands-free': 'Your turn',
-  interrupted: 'Your turn',
-  muted: 'Microphone muted',
-  paused: 'Call paused',
-  'nothing-heard': 'Your turn',
-  'text-only': 'Text-only call. Type your reply.',
-  'text-only-thinking': 'The customer is thinking',
-  'blocking-reply-failed': 'The customer has not replied',
-  'problem-offline': 'You are offline',
-  'problem-microphone-lost': 'Microphone unavailable',
-  'turn-limit': 'Message limit reached',
-  ending: 'Ending the call',
-  // A spoken call carries on paused after a failed ending: the microphone was let go of.
-  'end-failed': 'Call paused',
-  'end-nothing-to-review': 'Call paused',
-};
-
-const STATE_LABEL: Partial<Record<FixtureName, string>> = {
-  'state-calm': 'Calm',
-  'state-concerned': 'Concerned',
-  'state-frustrated': 'Frustrated',
-  'state-angry': 'Angry',
-  'state-escalating': 'Escalating',
-  'state-recovering': 'Recovering',
-};
-
-const isWorkspace = (name: FixtureName) => {
-  const { session, phase } = FIXTURES[name].snapshot;
-  return session !== null && phase !== 'idle' && phase !== 'requesting-microphone';
-};
-const WORKSPACE = FIXTURE_NAMES.filter(isWorkspace);
+function statusOf(name: FixtureName) {
+  const { snapshot, view } = FIXTURES[name];
+  return describeStatus({
+    stage: snapshot.stage,
+    mode: snapshot.mode,
+    phase: snapshot.phase,
+    speechDetected: snapshot.speechDetected,
+    micOpen: snapshot.micOpen,
+    microphone: snapshot.microphone,
+    problem: snapshot.problem,
+    online: view?.online ?? true,
+  });
+}
 
 describe('every fixture', () => {
   it.each(FIXTURE_NAMES)('%s has one h1, no duplicate ids and no inline styles', (name) => {
-    for (const width of [WIDTH.narrow, WIDTH.wide]) {
-      const { container, unmount } = renderCall(name, { width });
-      expect(container.querySelectorAll('h1')).toHaveLength(1);
-      const ids = [...container.querySelectorAll('[id]')].map((element) => element.id);
-      expect(new Set(ids).size, `duplicate ids in ${name} at ${width}px`).toBe(ids.length);
-      expect(container.querySelectorAll('[style]'), `inline style in ${name}`).toHaveLength(0);
-      unmount();
-      clearViewport();
-    }
+    const { container } = renderCall(name);
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    const ids = [...container.querySelectorAll('[id]')].map((element) => element.id);
+    expect(new Set(ids).size, `duplicate ids in ${name}`).toBe(ids.length);
+    // CSP: styles come from stylesheets, never from attributes (a loading bar's transform excepted).
+    const styled = [...container.querySelectorAll('[style]')].filter(
+      (element) => !element.classList.contains('ff-progress__fill'),
+    );
+    expect(styled, name).toHaveLength(0);
   });
 
-  it.each(WORKSPACE)('%s shows the right status line, state and controls', (name) => {
-    const { snapshot } = FIXTURES[name];
-    renderCall(name, { width: WIDTH.wide });
-    const expected = STATUS[name] ?? 'Your turn';
-    expect(within(zone()).getByText(expected)).toBeInTheDocument();
-
-    // The customer's state is always shown, with its word.
-    const state = snapshot.customerState;
-    expect(state).not.toBeNull();
-    const label = STATE_LABEL[name] ?? state!.band.label;
-    expect(within(stateCard()).getByText(label)).toBeInTheDocument();
-
-    const blocking = snapshot.problem?.severity === 'blocking';
-    const controls = screen.queryByRole('group', { name: 'Voice controls' });
-    if (snapshot.mode === 'voice' && !blocking) {
-      expect(controls).toBeInTheDocument();
-      expect(
-        screen.getAllByRole('button', { name: /^(Talk|Stop talking|Interrupt)$/ }),
-      ).toHaveLength(1);
-    } else {
-      expect(controls).not.toBeInTheDocument();
-    }
-    // Every workspace has the command bar's End call.
-    expect(screen.getAllByRole('button', { name: 'End call' }).length).toBeGreaterThan(0);
+  it.each(FIXTURE_NAMES)('%s never calls the engine just by being shown', (name) => {
+    const { actions } = renderCall(name);
+    for (const action of Object.values(actions)) expect(action).not.toHaveBeenCalled();
   });
 });
 
-describe('the four stages of a turn', () => {
-  it('tells them apart by words, icon shape and how the waveform is drawn', () => {
-    const stages = ['speech-detected', 'transcribing', 'processing', 'customer-speaking'] as const;
-    const seen = stages.map((name) => {
-      renderCall(name, { width: WIDTH.wide });
-      const strip = within(zone()).getByText(STATUS[name]!).closest('[data-stage]') as HTMLElement;
-      const record = {
-        stage: strip.dataset.stage,
-        label: STATUS[name],
-        icon: strip.querySelector('svg')?.innerHTML,
-        wave: strip.querySelector('svg[data-mode]')?.getAttribute('data-mode'),
-      };
-      cleanup();
-      clearViewport();
-      return record;
-    });
-    expect(new Set(seen.map((entry) => entry.stage)).size).toBe(4);
-    expect(new Set(seen.map((entry) => entry.icon)).size).toBe(4);
-    expect(seen.map((entry) => entry.wave)).toEqual([
-      'trainee',
-      'transcribing',
-      'thinking',
-      'customer',
-    ]);
+describe('the states of the call', () => {
+  it('has a fixture for every status, and each fixture is that status', () => {
+    expect(Object.keys(STATUS_FIXTURES).sort()).toEqual([...STATUS_IDS].sort());
+    for (const id of STATUS_IDS) {
+      expect(statusOf(STATUS_FIXTURES[id]).id, `${id} from ${STATUS_FIXTURES[id]}`).toBe(id);
+    }
   });
 
-  it('shows the customer’s ring and the word Speaking while their voice plays', () => {
-    renderCall('customer-speaking', { width: WIDTH.wide });
-    const stage = screen.getByRole('region', { name: 'Customer and voice' });
-    expect(within(stage).getByText('Speaking')).toBeInTheDocument();
+  it.each(STATUS_IDS.filter((id) => !BEFORE_THE_CALL.includes(id)))(
+    '%s shows its label under the customer, and the status describes the microphone control',
+    (id) => {
+      const name = STATUS_FIXTURES[id];
+      renderCall(name);
+      const status = statusOf(name);
+      const stage = screen.getByRole('region', { name: 'Customer' });
+      const label = within(stage).getByText(status.label);
+      expect(label).toBeVisible();
+      // The label is in the paragraph the controls point at, so a dimmed control says why.
+      const describedBy = label.closest('p')?.id;
+      expect(describedBy).toBeTruthy();
+      const talk = screen.getByRole('button', { name: /^(Talk|Done speaking|Return to voice)$/ });
+      expect(talk).toHaveAttribute('aria-describedby', describedBy);
+    },
+  );
+
+  it.each(BEFORE_THE_CALL)('%s is the microphone row of the step before the call', (id) => {
+    const name = STATUS_FIXTURES[id];
+    renderCall(name);
+    const row = within(screen.getByRole('list', { name: 'What is ready' })).getByText('Microphone')
+      .parentElement as HTMLElement;
+    // The row says the same state in a word or two: the status line's label is for the call itself.
+    expect(row).toHaveTextContent(statusOf(name).row);
+  });
+
+  it('keeps every status label to three words or fewer, and no two states share one', () => {
+    const labels = STATUS_IDS.map((id) => statusOf(STATUS_FIXTURES[id]).label);
+    for (const label of labels) expect(wordCount(label), label).toBeLessThanOrEqual(3);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('tells the four stages of a turn apart by words and by icon, never by colour alone', () => {
+    const icons = new Map<string, string>();
+    for (const id of [
+      'listening',
+      'processing-speech',
+      'generating-reply',
+      'customer-speaking',
+    ] as const) {
+      const status = statusOf(STATUS_FIXTURES[id]);
+      icons.set(status.label, status.icon);
+    }
+    expect(new Set(icons.values()).size).toBe(4);
+    expect(new Set(icons.keys()).size).toBe(4);
+  });
+
+  it('shows the customer ring and the current turn while the customer speaks, and no bouncing', () => {
+    const { container } = renderCall('customer-speaking');
+    expect(container.querySelector('.ff-avatar--speaking')).not.toBeNull();
+    const current = container.querySelectorAll('[aria-current="true"]');
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveTextContent('Priya Raman');
+    cleanup();
+    renderCall('mic-ready');
+    expect(document.querySelector('[aria-current="true"]')).toBeNull();
+  });
+
+  it('shows what the trainee said in the transcript while the customer is thinking', () => {
+    renderCall('transcript-available');
+    const log = screen.getByRole('log', { name: 'Call transcript' });
+    expect(within(log).getByText(/Did anything change on those PCs/)).toBeInTheDocument();
+    expect(within(log).getByText('Sending')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Customer' })).getByText('Customer is replying'),
+    ).toBeVisible();
+  });
+
+  it('shows a message being transcribed as a placeholder in the transcript, with a shimmer and no percentage', () => {
+    const { container } = renderCall('processing-speech');
+    const log = screen.getByRole('log', { name: 'Call transcript' });
+    expect(within(log).getByText('Transcribing')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Processing speech' })).not.toHaveAttribute(
+      'aria-valuenow',
+    );
+    expect(container.textContent).not.toMatch(/\d+\s?%/);
+  });
+
+  it('shows the words the trainee is saying now, hidden from assistive technology', () => {
+    const { container } = renderCall('speech-detected');
+    const live = container.querySelector('.cw-interim');
+    expect(live).toHaveAttribute('aria-hidden', 'true');
+    expect(live).toHaveTextContent(/Can I check which headset model/);
+    expect(
+      within(screen.getByRole('log', { name: 'Call transcript' })).queryByText(/Can I check which/),
+    ).toBeNull();
+    renderCall('listening');
+    expect(document.querySelectorAll('.cw-interim')).toHaveLength(1);
   });
 });
 
 describe('the layouts', () => {
-  it('shows three columns at 80em and up', () => {
-    renderCall('ready-for-next-turn', { width: WIDTH.wide });
-    expect(screen.getByRole('region', { name: 'Customer and voice' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Transcript' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Call context' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Details' })).not.toBeInTheDocument();
+  it('shows three columns at 80em and up: the customer, the transcript and the case', () => {
+    renderCall('mic-ready', { width: WIDTH.wide });
+    expect(screen.getByRole('region', { name: 'Customer' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Transcript' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Case' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Case' })).toBeNull();
+    // The controls are in the stage panel, not a dock.
+    expect(screen.getByRole('group', { name: 'Call controls' }).closest('.cw-dock')).toBeNull();
   });
 
-  it('moves the context into a sheet between 64em and 80em', async () => {
-    renderCall('ready-for-next-turn', { width: WIDTH.medium });
-    expect(screen.getByRole('region', { name: 'Customer and voice' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Call context' })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
-    const sheet = screen.getByRole('dialog', { name: 'Call details' });
-    expect(within(sheet).getByText('Your objective')).toBeInTheDocument();
-    // The stage panel already shows the customer, so the sheet does not repeat the state card.
-    expect(within(sheet).queryByRole('group', { name: 'Customer state' })).not.toBeInTheDocument();
+  it('moves the case into a sheet between 64em and 80em, opened from the bar', async () => {
+    renderCall('mic-ready', { width: WIDTH.medium });
+    expect(screen.queryByRole('heading', { level: 2, name: 'Case' })).toBeNull();
+    const open = screen.getByRole('button', { name: 'Case' });
+    expect(open).toHaveAttribute('aria-haspopup', 'dialog');
   });
 
-  it('is one column below 64em, with the controls in a dock and the customer in the sheet', async () => {
-    renderCall('ready-for-next-turn', { width: WIDTH.tablet });
-    expect(screen.queryByRole('region', { name: 'Customer and voice' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Talk' })).toBeInTheDocument();
-    // The compact bar carries the customer, their state, the time and End call.
-    const commandBar = bar();
-    expect(within(commandBar).getByText('Maya Okafor')).toBeInTheDocument();
-    expect(within(commandBar).getByText('Concerned')).toBeInTheDocument();
-    expect(within(commandBar).getByRole('timer')).toBeInTheDocument();
-    expect(within(commandBar).getByRole('button', { name: 'End call' })).toBeInTheDocument();
-    await userEvent.click(within(commandBar).getByRole('button', { name: 'Details' }));
-    const sheet = screen.getByRole('dialog', { name: 'Call details' });
-    expect(within(sheet).getByRole('group', { name: 'Customer state' })).toBeInTheDocument();
-    expect(within(sheet).getByText('Your objective')).toBeInTheDocument();
+  it('is one column below 64em, with the controls in a dock and the customer as a strip', () => {
+    renderCall('mic-ready', { width: WIDTH.narrow });
+    const controls = screen.getByRole('group', { name: 'Call controls' });
+    expect(controls.closest('.cw-dock')).not.toBeNull();
+    expect(document.querySelectorAll('[id="cw-controls"]')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Case' })).toBeInTheDocument();
+    expect(document.querySelector('.cw-person--compact')).not.toBeNull();
+  });
+
+  it('opens the case sheet from the bar and shows the same case as the column', async () => {
+    renderCall('case-sheet', { width: WIDTH.medium });
+    const dialog = screen.getByRole('dialog', { name: 'Case' });
+    expect(within(dialog).getByText('Microsoft Teams')).toBeInTheDocument();
+    expect(within(dialog).getByRole('textbox', { name: 'Private notes' })).toBeInTheDocument();
   });
 
   it('keeps End call in the bar, last in its tab order, at every width', () => {
-    for (const width of Object.values(WIDTH)) {
-      const { unmount } = renderCall('ready-for-next-turn', { width });
-      const buttons = within(bar()).getAllByRole('button');
+    for (const width of [WIDTH.narrow, WIDTH.medium, WIDTH.wide]) {
+      const { unmount } = renderCall('mic-ready', { width });
+      const buttons = within(document.querySelector('header') as HTMLElement).getAllByRole(
+        'button',
+      );
       expect(buttons[buttons.length - 1]).toHaveAccessibleName('End call');
+      expect(screen.getAllByRole('button', { name: 'End call' })).toHaveLength(1);
       unmount();
-      clearViewport();
     }
   });
 });
 
-describe('the command bar', () => {
-  it('writes out the scenario, the customer and their role in full', () => {
-    renderCall('ready-for-next-turn', { width: WIDTH.wide });
-    expect(within(bar()).getByText('Locked out after a password reset')).toBeInTheDocument();
-    expect(within(bar()).getByText('Maya Okafor, Front-desk coordinator')).toBeInTheDocument();
-  });
-
-  it('has a timer that is never announced', () => {
-    renderCall('ready-for-next-turn', { width: WIDTH.wide });
-    const timer = screen.getByRole('timer', { name: 'Call time' });
+describe('the top bar', () => {
+  it('names the product, the scenario in full and a call timer that is never announced', () => {
+    renderCall('mic-ready');
+    const bar = document.querySelector('header') as HTMLElement;
+    expect(within(bar).getByText('Microsoft Teams')).toBeInTheDocument();
+    expect(within(bar).getByText('Meeting audio drops for one team')).toBeInTheDocument();
+    expect(within(bar).getByText('Firefly')).toBeInTheDocument();
+    const timer = within(bar).getByRole('timer', { name: 'Call time' });
     expect(timer).toHaveAttribute('aria-live', 'off');
-    expect(timer).toHaveTextContent('2:47');
+    expect(timer.textContent).toMatch(/^\d+:\d{2}$/);
   });
 
-  it('labels the difficulty and the provider, never calling the built-in rules a live model', () => {
-    const { unmount } = renderCall('ready-for-next-turn', { width: WIDTH.wide });
-    expect(within(bar()).getByText('Starter')).toBeInTheDocument();
+  it('says Live, Reconnecting or Offline, and labels demo mode and a live model', () => {
+    const bar = () => document.querySelector('header') as HTMLElement;
+    renderCall('mic-ready');
+    expect(within(bar()).getByText('Live')).toBeInTheDocument();
     expect(within(bar()).getByText('Demo mode')).toBeInTheDocument();
-    expect(within(bar()).queryByText('Live model')).not.toBeInTheDocument();
-    unmount();
-    renderCall('live-model', { width: WIDTH.wide });
+    cleanup();
+    renderCall('live-model');
     expect(within(bar()).getByText('Live model')).toBeInTheDocument();
-  });
-
-  it.each([
-    ['ready-for-next-turn', 'Live call'],
-    ['muted', 'Muted'],
-    ['paused', 'Paused'],
-    ['text-only', 'Text-only call'],
-    ['problem-offline', 'Offline'],
-  ] as const)('shows the connection badge for %s', (name, label) => {
-    renderCall(name, { width: WIDTH.wide });
-    expect(within(bar()).getByText(label)).toBeInTheDocument();
-  });
-
-  it('says reconnecting once the browser is back online but the call has not recovered', () => {
-    renderCall('problem-offline', { width: WIDTH.wide, online: true });
+    expect(within(bar()).queryByText('Demo mode')).toBeNull();
+    cleanup();
+    renderCall('offline');
+    expect(within(bar()).getByText('Offline')).toBeInTheDocument();
+    cleanup();
+    renderCall('reconnecting');
     expect(within(bar()).getByText('Reconnecting')).toBeInTheDocument();
   });
+
+  it('shows no product for a call saved before scenarios named one, and guesses nothing', () => {
+    renderCall('legacy-call');
+    const bar = document.querySelector('header') as HTMLElement;
+    expect(within(bar).queryByText(/Microsoft/)).toBeNull();
+    expect(within(bar).getByText('Meeting audio drops for one team')).toBeInTheDocument();
+  });
 });
 
-describe('the context', () => {
-  it('shows what the trainee was told, and nothing hidden, in a standard call', () => {
-    renderCall('ready-for-next-turn', { width: WIDTH.wide });
-    const context = screen.getByRole('region', { name: 'Call context' });
-    for (const text of [
-      'Business impact',
-      'Call stage',
-      'Your objective',
-      'Ground rules',
-      'Difficulty',
-      "Customer's starting state",
-      'Live hints',
-      'Off',
-      'Understand what is happening and why, then agree how she will get back in.',
-    ]) {
-      expect(within(context).getByText(text)).toBeInTheDocument();
-    }
-    // Standard mode shows no hints at all.
-    expect(within(context).queryByText('Areas worth exploring')).not.toBeInTheDocument();
-    expect(screen.queryByText(/Context found/)).not.toBeInTheDocument();
-    expect(screen.queryByText('Other devices using the account')).not.toBeInTheDocument();
+describe('the case', () => {
+  const caseColumn = () => screen.getByRole('region', { name: 'Case' });
+
+  it('shows the product, case reference, issue, impact, stage and objective, and what is found so far', () => {
+    renderCall('guided-hints');
+    const column = within(caseColumn());
+    expect(column.getByText('Microsoft Teams')).toBeInTheDocument();
+    expect(column.getByText('FX-20418')).toBeInTheDocument();
+    expect(column.getByText('Synthetic')).toBeInTheDocument();
+    expect(column.getByText(/Audio cuts out for several people/)).toBeInTheDocument();
+    // Impact is the configured level's own line from the public brief.
+    expect(column.getByText('Medium')).toBeInTheDocument();
+    expect(column.getByText(/cannot hold its daily handover meeting/)).toBeInTheDocument();
+    expect(column.getByText('First contact')).toBeInTheDocument();
+    expect(column.getByText(/Find what changed, then agree a next step/)).toBeInTheDocument();
+    expect(column.getByText('Context found').nextElementSibling).toHaveTextContent('3');
+  });
+
+  it('keeps the rest of the public brief behind "More context"', async () => {
+    renderCall('mic-ready');
+    const toggle = within(caseColumn()).getByRole('button', { name: 'More context' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(caseColumn()).getByText(/shared Windows desktop PCs/)).not.toBeVisible();
+  });
+
+  it('shows a count of what was found, never a total and never what it is', () => {
+    renderCall('mic-ready');
+    const found = within(caseColumn()).getByText('Context found').nextElementSibling;
+    expect(found).toHaveTextContent(/^0$/);
+    expect(caseColumn().textContent).not.toMatch(/of \d+|\/ ?\d+/);
+  });
+
+  it('adds the areas worth exploring only in guided practice', () => {
+    renderCall('guided-hints');
+    expect(within(caseColumn()).getByText('Areas to explore')).toBeInTheDocument();
+    expect(within(caseColumn()).getByText('When it started')).toBeInTheDocument();
+    cleanup();
+    renderCall('mic-ready');
+    expect(within(caseColumn()).queryByText('Areas to explore')).toBeNull();
+  });
+
+  it('falls back to the older goal and the impact description for a call with no public brief', () => {
+    renderCall('legacy-call');
+    const column = within(caseColumn());
+    expect(column.queryByText('Product')).toBeNull();
+    expect(column.queryByText('Case')).toBeNull();
+    expect(column.getByText('Find what changed, then agree a next step.')).toBeInTheDocument();
+    expect(column.getByText(/Several users or one team blocked/)).toBeInTheDocument();
+  });
+
+  it('has private notes that are only on this screen, with a label and a hint', () => {
+    renderCall('notes');
+    const notes = within(caseColumn()).getByRole('textbox', { name: 'Private notes' });
+    expect(notes).toHaveValue('Driver 10.0.22621 updated Monday. Ask for the rollback plan.');
+    expect(notes).toHaveAccessibleDescription('Only on this screen. Not saved or scored.');
   });
 
   it('is one named region that a keyboard can reach, because the column scrolls', () => {
-    renderCall('ready-for-next-turn', { width: WIDTH.wide });
-    // It holds only text, so the scrolling area itself has to take focus (WCAG 2.1.1), and it is
-    // the only landmark with this name.
-    expect(screen.getAllByRole('region', { name: 'Call context' })).toHaveLength(1);
-    expect(screen.getByRole('region', { name: 'Call context' })).toHaveAttribute('tabindex', '0');
+    renderCall('mic-ready');
+    expect(caseColumn()).toHaveAttribute('tabindex', '0');
   });
 
-  it('adds the areas worth exploring and a count, never a total, in guided practice', () => {
-    renderCall('guided-hints', { width: WIDTH.wide });
-    const context = screen.getByRole('region', { name: 'Call context' });
-    expect(within(context).getByText('Areas worth exploring')).toBeInTheDocument();
-    expect(within(context).getByText('Other devices using the account')).toBeInTheDocument();
-    expect(within(context).getByText('On')).toBeInTheDocument();
-    expect(screen.getByText('Context found: 2')).toBeInTheDocument();
-    expect(screen.queryByText(/of \d+/)).not.toBeInTheDocument();
+  it('shows no score, no hint about what to say and no hidden fact', () => {
+    const { container } = renderCall('guided-hints');
+    expect(container.textContent).not.toMatch(/\bscore\b|CARE|suggest|you should say|hidden/i);
   });
 });
 
 describe('landmarks and skip links', () => {
   it('has one h1, named for the customer, and headings that do not skip a level', () => {
-    renderCall('ready-for-next-turn', { width: WIDTH.wide });
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Call with Maya Okafor');
-    const levels = screen
-      .getAllByRole('heading')
-      .map((heading) => Number(heading.tagName.slice(1)));
-    expect(levels[0]).toBe(1);
-    for (let index = 1; index < levels.length; index += 1) {
-      expect(levels[index]! - levels[index - 1]!).toBeLessThanOrEqual(1);
+    renderCall('mic-ready');
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Call with Priya Raman' }),
+    ).toBeInTheDocument();
+    const levels = screen.getAllByRole('heading').map((heading) => Number(heading.tagName[1]));
+    for (let i = 1; i < levels.length; i += 1) {
+      expect(levels[i]! - levels[i - 1]!).toBeLessThanOrEqual(1);
     }
   });
 
-  it('starts with a "Jump to" list of skip links to the controls, the transcript and the reply box', async () => {
-    renderCall('ready-for-next-turn', { width: WIDTH.wide });
-    const nav = screen.getByRole('navigation', { name: 'Jump to' });
-    const links = within(nav).getAllByRole('link');
-    expect(links.map((link) => link.textContent)).toEqual([
-      'Jump to the call controls',
-      'Jump to the transcript',
-      'Jump to the reply box',
-    ]);
-    // They come before everything else on the page.
-    expect(nav.parentElement?.firstElementChild).toBe(nav);
+  it('starts with a "Jump to" list: controls and transcript, and the reply box in a typed call', () => {
+    renderCall('mic-ready');
+    const jump = screen.getByRole('navigation', { name: 'Jump to' });
+    expect(
+      within(jump)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Jump to the call controls', 'Jump to the transcript']);
+    cleanup();
+    renderCall('text-fallback');
+    expect(
+      within(screen.getByRole('navigation', { name: 'Jump to' })).getByRole('link', {
+        name: 'Jump to the reply box',
+      }),
+    ).toBeInTheDocument();
+  });
 
-    await userEvent.click(links[2]!);
-    expect(screen.getByRole('textbox', { name: 'Type a reply' })).toHaveFocus();
-    await userEvent.click(links[1]!);
-    expect(screen.getByRole('region', { name: 'Transcript' })).toHaveFocus();
-    await userEvent.click(links[0]!);
+  it('has no global character shortcuts: letters do nothing, a button is only pressed when focused', async () => {
+    const { actions } = renderCall('mic-ready');
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await user.keyboard('tmpsrne');
+    for (const action of Object.values(actions)) expect(action).not.toHaveBeenCalled();
+    // The keyboard starts on Talk, so the one press it takes is Talk's own.
     expect(screen.getByRole('button', { name: 'Talk' })).toHaveFocus();
-  });
-
-  it('keeps the reply box’s address in the page while the box is closed, at every width', () => {
-    for (const width of [WIDTH.narrow, WIDTH.medium, WIDTH.wide]) {
-      const { unmount } = renderCall('ready-for-next-turn', { width });
-      // The "Jump to the reply box" link points here: a link to nothing is a broken skip link.
-      expect(screen.queryByRole('form', { name: 'Reply' })).not.toBeInTheDocument();
-      expect(document.getElementById('cw-reply'), `no #cw-reply at ${width}px`).not.toBeNull();
-      unmount();
-      clearViewport();
-    }
-  });
-
-  it('has no global character shortcuts', async () => {
-    const { actions } = renderCall('ready-for-next-turn', { width: WIDTH.wide });
-    await userEvent.keyboard('m p t r s e ? / 1');
-    for (const name of ['talk', 'toggleMute', 'togglePause', 'replay', 'endCall'] as const) {
-      expect(actions[name]).not.toHaveBeenCalled();
-    }
+    await user.keyboard(' ');
+    expect(actions.talk).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('what a screen reader hears', () => {
   it('reads the engine’s announcement once, as a whole sentence', () => {
-    vi.useFakeTimers();
-    const base = snapshotOf('ready-for-next-turn');
-    const { update } = renderCall({ ...base, announcement: null });
-    expect(announced()).toBe('');
-    update({ ...base, announcement: { id: 1, text: 'The customer is speaking.' } });
-    expect(announced()).toBe('The customer is speaking.');
-    // The same message again (same id) is not read again.
-    act(() => vi.advanceTimersByTime(6000));
-    expect(announced()).toBe('');
-    update({ ...base, announcement: { id: 1, text: 'The customer is speaking.' } });
-    expect(announced()).toBe('');
+    renderCall('customer-speaking');
+    expect(announced()).toBe('The customer is speaking. You can stop the response at any time.');
   });
 
   it('says a change of the customer’s state once, and never why', () => {
-    vi.useFakeTimers();
-    const base = snapshotOf('state-concerned');
-    const worse: CallSnapshot = {
-      ...base,
-      customerState: { ...base.customerState!, band: { id: 'frustrated', label: 'Frustrated' } },
-    };
-    const { update } = renderCall(base, { width: WIDTH.wide });
+    const { update } = renderCall('state-calm');
     expect(announced()).toBe('');
-    update(worse);
+    update(FIXTURES['state-frustrated'].snapshot);
     expect(announced()).toBe('The customer now seems frustrated.');
-    act(() => vi.advanceTimersByTime(6000));
-    update({ ...worse, elapsedSeconds: worse.elapsedSeconds + 1 });
+    for (const name of [
+      'state-concerned',
+      'state-frustrated',
+      'state-angry',
+      'state-escalating',
+      'state-recovering',
+    ] as const) {
+      const { customerState, stateHistory } = FIXTURES[name].snapshot;
+      expect(
+        stateChangeSentence(describeCustomerState(customerState, stateHistory)!),
+        name,
+      ).not.toMatch(/because|since|after you|\d/i);
+    }
+  });
+
+  it('says "recovering" when a customer who was angrier is easing', () => {
+    const { update } = renderCall('state-angry');
+    update(FIXTURES['state-recovering'].snapshot);
+    expect(announced()).toBe('The customer seems to be recovering.');
+  });
+
+  it('says nothing when the state stays as it was, whatever else changes', () => {
+    const { update } = renderCall('state-calm');
+    update({ ...FIXTURES['state-calm'].snapshot, elapsedSeconds: 99, micLevel: 0.4 });
     expect(announced()).toBe('');
   });
 
-  it('shows the new state in words and gives the card a brief outline', () => {
-    vi.useFakeTimers();
-    const base = snapshotOf('state-concerned');
-    const worse: CallSnapshot = {
-      ...base,
-      customerState: {
-        ...base.customerState!,
-        band: { id: 'frustrated', label: 'Frustrated' },
-        trend: 'rising',
-      },
-    };
-    const { update } = renderCall(base, { width: WIDTH.wide });
-    expect(stateCard()).not.toHaveAttribute('data-changed');
-    update(worse);
-    expect(within(stateCard()).getByText('Frustrated')).toBeInTheDocument();
-    expect(within(stateCard()).getByText('Getting more frustrated')).toBeInTheDocument();
-    expect(stateCard()).toHaveAttribute('data-changed', 'true');
-    act(() => vi.advanceTimersByTime(3000));
-    expect(stateCard()).not.toHaveAttribute('data-changed');
+  it('shows the new state in words and an icon, with the trend, and the label changes in place', () => {
+    const { update } = renderCall('state-calm');
+    const stage = () => screen.getByRole('region', { name: 'Customer' });
+    expect(within(stage()).getByText('Calm')).toBeVisible();
+    update(FIXTURES['state-escalating'].snapshot);
+    expect(within(stage()).getByText('Escalating')).toBeVisible();
+    expect(within(stage()).getByText('rising')).toBeInTheDocument();
+    expect(stage().querySelector('.ff-status')).not.toBeNull();
   });
 
   it('never reads transcript text through the announcer: a new reply is the log’s to announce', () => {
-    vi.useFakeTimers();
-    const base = snapshotOf('ready-for-next-turn');
-    const { update } = renderCall(base);
-    const reply = {
-      ...base.turns[0]!,
-      key: 'new',
-      index: 11,
-      text: 'A brand new reply from the customer.',
-    };
-    update({ ...base, turns: [...base.turns, reply] });
-    expect(announced()).toBe('');
-    expect(screen.getByRole('log', { name: 'Call transcript' })).toHaveTextContent(
-      'A brand new reply from the customer.',
-    );
+    const { update } = renderCall('mic-ready');
+    const next = snapshotOf('speech-detected');
+    update({
+      ...next,
+      announcement: { id: 9, text: 'The customer is speaking.', politeness: 'polite' },
+    });
+    for (const turn of next.turns) expect(announced()).not.toContain(turn.text);
+    const log = screen.getByRole('log', { name: 'Call transcript' });
+    expect(log).toHaveAttribute('aria-live', 'polite');
+    expect(log).toHaveAttribute('aria-relevant', 'additions');
   });
-});
 
-describe('the status line is plain text', () => {
-  it('is not a live region, so nothing is read twice', () => {
-    renderCall('transcribing', { width: WIDTH.wide });
-    const line = within(zone()).getByText('Transcribing what you said');
-    expect(line.closest('[aria-live]')).toBeNull();
-    expect(line.closest('[role="status"]')).toBeNull();
+  it('keeps the status line plain text, not a live region, so nothing is read twice', () => {
+    renderCall('listening');
+    const label = within(screen.getByRole('region', { name: 'Customer' })).getByText('Listening');
+    expect(label.closest('[aria-live]')).toBeNull();
+    expect(label.closest('[role="status"]')).toBeNull();
   });
 });
 
 describe('the page states', () => {
   it('shows a skeleton while loading, with one heading', () => {
-    const { container } = renderCall('loading');
-    expect(container.querySelector('[aria-busy="true"]')).toHaveTextContent('Loading the call');
-    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    renderCall('loading');
+    expect(screen.getByRole('heading', { level: 1, name: 'Loading the call' })).toBeInTheDocument();
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
   });
 
-  it('explains a load failure and offers Try again and a way back', async () => {
+  it('explains a load failure and offers Retry and a way back', async () => {
     const { actions } = renderCall('load-error');
     expect(
       screen.getByRole('heading', { level: 1, name: 'This call could not be opened.' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Nothing in the call was changed.')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing in the call was changed/)).toBeInTheDocument();
+    const { default: userEvent } = await import('@testing-library/user-event');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
+    expect(actions.retry).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('link', { name: 'Back to scenarios' })).toHaveAttribute(
       'href',
       '/scenarios',
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(actions.retry).toHaveBeenCalledTimes(1);
   });
 
-  it('says "Call unavailable" for a call that does not exist', () => {
+  it('says a call cannot be found, with no Retry, for a call that does not exist', () => {
     renderCall('unavailable');
-    expect(screen.getByRole('heading', { level: 1, name: 'Call unavailable' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to scenarios' })).toHaveAttribute(
-      'href',
-      '/scenarios',
-    );
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'We could not find this call.' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Back to scenarios' })).toBeInTheDocument();
   });
 
   it('is never blank for a call that is already over', () => {
-    const base = snapshotOf('ready-for-next-turn');
-    renderCall({ ...base, session: { ...base.session!, status: 'completed' } });
+    renderCall('report-opening');
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Opening your report' }),
+      screen.getByRole('heading', { level: 1, name: 'Opening your review' }),
     ).toBeInTheDocument();
   });
 });
 
-describe('the actions it is given', () => {
-  it('never calls the engine just by being shown', () => {
-    const actions = fakeActions();
-    for (const name of FIXTURE_NAMES) {
-      const { unmount } = renderCall(name, { actions, width: WIDTH.wide });
-      unmount();
-      clearViewport();
+describe('copy budgets: no instructional text during a call', () => {
+  const ALLOWED = ['cw-log', 'cw-case', 'cw-recovery', 'cw-turn', 'cw-interim'];
+
+  it.each(WORKSPACE.filter((name) => !name.startsWith('end-')))(
+    '%s has no paragraph of more than twelve words outside the transcript, the case and a problem',
+    (name) => {
+      const { container } = renderCall(name);
+      for (const paragraph of container.querySelectorAll('p')) {
+        if (paragraph.closest(ALLOWED.map((cls) => `.${cls}`).join(','))) continue;
+        if (paragraph.closest('dialog')) continue;
+        expect(
+          wordCount(paragraph.textContent ?? ''),
+          `${name}: ${paragraph.textContent}`,
+        ).toBeLessThanOrEqual(12);
+      }
+    },
+  );
+
+  it('keeps every control label to three words or fewer', () => {
+    renderCall('mic-ready');
+    const controls = screen.getByRole('group', { name: 'Call controls' });
+    for (const button of within(controls).getAllByRole('button')) {
+      expect(wordCount(button.textContent ?? ''), button.textContent ?? '').toBeLessThanOrEqual(3);
     }
-    for (const action of Object.values(actions)) expect(action).not.toHaveBeenCalled();
+  });
+
+  it('has no explanation of how the screen works anywhere in the workspace', () => {
+    const { container } = renderCall('mic-ready');
+    expect(container.textContent).not.toMatch(
+      /press|click|you can|will appear|how it works|everything the customer says/i,
+    );
+  });
+});
+
+describe('the actions it is given', () => {
+  it('is rendered with fresh fake actions each time', () => {
+    const actions = fakeActions();
+    renderCall('mic-ready', { actions });
+    expect(actions.begin).not.toHaveBeenCalled();
   });
 });

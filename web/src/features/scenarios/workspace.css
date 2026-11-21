@@ -1,135 +1,310 @@
-/* The workspace: the page head, the list pane and the details pane. From 64em the two panes sit
-   side by side and each scrolls on its own, so the next step stays in view; below that the page is
-   the list, and the details open in a full-screen sheet. */
+/* The scenario workspace: the title row, the filters, the list and (on narrow screens) the way back.
+   From 64em the list and the details sit side by side and each scrolls on its own, so the next
+   step stays in view; below it the list leads to the details. */
 
 .scn-page {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  padding-block: var(--sp-6) var(--sp-10);
+  padding-block: var(--sp-4) var(--sp-8);
 }
-
-.scn-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-3) var(--sp-6);
+.scn-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
 }
-.scn-head__text {
-  display: flex;
-  flex: 1 1 22rem;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-inline-size: 0;
-}
-.scn-head__lead {
-  max-inline-size: 48rem;
-  color: var(--fg-2);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-}
-@media (min-width: 48em) {
-  .scn-head__lead {
-    font-size: var(--fs-reading);
-    line-height: var(--lh-reading);
-  }
-}
-
-.scn-split {
+.scn-split,
+.scn-side {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
   min-inline-size: 0;
 }
-.scn-listpane {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  min-inline-size: 0;
-}
-.scn-listhead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.scn-side {
   gap: var(--sp-3);
-  min-block-size: var(--ctl-sm);
+}
+
+.scn-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
 }
 .scn-count {
+  margin-inline-end: auto;
+  color: var(--fg-3);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-variant-numeric: tabular-nums;
+}
+/* A number that changes fades in from just below, so a count never jumps. */
+.scn-n {
+  display: inline-block;
+  animation: scn-tick var(--dur-normal) var(--ease-decelerate) both;
+}
+@keyframes scn-tick {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+.scn-back {
+  align-self: flex-start;
+}
+
+/* ---- Filters ---------------------------------------------------------------------------- */
+.scn-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2) var(--sp-3);
+}
+.scn-filters-narrow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.scn-filters-narrow > .ff-button {
+  align-self: flex-start;
+}
+@media (max-width: 36em) {
+  .scn-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.scn-filters .scn-diff {
+  grid-column: 1 / -1;
+}
+.scn-ff .ff-field__label,
+.scn-diff .ff-segmented__legend {
+  margin-block-end: 0;
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-filters .scn-diff .ff-segmented__track {
+  display: flex;
+}
+.scn-diff .ff-segmented__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+  white-space: nowrap;
+}
+.scn-diff .scn-n {
+  color: var(--fg-3);
+  font-weight: var(--fw-regular);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- The list --------------------------------------------------------------------------- */
+.scn-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.scn-list__group {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+ul.scn-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scn-row {
+  position: relative;
+  min-inline-size: 0;
+  border-block-end: var(--stroke-w) solid var(--stroke-3);
+}
+.scn-row:last-child {
+  border-block-end: 0;
+}
+/* The native radio covers its whole row, so the whole row is the target and arrow keys work. */
+.scn-row__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.scn-row__input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.scn-row:has(.scn-row__input:focus-visible),
+.scn-row:has(.scn-row__link:focus-visible) {
+  z-index: 3;
+  border-radius: var(--r-lg);
+  outline: var(--stroke-w-thick) solid var(--focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-inner);
+}
+.scn-row__link:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.scn-row__face {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+  padding: var(--sp-3) var(--sp-4) var(--sp-3) var(--sp-5);
+  border-radius: var(--r-lg);
+  transition: background-color var(--dur-faster) var(--ease-easy);
+}
+.scn-row:hover .scn-row__face {
+  background: var(--bg-hover);
+}
+.scn-row[data-selected] .scn-row__face {
+  background: var(--bg-selected);
+}
+.scn-row__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-row__product {
+  min-inline-size: 0;
+}
+.scn-row__title {
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+  cursor: pointer;
+}
+.scn-row__link {
+  /* The link covers the row, as the radio does. */
+  color: var(--fg-1);
+}
+.scn-row__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.scn-row__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
   color: var(--fg-2);
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
-  font-weight: var(--fw-semibold);
+  text-wrap: pretty;
 }
-/* The button is 32 px tall to keep the list head slim; this keeps the area that answers a tap at 44. */
-.scn-listhead .ff-button::after {
-  content: '';
+.scn-row__go {
   position: absolute;
-  inset: calc((var(--target) - var(--ctl-sm)) / -2) -0.375rem;
+  inset-block-start: 50%;
+  inset-inline-end: var(--sp-3);
+  translate: 0 -50%;
+  color: var(--fg-3);
+}
+ul.scn-list .scn-row__face {
+  padding-inline-end: var(--sp-10);
 }
 
-/* ---- The details pane ------------------------------------------------------------------- */
-.scn-pane {
-  display: flex;
-  flex-direction: column;
-  min-inline-size: 0;
-  min-block-size: 0;
-  border: var(--stroke-w) solid var(--stroke-2);
-  border-radius: var(--r-xl);
-  background: var(--bg-canvas);
-  overflow: hidden;
-}
-.scn-pane--quiet {
-  background: var(--bg-quiet);
-}
-.scn-pane__scroll {
-  flex: 1 1 auto;
-  min-block-size: 0;
-  padding: var(--sp-6);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-.scn-pane__content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-  min-inline-size: 0;
-}
-.scn-pane__bar {
+/* The difficulty: three bars filled to the level, always with its name beside them. */
+.scn-level {
+  display: inline-flex;
   flex: none;
-  padding: var(--sp-3) var(--sp-6);
-  border-block-start: var(--stroke-w) solid var(--stroke-2);
-  background: var(--bg-quiet);
-}
-.scn-pane__persona {
-  display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-1h);
+  color: var(--fg-2);
+  font-weight: var(--fw-semibold);
 }
-.scn-pane--empty {
-  align-items: center;
-  justify-content: center;
+.scn-level__bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  block-size: 0.75rem;
+}
+.scn-level__bars > span {
+  inline-size: 3px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.28;
+}
+.scn-level__bars > span:nth-child(1) {
+  block-size: 0.25rem;
+}
+.scn-level__bars > span:nth-child(2) {
+  block-size: 0.5rem;
+}
+.scn-level__bars > span:nth-child(3) {
+  block-size: 0.75rem;
+}
+.scn-level__bars[data-steps='1'] > span:nth-child(-n + 1),
+.scn-level__bars[data-steps='2'] > span:nth-child(-n + 2),
+.scn-level__bars[data-steps='3'] > span {
+  opacity: 1;
+}
+
+/* The moving indicator: it sits beside the chosen row and slides to the next one. It moves with a
+   transform only, and the first placement is not animated (the stylesheet waits for data-placed). */
+.scn-ind {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: var(--sp-1h);
+  z-index: 2;
+  inline-size: 3px;
+  block-size: 1.25rem;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+  opacity: var(--scn-ind-o, 0);
+  transform: translateY(var(--scn-ind-y, 0px));
+  pointer-events: none;
+}
+.scn-list[data-placed] .scn-ind {
+  transition:
+    transform var(--dur-gentle) var(--ease-decelerate),
+    opacity var(--dur-fast) var(--ease-easy);
+}
+
+/* ---- Loading and empty ------------------------------------------------------------------ */
+.scn-list--loading .scn-row__face {
   gap: var(--sp-2);
-  padding: var(--sp-10) var(--sp-6);
-  color: var(--fg-3);
+}
+.scn-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-8) var(--sp-4);
+  border: var(--stroke-w) dashed var(--stroke-1);
+  border-radius: var(--r-xl);
+  background: var(--bg-quiet);
   text-align: center;
 }
-.scn-pane__empty-title {
-  color: var(--fg-1);
+.scn-empty__icon {
+  color: var(--fg-3);
+}
+.scn-empty__title {
   font-size: var(--fs-subtitle2);
   line-height: var(--lh-subtitle2);
   font-weight: var(--fw-semibold);
 }
-.scn-pane__empty-text {
-  max-inline-size: 22rem;
-  color: var(--fg-2);
-}
 
+/* ---- Wide: two panes, each with its own scroll -------------------------------------------- */
 @media (min-width: 64em) {
   .scn-page {
     block-size: calc(100vh - var(--header-h));
     block-size: calc(100dvh - var(--header-h));
-    min-block-size: 40rem;
+    min-block-size: 38rem;
     padding-block-end: var(--sp-4);
   }
   .scn-split {
@@ -139,80 +314,42 @@
     gap: var(--sp-6);
     min-block-size: 0;
   }
-  .scn-listpane {
+  .scn-side {
     min-block-size: 0;
   }
-}
-
-/* ---- Narrow: the chosen scenario, kept in reach under the list -------------------------------- */
-.scn-selected {
-  position: sticky;
-  inset-block-end: 0;
-  z-index: var(--z-sticky);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2) var(--sp-3);
-  margin-inline: calc(var(--gutter) * -1);
-  margin-block-end: calc(var(--sp-10) * -1);
-  padding: var(--sp-3) var(--gutter);
-  padding-block-end: calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
-  border-block-start: var(--stroke-w) solid var(--stroke-2);
-  background: var(--bg-canvas);
-  box-shadow: 0 -2px 8px rgb(0 0 0 / 0.08);
-}
-.scn-selected__text {
-  display: flex;
-  flex: 1 1 12rem;
-  flex-direction: column;
-  min-inline-size: 0;
-}
-.scn-selected__label {
-  color: var(--fg-3);
-  font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
-}
-.scn-selected__title {
-  color: var(--fg-1);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  font-weight: var(--fw-semibold);
-}
-@media (max-width: 30em) {
-  .scn-selected .ff-button {
-    flex: 1 1 100%;
+  .scn-scroll {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    /* Room for the focus ring, which the scroll area would otherwise clip; the margin gives it back. */
+    padding: var(--sp-1);
+    margin: calc(var(--sp-1) * -1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
-}
-
-/* ---- The sheet: the details and setup, full screen below 64em ---------------------------------- */
-@media (max-width: 63.99em) {
-  .ff-dialog.scn-sheet {
-    inline-size: 100%;
-    block-size: 100%;
-    max-inline-size: 100%;
-    max-block-size: 100%;
-    margin: 0;
-    border: 0;
-    border-radius: 0;
-  }
-}
-.scn-sheet__content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-  max-inline-size: 48rem;
-  margin-inline: auto;
-  padding-block-end: var(--sp-4);
-}
-.scn-sheet .ff-dialog__actions {
-  justify-content: stretch;
 }
 
 @media (forced-colors: active) {
-  .scn-pane,
-  .scn-selected {
-    border-color: CanvasText;
-    box-shadow: none;
+  .scn-row[data-selected] .scn-row__face {
+    forced-color-adjust: none;
+    background: Canvas;
+    color: CanvasText;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .scn-ind {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .scn-level__bars > span {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  .scn-row__summary,
+  .scn-row__meta {
+    color: CanvasText;
+  }
+  .scn-empty {
+    border-color: GrayText;
   }
 }

@@ -434,7 +434,8 @@ describe('the trainee’s voice, recognised by the browser', () => {
     expect(phase()).toBe('transcribing');
     await advance(10_000);
     expect(phase()).toBe('ready-for-next-turn');
-    expect(h.snap().problem).toMatchObject({ code: 'transcription-failed', retry: 'transcribe' });
+    // The browser's own service never answered: it is the same as not being able to reach it.
+    expect(h.snap().problem).toMatchObject({ code: 'offline', retry: 'transcribe' });
     expect(h.snap().turns).toHaveLength(1);
     expect(mocked.sendMessage).not.toHaveBeenCalled();
     expect(recognition.running).toBe(false);
@@ -468,8 +469,8 @@ describe('the trainee’s voice, recognised by the browser', () => {
             recognition.speechEnd();
             finish(recognition);
           });
-          expect(h.snap().hint).toMatch(/no words could be made out/);
-          expect(h.snap().hint).toMatch(/type your reply/);
+          expect(h.snap().hint).toMatch(/no words could be made out/i);
+          expect(h.snap().hint).toMatch(/use text/);
           expect(h.snap().announcement?.text).toBe(h.snap().hint);
           expect(h.snap().turns).toHaveLength(1);
           expect(h.snap().problem).toBeNull();
@@ -503,7 +504,7 @@ describe('the trainee’s voice, recognised by the browser', () => {
         h.env.recognition.latest().close();
       });
       expect(h.snap().hint).toMatch(/^Nothing was heard\./);
-      expect(h.snap().hint).toMatch(/type your reply/);
+      expect(h.snap().hint).toMatch(/Check your microphone/);
     });
   });
 
@@ -529,7 +530,7 @@ describe('the trainee’s voice, recognised by the browser', () => {
     ['not-allowed', 'microphone-denied', 'denied', 'text'],
     ['service-not-allowed', 'microphone-denied', 'denied', 'text'],
     ['audio-capture', 'microphone-missing', 'unavailable', 'text'],
-    ['network', 'transcription-failed', 'granted', 'voice'],
+    ['network', 'offline', 'granted', 'voice'],
     ['language-not-supported', 'speech-service-unavailable', 'granted', 'voice'],
     ['bad-grammar', 'transcription-failed', 'granted', 'voice'],
   ] as const)(

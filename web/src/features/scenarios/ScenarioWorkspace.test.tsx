@@ -2,11 +2,25 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
-import { ISSUE_TYPE_LABELS } from '#shared/domain/vocab.ts';
+import { wordCount } from '#shared/domain/scenario.ts';
+import {
+  CURVEBALL_LABELS,
+  IMPACT_LABELS,
+  PRODUCT_FAMILY_LABELS,
+  STYLE_LABELS,
+} from '#shared/domain/vocab.ts';
 import { api } from '../../lib/api.ts';
 import type * as ApiModule from '../../lib/api.ts';
-import { groupByIssue } from './catalogue.ts';
-import { SAMPLE, publicScenarios, scenarioById, sessionSummary } from './testing/fixtures.ts';
+import { detectFeatures, type VoiceFeatures } from '../voice/support.ts';
+import type * as SupportModule from '../voice/support.ts';
+import { sortScenarios } from './catalogue.ts';
+import {
+  AZURE_SPEECH,
+  SAMPLE,
+  appConfig,
+  publicScenarios,
+  scenarioById,
+} from './testing/fixtures.ts';
 import {
   mockApi,
   networkError,
@@ -15,29 +29,38 @@ import {
   stubViewport,
   type RenderOptions,
 } from './testing/harness.tsx';
+import { defaultVoiceFor, voiceLabel } from './voice-choice.ts';
 
 vi.mock('../../lib/api.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
   return {
     ...actual,
-    api: {
-      config: vi.fn(),
-      scenarios: vi.fn(),
-      scenario: vi.fn(),
-      createSession: vi.fn(),
-      listSessions: vi.fn(),
-    },
+    api: { config: vi.fn(), scenarios: vi.fn(), scenario: vi.fn(), createSession: vi.fn() },
   };
 });
+vi.mock('../voice/support.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof SupportModule>();
+  return { ...actual, detectFeatures: vi.fn() };
+});
+
+const FULL_BROWSER: VoiceFeatures = {
+  secureContext: true,
+  microphone: true,
+  audioContext: true,
+  worklet: true,
+  recognition: true,
+  synthesis: true,
+  audioElement: true,
+};
 
 const all = publicScenarios();
-const groups = groupByIssue(all);
-const firstTitle = groups[0]?.scenarios[0]?.title as string;
-const secondTitle = groups[0]?.scenarios[1]?.title as string;
-const secondId = groups[0]?.scenarios[1]?.id as string;
+const sorted = sortScenarios(all);
+const first = sorted[0] as PublicScenarioDTO;
+const second = sorted[1] as PublicScenarioDTO;
 
 beforeEach(() => {
   mockApi();
+  vi.mocked(detectFeatures).mockReturnValue(FULL_BROWSER);
 });
 afterEach(() => {
   cleanup();
@@ -46,197 +69,234 @@ afterEach(() => {
   vi.mocked(api.scenarios).mockReset();
 });
 
-const scenarioGroup = () => screen.findByRole('group', { name: 'Choose a scenario' });
-const rowFor = async (title: string) =>
-  within(await scenarioGroup()).getByRole('radio', { name: title });
-const setupGroup = (name: RegExp) => screen.getByRole('group', { name });
-const setup = {
-  difficulty: () => setupGroup(/^Difficulty/),
-  impact: () => setupGroup(/^Business impact/),
-  mood: () => setupGroup(/^Customer starting temperature/),
-  proficiency: () => setupGroup(/^Technical proficiency/),
-  curveballs: () => setupGroup(/^Curveballs/),
-};
-const chooseOption = (group: HTMLElement, name: string) =>
+const list = () => screen.findByRole('group', { name: 'Scenarios' });
+const row = async (title: string) => within(await list()).getByRole('radio', { name: title });
+const rows = async () => within(await list()).getAllByRole('radio');
+const control = (name: string | RegExp) => screen.getByRole('group', { name });
+const choose = (group: HTMLElement, name: string | RegExp) =>
   userEvent.click(within(group).getByRole('radio', { name }));
-const briefLink = () => screen.getByRole('link', { name: /Continue to call brief/ });
+const review = () => screen.getByRole('link', { name: 'Review brief' });
+const openCustomise = async () => {
+  const button = await screen.findByRole('button', { name: /^Customise/ });
+  if (button.getAttribute('aria-expanded') !== 'true') await userEvent.click(button);
+};
+const count = (text: string) => expect(screen.getByText(text)).toBeInTheDocument();
+
+/** What a row says besides its title: the text its description points at. */
+function described(radio: HTMLElement): string[] {
+  return (radio.getAttribute('aria-describedby') ?? '')
+    .split(' ')
+    .map((id) => document.getElementById(id)?.textContent ?? '');
+}
 
 describe('the scenario list on a wide screen', () => {
   beforeEach(() => stubViewport(true));
 
-  it('lists every scenario under its issue type, in the vocabulary order', async () => {
+  it('lists every scenario as a row, by product, with its product, title, short line and difficulty', async () => {
     renderApp('/scenarios');
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Choose a scenario' }),
-    ).toBeVisible();
-    const list = await scenarioGroup();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
+    const radios = await rows();
+    expect(radios).toHaveLength(all.length);
+    expect(radios.map((radio) => radio.getAttribute('value'))).toEqual(sorted.map((s) => s.id));
 
-    const headings = within(list).getAllByRole('heading', { level: 2 });
-    expect(headings).toHaveLength(groups.length);
-    groups.forEach((group, index) => {
-      expect(headings[index]).toHaveTextContent(group.label);
-      expect(group.label).toBe(ISSUE_TYPE_LABELS[group.issueType]);
-    });
-    expect(within(list).getAllByRole('radio')).toHaveLength(all.length);
+    const teams = scenarioById(SAMPLE.standard);
+    const [meta, summary] = described(await row(teams.title));
+    expect(meta).toContain('Microsoft Teams \u00b7 Meetings');
+    expect(meta).toContain('Standard');
+    expect(summary).toBe(teams.listSummary);
+    // Rows, not cards: no heading and no button inside a row.
+    expect(within(await list()).queryAllByRole('heading')).toEqual([]);
+    expect(within(await list()).queryAllByRole('button')).toEqual([]);
   });
 
-  it('shows what a row needs: title, summary, difficulty, impact, mood, style, time and tags', async () => {
+  it('keeps every list description to 18 words, the summary to 60 and each filter label to 3', async () => {
     renderApp('/scenarios');
-    const row = await rowFor('Checkout is down and the clock is running');
-    const description = (row.getAttribute('aria-describedby') ?? '')
-      .split(' ')
-      .map((id) => document.getElementById(id)?.textContent ?? '')
-      .join(' ');
-    for (const text of [
-      'The head of digital at an online retailer',
-      'Challenge',
-      'High impact',
-      'Starts angry',
-      'Demanding',
-      'About 12 min',
-      'outage, executive pressure, checkout',
-    ]) {
-      expect(description).toContain(text);
+    for (const radio of await rows()) {
+      expect(wordCount(described(radio)[1] ?? '')).toBeLessThanOrEqual(18);
     }
+    const selected = screen.getByRole('region', { name: first.title });
+    expect(
+      wordCount(within(selected).getByText(first.summary).textContent ?? ''),
+    ).toBeLessThanOrEqual(60);
+    for (const name of ['Product', 'Issue type', 'Difficulty']) {
+      expect(wordCount(name)).toBeLessThanOrEqual(3);
+    }
+    expect(screen.getByRole('combobox', { name: 'Product' })).toBeVisible();
+    expect(screen.getByRole('combobox', { name: 'Issue type' })).toBeVisible();
+    expect(control('Difficulty')).toBeVisible();
   });
 
   it('selects the first scenario when the address names none, and writes that in the address', async () => {
     const app = renderApp('/scenarios');
-    expect(await await rowFor(firstTitle)).toBeChecked();
-    await waitFor(() => expect(app.query().get('scenario')).toBe(groups[0]?.scenarios[0]?.id));
-    expect(await screen.findByRole('heading', { level: 2, name: firstTitle })).toBeVisible();
+    expect(await row(first.title)).toBeChecked();
+    await waitFor(() => expect(app.query().get('scenario')).toBe(first.id));
+    expect(await screen.findByRole('heading', { level: 2, name: first.title })).toBeVisible();
     expect(app.router.state.historyAction).toBe('REPLACE');
   });
 
   it('moves the choice with the arrow keys and keeps the details in step', async () => {
     const user = userEvent.setup();
     const app = renderApp('/scenarios');
-    const first = await rowFor(firstTitle);
-    first.focus();
+    (await row(first.title)).focus();
     await user.keyboard('{ArrowDown}');
 
-    expect(await rowFor(secondTitle)).toBeChecked();
-    expect(await screen.findByRole('heading', { level: 2, name: secondTitle })).toBeVisible();
-    await waitFor(() => expect(app.query().get('scenario')).toBe(secondId));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(await row(second.title)).toBeChecked();
+    expect(await screen.findByRole('heading', { level: 2, name: second.title })).toBeVisible();
+    await waitFor(() => expect(app.query().get('scenario')).toBe(second.id));
+    expect(await row(second.title)).toHaveFocus();
   });
 
-  it('gives the list a focusable, named scroll area of its own', async () => {
+  it('puts the moving indicator by the chosen row and hides it when none is chosen', async () => {
+    const user = userEvent.setup();
     renderApp('/scenarios');
-    const region = await screen.findByRole('region', { name: 'Scenario list' });
-    expect(region).toHaveAttribute('tabindex', '0');
+    const group = await list();
+    const strip = group.closest('.scn-list') as HTMLElement;
+    await waitFor(() => expect(strip.style.getPropertyValue('--scn-ind-o')).toBe('1'));
+    expect(strip.querySelector('.scn-ind')).toHaveAttribute('aria-hidden', 'true');
+    expect(strip.querySelector('[data-selected]')?.querySelector('input')).toBeChecked();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
+    await waitFor(() => expect(strip.querySelectorAll('[data-selected]')).toHaveLength(1));
+  });
+
+  it('fades the details in when another scenario is chosen', async () => {
+    const user = userEvent.setup();
+    renderApp('/scenarios');
+    const before = (await screen.findByRole('heading', { level: 2, name: first.title })).closest(
+      '.scn-fade',
+    );
+    expect(before).not.toBeNull();
+    (await row(first.title)).focus();
+    await user.keyboard('{ArrowDown}');
+    const heading = await screen.findByRole('heading', { level: 2, name: second.title });
+    expect(heading.closest('.scn-fade')).not.toBe(before);
+  });
+
+  it('gives every control a name, so nothing is read as "edit text" or "button"', async () => {
+    renderApp('/scenarios');
+    await list();
+    for (const box of screen.getAllByRole('combobox')) expect(box).toHaveAccessibleName();
+    for (const radio of screen.getAllByRole('radio')) expect(radio).toHaveAccessibleName();
+    for (const button of screen.getAllByRole('button')) expect(button).toHaveAccessibleName();
   });
 });
 
-describe('search and filters', () => {
+describe('the filters and their counts', () => {
   beforeEach(() => stubViewport(true));
 
-  it('searches title, summary, tags, customer and issue type, and counts the matches', async () => {
-    const user = userEvent.setup();
-    const app = renderApp('/scenarios');
-    await scenarioGroup();
-    expect(screen.getByText('13 scenarios')).toBeInTheDocument();
-
-    await user.type(screen.getByRole('searchbox', { name: 'Search scenarios' }), 'Lindqvist');
-    const list = await scenarioGroup();
-    expect(within(list).getAllByRole('radio')).toHaveLength(1);
-    expect(
-      within(list).getByRole('radio', {
-        name: 'Closing out a case where the fix is not fully confirmed',
-      }),
-    ).toBeChecked();
-    expect(screen.getByText('1 of 13 scenarios')).toBeInTheDocument();
-    expect(app.query().get('q')).toBe('Lindqvist');
-  });
-
-  it('announces the count politely', async () => {
+  it('group the products by family, each with how many scenarios it has', async () => {
     renderApp('/scenarios');
-    await scenarioGroup();
-    const count = screen.getByText('13 scenarios');
-    expect(count).toHaveAttribute('role', 'status');
-    expect(count).toHaveAttribute('aria-live', 'polite');
+    await list();
+    const product = screen.getByRole('combobox', { name: 'Product' });
+    const groups = within(product).getAllByRole('group');
+    expect(groups.map((group) => group.getAttribute('label'))).toEqual([
+      PRODUCT_FAMILY_LABELS['microsoft-365'],
+      PRODUCT_FAMILY_LABELS.windows,
+      PRODUCT_FAMILY_LABELS.azure,
+      PRODUCT_FAMILY_LABELS['dynamics-365'],
+    ]);
+    expect(within(product).getByRole('option', { name: 'All products' })).toBeInTheDocument();
+    expect(
+      within(product).getByRole('option', { name: 'Microsoft Teams (2)' }),
+    ).toBeInTheDocument();
+    expect(within(product).getByRole('option', { name: 'Azure (2)' })).toBeInTheDocument();
   });
 
-  it('filters by issue type, difficulty and business impact, each with a visible label', async () => {
+  it('narrow the list, say so in the count, and write the choice in the address', async () => {
     const user = userEvent.setup();
     const app = renderApp('/scenarios');
-    await scenarioGroup();
+    await list();
+    count('16 scenarios');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
+    expect(await rows()).toHaveLength(2);
+    count('2 of 16 scenarios');
+    expect(app.query().get('f_product')).toBe('teams');
+    expect(app.router.state.historyAction).toBe('REPLACE');
+  });
 
+  it('update every other count when one filter changes, and put an empty choice out of reach', async () => {
+    const user = userEvent.setup();
+    renderApp('/scenarios');
+    await list();
+    const difficulty = control('Difficulty');
+    expect(within(difficulty).getByRole('radio', { name: 'All, 16 scenarios' })).toBeChecked();
+    expect(within(difficulty).getByRole('radio', { name: 'Starter, 5 scenarios' })).toBeVisible();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
+    expect(within(difficulty).getByRole('radio', { name: 'All, 2 scenarios' })).toBeChecked();
+    expect(within(difficulty).getByRole('radio', { name: 'Starter, 0 scenarios' })).toBeDisabled();
+    expect(within(difficulty).getByRole('radio', { name: 'Challenge, 1 scenario' })).toBeEnabled();
+    const issue = screen.getByRole('combobox', { name: 'Issue type' });
+    expect(within(issue).getByRole('option', { name: /^How-to question \(0\)/ })).toBeDisabled();
+    expect(within(issue).getByRole('option', { name: /^Data missing \(1\)/ })).toBeEnabled();
+  });
+
+  it('filter by difficulty with the segmented control', async () => {
+    const app = renderApp('/scenarios');
+    await list();
+    await choose(control('Difficulty'), 'Challenge, 4 scenarios');
+    expect(await rows()).toHaveLength(4);
+    expect(app.query().get('f_difficulty')).toBe('challenge');
+    expect(app.query().get('difficulty')).toBeNull();
+    await choose(control('Difficulty'), /^All/);
+    expect(await rows()).toHaveLength(all.length);
+  });
+
+  it('show "Clear filters" only while something is filtered, and clear everything and move focus', async () => {
+    const user = userEvent.setup();
+    const app = renderApp('/scenarios');
+    await list();
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'azure');
     await user.selectOptions(
       screen.getByRole('combobox', { name: 'Issue type' }),
-      'slow-performance',
+      'billing-licence',
     );
-    expect(within(await scenarioGroup()).getAllByRole('radio')).toHaveLength(
-      all.filter((s) => s.issueType === 'slow-performance').length,
-    );
-    expect(app.query().get('f_issue')).toBe('slow-performance');
-
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Difficulty' }), 'starter');
-    expect(within(await scenarioGroup()).getAllByRole('radio')).toHaveLength(
-      all.filter((s) => s.issueType === 'slow-performance' && s.difficulty === 'starter').length,
-    );
-    expect(app.query().get('f_difficulty')).toBe('starter');
-
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Difficulty' }), '');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Business impact' }), 'medium');
-    const expected = all.filter((s) => s.issueType === 'slow-performance' && s.impact === 'medium');
-    expect(within(await scenarioGroup()).getAllByRole('radio')).toHaveLength(expected.length);
-    expect(app.query().get('f_impact')).toBe('medium');
-    expect(app.query().get('difficulty')).toBeNull();
-  });
-
-  it('shows "Clear filters" only while something is filtered, and clears everything', async () => {
-    const user = userEvent.setup();
-    const app = renderApp('/scenarios');
-    await scenarioGroup();
-    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
-
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Issue type' }), 'how-to');
-    await user.type(screen.getByRole('searchbox', { name: 'Search scenarios' }), 'export');
     await user.click(await screen.findByRole('button', { name: 'Clear filters' }));
 
-    expect(within(await scenarioGroup()).getAllByRole('radio')).toHaveLength(all.length);
+    expect(await rows()).toHaveLength(all.length);
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
-    expect(screen.getByRole('searchbox', { name: 'Search scenarios' })).toHaveValue('');
-    expect(screen.getByRole('searchbox', { name: 'Search scenarios' })).toHaveFocus();
-    expect(app.query().get('q')).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Product' })).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: 'Product' })).toHaveFocus();
+    expect(app.query().get('f_product')).toBeNull();
     expect(app.query().get('f_issue')).toBeNull();
   });
 
-  it('shows a filter at once too', async () => {
+  it('show a choice at once, without waiting for the address to catch up', async () => {
     const app = renderApp('/scenarios', { slowNavigation: 80 });
-    await scenarioGroup();
-    const issue = screen.getByRole('combobox', { name: 'Issue type' });
-    fireEvent.change(issue, { target: { value: 'how-to' } });
-    expect(issue).toHaveValue('how-to');
-
-    await waitFor(() => expect(app.query().get('f_issue')).toBe('how-to'));
-    expect(issue).toHaveValue('how-to');
+    await list();
+    const product = screen.getByRole('combobox', { name: 'Product' });
+    fireEvent.change(product, { target: { value: 'azure' } });
+    expect(product).toHaveValue('azure');
+    await waitFor(() => expect(app.query().get('f_product')).toBe('azure'));
+    expect(product).toHaveValue('azure');
   });
 
-  it('says when nothing matches and offers a way out', async () => {
+  it('say when nothing matches and offer a way out, and leave the details empty', async () => {
     const user = userEvent.setup();
-    renderApp('/scenarios');
-    await scenarioGroup();
-    await user.type(screen.getByRole('searchbox', { name: 'Search scenarios' }), 'zzzz-nothing');
-
+    renderApp('/scenarios?f_product=teams&f_difficulty=starter');
     expect(await screen.findByRole('heading', { name: 'No scenarios match' })).toBeVisible();
-    expect(screen.getByText('0 of 13 scenarios')).toBeInTheDocument();
+    count('0 of 16 scenarios');
     expect(screen.getByText('No scenario selected')).toBeInTheDocument();
     const clear = screen.getAllByRole('button', { name: 'Clear filters' });
     await user.click(clear[clear.length - 1] as HTMLElement);
-    expect(within(await scenarioGroup()).getAllByRole('radio')).toHaveLength(all.length);
+    expect(await rows()).toHaveLength(all.length);
   });
 
-  it('selects another scenario when the chosen one is filtered out', async () => {
-    const user = userEvent.setup();
+  it('select another scenario when the chosen one is filtered out, and tidy the address', async () => {
     const app = renderApp('/scenarios');
-    await scenarioGroup();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Difficulty' }), 'challenge');
+    await list();
+    await choose(control('Difficulty'), 'Challenge, 4 scenarios');
+    const challenge = all.filter((s) => s.difficulty === 'challenge').map((s) => s.id);
+    await waitFor(() => expect(challenge).toContain(app.query().get('scenario')));
+    expect(await within(await list()).findAllByRole('radio', { checked: true })).toHaveLength(1);
+  });
 
-    const challenge = all.filter((s) => s.difficulty === 'challenge');
-    await waitFor(() => expect(challenge.map((s) => s.id)).toContain(app.query().get('scenario')));
-    expect(within(await scenarioGroup()).getAllByRole('radio', { checked: true })).toHaveLength(1);
+  it('announce the count politely', async () => {
+    renderApp('/scenarios');
+    await list();
+    const status = screen.getByText('16 scenarios').closest('[role="status"]');
+    expect(status).toHaveAttribute('aria-live', 'polite');
   });
 });
 
@@ -247,20 +307,19 @@ describe('loading, failure and retry', () => {
     vi.mocked(api.scenarios).mockReturnValue(new Promise(() => undefined));
     renderApp('/scenarios');
     expect(await screen.findByText('Loading scenarios')).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Choose a scenario' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Scenarios' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Product' })).not.toBeInTheDocument();
   });
 
-  it('says what happened and retries', async () => {
+  it('says what happened, and tries again', async () => {
     const user = userEvent.setup();
     vi.mocked(api.scenarios).mockRejectedValueOnce(networkError());
     renderApp('/scenarios');
-
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Scenarios could not be loaded');
     expect(alert).toHaveTextContent("Can't reach Firefly right now.");
     await user.click(within(alert).getByRole('button', { name: 'Try again' }));
-
-    expect(await rowFor(firstTitle)).toBeInTheDocument();
+    expect(await row(first.title)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -268,48 +327,69 @@ describe('loading, failure and retry', () => {
     stubOnline(false);
     vi.mocked(api.scenarios).mockRejectedValueOnce(networkError());
     renderApp('/scenarios');
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('You are offline');
+    expect(await screen.findByRole('alert')).toHaveTextContent('You are offline');
+  });
+
+  it('says when there are no scenarios at all, and can look again', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.scenarios).mockResolvedValueOnce([]);
+    renderApp('/scenarios');
+    expect(await screen.findByRole('heading', { name: 'No scenarios available' })).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await row(first.title)).toBeInTheDocument();
   });
 });
 
 describe('the address', () => {
   beforeEach(() => stubViewport(true));
 
-  it('restores the search, the filters, the scenario and every setting', async () => {
+  it('restores the filters, the scenario and every setting', async () => {
     renderApp(
-      `/scenarios?q=billing&f_difficulty=starter&scenario=licence-seat-not-assigned&impact=high&temperature=angry&proficiency=expert&style=terse&stage=closure&curveballs=deadline&hints=on&difficulty=challenge`,
+      `/scenarios?f_product=teams&scenario=${SAMPLE.challenge}&impact=low&temperature=anxious&proficiency=novice&style=vague&stage=closure&curveballs=deadline&hints=on&difficulty=starter&voice=voice-d`,
     );
-    // The filters hide the scenario named in the address (it is Starter, so the filter keeps it).
-    expect(await rowFor('A new hire has no premium seat')).toBeChecked();
-    expect(screen.getByRole('searchbox', { name: 'Search scenarios' })).toHaveValue('billing');
-    expect(screen.getByRole('combobox', { name: 'Difficulty' })).toHaveValue('starter');
+    expect(await row(scenarioById(SAMPLE.challenge).title)).toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Product' })).toHaveValue('teams');
+    expect(within(control('Preset')).getByRole('radio', { name: 'Starter' })).toBeChecked();
 
-    expect(within(setup.difficulty()).getByRole('radio', { name: 'Challenge' })).toBeChecked();
-    expect(within(setup.impact()).getByRole('radio', { name: 'High' })).toBeChecked();
-    expect(within(setup.mood()).getByRole('radio', { name: 'Angry / escalating' })).toBeChecked();
-    expect(within(setup.proficiency()).getByRole('radio', { name: 'Expert' })).toBeChecked();
-    expect(screen.getByRole('combobox', { name: /^Communication style/ })).toHaveValue('terse');
-    expect(screen.getByRole('combobox', { name: /^Call stage/ })).toHaveValue('closure');
-    expect(within(setup.curveballs()).getByRole('radio', { name: 'Choose' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: /Imposes a deadline/ })).toBeChecked();
+    await openCustomise();
+    expect(within(control(/^Impact/)).getByRole('radio', { name: 'Low' })).toBeChecked();
+    expect(
+      within(control(/^Starting state/)).getByRole('radio', { name: 'Anxious' }),
+    ).toBeChecked();
+    expect(within(control(/^Proficiency/)).getByRole('radio', { name: 'Novice' })).toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Style' })).toHaveValue('vague');
+    expect(screen.getByRole('combobox', { name: 'Call stage' })).toHaveValue('closure');
+    expect(screen.getByRole('combobox', { name: 'Customer voice' })).toHaveValue('voice-d');
+    expect(within(control(/^Complications/)).getByRole('radio', { name: 'Choose' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: CURVEBALL_LABELS.deadline.label })).toBeChecked();
     expect(screen.getByRole('switch', { name: /Live hints/ })).toBeChecked();
   });
 
   it('ignores values it cannot use and tidies the address', async () => {
-    const app = renderApp('/scenarios?scenario=nope&difficulty=extreme&f_impact=huge&utm=1');
-    expect(await rowFor(firstTitle)).toBeChecked();
-    await waitFor(() =>
-      expect(app.where()).toBe(`/scenarios?scenario=${groups[0]?.scenarios[0]?.id}`),
+    const app = renderApp('/scenarios?scenario=nope&difficulty=extreme&f_product=notes&utm=1');
+    expect(await row(first.title)).toBeChecked();
+    await waitFor(() => expect(app.where()).toBe(`/scenarios?scenario=${first.id}`));
+  });
+
+  it('says so once when the address names a scenario that has gone', async () => {
+    const user = userEvent.setup();
+    renderApp('/scenarios?scenario=locked-out-after-password-reset');
+    const notice = await screen.findByText(/That scenario is no longer in the library/);
+    expect(await row(first.title)).toBeChecked();
+    await user.click(
+      within(notice.closest('[role="status"]') as HTMLElement).getByRole('button', {
+        name: 'Dismiss',
+      }),
     );
+    expect(screen.queryByText(/no longer in the library/)).not.toBeInTheDocument();
   });
 
   it('only ever replaces the address, so Back leaves the workspace', async () => {
     const user = userEvent.setup();
     const app = renderApp('/scenarios');
-    await scenarioGroup();
-    await user.type(screen.getByRole('searchbox', { name: 'Search scenarios' }), 'a');
-    await user.click(within(setup.difficulty()).getByRole('radio', { name: 'Challenge' }));
+    await list();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
+    await choose(control('Preset'), 'Challenge');
     expect(app.router.state.historyAction).toBe('REPLACE');
     expect(app.query().get('difficulty')).toBe('challenge');
   });
@@ -317,223 +397,303 @@ describe('the address', () => {
   it('does not carry one scenario\u2019s changes to another', async () => {
     const user = userEvent.setup();
     const app = renderApp(`/scenarios?scenario=${SAMPLE.standard}&difficulty=challenge&hints=on`);
-    expect(await rowFor('Team cannot open the shared project workspace')).toBeChecked();
-    await user.click(await rowFor('Locked out after a password reset'));
-
+    expect(await row(scenarioById(SAMPLE.standard).title)).toBeChecked();
+    await user.click(await row(scenarioById(SAMPLE.starter).title));
     await waitFor(() => expect(app.query().get('scenario')).toBe(SAMPLE.starter));
     expect(app.query().get('difficulty')).toBeNull();
     expect(app.query().get('hints')).toBeNull();
-    expect(within(setup.difficulty()).getByRole('radio', { name: 'Starter' })).toBeChecked();
+    expect(within(control('Preset')).getByRole('radio', { name: 'Starter' })).toBeChecked();
   });
 });
 
-describe('the call setup', () => {
+describe('the chosen scenario', () => {
   beforeEach(() => stubViewport(true));
-
   const open = async (id: string, options?: RenderOptions) => {
     const app = renderApp(`/scenarios?scenario=${id}`, options);
-    await rowFor(scenarioById(id).title);
     await screen.findByRole('heading', { level: 2, name: scenarioById(id).title });
     return app;
   };
 
-  it('starts at the scenario as written: nothing marked changed, no reset, a plain link', async () => {
+  it('shows the product, impact, call stage, style, duration and a short description', async () => {
+    await open(SAMPLE.challenge);
+    const scenario = scenarioById(SAMPLE.challenge);
+    const pane = screen.getByRole('region', { name: scenario.title });
+    expect(within(pane).getByText('Microsoft Teams \u00b7 Calling')).toBeVisible();
+    expect(within(pane).getByText(scenario.summary)).toBeVisible();
+    const fact = (term: string) =>
+      within(pane).getByText(term, { selector: 'dt' }).nextElementSibling;
+    expect(fact('Impact')).toHaveTextContent(`High \u00b7 ${scenario.publicBrief.impact.high}`);
+    expect(fact('Call stage')).toHaveTextContent('Escalated case');
+    expect(fact('Style')).toHaveTextContent(`${STYLE_LABELS.demanding.label}, expert user`);
+    expect(fact('Duration')).toHaveTextContent('About 12 min');
+    expect(within(pane).getByRole('link', { name: 'Review brief' })).toBeVisible();
+  });
+
+  it('sits under the page\u2019s own heading, with its sections one level further down', async () => {
+    await open(SAMPLE.challenge);
+    expect(screen.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 3, name: 'Starting state' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Customise/ }).closest('h3')).not.toBeNull();
+  });
+
+  it('shows the customer as the call will start, and moves it when the preset changes', async () => {
     await open(SAMPLE.standard);
-    expect(within(setup.difficulty()).getByRole('radio', { name: 'Standard' })).toBeChecked();
-    expect(screen.queryByText('Changed from default')).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Reset to scenario defaults' }),
-    ).not.toBeInTheDocument();
-    expect(briefLink()).toHaveAttribute('href', `/scenarios/${SAMPLE.standard}/brief`);
+    const pane = screen.getByRole('region', { name: scenarioById(SAMPLE.standard).title });
+    const state = within(pane).getByRole('heading', { name: 'Starting state' })
+      .parentElement as HTMLElement;
+    expect(within(state).getByText('Priya Nair')).toBeVisible();
+    expect(within(state).getByText('Synthetic customer')).toBeVisible();
+    expect(within(state).getByText('Frustrated')).toBeVisible();
+    const level = (name: string) =>
+      within(state).getByText(name, { selector: 'dt' }).nextElementSibling;
+    expect(level('Patience')).toHaveTextContent('Medium');
+
+    await choose(control('Preset'), 'Challenge');
+    expect(level('Patience')).toHaveTextContent('Low');
+    expect(level('Trust')).toHaveTextContent('Low');
+    await choose(control('Preset'), 'Starter');
+    expect(level('Patience')).toHaveTextContent('High');
   });
 
-  it('shows a choice at once, without waiting for the address to catch up', async () => {
-    const app = await open(SAMPLE.standard, { slowNavigation: 80 });
-    const challenge = within(setup.difficulty()).getByRole('radio', { name: 'Challenge' });
-    fireEvent.click(challenge);
-    // The router is slow to commit, and nothing has been awaited: the control already shows it.
-    expect(challenge).toBeChecked();
-    expect(within(setup.difficulty()).getByRole('radio', { name: 'Standard' })).not.toBeChecked();
-    expect(app.query().get('difficulty')).toBeNull();
-
-    await waitFor(() => expect(app.query().get('difficulty')).toBe('challenge'));
-    expect(challenge).toBeChecked();
-  });
-
-  it('describes the current choice under each control', async () => {
+  it('moves the customer when the starting state changes, and the facts when the impact does', async () => {
     await open(SAMPLE.standard);
-    expect(screen.getByText(/Moderate ambiguity, several hidden facts/)).toBeInTheDocument();
+    await openCustomise();
+    await choose(control(/^Starting state/), 'Calm');
+    const scenario = scenarioById(SAMPLE.standard);
     expect(
-      screen.getByText('Several users or one team blocked. The customer expects regular updates.'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Short on patience and expecting progress.')).toBeInTheDocument();
-    expect(screen.getByText('Direct. Asks for commitments and timelines.')).toBeInTheDocument();
-    expect(
-      screen.getByText('The customer is explaining the issue for the first time.'),
-    ).toBeInTheDocument();
+      within(screen.getByRole('region', { name: scenario.title })).getAllByText('Calm').length,
+    ).toBeGreaterThan(0);
+    await choose(control(/^Impact/), 'High');
+    expect(screen.getByText(scenario.publicBrief.impact.high, { exact: false })).toBeVisible();
   });
 
-  it('updates the preview, the summary bar and the link with every control', async () => {
-    const user = userEvent.setup();
+  it('has the presets Starter, Standard and Challenge, at the scenario\u2019s own to begin with', async () => {
     await open(SAMPLE.standard);
-    const chips = () => within(screen.getByRole('list', { name: 'Your choices' }));
-
-    await chooseOption(setup.difficulty(), 'Challenge');
-    expect(await screen.findByText('Expect up to two complications.')).toBeInTheDocument();
-    expect(chips().getByText('Challenge')).toBeInTheDocument();
-
-    await chooseOption(setup.impact(), 'High');
+    const preset = control('Preset');
     expect(
-      screen.getByText(/The business impact is high: production outage or broad impact\./),
-    ).toBeInTheDocument();
-    expect(chips().getByText('High impact')).toBeInTheDocument();
-
-    await chooseOption(setup.mood(), 'Anxious');
-    expect(screen.getByText(/^An anxious, demanding customer/)).toBeInTheDocument();
-    expect(chips().getByText('Anxious')).toBeInTheDocument();
-
-    await chooseOption(setup.proficiency(), 'Novice');
-    expect(screen.getByText(/with novice technical proficiency/)).toBeInTheDocument();
-
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: /^Communication style/ }),
-      'vague',
-    );
-    expect(screen.getByText(/^An anxious, vague customer/)).toBeInTheDocument();
-    expect(
-      screen.getByText('Imprecise at first. Becomes specific when asked focused questions.'),
-    ).toBeInTheDocument();
-
-    await user.selectOptions(screen.getByRole('combobox', { name: /^Call stage/ }), 'escalated');
-    expect(screen.getByText(/is calling about an escalated case\./)).toBeInTheDocument();
-    expect(
-      screen.getByText('Earlier contacts have not resolved it. Trust is already strained.'),
-    ).toBeInTheDocument();
-
-    expect(briefLink()).toHaveAttribute(
-      'href',
-      `/scenarios/${SAMPLE.standard}/brief?difficulty=challenge&impact=high&temperature=anxious&proficiency=novice&style=vague&stage=escalated`,
-    );
+      within(preset)
+        .getAllByRole('radio')
+        .map((radio) => radio.getAttribute('value')),
+    ).toEqual(['starter', 'standard', 'challenge']);
+    expect(within(preset).getByRole('radio', { name: 'Standard' })).toBeChecked();
   });
 
-  it('shows what you are told for the chosen call stage', async () => {
-    const user = userEvent.setup();
-    const scenario = scenarioById(SAMPLE.starter);
-    await open(SAMPLE.starter);
-    const note = scenario.stageBriefs['follow-up'];
-    expect(screen.queryByText(note)).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: /^Call stage/ }), 'follow-up');
-    expect(await screen.findByText(note)).toBeInTheDocument();
-  });
-
-  it('marks a changed control in words, and offers Reset only then', async () => {
-    await open(SAMPLE.standard);
-    await chooseOption(setup.impact(), 'Low');
-    expect(within(setup.impact()).getByText('Changed from default')).toBeInTheDocument();
-    expect(within(setup.difficulty()).queryByText('Changed from default')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reset to scenario defaults' })).toBeInTheDocument();
-  });
-
-  it('resets every setting, says so, and puts focus on the setup heading', async () => {
-    const user = userEvent.setup();
+  it('puts the setup, the preview and the link in step with every control, and the link in the address', async () => {
     const app = await open(SAMPLE.standard);
-    await chooseOption(setup.difficulty(), 'Challenge');
-    await chooseOption(setup.mood(), 'Calm');
-    await user.click(screen.getByRole('button', { name: 'Reset to scenario defaults' }));
+    await openCustomise();
+    await choose(control('Preset'), 'Challenge');
+    await choose(control(/^Impact/), 'High');
+    await choose(control(/^Starting state/), 'Anxious');
+    await choose(control(/^Proficiency/), 'Novice');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Style' }), 'vague');
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: 'Call stage' }),
+      'escalated',
+    );
 
-    expect(within(setup.difficulty()).getByRole('radio', { name: 'Standard' })).toBeChecked();
-    expect(within(setup.mood()).getByRole('radio', { name: 'Frustrated' })).toBeChecked();
-    expect(screen.queryByText('Changed from default')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(review()).toHaveAttribute(
+        'href',
+        `/scenarios/${SAMPLE.standard}/brief?difficulty=challenge&impact=high&temperature=anxious&proficiency=novice&style=vague&stage=escalated`,
+      ),
+    );
+    expect(app.query().get('stage')).toBe('escalated');
+    expect(review()).toBeVisible();
+  });
+
+  it('keeps the link plain while nothing has been changed', async () => {
+    await open(SAMPLE.standard);
+    expect(review()).toHaveAttribute('href', `/scenarios/${SAMPLE.standard}/brief`);
+  });
+});
+
+describe('the setup behind "Customise"', () => {
+  beforeEach(() => stubViewport(true));
+  const open = async (id: string, options?: RenderOptions) => {
+    const app = renderApp(`/scenarios?scenario=${id}`, options);
+    await screen.findByRole('heading', { level: 2, name: scenarioById(id).title });
+    return app;
+  };
+
+  it('is closed to begin with, and opens with its settings at the scenario\u2019s own values', async () => {
+    await open(SAMPLE.standard);
+    const button = screen.getByRole('button', { name: /^Customise/ });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('group', { name: /^Impact/ })).not.toBeInTheDocument();
+    await userEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(within(control(/^Impact/)).getByRole('radio', { name: 'Medium' })).toBeChecked();
+    expect(screen.queryByText('Changed')).not.toBeInTheDocument();
+  });
+
+  it('keeps its help out of the page until it is asked for, one setting at a time', async () => {
+    const user = userEvent.setup();
+    await open(SAMPLE.standard);
+    await openCustomise();
+    const description = IMPACT_LABELS.medium.description;
+    expect(screen.queryByText(description)).not.toBeVisible();
+    const help = screen.getByRole('button', { name: 'About impact' });
+    expect(help).toHaveAttribute('aria-expanded', 'false');
+    await user.click(help);
+    expect(help).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(description)).toBeVisible();
+    expect(screen.queryByText(STYLE_LABELS.talkative.description)).not.toBeVisible();
+    await user.click(help);
+    expect(screen.getByText(description)).not.toBeVisible();
+  });
+
+  it('keeps the other settings\u2019 help out too, and the preset\u2019s', async () => {
+    const user = userEvent.setup();
+    await open(SAMPLE.standard);
+    expect(screen.getByText(/Moderate ambiguity/)).not.toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'About presets' }));
+    expect(screen.getByText(/Moderate ambiguity/)).toBeVisible();
+  });
+
+  it('marks a changed setting in words, counts the changes on the closed row, and offers Reset', async () => {
+    const user = userEvent.setup();
+    await open(SAMPLE.standard);
+    const reset = () => screen.getByRole('button', { name: 'Reset to scenario defaults' });
+    await openCustomise();
+    expect(reset()).toHaveAttribute('aria-disabled', 'true');
+    await choose(control(/^Impact/), 'Low');
     expect(
-      screen.queryByRole('button', { name: 'Reset to scenario defaults' }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: 'Call setup' })).toHaveFocus();
+      within(screen.getByRole('button', { name: /^Customise/ })).getByText('1 changed'),
+    ).toBeVisible();
+    expect(control('Impact, changed')).toBeInTheDocument();
+    expect(reset()).not.toHaveAttribute('aria-disabled');
+    await user.click(reset());
+    expect(within(control(/^Impact/)).getByRole('radio', { name: 'Medium' })).toBeChecked();
+    expect(screen.queryByText('1 changed')).not.toBeInTheDocument();
+    expect(reset()).toHaveFocus();
     expect(await screen.findByText('Settings reset to the scenario defaults.')).toBeInTheDocument();
-    await waitFor(() => expect(app.where()).toBe(`/scenarios?scenario=${SAMPLE.standard}`));
+  });
+
+  it('starts with the scenario\u2019s own voice, and a chosen one goes in the address', async () => {
+    const app = await open(SAMPLE.standard);
+    await openCustomise();
+    const select = screen.getByRole('combobox', { name: 'Customer voice' });
+    const own = defaultVoiceFor(SAMPLE.standard);
+    expect(select).toHaveValue(own);
+    expect(within(select).getByRole('option', { name: voiceLabel(own) })).toBeInTheDocument();
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Voice A - Warm', 'Voice B - Direct', 'Voice C - Measured', 'Voice D - Concise']);
+    const other = own === 'voice-a' ? 'voice-b' : 'voice-a';
+    await userEvent.selectOptions(select, other);
+    await waitFor(() => expect(app.query().get('voice')).toBe(other));
+    expect(screen.getByRole('button', { name: /^Customise/ })).toHaveTextContent('1 changed');
+    await userEvent.selectOptions(select, own);
+    await waitFor(() => expect(app.query().get('voice')).toBeNull());
+  });
+
+  it('offers only the voices the speech service lists, and none where nothing can speak the customer', async () => {
+    mockApi({
+      config: appConfig({
+        speech: { ...AZURE_SPEECH, voices: (AZURE_SPEECH.voices ?? []).slice(0, 2) },
+      }),
+    });
+    await open(SAMPLE.standard);
+    await openCustomise();
+    const select = screen.getByRole('combobox', { name: 'Customer voice' });
+    await waitFor(() => expect(within(select).getAllByRole('option')).toHaveLength(2));
+    cleanup();
+
+    vi.mocked(detectFeatures).mockReturnValue({
+      ...FULL_BROWSER,
+      synthesis: false,
+      audioElement: false,
+    });
+    mockApi();
+    await open(SAMPLE.standard);
+    await openCustomise();
+    await screen.findByRole('group', { name: /^Impact/ });
+    expect(screen.queryByRole('combobox', { name: 'Customer voice' })).not.toBeInTheDocument();
   });
 
   it('turns live hints on for Starter and off otherwise, until they are set', async () => {
     const user = userEvent.setup();
     await open(SAMPLE.standard);
-    const hints = () => screen.getByRole('switch', { name: /Live hints during the call/ });
+    await openCustomise();
+    const hints = () => screen.getByRole('switch', { name: /Live hints/ });
     expect(hints()).not.toBeChecked();
-
-    await chooseOption(setup.difficulty(), 'Starter');
+    await choose(control('Preset'), 'Starter');
     expect(hints()).toBeChecked();
-    expect(screen.queryByText('Changed from default', { selector: 'span span' })).not.toBeNull();
-
-    await chooseOption(setup.difficulty(), 'Challenge');
+    await choose(control('Preset'), 'Challenge');
     expect(hints()).not.toBeChecked();
     await user.click(hints());
     expect(hints()).toBeChecked();
-    expect(briefLink().getAttribute('href')).toContain('hints=on');
-    await chooseOption(setup.difficulty(), 'Starter');
-    expect(hints()).toBeChecked();
+    expect(review().getAttribute('href')).toContain('hints=on');
   });
 
-  describe('curveballs', () => {
-    it('offers Off, the difficulty default and Choose', async () => {
+  describe('complications', () => {
+    const modes = () => control(/^Complications/);
+
+    it('offer Off, the difficulty default and Choose, with the default to begin with', async () => {
       await open(SAMPLE.standard);
-      const group = setup.curveballs();
+      await openCustomise();
       expect(
-        within(group)
+        within(modes())
           .getAllByRole('radio')
-          .map((r) => r.closest('div')?.textContent),
-      ).toEqual(['Off', 'Default for this difficulty', 'Choose']);
-      expect(
-        within(group).getByRole('radio', { name: 'Default for this difficulty' }),
-      ).toBeChecked();
+          .map((radio) => radio.getAttribute('value')),
+      ).toEqual(['none', 'default', 'choose']);
+      expect(within(modes()).getByRole('radio', { name: 'Default' })).toBeChecked();
       expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     });
 
-    it('switches off, and puts "none" in the address', async () => {
+    it('switch off, and put "none" in the address', async () => {
       const app = await open(SAMPLE.standard);
-      await chooseOption(setup.curveballs(), 'Off');
-      expect(screen.getByText('No complications are set.')).toBeInTheDocument();
+      await openCustomise();
+      await choose(modes(), 'Off');
       await waitFor(() => expect(app.query().get('curveballs')).toBe('none'));
     });
 
-    it('lists what the scenario offers, with descriptions, when choosing', async () => {
+    it('list what the scenario offers by name only, and explain them when asked', async () => {
+      const user = userEvent.setup();
       await open(SAMPLE.standard);
-      await chooseOption(setup.curveballs(), 'Choose');
-      const boxes = screen.getAllByRole('checkbox');
-      expect(boxes).toHaveLength(scenarioById(SAMPLE.standard).curveballOptions.length);
+      await openCustomise();
+      await choose(modes(), 'Choose');
+      expect(screen.getAllByRole('checkbox')).toHaveLength(2);
       expect(
-        screen.getByRole('checkbox', { name: 'Asks for a manager' }),
-      ).toHaveAccessibleDescription('The customer asks to speak to someone more senior.');
-      expect(screen.getByText(/0 of 1 chosen/)).toBeInTheDocument();
+        screen.getByRole('checkbox', { name: CURVEBALL_LABELS['ask-manager'].label }),
+      ).toBeVisible();
+      expect(
+        screen.getByText(CURVEBALL_LABELS['ask-manager'].description, { exact: false }),
+      ).not.toBeVisible();
+      await user.click(screen.getByRole('button', { name: 'About complications' }));
+      expect(
+        screen.getByText(CURVEBALL_LABELS['ask-manager'].description, { exact: false }),
+      ).toBeVisible();
+      expect(screen.getByText(/0 of 1 chosen/)).toBeVisible();
     });
 
-    it('stops at the limit for the difficulty and says why', async () => {
+    it('stop at the limit for the difficulty and say why', async () => {
       const user = userEvent.setup();
       const app = await open(SAMPLE.standard);
-      await chooseOption(setup.curveballs(), 'Choose');
+      await openCustomise();
+      await choose(modes(), 'Choose');
       await user.click(screen.getByRole('checkbox', { name: 'Asks for a manager' }));
-
       expect(
-        await screen.findByText(
-          /You have reached the limit for Standard: untick one to choose another\./,
-        ),
-      ).toBeInTheDocument();
+        await screen.findByText(/1 of 1 chosen\. Untick one to choose another\./),
+      ).toBeVisible();
       expect(screen.getByRole('checkbox', { name: 'Imposes a deadline' })).toBeDisabled();
-      expect(screen.getByRole('checkbox', { name: 'Asks for a manager' })).toBeEnabled();
       expect(app.query().get('curveballs')).toBe('ask-manager');
-
       await user.click(screen.getByRole('checkbox', { name: 'Asks for a manager' }));
       expect(screen.getByRole('checkbox', { name: 'Imposes a deadline' })).toBeEnabled();
-      expect(screen.getByRole('checkbox', { name: 'Asks for a manager' })).not.toBeChecked();
     });
 
-    it('allows two on Challenge, and trims the choice when the difficulty is lowered', async () => {
+    it('allow two on Challenge, and trim the choice, in words, when the preset is lowered', async () => {
       const user = userEvent.setup();
       await open(SAMPLE.challenge);
-      await chooseOption(setup.curveballs(), 'Choose');
+      await openCustomise();
+      await choose(modes(), 'Choose');
       await user.click(screen.getByRole('checkbox', { name: 'Asks for a manager' }));
       await user.click(screen.getByRole('checkbox', { name: 'Imposes a deadline' }));
       expect(screen.getByRole('checkbox', { name: 'Goes quiet' })).toBeDisabled();
 
-      await chooseOption(setup.difficulty(), 'Standard');
-      // The note is on the page and, as a whole sentence, in the polite live region too.
+      await choose(control('Preset'), 'Standard');
       expect(
         (
           await screen.findAllByText(
@@ -545,11 +705,14 @@ describe('the call setup', () => {
       expect(screen.getByRole('checkbox', { name: 'Imposes a deadline' })).not.toBeChecked();
     });
 
-    it('never says how an unexpected turn is triggered', async () => {
+    it('never say how an unexpected turn is triggered', async () => {
       await open(SAMPLE.challenge);
-      await chooseOption(setup.curveballs(), 'Choose');
-      const text = document.body.textContent ?? '';
-      expect(text).not.toMatch(/trigger|after turn|when the customer|temperature reaches/i);
+      await openCustomise();
+      await choose(modes(), 'Choose');
+      await userEvent.click(screen.getByRole('button', { name: 'About complications' }));
+      expect(document.body.textContent ?? '').not.toMatch(
+        /trigger|after turn|temperature reaches/i,
+      );
     });
   });
 });
@@ -557,288 +720,121 @@ describe('the call setup', () => {
 describe('on a narrow screen', () => {
   beforeEach(() => stubViewport(false));
 
-  it('shows the list, with the filters in a region that opens', async () => {
+  it('shows the list as links, with the filters in a region that opens', async () => {
     const user = userEvent.setup();
     renderApp('/scenarios');
-    await scenarioGroup();
-    expect(screen.queryByRole('heading', { level: 2, name: firstTitle })).not.toBeInTheDocument();
+    const links = within(await screen.findByRole('list', { name: 'Scenarios' })).getAllByRole(
+      'link',
+    );
+    expect(links).toHaveLength(all.length);
+    expect(links[0]).toHaveTextContent(first.title);
+    expect(screen.queryByRole('region', { name: first.title })).not.toBeInTheDocument();
 
     const toggle = screen.getByRole('button', { name: 'Filters' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('combobox', { name: 'Issue type' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Product' })).not.toBeInTheDocument();
     await user.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Issue type' }), 'how-to');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
     expect(screen.getByRole('button', { name: 'Filters (1)' })).toBeInTheDocument();
-    expect(within(await scenarioGroup()).getAllByRole('radio')).toHaveLength(
-      all.filter((s) => s.issueType === 'how-to').length,
-    );
+    expect(
+      within(screen.getByRole('list', { name: 'Scenarios' })).getAllByRole('link'),
+    ).toHaveLength(2);
   });
 
-  it('opens the details in a sheet when a row is chosen, and closes it with the choice kept', async () => {
+  it('opens the details when a row is pressed, one step on from the list, with focus on the title', async () => {
     const user = userEvent.setup();
     const app = renderApp('/scenarios');
-    const row = await rowFor(secondTitle);
-    await user.click(row);
+    await user.click(await screen.findByRole('link', { name: second.title }));
 
-    const sheet = await screen.findByRole('dialog', { name: secondTitle });
-    expect(within(sheet).getByRole('link', { name: /Continue to call brief/ })).toBeInTheDocument();
-    expect(
-      within(sheet).getByRole('heading', { level: 3, name: 'What you are told' }),
-    ).toBeInTheDocument();
-    expect(within(sheet).getByRole('group', { name: /^Difficulty/ })).toBeInTheDocument();
-    await waitFor(() => expect(app.query().get('scenario')).toBe(secondId));
-
-    await user.click(within(sheet).getByRole('button', { name: 'Back to scenarios' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(await rowFor(secondTitle)).toBeChecked();
-    expect(await rowFor(secondTitle)).toHaveFocus();
-    expect(app.query().get('scenario')).toBe(secondId);
+    const title = await screen.findByRole('heading', { level: 1, name: second.title });
+    await waitFor(() => expect(title).toHaveFocus());
+    expect(app.query().get('scenario')).toBe(second.id);
+    expect(app.router.state.historyAction).toBe('PUSH');
+    expect(screen.getByRole('link', { name: 'Review brief' })).toBeVisible();
+    expect(screen.queryByRole('list', { name: 'Scenarios' })).not.toBeInTheDocument();
   });
 
-  it('closes the sheet on Escape too', async () => {
+  it('returns to the list with the Back button of the browser, and with the one in the page', async () => {
     const user = userEvent.setup();
-    renderApp('/scenarios');
-    await user.click(await rowFor(firstTitle));
-    const sheet = await screen.findByRole('dialog', { name: firstTitle });
-    fireEvent(sheet, new Event('cancel', { cancelable: true }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const app = renderApp('/scenarios');
+    await user.click(await screen.findByRole('link', { name: second.title }));
+    await screen.findByRole('heading', { level: 1, name: second.title });
+
+    await user.click(screen.getByRole('button', { name: 'Scenarios' }));
+    const back = await screen.findByRole('link', { name: second.title });
+    expect(app.router.state.historyAction).toBe('POP');
+    expect(app.query().get('scenario')).toBeNull();
+    await waitFor(() => expect(back).toHaveFocus());
+
+    await user.click(back);
+    await screen.findByRole('heading', { level: 1, name: second.title });
+    await app.router.navigate(-1);
+    expect(await screen.findByRole('list', { name: 'Scenarios' })).toBeVisible();
   });
 
-  it('opens the sheet again when the chosen row is pressed again', async () => {
+  it('moves between the links with the arrow keys, Home and End', async () => {
     const user = userEvent.setup();
     renderApp('/scenarios');
-    await user.click(await rowFor(firstTitle));
-    await user.click(await screen.findByRole('button', { name: 'Back to scenarios' }));
-    await user.click(await rowFor(firstTitle));
-    expect(await screen.findByRole('dialog', { name: firstTitle })).toBeInTheDocument();
-  });
-
-  it('does not open the sheet for the arrow keys, and offers a button instead', async () => {
-    const user = userEvent.setup();
-    renderApp('/scenarios');
-    const first = await rowFor(firstTitle);
-    first.focus();
+    const links = within(await screen.findByRole('list', { name: 'Scenarios' })).getAllByRole(
+      'link',
+    );
+    links[0]?.focus();
     await user.keyboard('{ArrowDown}');
-    expect(await rowFor(secondTitle)).toBeChecked();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-
-    await user.click(await screen.findByRole('button', { name: 'Review and set up' }));
-    expect(await screen.findByRole('dialog', { name: secondTitle })).toBeInTheDocument();
+    expect(links[1]).toHaveFocus();
+    await user.keyboard('{End}');
+    expect(links[links.length - 1]).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(links[links.length - 2]).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(links[0]).toHaveFocus();
   });
 
-  it('gives focus back to the "Review and set up" button when its sheet closes', async () => {
+  it('starts with the details open when the address names a scenario, and the page\u2019s Back replaces it', async () => {
     const user = userEvent.setup();
-    renderApp('/scenarios');
-    const first = await rowFor(firstTitle);
-    first.focus();
-    await user.keyboard('{ArrowDown}');
-    const review = await screen.findByRole('button', { name: 'Review and set up' });
-    review.focus();
-    await user.keyboard('{Enter}');
-    await screen.findByRole('dialog', { name: secondTitle });
-    await user.click(screen.getByRole('button', { name: 'Back to scenarios' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    // The same button, not a new one: keyboard and screen-reader users stay where they were.
-    expect(screen.getByRole('button', { name: 'Review and set up' })).toBe(review);
-    expect(review).toHaveFocus();
+    const app = renderApp(`/scenarios?scenario=${SAMPLE.challenge}&difficulty=starter`);
+    await screen.findByRole('heading', { level: 1, name: scenarioById(SAMPLE.challenge).title });
+    expect(within(control('Preset')).getByRole('radio', { name: 'Starter' })).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Scenarios' }));
+    expect(await screen.findByRole('list', { name: 'Scenarios' })).toBeVisible();
+    expect(app.query().get('scenario')).toBeNull();
+    expect(app.router.state.historyAction).toBe('REPLACE');
   });
 
-  it('starts with the sheet open when the address names a scenario', async () => {
-    renderApp(`/scenarios?scenario=${SAMPLE.challenge}&difficulty=starter`);
-    const sheet = await screen.findByRole('dialog', { name: scenarioById(SAMPLE.challenge).title });
-    expect(within(sheet).getByRole('radio', { name: 'Starter' })).toBeChecked();
-  });
-
-  it('keeps targets at least 44 px tall: the primary action is a real, full-width link', async () => {
+  it('keeps the filters in the address when the details open', async () => {
     const user = userEvent.setup();
-    renderApp('/scenarios');
-    await user.click(await rowFor(firstTitle));
-    const link = await screen.findByRole('link', { name: /Continue to call brief/ });
-    expect(link.className).toContain('ff-button--medium');
-  });
-});
-
-describe('calls in progress and recent calls', () => {
-  beforeEach(() => stubViewport(true));
-
-  const active = sessionSummary({
-    id: 'session-active',
-    status: 'active',
-    endedAt: null,
-    durationSeconds: null,
-    overallScore: null,
-    completion: null,
+    const app = renderApp('/scenarios?f_product=teams');
+    await user.click(await screen.findByRole('link', { name: /Meeting recordings/ }));
+    await screen.findByRole('heading', { level: 1 });
+    expect(app.query().get('f_product')).toBe('teams');
   });
 
-  it('reminds you of a call in progress, with the way back into it', async () => {
-    mockApi({ active });
-    renderApp('/scenarios');
-    const banner = await screen.findByText(
-      /You have a call in progress: Locked out after a password reset\./,
-    );
-    expect(banner).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Resume' })).toHaveAttribute(
-      'href',
-      '/calls/session-active',
-    );
-  });
-
-  it('says nothing when no call is in progress', async () => {
-    renderApp('/scenarios');
-    await scenarioGroup();
-    expect(screen.queryByText(/call in progress/)).not.toBeInTheDocument();
-  });
-
-  it('says nothing when it cannot be found out whether one is', async () => {
-    vi.mocked(api.listSessions).mockRejectedValue(networkError());
-    renderApp('/scenarios');
-    await scenarioGroup();
-    expect(screen.queryByText(/call in progress/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it('lists the latest calls with what to do next for each', async () => {
-    const user = userEvent.setup();
-    mockApi({
-      sessions: [
-        active,
-        sessionSummary({
-          id: 'session-done',
-          scenarioId: SAMPLE.standard,
-          scenarioTitle: 'Team cannot open the shared project workspace',
-          status: 'completed',
-          overallScore: 3.4,
-          durationSeconds: 540,
-        }),
-        sessionSummary({
-          id: 'session-eval',
-          status: 'completing',
-          overallScore: null,
-          completion: null,
-        }),
-        sessionSummary({
-          id: 'session-failed',
-          status: 'evaluation_failed',
-          overallScore: null,
-          completion: null,
-        }),
-      ],
-    });
-    renderApp('/scenarios');
-    await scenarioGroup();
-    await user.click(screen.getByRole('button', { name: 'Recent calls' }));
-
-    const dialog = await screen.findByRole('dialog', { name: 'Recent calls' });
-    const rows = await within(dialog).findAllByRole('listitem');
-    expect(rows).toHaveLength(4);
-
-    const done = rows[1] as HTMLElement;
-    expect(
-      within(done).getByText('Team cannot open the shared project workspace'),
-    ).toBeInTheDocument();
-    expect(done).toHaveTextContent('Daniel Osei');
-    expect(done).toHaveTextContent('9 min');
-    expect(done).toHaveTextContent('Overall 3.4 of 5');
-    expect(within(done).getByText('Completed')).toBeInTheDocument();
-    expect(within(done).getByRole('link', { name: /View report/ })).toHaveAttribute(
-      'href',
-      '/sessions/session-done/report',
-    );
-
-    expect(within(rows[0] as HTMLElement).getByText('In progress')).toBeInTheDocument();
-    expect(within(rows[0] as HTMLElement).getByRole('link', { name: /Resume/ })).toHaveAttribute(
-      'href',
-      '/calls/session-active',
-    );
-    expect(within(rows[2] as HTMLElement).getByText('Evaluating')).toBeInTheDocument();
-    expect(within(rows[2] as HTMLElement).getByRole('link', { name: /Open/ })).toHaveAttribute(
-      'href',
-      '/sessions/session-eval/report',
-    );
-    expect(within(rows[3] as HTMLElement).getByRole('link', { name: /Open/ })).toHaveAttribute(
-      'href',
-      '/sessions/session-failed/report',
-    );
-    expect(within(dialog).queryByText(/total|average|trend/i)).not.toBeInTheDocument();
-  });
-
-  it('lists no more than ten calls', async () => {
-    const user = userEvent.setup();
-    mockApi({
-      sessions: Array.from({ length: 14 }, (_, index) =>
-        sessionSummary({ id: `session-${String(index).padStart(4, '0')}` }),
-      ),
-    });
-    renderApp('/scenarios');
-    await scenarioGroup();
-    await user.click(screen.getByRole('button', { name: 'Recent calls' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Recent calls' });
-    expect(await within(dialog).findAllByRole('listitem')).toHaveLength(10);
-    expect(vi.mocked(api.listSessions)).toHaveBeenCalledWith({ limit: 10 }, expect.anything());
-  });
-
-  it('says there are no calls yet, and closes back to where it was opened', async () => {
-    const user = userEvent.setup();
-    renderApp('/scenarios');
-    await scenarioGroup();
-    const opener = screen.getByRole('button', { name: 'Recent calls' });
-    await user.click(opener);
-    const dialog = await screen.findByRole('dialog', { name: 'Recent calls' });
-    expect(await within(dialog).findByText('No calls yet.')).toBeInTheDocument();
-    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(opener).toHaveFocus();
-  });
-
-  it('explains a failure to load the calls and tries again', async () => {
-    const user = userEvent.setup();
-    renderApp('/scenarios');
-    await scenarioGroup();
-    vi.mocked(api.listSessions).mockRejectedValueOnce(networkError());
-    await user.click(screen.getByRole('button', { name: 'Recent calls' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Recent calls' });
-    expect(
-      await within(dialog).findByText('Recent calls could not be loaded.'),
-    ).toBeInTheDocument();
-    expect(dialog).toHaveTextContent('Nothing was changed');
-
-    vi.mocked(api.listSessions).mockResolvedValue({ sessions: [sessionSummary()], total: 1 });
-    await user.click(within(dialog).getByRole('button', { name: 'Try again' }));
-    expect(
-      await within(dialog).findByText('Locked out after a password reset'),
-    ).toBeInTheDocument();
+  it('has one heading for the page when the details are open: the scenario\u2019s title, as the page\u2019s own', async () => {
+    const { title } = scenarioById(SAMPLE.challenge);
+    renderApp(`/scenarios?scenario=${SAMPLE.challenge}`);
+    await screen.findByRole('heading', { level: 1, name: title });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole('heading', { level: 2, name: title })).not.toBeInTheDocument();
+    // The sections under it are one level down, so the order of headings has no gap.
+    expect(screen.getByRole('heading', { level: 2, name: 'Starting state' })).toBeVisible();
+    expect(screen.getByRole('button', { name: /^Customise/ }).closest('h2')).not.toBeNull();
   });
 });
 
 describe('a server that does not send every field yet', () => {
   beforeEach(() => stubViewport(true));
 
-  // An older server has no stage notes and no list of curveballs to choose from.
-  const stale = publicScenarios().map(
-    ({ stageBriefs: _stageBriefs, curveballOptions: _curveballOptions, ...rest }) => rest,
-  ) as unknown as PublicScenarioDTO[];
-
-  it('still shows the situation, and the way to start, without the stage notes', async () => {
-    vi.mocked(api.scenarios).mockResolvedValue(stale);
-    const scenario = scenarioById(SAMPLE.standard);
-    renderApp(`/scenarios?scenario=${SAMPLE.standard}&stage=escalated`);
-
-    expect(await screen.findByRole('heading', { level: 2, name: scenario.title })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 3, name: 'What you are told' })).toBeVisible();
-    expect(screen.getAllByText(scenario.brief.situation).length).toBeGreaterThan(0);
-    expect(screen.getByRole('combobox', { name: /^Call stage/ })).toHaveValue('escalated');
-    expect(briefLink()).toHaveAttribute('href', expect.stringContaining('stage=escalated'));
-  });
-
-  it('offers no curveballs to choose from, but still Off and the default', async () => {
+  it('offers no complications to choose from, but still Off and the default', async () => {
+    const stale = publicScenarios().map(
+      ({ curveballOptions: _omitted, ...rest }) => rest,
+    ) as unknown as PublicScenarioDTO[];
     vi.mocked(api.scenarios).mockResolvedValue(stale);
     renderApp(`/scenarios?scenario=${SAMPLE.standard}`);
     await screen.findByRole('heading', { level: 2, name: scenarioById(SAMPLE.standard).title });
-
-    const group = setup.curveballs();
-    expect(within(group).getByRole('radio', { name: 'Off' })).toBeVisible();
-    expect(within(group).getByRole('radio', { name: 'Default for this difficulty' })).toBeChecked();
-    expect(within(group).queryByRole('radio', { name: 'Choose' })).not.toBeInTheDocument();
+    await openCustomise();
+    const modes = control(/^Complications/);
+    expect(within(modes).getByRole('radio', { name: 'Off' })).toBeVisible();
+    expect(within(modes).getByRole('radio', { name: 'Default' })).toBeChecked();
+    expect(within(modes).queryByRole('radio', { name: 'Choose' })).not.toBeInTheDocument();
   });
 });

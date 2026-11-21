@@ -1,0 +1,15 @@
+/* The failure card: what happened, what was kept, and the ways forward. Its actions sit under the text,
+   because the stage column is narrow. */
+
+.ff-message.cw-recovery.ff-message--actions {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon body'
+    '. actions';
+}
+.ff-message.cw-recovery.ff-message--actions .ff-message__actions {
+  margin-block-start: var(--sp-1);
+}
+.cw-recovery__text {
+  margin: 0;
+}

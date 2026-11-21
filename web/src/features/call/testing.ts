@@ -200,6 +200,15 @@ export class FakeServer {
         issueType: 'sign-in-access',
         tags: [],
         estimatedMinutes: 8,
+        product: {
+          id: 'entra-id',
+          name: 'Microsoft Entra ID',
+          family: 'microsoft-365',
+          familyLabel: 'Microsoft 365',
+          area: 'Sign-in',
+        },
+        caseReference: 'FX-10001',
+        publicBrief: null,
         persona: { name: 'Priya Nair', role: 'Office manager', organisation: 'Northwind Traders' },
         brief: { situation: 'A customer is locked out.', goal: 'Restore access.', groundRules: [] },
         config: {
