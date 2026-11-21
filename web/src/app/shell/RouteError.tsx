@@ -22,6 +22,9 @@ export function classifyRouteError(error: unknown): RouteErrorKind {
     ) {
       return 'load';
     }
+    // The build fetches a page's stylesheet before its code, and says so with a plain Error when
+    // that fetch fails (offline, or a build that has been replaced): the page never arrived either.
+    if (/^Unable to preload (CSS|dependency)/i.test(error.message)) return 'load';
   }
   return 'unknown';
 }

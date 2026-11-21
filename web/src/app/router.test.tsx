@@ -215,6 +215,11 @@ describe('when a page fails', () => {
       'load',
     );
     expect(classifyRouteError(new TypeError('Importing a module script failed.'))).toBe('load');
+    // What the production build throws first when the page's stylesheet or code cannot be fetched.
+    expect(
+      classifyRouteError(new Error('Unable to preload CSS for /assets/About-AbCd1234.css')),
+    ).toBe('load');
+    expect(classifyRouteError(new Error('Unable to preload dependency /assets/x.js'))).toBe('load');
     expect(classifyRouteError(new Error('boom'))).toBe('unknown');
     expect(classifyRouteError('boom')).toBe('unknown');
   });
