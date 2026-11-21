@@ -1,25 +1,76 @@
 // Shared vocabulary for scenarios, state and coaching. Used by the server, the web app and
 // the tests. Everything here is plain data: no runtime dependencies.
 
+// Firefly simulates support calls for Microsoft products only. Scenarios name a product from this
+// list; the family groups products in the scenario filters.
+export const PRODUCT_FAMILIES = ['microsoft-365', 'windows', 'azure', 'dynamics-365'] as const;
+export type ProductFamily = (typeof PRODUCT_FAMILIES)[number];
+
+export const PRODUCT_FAMILY_LABELS: Record<ProductFamily, string> = {
+  'microsoft-365': 'Microsoft 365',
+  windows: 'Windows',
+  azure: 'Azure',
+  'dynamics-365': 'Dynamics 365',
+};
+
+export const PRODUCT_IDS = [
+  'teams',
+  'outlook',
+  'exchange-online',
+  'sharepoint-online',
+  'onedrive-business',
+  'm365-apps',
+  'entra-id',
+  'intune',
+  'defender-office-365',
+  'power-platform',
+  'windows-11',
+  'azure',
+  'dynamics-365',
+] as const;
+export type ProductId = (typeof PRODUCT_IDS)[number];
+
+export const PRODUCT_INFO: Record<ProductId, { name: string; family: ProductFamily }> = {
+  teams: { name: 'Microsoft Teams', family: 'microsoft-365' },
+  outlook: { name: 'Outlook', family: 'microsoft-365' },
+  'exchange-online': { name: 'Exchange Online', family: 'microsoft-365' },
+  'sharepoint-online': { name: 'SharePoint Online', family: 'microsoft-365' },
+  'onedrive-business': { name: 'OneDrive for Business', family: 'microsoft-365' },
+  'm365-apps': { name: 'Microsoft 365 Apps', family: 'microsoft-365' },
+  'entra-id': { name: 'Microsoft Entra ID', family: 'microsoft-365' },
+  intune: { name: 'Microsoft Intune', family: 'microsoft-365' },
+  'defender-office-365': { name: 'Defender for Office 365', family: 'microsoft-365' },
+  'power-platform': { name: 'Power Platform', family: 'microsoft-365' },
+  'windows-11': { name: 'Windows 11', family: 'windows' },
+  azure: { name: 'Azure', family: 'azure' },
+  'dynamics-365': { name: 'Dynamics 365', family: 'dynamics-365' },
+};
+
 export const ISSUE_TYPES = [
   'sign-in-access',
+  'permissions',
   'service-outage',
   'slow-performance',
   'data-missing',
   'billing-licence',
   'how-to',
   'feature-not-working',
+  'setup-deployment',
+  'policy-security',
 ] as const;
 export type IssueType = (typeof ISSUE_TYPES)[number];
 
 export const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
   'sign-in-access': 'Sign-in or access problem',
+  permissions: 'Permissions or visibility',
   'service-outage': 'Service outage',
   'slow-performance': 'Slow performance',
   'data-missing': 'Data missing',
   'billing-licence': 'Billing or licence question',
   'how-to': 'How-to question',
   'feature-not-working': 'Feature not working as expected',
+  'setup-deployment': 'Setup or deployment problem',
+  'policy-security': 'Blocked by a policy or security rule',
 };
 
 export const IMPACTS = ['low', 'medium', 'high'] as const;
