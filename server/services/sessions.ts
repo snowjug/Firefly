@@ -18,6 +18,7 @@ import {
   type EvaluationDraft,
 } from '#shared/domain/report.ts';
 import { ScenarioOverridesSchema, type ScenarioDefinition } from '#shared/domain/scenario.ts';
+import { INPUT_MODES } from '#shared/domain/speech.ts';
 import { startingState } from '#shared/domain/state.ts';
 import { MAX_MESSAGE_CHARS, redactSensitive } from '#shared/domain/text.ts';
 import {
@@ -25,16 +26,20 @@ import {
   type DimensionId,
   type EvaluationPhase,
   type SessionStatus,
+  type TemperatureBandId,
 } from '#shared/domain/vocab.ts';
 import { classifyTurnRules } from '../engine/classifier.ts';
 import { processTraineeTurn } from '../engine/pipeline.ts';
 import { createInitialRuntime, openingMessage, publicState } from '../engine/session.ts';
 import type { EvaluationInput, TranscriptTurn } from '../engine/types.ts';
 import { RUBRIC_VERSION } from '../engine/types.ts';
-import { AppError, conflict, isAbortError, notFound } from '../errors.ts';
+import { AppError, badRequest, conflict, isAbortError, notFound } from '../errors.ts';
 import type { FailureHooks } from '../hooks.ts';
 import { shortId, type Logger } from '../log.ts';
 import { ProviderError, type ModelProvider } from '../providers/types.ts';
+import { moodAtTurn, speakerFor } from '../speech/direction.ts';
+import { SpeechError } from '../speech/types.ts';
+import type { Speaker } from '../speech/voices.ts';
 import type { Repository, SessionRow, TurnRow } from '../db/repository.ts';
 import { transaction } from '../db/database.ts';
 import type { DatabaseSync } from 'node:sqlite';
@@ -78,6 +83,7 @@ export const SendMessageSchema = z.object({
     .min(1, 'Type a message before sending.')
     .max(LIMITS.maxMessageChars, `Messages can be up to ${LIMITS.maxMessageChars} characters.`),
   clientMessageId: z.string().regex(idPattern),
+  inputMode: z.enum(INPUT_MODES).default('text'),
 });
 
 export const EndSessionSchema = z.object({
@@ -93,10 +99,22 @@ const PROVIDER_STATUS: Record<string, number> = {
   provider_content_filtered: 422,
 };
 
+const SPEECH_STATUS: Record<SpeechError['code'], number> = {
+  speech_unavailable: 503,
+  speech_failed: 502,
+  speech_timeout: 504,
+  speech_rate_limited: 429,
+};
+
 export function toAppError(error: unknown): AppError {
   if (error instanceof AppError) return error;
   if (error instanceof ProviderError) {
     return new AppError(PROVIDER_STATUS[error.code] ?? 502, error.code, error.message, {
+      retryable: error.retryable,
+    });
+  }
+  if (error instanceof SpeechError) {
+    return new AppError(SPEECH_STATUS[error.code], error.code, error.message, {
       retryable: error.retryable,
     });
   }
@@ -179,6 +197,7 @@ export class SessionService {
         role: 'customer',
         text: openingMessage(scenario),
         source: 'opening',
+        inputMode: 'text',
         clientMessageId: null,
         classification: null,
         createdAt: startedAt,
@@ -216,6 +235,29 @@ export class SessionService {
         text: t.text,
         createdAt: t.createdAt,
       })),
+    };
+  }
+
+  /**
+   * The stored words of one customer turn and how they should sound: which speaker, and how hot the
+   * customer was when they said it. It is the only source of text for speech, so the browser can
+   * never supply words to be spoken.
+   */
+  getSpeakableTurn(
+    profileId: string,
+    sessionId: string,
+    turnIndex: number,
+  ): { text: string; speaker: Speaker; mood: TemperatureBandId } {
+    const { repo } = this.deps;
+    const session = repo.getSession(sessionId, profileId);
+    if (!session) throw notFound('That session');
+    const turn = repo.getTurns(sessionId).find((t) => t.idx === turnIndex);
+    if (!turn) throw notFound('That turn');
+    if (turn.role !== 'customer') throw badRequest("Only the customer's turns can be spoken.");
+    return {
+      text: turn.text,
+      speaker: speakerFor(session.scenario.persona),
+      mood: moodAtTurn(session.scenario, repo.getStateEvents(sessionId), turnIndex),
     };
   }
 
@@ -316,6 +358,7 @@ export class SessionService {
           role: 'trainee',
           text: cleaned.text,
           source: 'trainee',
+          inputMode: request.inputMode ?? 'text',
           clientMessageId: request.clientMessageId,
           classification,
           createdAt: new Date().toISOString(),
@@ -362,6 +405,7 @@ export class SessionService {
         role: 'customer',
         text: result.customerText,
         source: result.customerSource,
+        inputMode: 'text',
         clientMessageId: null,
         classification: null,
         createdAt: new Date().toISOString(),
@@ -410,7 +454,14 @@ export class SessionService {
   }
 
   private turnDTO(t: TurnRow) {
-    return { index: t.idx, role: t.role, text: t.text, createdAt: t.createdAt, source: t.source };
+    return {
+      index: t.idx,
+      role: t.role,
+      text: t.text,
+      createdAt: t.createdAt,
+      source: t.source,
+      inputMode: t.inputMode,
+    };
   }
 
   private responseFor(

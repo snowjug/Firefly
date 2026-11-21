@@ -45,6 +45,17 @@ describe('basics and security headers', () => {
     expect(res.headers.get('cache-control')).toBe('no-store');
   });
 
+  it('lets the page play spoken replies from blob URLs without loosening anything else', async () => {
+    for (const path of ['/api/health', '/']) {
+      const res = await app.client().raw(path);
+      const policy = res.headers.get('content-security-policy') ?? '';
+      expect(policy, path).toContain("media-src 'self' blob:");
+      expect(policy, path).toContain("script-src 'self';");
+      expect(policy, path).toContain("style-src 'self';");
+      expect(policy, path).not.toMatch(/unsafe-inline|unsafe-eval/);
+    }
+  });
+
   it('lets its own pages use the microphone (Voice needs it) and nothing else sensitive', async () => {
     const policy = (await app.client().get('/api/health')).headers.get('permissions-policy') ?? '';
     // `microphone=()` makes browser speech recognition fail at once with "not-allowed".
@@ -185,6 +196,137 @@ describe('sessions and messages', () => {
     expect((await say(stranger, session.id, 'hello')).status).toBe(404);
     expect((await stranger.post(`/api/sessions/${session.id}/end`, {})).status).toBe(404);
     expect((await stranger.del(`/api/sessions/${session.id}`)).status).toBe(404);
+  });
+});
+
+describe('how a trainee turn arrived', () => {
+  const sendVoice = (
+    client: ReturnType<typeof app.client>,
+    id: string,
+    text: string,
+    clientMessageId = randomUUID(),
+    inputMode: string | null = 'voice', // null leaves it out of the request
+  ) =>
+    client.post(`/api/sessions/${id}/messages`, {
+      text,
+      clientMessageId,
+      ...(inputMode === null ? {} : { inputMode }),
+    });
+  const modes = (turns: { role: string; inputMode: string }[]) =>
+    turns.map((t) => `${t.role}:${t.inputMode}`);
+
+  it('stores a spoken turn as voice and returns it as voice wherever turns are returned', async () => {
+    const { client, session } = await newSession();
+    expect(modes(session.turns)).toEqual(['customer:text']);
+
+    const res = await sendVoice(client, session.id, 'Hello, I am Sam. What is happening?');
+    expect(res.status).toBe(200);
+    expect(res.body.traineeTurn).toMatchObject({ index: 2, role: 'trainee', inputMode: 'voice' });
+    expect(res.body.customerTurn).toMatchObject({ index: 3, role: 'customer', inputMode: 'text' });
+
+    const reload = await client.get(`/api/sessions/${session.id}`);
+    expect(modes(reload.body.session.turns)).toEqual([
+      'customer:text',
+      'trainee:voice',
+      'customer:text',
+    ]);
+    // A typed turn after a spoken one is typed.
+    await say(client, session.id, 'When did it start?');
+    const again = await client.get(`/api/sessions/${session.id}`);
+    expect(modes(again.body.session.turns)).toEqual([
+      'customer:text',
+      'trainee:voice',
+      'customer:text',
+      'trainee:text',
+      'customer:text',
+    ]);
+  });
+
+  it('keeps the mode after the call is over', async () => {
+    const { client, session } = await newSession();
+    await sendVoice(client, session.id, 'Hello, I am Sam. What is happening?');
+    await client.post(`/api/sessions/${session.id}/end`, {});
+    await app.service.settle(session.id);
+    const done = await client.get(`/api/sessions/${session.id}`);
+    expect(done.body.session.status).toBe('completed');
+    expect(modes(done.body.session.turns)).toEqual([
+      'customer:text',
+      'trainee:voice',
+      'customer:text',
+    ]);
+  });
+
+  it('treats a message with no input mode as typed, and refuses one it does not know', async () => {
+    const { client, session } = await newSession();
+    const plain = await sendVoice(client, session.id, 'What is happening?', randomUUID(), null);
+    expect(plain.body.traineeTurn.inputMode).toBe('text');
+    const typed = await sendVoice(client, session.id, 'When did it start?', randomUUID(), 'text');
+    expect(typed.body.traineeTurn.inputMode).toBe('text');
+
+    const bad = await sendVoice(client, session.id, 'Who is affected?', randomUUID(), 'telepathy');
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.code).toBe('validation_failed');
+    const reload = await client.get(`/api/sessions/${session.id}`);
+    expect(reload.body.session.turns).toHaveLength(5);
+  });
+
+  it('keeps one turn, still spoken, when the same message is sent again', async () => {
+    const { client, session } = await newSession();
+    const id = randomUUID();
+    const first = await sendVoice(client, session.id, 'When did this start?', id, 'voice');
+    // A resend, even one that gets the mode wrong or leaves it out, returns the stored turn.
+    const typed = await sendVoice(client, session.id, 'When did this start?', id, 'text');
+    const bare = await sendVoice(client, session.id, 'When did this start?', id, null);
+    for (const again of [typed, bare]) {
+      expect(again.status).toBe(200);
+      expect(again.body.traineeTurn).toEqual(first.body.traineeTurn);
+      expect(again.body.customerTurn.text).toBe(first.body.customerTurn.text);
+    }
+    const reload = await client.get(`/api/sessions/${session.id}`);
+    expect(modes(reload.body.session.turns)).toEqual([
+      'customer:text',
+      'trainee:voice',
+      'customer:text',
+    ]);
+  });
+
+  it('keeps the mode of a turn whose reply failed, and when the retry succeeds', async () => {
+    const { client, session } = await newSession();
+    await app.client().post('/api/test/fail-next', { target: 'customer', count: 1 });
+    const id = randomUUID();
+    const failed = await sendVoice(client, session.id, 'When did it start?', id, 'voice');
+    expect(failed.status).toBe(502);
+    expect(failed.body.error.details.traineeTurn).toMatchObject({
+      role: 'trainee',
+      inputMode: 'voice',
+    });
+
+    const mid = await client.get(`/api/sessions/${session.id}`);
+    expect(mid.body.session.awaitingReply).toEqual({ clientMessageId: id, turnIndex: 2 });
+    expect(modes(mid.body.session.turns)).toEqual(['customer:text', 'trainee:voice']);
+
+    // The retry leaves the mode out, as a client that only remembers the text and the id might.
+    const retried = await sendVoice(client, session.id, 'When did it start?', id, null);
+    expect(retried.status).toBe(200);
+    expect(retried.body.traineeTurn.inputMode).toBe('voice');
+    const after = await client.get(`/api/sessions/${session.id}`);
+    expect(modes(after.body.session.turns)).toEqual([
+      'customer:text',
+      'trainee:voice',
+      'customer:text',
+    ]);
+    expect(after.body.session.awaitingReply).toBeNull();
+  });
+
+  it('never marks the customer as having spoken into the microphone', async () => {
+    const { client, session } = await newSession();
+    for (const text of ['What is happening?', 'When did it start?', 'Who is affected?']) {
+      await sendVoice(client, session.id, text);
+    }
+    const reload = await client.get(`/api/sessions/${session.id}`);
+    for (const turn of reload.body.session.turns) {
+      expect(turn.role === 'customer' ? turn.inputMode : 'text').toBe('text');
+    }
   });
 });
 

@@ -29,6 +29,7 @@ const scenario = {
 
   persona: {
     name: 'Rhys Pritchard',
+    speaker: 'male',
     role: 'IT coordinator and office manager',
     organisation: 'Woodgrove Building Supplies',
     background:

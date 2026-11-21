@@ -12,6 +12,8 @@ import { createProvider } from './providers/index.ts';
 import type { ModelProvider } from './providers/types.ts';
 import { getScenarioLibrary } from './scenarios/index.ts';
 import { SessionService, type EvaluatorFns } from './services/sessions.ts';
+import { createSpeechProvider } from './speech/index.ts';
+import type { SpeechProvider } from './speech/types.ts';
 
 export interface Runtime {
   handler: ReturnType<typeof createApp>['handler'];
@@ -19,6 +21,7 @@ export interface Runtime {
   repo: Repository;
   service: SessionService;
   provider: ModelProvider;
+  speech: SpeechProvider;
   hooks: FailureHooks;
   close(): void;
 }
@@ -33,6 +36,7 @@ export function createRuntime(options: {
   config: AppConfig;
   db?: DatabaseSync;
   provider?: ModelProvider;
+  speech?: SpeechProvider;
   log?: Logger;
   library?: ScenarioDefinition[];
   evaluators?: EvaluatorFns;
@@ -43,17 +47,19 @@ export function createRuntime(options: {
   const repo = createRepository(db);
   const hooks = createFailureHooks(config.testHooks);
   const provider = options.provider ?? createProvider(config.provider);
+  const speech = options.speech ?? createSpeechProvider(config.speech);
   const library = options.library ?? getScenarioLibrary();
   const evaluators = options.evaluators ?? defaultEvaluators;
 
   const service = new SessionService({ db, repo, provider, library, evaluators, log, hooks });
-  const app = createApp({ config, service, provider, repo, hooks, log });
+  const app = createApp({ config, service, provider, speech, repo, hooks, log });
   return {
     handler: app.handler,
     db,
     repo,
     service,
     provider,
+    speech,
     hooks,
     close: () => db.close(),
   };

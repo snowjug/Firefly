@@ -9,11 +9,13 @@ import { openDatabase } from '../db/database.ts';
 import type { EvaluationInput } from '../engine/types.ts';
 import { createFailureHooks } from '../hooks.ts';
 import { createApp } from '../http/app.ts';
-import { silentLogger } from '../log.ts';
+import { silentLogger, type Logger } from '../log.ts';
 import { createMockProvider } from '../providers/mock.ts';
 import type { ModelProvider } from '../providers/types.ts';
 import exemplar from '../scenarios/library/locked-out-after-password-reset.ts';
 import { SessionService, type EvaluatorFns } from '../services/sessions.ts';
+import { createNoneSpeechProvider } from '../speech/index.ts';
+import type { SpeechProvider } from '../speech/types.ts';
 
 // Test harness: the real services and HTTP app on an in-memory database and an ephemeral port.
 
@@ -144,19 +146,24 @@ export interface TestResponse {
 export async function createTestApp(
   options: {
     provider?: ModelProvider;
+    /** The speech provider. Speech is off (`none`) unless a test passes one. */
+    speech?: SpeechProvider;
     library?: ScenarioDefinition[];
     evaluators?: EvaluatorFns;
     testHooks?: boolean;
     devDiagnostics?: boolean;
+    /** Where the server writes its log lines. Silent unless a test wants to read them. */
+    log?: Logger;
   } = {},
 ): Promise<TestApp> {
   const db = openDatabase(':memory:');
   const repo = createRepository(db);
   const hooks = createFailureHooks(options.testHooks ?? true);
   const provider = options.provider ?? createMockProvider({ delayMs: 0 });
+  const speech = options.speech ?? createNoneSpeechProvider();
   const library = options.library ?? [ScenarioDefinitionSchema.parse(exemplar)];
   const evaluators = options.evaluators ?? fakeEvaluators;
-  const log = silentLogger;
+  const log = options.log ?? silentLogger;
 
   const service = new SessionService({ db, repo, provider, library, evaluators, log, hooks });
   const config: AppConfig = {
@@ -169,8 +176,9 @@ export async function createTestApp(
     devDiagnostics: options.devDiagnostics ?? false,
     testHooks: options.testHooks ?? true,
     provider: { config: { kind: 'mock', mockDelayMs: 0 }, problem: null },
+    speech: { config: { kind: 'none' }, problem: null },
   };
-  const app = createApp({ config, service, provider, repo, hooks, log });
+  const app = createApp({ config, service, provider, speech, repo, hooks, log });
   const server: Server = createServer((req, res) => {
     void app.handler(req, res);
   });

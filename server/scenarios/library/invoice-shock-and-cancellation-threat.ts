@@ -29,6 +29,7 @@ const scenario = {
 
   persona: {
     name: 'Nomvula Dlamini',
+    speaker: 'female',
     role: 'Operations Director',
     organisation: 'Proseware Field Services',
     background:

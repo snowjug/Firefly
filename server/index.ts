@@ -44,6 +44,8 @@ server.listen(config.port, config.host, () => {
   console.log(`  AI provider : ${runtime.provider.label}`);
   if (config.provider.problem)
     console.log(`  Notice      : ${config.provider.problem} Using demo mode instead.`);
+  console.log(`  Speech      : ${runtime.speech.label}`);
+  if (config.speech.problem) console.log(`  Notice      : ${config.speech.problem}`);
   console.log(`  Database    : ${config.dbPath}`);
   console.log(
     existsSync(config.webDir)

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyConfig } from '#shared/domain/config.ts';
+import { PersonaSchema } from '#shared/domain/scenario.ts';
 import {
   CALL_STAGES,
   DIFFICULTIES,
@@ -12,6 +13,7 @@ import {
 } from '#shared/domain/vocab.ts';
 import { openingMessage } from '../engine/session.ts';
 import { simulate } from '../engine/simulate.ts';
+import { toPublicScenario } from '../services/dto.ts';
 import { distinctiveTokens, getScenarioLibrary, loadScenarios } from './index.ts';
 
 const library = getScenarioLibrary();
@@ -58,6 +60,40 @@ describe('scenario library', () => {
     expect(used((s) => s.issueType).size).toBeGreaterThanOrEqual(6);
     expect(ISSUE_TYPES.length).toBeGreaterThanOrEqual(used((s) => s.issueType).size);
     expect(library.filter((s) => s.enabled && s.spotlight)).toHaveLength(1);
+  });
+
+  it('names which synthetic voice speaks for every enabled customer, and keeps that choice private', () => {
+    const enabled = library.filter((s) => s.enabled);
+    for (const scenario of enabled) {
+      expect(scenario.persona.speaker, scenario.id).toMatch(/^(female|male)$/);
+    }
+    // Chosen by the persona's fictional name.
+    expect(Object.fromEntries(library.map((s) => [s.persona.name, s.persona.speaker]))).toEqual({
+      'Carmen Fraser': 'female',
+      'Elias Lindqvist': 'male',
+      'Declan Hartley': 'male',
+      'Seun Adeyemi': 'male',
+      'Mateus Carvalho': 'male',
+      'Linh Tran': 'female',
+      'Nomvula Dlamini': 'female',
+      'Tomasz Nowak': 'male',
+      'Maya Okafor': 'female',
+      'Ingrid Solheim': 'female',
+      'Rhys Pritchard': 'male',
+      'Priya Raman': 'female',
+      'Daniel Osei': 'male',
+    });
+    // It is a voice choice for the server, never something the web app is told.
+    expect(JSON.stringify(library.map(toPublicScenario))).not.toMatch(/speaker/i);
+  });
+
+  it('still reads a persona stored before speakers existed, and refuses a speaker that is not one', () => {
+    const first = library[0];
+    if (!first) throw new Error('The library is empty');
+    const { speaker: _speaker, ...older } = first.persona;
+    expect(PersonaSchema.safeParse(older).success).toBe(true);
+    expect(PersonaSchema.safeParse({ ...older, speaker: 'nonbinary' }).success).toBe(false);
+    expect(PersonaSchema.safeParse({ ...older, speaker: 'female' }).success).toBe(true);
   });
 
   it('contains no real-looking contact details or links', () => {

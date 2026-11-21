@@ -29,6 +29,7 @@ const scenario = {
 
   persona: {
     name: 'Tomasz Nowak',
+    speaker: 'male',
     role: 'Design team lead',
     organisation: 'Contoso Design Studio',
     background:

@@ -26,6 +26,8 @@ export function securityHeaders(res: ServerResponse, isApi: boolean): void {
       "img-src 'self' data:",
       "font-src 'self'",
       "connect-src 'self'",
+      // Spoken replies are played from a blob URL made from the downloaded audio.
+      "media-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -105,6 +107,38 @@ export async function readJsonBody(req: IncomingMessage, maxBytes = 64 * 1024): 
   }
 }
 
+const AUDIO_TYPES = new Set(['audio/wav', 'audio/x-wav']);
+
+/** Refuses a request that says its body is larger than `maxBytes`, without reading any of it. */
+export function assertSmallBody(req: IncomingMessage, maxBytes = 64 * 1024): void {
+  if (Number(req.headers['content-length'] ?? 0) > maxBytes) {
+    throw new AppError(413, 'payload_too_large', 'That request is too large.');
+  }
+}
+
+/**
+ * Reads an uploaded recording with a hard size limit. Another media type is refused before anything
+ * is read, and an upload that says it is too large is refused without reading it. The bytes are only
+ * ever held in memory: they are not written anywhere and not logged.
+ */
+export async function readAudioBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const type = (req.headers['content-type'] ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  if (!AUDIO_TYPES.has(type)) {
+    throw new AppError(415, 'unsupported_media', 'Send the recording as audio/wav.');
+  }
+  const tooLarge = () => new AppError(413, 'payload_too_large', 'That recording is too large.');
+  if (Number(req.headers['content-length'] ?? 0) > maxBytes) throw tooLarge();
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buf = chunk as Buffer;
+    size += buf.length;
+    if (size > maxBytes) throw tooLarge();
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks, size);
+}
+
 // ---- rate limiting -------------------------------------------------------------------------
 
 export interface BucketSpec {
@@ -112,13 +146,15 @@ export interface BucketSpec {
   refillPerSecond: number;
 }
 
-export type RateLimitName = 'api' | 'create' | 'message' | 'end';
+export type RateLimitName = 'api' | 'create' | 'message' | 'end' | 'speech';
 
 export const RATE_LIMITS: Record<RateLimitName, BucketSpec> = {
   api: { capacity: 240, refillPerSecond: 4 },
   create: { capacity: 20, refillPerSecond: 20 / 60 },
   message: { capacity: 30, refillPerSecond: 30 / 60 },
   end: { capacity: 10, refillPerSecond: 10 / 60 },
+  // Both speech endpoints share it: one reply spoken and one recording sent are each a request.
+  speech: { capacity: 60, refillPerSecond: 1 },
 };
 
 export function createRateLimiter(now: () => number = Date.now, specs = RATE_LIMITS) {

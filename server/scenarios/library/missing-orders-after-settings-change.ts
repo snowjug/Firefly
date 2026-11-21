@@ -28,6 +28,7 @@ const scenario = {
 
   persona: {
     name: 'Ingrid Solheim',
+    speaker: 'female',
     role: 'Operations manager',
     organisation: 'Wingtip Wholesale',
     background:

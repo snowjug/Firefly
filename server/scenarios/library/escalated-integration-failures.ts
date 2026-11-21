@@ -28,6 +28,7 @@ const scenario = {
 
   persona: {
     name: 'Mateus Carvalho',
+    speaker: 'male',
     role: 'Senior Integration Engineer',
     organisation: 'Litware Freight',
     background:

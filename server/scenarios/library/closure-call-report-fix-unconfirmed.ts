@@ -34,6 +34,7 @@ const scenario = {
 
   persona: {
     name: 'Elias Lindqvist',
+    speaker: 'male',
     role: 'Regional operations manager',
     organisation: 'Adventure Works Retail Group',
     background:

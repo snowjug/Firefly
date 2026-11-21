@@ -29,6 +29,7 @@ const scenario = {
 
   persona: {
     name: 'Priya Raman',
+    speaker: 'female',
     role: 'Operations analyst',
     organisation: 'Northwind Dairy Co-op',
     background:

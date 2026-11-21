@@ -10,6 +10,7 @@ import type {
   SessionStatus,
 } from '#shared/domain/vocab.ts';
 import type { ProviderKind } from '#shared/domain/api.ts';
+import type { InputMode } from '#shared/domain/speech.ts';
 import type { DiscoveryRecord, EngineRuntime } from '../engine/types.ts';
 import type { PromptVersions } from '../providers/types.ts';
 
@@ -46,6 +47,8 @@ export interface TurnRow {
   role: 'customer' | 'trainee';
   text: string;
   source: 'opening' | 'live' | 'demo' | 'trainee';
+  /** How the turn arrived. Only a trainee turn can be `voice`. */
+  inputMode: InputMode;
   clientMessageId: string | null;
   classification: TurnClassification | null;
   createdAt: string;
@@ -100,6 +103,7 @@ function turnFromRow(r: Row): TurnRow {
     role: r.role as 'customer' | 'trainee',
     text: String(r.text),
     source: r.source as TurnRow['source'],
+    inputMode: r.input_mode === 'voice' ? 'voice' : 'text',
     clientMessageId: (r.client_message_id as string | null) ?? null,
     classification: parseOrNull<TurnClassification>(r.classification),
     createdAt: String(r.created_at),
@@ -255,14 +259,15 @@ export function createRepository(db: DatabaseSync) {
     // ---- turns ----------------------------------------------------------------------------
     insertTurn(sessionId: string, t: Omit<TurnRow, 'createdAt'> & { createdAt?: string }): void {
       db.prepare(
-        `INSERT INTO turns (session_id, idx, role, text, source, client_message_id, classification, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO turns (session_id, idx, role, text, source, input_mode, client_message_id, classification, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         sessionId,
         t.idx,
         t.role,
         t.text,
         t.source,
+        t.inputMode,
         t.clientMessageId,
         t.classification ? json(t.classification) : null,
         t.createdAt ?? now(),

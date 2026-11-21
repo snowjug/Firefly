@@ -1,6 +1,7 @@
-﻿import type { CoachingReport } from './report.ts';
+import type { CoachingReport } from './report.ts';
 import type { RedactionKind } from './text.ts';
 import type { ScenarioOverrides } from './scenario.ts';
+import type { InputMode, SpeechCapabilitiesDTO } from './speech.ts';
 import type {
   BusinessImpact,
   CallStage,
@@ -38,6 +39,11 @@ export type ApiErrorCode =
   | 'provider_rate_limited'
   | 'provider_bad_output'
   | 'provider_content_filtered'
+  | 'speech_unavailable'
+  | 'speech_failed'
+  | 'speech_timeout'
+  | 'speech_rate_limited'
+  | 'unsupported_media'
   | 'evaluation_failed'
   | 'internal';
 
@@ -48,6 +54,8 @@ export interface ApiErrorBody {
 export interface AppConfigDTO {
   app: { name: string; version: string };
   provider: { kind: ProviderKind; label: string; demo: boolean; notice: string | null };
+  /** What the server's speech provider can do. The browser's own speech features are separate. */
+  speech: SpeechCapabilitiesDTO;
   limits: { maxMessageChars: number; maxTraineeTurns: number };
   features: { devDiagnostics: boolean; testHooks: boolean };
 }
@@ -70,6 +78,11 @@ export interface PublicScenarioDTO {
   difficulty: Difficulty;
   persona: { name: string; role: string; organisation: string };
   brief: { situation: string; goal: string; groundRules: string[] };
+  /**
+   * What the trainee is told about the call stage, by stage (empty for a first contact). A call's
+   * brief is `brief.situation` followed by the text for the stage chosen for the call.
+   */
+  stageBriefs: Record<CallStage, string>;
   expectedDiscoveryAreas: string[];
   coachingFocus: DimensionId[];
   curveballOptions: CurveballType[];
@@ -91,6 +104,8 @@ export interface TurnDTO {
   text: string;
   createdAt: string;
   source: 'opening' | 'live' | 'demo' | 'trainee';
+  /** How a trainee turn arrived. Customer turns are always `text`. */
+  inputMode: InputMode;
   markers?: TurnMarker[]; // only present once the call is completed
 }
 
@@ -182,6 +197,8 @@ export interface TranscriptDTO {
 export interface SendMessageRequest {
   text: string;
   clientMessageId: string; // client-generated unique id; resending the same id never duplicates
+  /** `voice` when the text was recognised from the trainee's speech. Defaults to `text`. */
+  inputMode?: InputMode;
 }
 
 export interface SendMessageResponse {

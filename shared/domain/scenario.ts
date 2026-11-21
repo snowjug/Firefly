@@ -30,6 +30,9 @@ export const PersonaSchema = z.object({
   organisation: text(80), // fictional organisation
   background: text(400),
   voice: text(300), // how this person talks (used for model prompts and for authors)
+  // Which synthetic voice speaks for this customer in a spoken call. It only picks a voice and says
+  // nothing else about the person. Optional so that calls stored before it existed still load.
+  speaker: z.enum(['female', 'male']).optional(),
 });
 
 export const EnvironmentSchema = z.object({

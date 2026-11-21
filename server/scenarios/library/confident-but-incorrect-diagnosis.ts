@@ -30,6 +30,7 @@ const scenario = {
 
   persona: {
     name: 'Seun Adeyemi',
+    speaker: 'male',
     role: 'Senior Platform Engineer',
     organisation: 'Lucerne Tickets',
     background:
