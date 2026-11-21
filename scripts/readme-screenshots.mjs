@@ -14,7 +14,6 @@
 // that plays a short generated tone (no real audio is recorded or committed), the demo speech provider
 // answers with scripted sentences, and the demo rules engine plays the customer. Look at every picture
 // before committing it: a picture that shows something the app does not do is worse than none.
-/* global window */
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
