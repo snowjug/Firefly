@@ -1,0 +1,217 @@
+/* The transcript: whole turns in the reading size, the trainee's own turns on a quiet ground. */
+
+.cw-log-wrap {
+  position: relative;
+  flex: 1 1 0px;
+  min-block-size: 0;
+}
+.cw-log-scroll {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.cw-log-scroll:focus-visible {
+  outline-offset: -2px;
+  box-shadow: none;
+}
+.cw-log__empty {
+  color: var(--fg-3);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.cw-turns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cw-turn {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--sp-3);
+  min-inline-size: 0;
+  animation: cw-turn-in var(--dur-normal) var(--ease-decelerate);
+}
+/* Older turns are skipped by the browser until they are scrolled to, so a long call stays smooth. */
+.cw-turn--old {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 5rem;
+  animation: none;
+}
+@keyframes cw-turn-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+}
+
+.cw-turn__you {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--r-pill);
+  background: var(--bg-strong);
+  color: var(--fg-2);
+}
+.cw-turn__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+}
+.cw-turn--trainee .cw-turn__body {
+  padding: var(--sp-2) var(--sp-3) var(--sp-2h);
+  border: var(--stroke-w) solid var(--stroke-3);
+  border-radius: var(--r-xl);
+  background: var(--bg-quiet);
+}
+
+.cw-turn__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-0h) var(--sp-3);
+}
+.cw-turn__who {
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+.cw-turn__time {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-variant-numeric: tabular-nums;
+}
+.cw-turn__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.cw-turn__tag--busy {
+  font-weight: var(--fw-semibold);
+}
+.cw-turn__text {
+  color: var(--fg-1);
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cw-turn--sending .cw-turn__text,
+.cw-turn--transcribing .cw-turn__text {
+  color: var(--fg-2);
+}
+.cw-turn--transcribing .cw-turn__text {
+  font-style: italic;
+}
+.cw-turn__skeleton.ff-skeleton {
+  inline-size: 60%;
+  margin-block: var(--sp-1h);
+}
+
+.cw-turn__failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin-block-start: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--stroke-w) solid var(--status-warning-border);
+  border-radius: var(--r-lg);
+  background: var(--status-warning-bg);
+}
+.cw-turn__failed-text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+.cw-turn__failed-text .ff-icon {
+  color: var(--status-warning-fg);
+}
+.cw-turn__note {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-block-start: var(--sp-1);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+/* What the trainee is saying right now: under the log, italic, and silent for assistive technology. */
+.cw-interim {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  margin-block-start: var(--sp-5);
+  margin-inline-start: 2.75rem;
+  min-inline-size: 0;
+}
+.cw-interim__label {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.cw-interim__text {
+  color: var(--fg-2);
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.ff-button.cw-log__jump {
+  position: absolute;
+  inset-block-end: var(--sp-3);
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  box-shadow: var(--shadow-8);
+}
+
+@media (max-width: 40em) {
+  .cw-log-scroll {
+    padding-inline: var(--sp-4);
+  }
+  .cw-turn {
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    column-gap: var(--sp-2);
+  }
+  .cw-turn__you,
+  .cw-turn .ff-avatar {
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+  }
+  .cw-interim {
+    margin-inline-start: 2.25rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .cw-turn--trainee .cw-turn__body {
+    border-color: CanvasText;
+  }
+  .cw-turn__failed {
+    border-color: CanvasText;
+  }
+}

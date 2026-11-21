@@ -1,0 +1,74 @@
+/* The composer: a label, a box that grows to six lines, Send, and the words around them. */
+
+.cw-composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  box-sizing: border-box;
+  padding: var(--sp-3) var(--sp-5) var(--sp-4);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-canvas);
+}
+.cw-composer--closed {
+  padding-block: var(--sp-3);
+  align-items: flex-start;
+}
+
+.cw-composer__row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+.ff-input.cw-composer__input {
+  flex: 1 1 auto;
+  min-block-size: var(--ctl-md);
+  max-block-size: calc(6 * var(--lh-body) + 2 * var(--sp-2) + 2px);
+  resize: none;
+  overflow-y: auto;
+  field-sizing: content;
+}
+.ff-button.cw-composer__send {
+  flex: none;
+}
+
+.cw-composer__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-0h) var(--sp-3);
+}
+.cw-composer__helper,
+.cw-composer__reason,
+.cw-composer__remaining {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.cw-composer__reason {
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+.cw-composer__count {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-variant-numeric: tabular-nums;
+}
+.cw-composer__count--over {
+  color: var(--status-danger-fg);
+  font-weight: var(--fw-semibold);
+}
+.ff-button.cw-composer__close,
+.cw-composer__close {
+  position: absolute;
+  inset-block-start: var(--sp-1);
+  inset-inline-end: var(--sp-3);
+}
+
+@media (max-width: 40em) {
+  .cw-composer {
+    padding-inline: var(--sp-4);
+  }
+}
