@@ -22,6 +22,8 @@ This page is about the language model. Speaking and listening are a separate bou
 
 **The Gemini smoke check.** Gemini (model `gemini-3.5-flash-lite`, free tier, key supplied locally by the user) got a limited live smoke check on 21 Nov 2026 through the real HTTP API: two scripted calls (Outlook shared mailbox, 7 engineer turns; Teams external meetings, 10 engineer turns) with live customer replies and a model-written v2 report for each; no errors, no retries, no coaching or list-style replies detected by simple automatic checks. That is a smoke check, not a quality evaluation: it says nothing about voice, about other scenarios, or about paid-tier behaviour.
 
+These two calls were a re-run. An earlier live run the same day exposed four customer-engine faults: a reveal the customer had earned was rejected as bad output, a repeated question got a wrong answer, the customer pushed too hard, and it repeated lines word for word. They were fixed before the re-run, with tests.
+
 Azure OpenAI, the OpenAI-compatible endpoint and Azure AI Speech have not been run live. When another provider is run, add the date, the model and what was run here.
 
 ## Configure a provider
