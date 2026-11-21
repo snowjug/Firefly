@@ -1,29 +1,38 @@
 import { expect, test } from './support/fixtures.ts';
 import { GOOD_CALL } from './support/api.ts';
-import { callScreen, sendTyped, startTypedCall } from './support/call-screen.ts';
+import {
+  STATUS,
+  callScreen,
+  converse,
+  sendTyped,
+  startSpokenCall,
+  startTypedCall,
+} from './support/call-screen.ts';
+import { lengthenCustomerVoice } from './support/a11y.ts';
+import { isMockUtterance } from './support/mock-speech.ts';
 import { expectNoRawFailureText } from './support/raw-text.ts';
 
 // Resilience: a page that is reloaded, an address that is stale, a connection that drops and a call
-// that has grown long. Each of these must leave the person with what they had and a way on.
+// that has grown long. Each of these must leave the person with what they had and a way on: the
+// message that was kept stays visible, Retry works, no turn appears twice, and the call can be ended
+// safely.
 
 test.describe.configure({ timeout: 90_000 });
 
 test.describe('a call that is reloaded', () => {
   test('resumes with the transcript intact, and carries on', async ({ page, api }) => {
     const { call, screen } = await startTypedCall(page, api);
-    await sendTyped(screen, 'Hello, my name is Sam. Can you tell me what is happening?');
-    await expect(screen.turns).toHaveCount(3);
-    await sendTyped(screen, 'When did it last work, and did anything change before it stopped?');
-    await expect(screen.turns).toHaveCount(5);
+    await converse(screen, [
+      'Hello, my name is Sam. Can you tell me what is happening?',
+      'When did it last work, and did anything change before it stopped?',
+    ]);
     const before = (await api.session(call.id)).turns.map((turn) => turn.text);
 
     await page.reload();
 
     await test.step('the pre-flight says the call is still open and shows the transcript so far', async () => {
-      await expect(page.getByRole('heading', { level: 1, name: 'Resume your call' })).toBeVisible();
-      await expect(
-        page.getByText('Your call is still open and your transcript so far is saved.'),
-      ).toBeVisible();
+      await expect(screen.preflight.resumeHeading).toBeVisible();
+      await expect(page.getByText('Time so far')).toBeVisible();
       const soFar = page
         .locator('section')
         .filter({ has: page.getByRole('heading', { level: 2, name: 'Transcript so far' }) });
@@ -32,7 +41,7 @@ test.describe('a call that is reloaded', () => {
     });
 
     await test.step('resuming brings the whole transcript back, and the call goes on', async () => {
-      await page.getByRole('button', { name: 'Resume as a text-only call' }).click();
+      await screen.preflight.resumeText.click();
       await expect(screen.turns).toHaveCount(5);
       for (const [index, text] of before.entries()) {
         await expect(screen.turns.nth(index)).toContainText(text.slice(0, 40));
@@ -43,7 +52,7 @@ test.describe('a call that is reloaded', () => {
     });
   });
 
-  test('a message the customer never answered is kept and offers Try again, and is not sent twice', async ({
+  test('a message the customer never answered is kept and offers Retry, and is not sent twice', async ({
     page,
     api,
     problems,
@@ -54,24 +63,28 @@ test.describe('a call that is reloaded', () => {
     await sendTyped(screen, 'Hello, my name is Sam. Can you tell me what is happening?');
 
     await test.step('the customer could not reply: what happened, what was kept, what to do', async () => {
-      await expect(page.getByText('The customer could not reply.')).toBeVisible();
-      await expect(page.getByText('Your message was saved.')).toBeVisible();
-      await expect(
-        page.getByText('Choose Try again to send it again. It will not be sent twice.'),
-      ).toBeVisible();
-      await expect(screen.turns.last()).toContainText('Not sent. Your words are kept.');
+      await expect(screen.problem.title).toHaveText('The customer could not reply.');
+      await expect(screen.problem.card).toContainText('Your message was saved.');
+      await expect(screen.problem.card).toContainText('Retry sends it once, never twice.');
+      await expect(screen.turns).toHaveCount(2);
+      await expect(screen.turns.last()).toContainText('Not sent');
+      await expect(screen.turns.last()).toContainText('Hello, my name is Sam.');
+      await expect(screen.problem.retry).toHaveCount(1);
+      await expect(screen.problem.endSafely).toBeVisible();
+      await expectNoRawFailureText(page);
     });
 
     await test.step('a reload keeps the unanswered message, and it can still be retried', async () => {
       await page.reload();
-      await expect(page.getByRole('heading', { level: 1, name: 'Resume your call' })).toBeVisible();
-      await page.getByRole('button', { name: 'Resume as a text-only call' }).click();
+      await expect(screen.preflight.resumeHeading).toBeVisible();
+      await screen.preflight.resumeText.click();
       await expect(screen.turns).toHaveCount(2);
       await expect(screen.turns.last()).toContainText('Hello, my name is Sam.');
-      await expect(screen.turns.last()).toContainText('Not sent. Your words are kept.');
-      await page.getByRole('button', { name: 'Try again' }).first().click();
+      await expect(screen.turns.last()).toContainText('Not sent');
+      await screen.problem.retry.click();
       await expect(screen.turns).toHaveCount(3);
-      await expect(page.getByText('Not sent. Your words are kept.')).toHaveCount(0);
+      await expect(page.getByText('Not sent')).toHaveCount(0);
+      await expect(screen.problem.card).toHaveCount(0);
     });
 
     await test.step('the call holds one message, not two', async () => {
@@ -79,6 +92,34 @@ test.describe('a call that is reloaded', () => {
       expect(saved.turns.filter((turn) => turn.role === 'trainee')).toHaveLength(1);
       expect(saved.awaitingReply).toBeNull();
     });
+  });
+
+  test('"End safely" after a failed reply ends the call, keeps the message, and opens the report', async ({
+    page,
+    api,
+    problems,
+  }) => {
+    problems.allow({ status: 502, url: '/messages' });
+    const { call, screen } = await startTypedCall(page, api);
+    await api.failNext('customer', 1);
+    await sendTyped(screen, 'Hello, my name is Sam. Can you tell me what is happening?');
+    await expect(screen.problem.endSafely).toBeVisible();
+
+    await screen.problem.endSafely.click();
+    await expect(screen.endDialog).toBeVisible();
+    await screen.endDialog.getByRole('button', { name: 'End and review' }).click();
+    await expect(page).toHaveURL(new RegExp(`/sessions/${call.id}/report$`));
+    await expect(page.getByRole('heading', { level: 1, name: 'Coaching report' })).toBeVisible({
+      timeout: 30_000,
+    });
+    // The message that could not be answered is in the transcript of the report, once.
+    await expect(
+      page
+        .getByRole('region', { name: 'Transcript', exact: true })
+        .getByText('Hello, my name is Sam.'),
+    ).toHaveCount(1);
+    const saved = await api.session(call.id);
+    expect(saved.turns.filter((turn) => turn.role === 'trainee')).toHaveLength(1);
   });
 });
 
@@ -96,7 +137,7 @@ test.describe('an address that is stale', () => {
       }),
     ).toBeVisible();
     await page.getByRole('link', { name: 'Back to scenarios' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Choose a scenario' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
   });
 
   test('a report that does not exist says so, and offers a scenario or home', async ({
@@ -118,7 +159,7 @@ test.describe('an address that is stale', () => {
   }) => {
     problems.allow({ status: 404, url: '/api/sessions/' });
     const done = await api.completedCall({ lines: GOOD_CALL.slice(0, 2) });
-    await page.request.delete(`/api/sessions/${done.id}`);
+    await api.remove(done.id);
     await page.goto(`/sessions/${done.id}/report`);
     await expect(page.getByRole('heading', { level: 1, name: 'Report unavailable' })).toBeVisible();
     await page.goto(`/calls/${done.id}`);
@@ -147,36 +188,83 @@ test.describe('an address that is stale', () => {
 });
 
 test.describe('a connection that drops', () => {
-  test('says so, keeps the message and the transcript, and sends it when the connection is back', async ({
+  test('says so, keeps the message and the transcript, and sends it once when the connection is back', async ({
     page,
     api,
     context,
     problems,
   }) => {
     problems.allowOffline();
-    const { screen } = await startTypedCall(page, api);
-    await sendTyped(screen, 'Hello, my name is Sam. Can you tell me what is happening?');
-    await expect(screen.turns).toHaveCount(3);
+    const { call, screen } = await startTypedCall(page, api);
+    await converse(screen, ['Hello, my name is Sam. Can you tell me what is happening?']);
 
     await context.setOffline(true);
-    await expect(page.getByText('Offline', { exact: true })).toBeVisible();
+    await expect(screen.status).toHaveText(STATUS.offline);
+    await expect(page.getByRole('banner').or(page.locator('.cw-bar'))).toContainText('Offline');
 
     await test.step('a message sent offline is kept, with what to do', async () => {
       await sendTyped(screen, 'When did it last work, and did anything change before it stopped?');
-      await expect(page.getByText('You appear to be offline.')).toBeVisible();
-      await expect(page.getByText('Your message is kept here.')).toBeVisible();
+      await expect(screen.problem.title).toHaveText('You appear to be offline.');
+      await expect(screen.problem.card).toContainText('Your message is kept.');
       await expect(screen.turns).toHaveCount(4);
-      await expect(screen.turns.nth(0)).toBeVisible();
       await expect(screen.turns.nth(1)).toContainText('Hello, my name is Sam.');
-      await expect(screen.turns.last()).toContainText('Not sent. Your words are kept.');
+      await expect(screen.turns.last()).toContainText('Not sent');
+      await expect(screen.turns.last()).toContainText('When did it last work');
     });
 
-    await test.step('back online, Try again sends it once and the customer replies', async () => {
+    await test.step('Retry while still offline changes nothing: the message stays, once', async () => {
+      await screen.problem.retry.click();
+      await expect(screen.problem.title).toHaveText('You appear to be offline.');
+      await expect(screen.turns).toHaveCount(4);
+      await expect(screen.turns.last()).toContainText('Not sent');
+    });
+
+    await test.step('back online, the kept message is sent once by itself and the customer replies', async () => {
       await context.setOffline(false);
-      await expect(page.getByText('Offline', { exact: true })).toBeHidden();
-      await page.getByRole('button', { name: 'Try again' }).first().click();
       await expect(screen.turns).toHaveCount(5);
-      await expect(page.getByText('You appear to be offline.')).toHaveCount(0);
+      await expect(screen.problem.card).toHaveCount(0);
+      await expect(screen.turns.nth(3)).not.toContainText('Not sent');
+      const saved = await api.session(call.id);
+      expect(saved.turns.filter((turn) => turn.role === 'trainee')).toHaveLength(2);
+      expect(
+        saved.turns.filter((turn) => turn.text.includes('When did it last work')),
+      ).toHaveLength(1);
+    });
+  });
+
+  test('a spoken turn lost to the connection keeps the call, and Retry sends what was said', async ({
+    page,
+    api,
+    context,
+    problems,
+  }) => {
+    problems.allowOffline();
+    problems.allow({ status: 502, url: '/api/speech/transcribe' });
+    await lengthenCustomerVoice(page, 30);
+    const { call, screen } = await startSpokenCall(page, api);
+    await expect(screen.status).toHaveText(STATUS.speaking);
+    await screen.stopAudio.click();
+    await expect(screen.status).toHaveText(STATUS.hearing, { timeout: 20_000 });
+
+    await test.step('the connection goes while the trainee is speaking', async () => {
+      await context.setOffline(true);
+      await expect(screen.problem.title).toHaveText(
+        /Firefly could not reach the speech service\.|Your speech could not be turned into text\./,
+        { timeout: 30_000 },
+      );
+      await expect(screen.problem.card).toContainText('Your call and its transcript are safe.');
+      await expect(screen.turns).toHaveCount(1);
+      await expectNoRawFailureText(page);
+    });
+
+    await test.step('back online, Retry sends it, and it is one turn', async () => {
+      await context.setOffline(false);
+      await screen.problem.retry.click();
+      await expect(screen.turns).toHaveCount(3, { timeout: 30_000 });
+      const text = (await screen.turns.nth(1).locator('.cw-turn__text').innerText()).trim();
+      expect(isMockUtterance(text)).toBe(true);
+      const saved = await api.session(call.id);
+      expect(saved.turns.filter((turn) => turn.role === 'trainee')).toHaveLength(1);
     });
   });
 
@@ -188,15 +276,20 @@ test.describe('a connection that drops', () => {
     problems.allowOffline();
     // Both pages are visited online first, so that their code is in the browser when the network goes.
     await page.goto('/');
-    await page.getByRole('banner').getByRole('link', { name: 'Start simulation' }).click();
-    await expect(page.getByText('13 scenarios', { exact: true })).toBeVisible();
+    await page.getByRole('banner').getByRole('link', { name: 'Start call' }).click();
+    await expect(
+      page
+        .getByRole('main')
+        .getByRole('status')
+        .filter({ hasText: /scenarios$/ }),
+    ).toHaveText('16 scenarios');
     await page.getByRole('link', { name: 'Firefly home' }).click();
     await expect(page.getByRole('heading', { level: 1 })).toContainText(
-      'Practise the conversation',
+      'Practise Microsoft support calls',
     );
 
     await context.setOffline(true);
-    await page.getByRole('banner').getByRole('link', { name: 'Start simulation' }).click();
+    await page.getByRole('banner').getByRole('link', { name: 'Start call' }).click();
     await expect(page.getByText('Scenarios could not be loaded', { exact: true })).toBeVisible();
     await expect(
       page.getByText(/You are offline, so the scenarios could not be loaded/),
@@ -205,7 +298,47 @@ test.describe('a connection that drops', () => {
 
     await context.setOffline(false);
     await page.getByRole('button', { name: 'Try again' }).click();
-    await expect(page.getByText('13 scenarios', { exact: true })).toBeVisible();
+    await expect(
+      page
+        .getByRole('main')
+        .getByRole('status')
+        .filter({ hasText: /scenarios$/ }),
+    ).toHaveText('16 scenarios');
+  });
+
+  test('a scenario list that the server cannot give says so in words, and Try again loads it', async ({
+    page,
+    problems,
+  }) => {
+    problems.allow({ status: 500, url: '/api/scenarios' });
+    let failing = true;
+    await page.route('**/api/scenarios', async (route) => {
+      if (failing) {
+        await route.fulfill({
+          status: 500,
+          json: {
+            error: {
+              code: 'internal',
+              message: 'Something went wrong on our side.',
+              retryable: true,
+            },
+          },
+        });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.goto('/scenarios');
+    await expect(page.getByText('Scenarios could not be loaded', { exact: true })).toBeVisible();
+    await expectNoRawFailureText(page);
+    failing = false;
+    await page.getByRole('button', { name: 'Try again' }).click();
+    await expect(
+      page
+        .getByRole('main')
+        .getByRole('status')
+        .filter({ hasText: /scenarios$/ }),
+    ).toHaveText('16 scenarios');
   });
 
   test('a page whose code cannot be fetched offline says so in its own words, and loads once back online', async ({
@@ -216,20 +349,12 @@ test.describe('a connection that drops', () => {
     problems.allowOffline();
     await page.goto('/');
     await context.setOffline(true);
-    await page.getByRole('banner').getByRole('link', { name: 'About' }).click();
+    await page.getByRole('contentinfo').getByRole('link', { name: 'About' }).click();
     await expect(
       page.getByRole('heading', { level: 1, name: 'This page did not load' }),
     ).toBeVisible();
-    await expect(
-      page.getByText(
-        'You are offline, so part of this page could not be fetched. Reconnect, then try again.',
-      ),
-    ).toBeVisible();
-    await expect(
-      page.getByText(
-        'Calls, transcripts and reports that Firefly has already saved are not affected.',
-      ),
-    ).toBeVisible();
+    await expect(page.getByText('You are offline. Reconnect, then try again.')).toBeVisible();
+    await expect(page.getByText('Saved calls and reports are not affected.')).toBeVisible();
     await expectNoRawFailureText(page);
 
     await context.setOffline(false);
@@ -254,8 +379,8 @@ test.describe('a long call', () => {
     expect(saved.turns.length).toBeGreaterThan(60);
 
     await page.goto(`/calls/${call.id}?input=text`);
-    await page.getByRole('button', { name: 'Resume as a text-only call' }).click();
     const screen = callScreen(page);
+    await screen.preflight.resumeText.click();
     await expect(screen.turns).toHaveCount(saved.turns.length);
 
     await test.step('the transcript follows the newest turn, and scrolling away offers "Jump to latest"', async () => {
@@ -283,7 +408,7 @@ test.describe('a long call', () => {
     await test.step('the report for the long call has every turn', async () => {
       await screen.endCall.click();
       await screen.endDialog.getByRole('button', { name: 'End and review' }).click();
-      await expect(page.getByRole('region', { name: 'Overall coaching summary' })).toBeVisible({
+      await expect(page.getByRole('region', { name: 'Summary', exact: true })).toBeVisible({
         timeout: 30_000,
       });
       const total = saved.turns.length + 2;

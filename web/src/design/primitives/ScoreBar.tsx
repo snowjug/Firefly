@@ -11,6 +11,11 @@ export interface ScoreBarProps {
   size?: 'small' | 'medium' | 'large';
   /** Show the number and label as text. Turn off only where the text sits beside it already. */
   showText?: boolean;
+  /**
+   * Fill the segments once from empty when the bar first appears, one after another. Only when
+   * motion is allowed: under reduced motion the bar is simply there.
+   */
+  animate?: boolean;
   className?: string;
 }
 
@@ -28,6 +33,7 @@ export function ScoreBar({
   label,
   size = 'medium',
   showText = true,
+  animate = false,
   className,
 }: ScoreBarProps) {
   const has = score !== null;
@@ -35,7 +41,14 @@ export function ScoreBar({
   const word = label ?? (has && max === 5 ? scoreLabel(clamped) : has ? undefined : 'Not scored');
   const spoken = has ? `${format(clamped)} of ${max}${word ? `, ${word}` : ''}` : 'Not scored';
   return (
-    <span className={cx('ff-scorebar', `ff-scorebar--${size}`, className)}>
+    <span
+      className={cx(
+        'ff-scorebar',
+        `ff-scorebar--${size}`,
+        animate && 'ff-scorebar--animate',
+        className,
+      )}
+    >
       <span
         className="ff-scorebar__segments"
         {...(showText ? { 'aria-hidden': true } : { role: 'img', 'aria-label': spoken })}
@@ -44,7 +57,10 @@ export function ScoreBar({
           const fill = Math.min(1, Math.max(0, clamped - index));
           return (
             <span className="ff-scorebar__segment" key={index}>
-              <span className="ff-scorebar__fill" style={{ inlineSize: `${fill * 100}%` }} />
+              <span
+                className="ff-scorebar__fill"
+                style={{ transform: `translateX(${(fill - 1) * 100}%)` }}
+              />
             </span>
           );
         })}

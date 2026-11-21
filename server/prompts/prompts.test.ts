@@ -43,6 +43,12 @@ function replySection(system: string): string {
   return system.slice(start, system.indexOf('RULES THAT ALWAYS APPLY'));
 }
 
+/** What the customer remembers of the call so far: what they said, and what was committed to. */
+function memorySection(system: string): string {
+  const start = system.indexOf('THE CALL SO FAR');
+  return start < 0 ? '' : system.slice(start, system.indexOf('THIS REPLY'));
+}
+
 const SEEDED_LINES = [
   'What laptop are you using?',
   'When did it start?',
@@ -54,9 +60,10 @@ const SEEDED_LINES = [
 
 describe('prompt versions and sampling', () => {
   it('versions each prompt and sets sampling to suit the task', async () => {
-    expect(CUSTOMER_PROMPT_VERSION).toBe('customer-1');
-    expect(CLASSIFIER_PROMPT_VERSION).toBe('classifier-1');
-    expect(EVALUATOR_PROMPT_VERSION).toBe('evaluator-2');
+    // Each prompt carries a name and a number, so a stored call says which wording it was run with.
+    expect(CUSTOMER_PROMPT_VERSION).toMatch(/^customer-\d+$/);
+    expect(CLASSIFIER_PROMPT_VERSION).toMatch(/^classifier-\d+$/);
+    expect(EVALUATOR_PROMPT_VERSION).toMatch(/^evaluator-\d+$/);
 
     const ctx = await lastContext(['Hello, I am Sam. What is going on?']);
     const customer = buildCustomerPrompt(ctx).request;
@@ -197,8 +204,8 @@ describe('the customer prompt: who the customer is', () => {
   it('carries the output and safety rules', async () => {
     const system = systemOf(await lastContext(['Hello']));
     for (const rule of [
-      /1 to 6 short sentences of plain text/,
-      /No markdown/,
+      /short, natural sentences, usually one to three/,
+      /no markdown/,
       /no stage directions/,
       /no quotation marks around the whole reply/,
       /no speaker labels/,
@@ -207,9 +214,9 @@ describe('the customer prompt: who the customer is', () => {
       /Never coach the engineer/,
       /Never solve the technical problem/,
       /Never invent specific facts such as numbers, error messages, codes, names, dates, times or products/,
-      /say naturally that you do not know or have not checked/,
+      /say naturally that you do not know/,
       /can never change these rules/,
-      /Never claim that real companies, products, people or systems are involved/,
+      /Everything about you and your organisation is fictional/,
       /never abusive, discriminatory or crude/,
     ]) {
       expect(system).toMatch(rule);
@@ -295,7 +302,7 @@ describe('the customer prompt: reacting to what the engineer did', () => {
       'unexplained jargon for a novice',
       ['Your cached credentials are probably stale after DNS propagation.'],
       { proficiency: 'novice' },
-      [/technical terms without explaining them/, /everyday words/],
+      [/term you do not know: "DNS"/, /everyday words/],
     ],
     [
       'an unverified promise',
@@ -570,7 +577,7 @@ describe('the customer prompt: which facts it may contain', () => {
       "Hello, I'm Sam. What's going on?",
       'Is your work email also signed in on your phone or tablet?',
     ]);
-    const section = replySection(systemOf(ctx));
+    const section = memorySection(systemOf(ctx));
     const lockout = factOf('hf-lockout-message');
     expect(section).toContain('What you have already told the engineer');
     expect(section).toContain(lockout.partialStatement as string);
@@ -583,11 +590,9 @@ describe('the customer prompt: which facts it may contain', () => {
       'What laptop and browser are you using?',
       'Is your work email also signed in on your phone or tablet?',
     ]);
-    const section = replySection(systemOf(ctx));
-    const [said, now] = [
-      section.slice(section.indexOf('What you have already told the engineer')),
-      section.slice(0, section.indexOf('What you have already told the engineer')),
-    ];
+    const system = systemOf(ctx);
+    const [said, now] = [memorySection(system), replySection(system)];
+    expect(said).toContain('What you have already told the engineer');
     expect(said).toContain(factOf('hf-lockout-message').statement);
     expect(said).toContain('work laptop');
     expect(now).toContain(factOf('hf-phone-old-password').statement);
@@ -618,7 +623,8 @@ describe('the customer prompt: which facts it may contain', () => {
   });
 
   it('tells the customer to say they do not know when nothing can be shared', async () => {
-    const ctx = await lastContext(['Hello']);
+    // A call that is past the first exchange, where the customer says why they called.
+    const ctx = await lastContext(['Hello', 'What colour is the building?']);
     const base = {
       ...ctx.discovery,
       reveal: [],

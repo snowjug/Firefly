@@ -3,13 +3,14 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type UIEvent,
 } from 'react';
 import { Avatar, Button, cx, Icon, Skeleton, VisuallyHidden } from '../../design/index.ts';
 import type { CallTurn } from '../call/contract.ts';
-import { clockSince } from './call-model.ts';
+import { timeMarks } from './call-model.ts';
 import './transcript.css';
 
 /** How near the end counts as "at the latest turn", in pixels. */
@@ -22,33 +23,50 @@ const RECENT_TURNS = 10;
 interface TurnItemProps {
   turn: CallTurn;
   who: string;
+  /** m:ss, only on a turn worth a timestamp (see `timeMarks`). */
   time: string;
+  /** Far enough back that the browser may skip laying it out until it is scrolled to. */
   old: boolean;
-  onRetry?: () => void;
+  /** Arrived after the transcript was first shown: it enters with a short fade. */
+  enter: boolean;
+  /** The customer's turn that is being spoken now. */
+  current: boolean;
+  /** Developer diagnostics: say how a trainee turn arrived. Never shown to a trainee. */
+  showInputMode: boolean;
 }
 
-const TurnItem = memo(function TurnItem({ turn, who, time, old, onRetry }: TurnItemProps) {
+const TurnItem = memo(function TurnItem({
+  turn,
+  who,
+  time,
+  old,
+  enter,
+  current,
+  showInputMode,
+}: TurnItemProps) {
   const trainee = turn.role === 'trainee';
-  const spoken = trainee && turn.inputMode === 'voice';
   const transcribing = turn.status === 'transcribing';
   return (
     <li
       className={cx(
         'cw-turn',
-        trainee ? 'cw-turn--trainee' : 'cw-turn--customer',
+        trainee ? 'cw-turn--you' : 'cw-turn--customer',
         turn.status !== 'sent' && `cw-turn--${turn.status}`,
+        current && 'cw-turn--current',
         old && 'cw-turn--old',
+        enter && 'cw-turn--enter',
       )}
+      aria-current={current ? 'true' : undefined}
     >
       {trainee ? (
         <span className="cw-turn__you" aria-hidden="true">
-          <Icon name="person" size={18} />
+          <Icon name="person" size={16} />
         </span>
       ) : (
         <Avatar name={who} size="sm" className="cw-turn__avatar" />
       )}
       <div className="cw-turn__body">
-        <div className="cw-turn__meta">
+        <p className="cw-turn__meta">
           <span className="cw-turn__who">{who}</span>
           {time ? (
             <time className="cw-turn__time" dateTime={turn.createdAt}>
@@ -56,19 +74,24 @@ const TurnItem = memo(function TurnItem({ turn, who, time, old, onRetry }: TurnI
               {time}
             </time>
           ) : null}
-          {spoken ? (
-            <span className="cw-turn__tag">
-              <Icon name="microphone" size={14} />
-              Spoken
+          {transcribing ? <span className="cw-turn__tag">Transcribing</span> : null}
+          {turn.status === 'sending' ? <span className="cw-turn__tag">Sending</span> : null}
+          {turn.status === 'failed' ? (
+            <span className="cw-turn__tag cw-turn__tag--alert">
+              <Icon name="warning" size={14} />
+              Not sent
             </span>
           ) : null}
-          {transcribing ? (
-            <span className="cw-turn__tag cw-turn__tag--busy">Transcribing</span>
+          {turn.interrupted ? (
+            <span className="cw-turn__tag">
+              <Icon name="speaker-off" size={14} />
+              Audio stopped
+            </span>
           ) : null}
-          {turn.status === 'sending' ? (
-            <span className="cw-turn__tag cw-turn__tag--busy">Sending</span>
+          {showInputMode && trainee ? (
+            <span className="cw-turn__tag">{turn.inputMode === 'voice' ? 'Spoken' : 'Typed'}</span>
           ) : null}
-        </div>
+        </p>
         {transcribing && turn.text === '' ? (
           <Skeleton className="cw-turn__skeleton" />
         ) : (
@@ -76,25 +99,6 @@ const TurnItem = memo(function TurnItem({ turn, who, time, old, onRetry }: TurnI
             {turn.text}
           </p>
         )}
-        {turn.status === 'failed' ? (
-          <div className="cw-turn__failed">
-            <span className="cw-turn__failed-text">
-              <Icon name="warning" size={16} />
-              Not sent. Your words are kept.
-            </span>
-            {onRetry ? (
-              <Button size="small" icon="refresh" onClick={onRetry}>
-                Try again
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-        {turn.interrupted ? (
-          <p className="cw-turn__note">
-            <Icon name="info" size={16} />
-            You interrupted. The full reply is above.
-          </p>
-        ) : null}
       </div>
     </li>
   );
@@ -105,18 +109,25 @@ const TurnItem = memo(function TurnItem({ turn, who, time, old, onRetry }: TurnI
 export interface TurnListProps {
   turns: readonly CallTurn[];
   customerName: string;
-  /** The session's start, so each turn can say how far into the call it was. */
+  /** The session's start, so a turn can say how far into the call it was. */
   startedAt: string;
-  onRetry?: () => void;
+  /** The keys of the turns that were there from the start: any other turn enters with a fade. Null for none. */
+  settled?: ReadonlySet<string> | null;
+  /** The key of the customer's turn being spoken now. */
+  currentKey?: string | null;
+  showInputMode?: boolean;
 }
 
-/** The conversation as whole turns, each with who spoke, when, and how it arrived. */
+/** The conversation as whole turns: who spoke, a timestamp now and then, and what became of each. */
 export const TurnList = memo(function TurnList({
   turns,
   customerName,
   startedAt,
-  onRetry,
+  settled = null,
+  currentKey = null,
+  showInputMode = false,
 }: TurnListProps) {
+  const marks = useMemo(() => timeMarks(turns, startedAt), [turns, startedAt]);
   const recentFrom = turns.length - RECENT_TURNS;
   return (
     <ol className="cw-turns" role="list">
@@ -125,11 +136,11 @@ export const TurnList = memo(function TurnList({
           key={turn.key}
           turn={turn}
           who={turn.role === 'customer' ? customerName : 'You'}
-          time={clockSince(startedAt, turn.createdAt)}
+          time={marks.get(turn.key) ?? ''}
           old={index < recentFrom}
-          // Only a failed turn has a retry button, so every other row keeps the same props when the
-          // screen re-renders (the clock ticks, the microphone level moves) and is not drawn again.
-          onRetry={turn.status === 'failed' ? onRetry : undefined}
+          enter={settled !== null && !settled.has(turn.key)}
+          current={turn.key === currentKey}
+          showInputMode={showInputMode}
         />
       ))}
     </ol>
@@ -138,33 +149,46 @@ export const TurnList = memo(function TurnList({
 
 // ---- The live transcript --------------------------------------------------------------------
 
-export interface TranscriptProps extends TurnListProps {
-  /** The trainee's words so far, shown under the log while they are still speaking. */
+export interface TranscriptProps {
+  turns: readonly CallTurn[];
+  customerName: string;
+  startedAt: string;
+  /** The trainee's words so far, shown at the end of the log while they are still speaking. */
   interim: string;
+  /** The customer's voice is playing, so their latest turn is the current one. */
+  speaking: boolean;
   reducedMotion: boolean;
   /** The id of the heading that names this region. */
   titleId: string;
+  showInputMode?: boolean;
 }
 
 /**
  * The transcript: a log that grows by whole turns, and is the only place transcript text is
- * announced. It follows the newest turn unless the person has scrolled up, and then offers a
- * "Jump to latest" button. The live caption of what the trainee is saying sits under the log and is
- * hidden from assistive technology.
+ * announced. It follows the newest turn, gently, unless the person has scrolled up, and then offers
+ * "Jump to latest". The live words of what the trainee is saying sit at the end of the log and are
+ * hidden from assistive technology (the finished turn is announced instead).
  */
 export function Transcript({
   turns,
   customerName,
   startedAt,
-  onRetry,
   interim,
+  speaking,
   reducedMotion,
   titleId,
+  showInputMode = false,
 }: TranscriptProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
+  const count = useRef(turns.length);
   const [away, setAway] = useState(false);
+  const [settled] = useState<ReadonlySet<string>>(() => new Set(turns.map((turn) => turn.key)));
+  const currentKey = useMemo(
+    () => (speaking ? (turns.findLast((turn) => turn.role === 'customer')?.key ?? null) : null),
+    [speaking, turns],
+  );
 
   const toEnd = useCallback((behavior: ScrollBehavior) => {
     const element = scroller.current;
@@ -184,9 +208,12 @@ export function Transcript({
   };
 
   // A new turn, a turn that changed, or live words: stay with the newest unless the person left it.
+  // A new turn scrolls gently; anything else stays put with it at once.
   useLayoutEffect(() => {
-    if (follow.current) toEnd('auto');
-  }, [turns, interim, toEnd]);
+    const grew = turns.length > count.current;
+    count.current = turns.length;
+    if (follow.current) toEnd(grew && !reducedMotion ? 'smooth' : 'auto');
+  }, [turns, interim, toEnd, reducedMotion]);
 
   // The box or its content changing size (the composer opening, older turns being laid out).
   useEffect(() => {
@@ -229,19 +256,21 @@ export function Transcript({
           ref={content}
         >
           {turns.length === 0 ? (
-            <p className="cw-log__empty">The conversation will appear here.</p>
+            <p className="cw-log__empty">No messages yet.</p>
           ) : (
             <TurnList
               turns={turns}
               customerName={customerName}
               startedAt={startedAt}
-              onRetry={onRetry}
+              settled={settled}
+              currentKey={currentKey}
+              showInputMode={showInputMode}
             />
           )}
         </div>
         {interim ? (
           <p className="cw-interim" aria-hidden="true">
-            <span className="cw-interim__label">You are saying</span>
+            <span className="cw-interim__who">You</span>
             <span className="cw-interim__text" dir="auto">
               {interim}
             </span>

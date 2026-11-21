@@ -5,7 +5,7 @@ import { Footer } from '../shell/Footer.tsx';
 import { OfflineNotice, SkipLink } from '../shell/Shell.tsx';
 import '../shell/shell.css';
 
-/** The scenario pages and the report: the app header, main and a slim footer. */
+/** The scenario pages and the report: the app header, main and the footer. */
 export function AppLayout() {
   return (
     <SectionProvider>
@@ -15,7 +15,7 @@ export function AppLayout() {
       <main id="main" tabIndex={-1} className="ff-main">
         <Outlet />
       </main>
-      <Footer slim />
+      <Footer />
     </SectionProvider>
   );
 }

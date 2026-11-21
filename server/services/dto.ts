@@ -1,14 +1,24 @@
 import type {
+  PublicProductDTO,
   PublicScenarioDTO,
   SessionDTO,
   SessionSummaryDTO,
   TurnDTO,
   TurnMarker,
 } from '#shared/domain/api.ts';
-import { availableCurveballTypes, GENERIC_STAGE_FRAMES } from '#shared/domain/config.ts';
-import { CALL_STAGES, type CallStage } from '#shared/domain/vocab.ts';
+import {
+  availableCurveballTypes,
+  GENERIC_STAGE_FRAMES,
+  normaliseStoredScenario,
+} from '#shared/domain/config.ts';
+import {
+  CALL_STAGES,
+  PRODUCT_FAMILY_LABELS,
+  PRODUCT_INFO,
+  type CallStage,
+} from '#shared/domain/vocab.ts';
 import { CoachingReportSchema, type CoachingReport } from '#shared/domain/report.ts';
-import type { ScenarioDefinition } from '#shared/domain/scenario.ts';
+import type { ProductRef, ScenarioDefinition } from '#shared/domain/scenario.ts';
 import type { StateEvent } from '#shared/domain/state.ts';
 import { publicState } from '../engine/session.ts';
 import type { SessionRow, TurnRow } from '../db/repository.ts';
@@ -17,14 +27,28 @@ import type { SessionRow, TurnRow } from '../db/repository.ts';
 // engine state never appear here; the only things revealed about a call are those a trainee may
 // legitimately see, and (after the call ends) the report and transcript annotations.
 
+export function toProductDTO(ref: ProductRef): PublicProductDTO {
+  const info = PRODUCT_INFO[ref.id];
+  return {
+    id: ref.id,
+    name: info.name,
+    family: info.family,
+    familyLabel: PRODUCT_FAMILY_LABELS[info.family],
+    area: ref.area,
+  };
+}
+
 export function toPublicScenario(def: ScenarioDefinition): PublicScenarioDTO {
   return {
     id: def.id,
     version: def.version,
     title: def.title,
+    listSummary: def.listSummary,
     summary: def.summary,
     tags: def.tags,
     estimatedMinutes: def.estimatedMinutes,
+    product: toProductDTO(def.product),
+    caseReference: def.caseReference ?? null,
     issueType: def.issueType,
     impact: def.impact,
     startingTemperature: def.startingTemperature,
@@ -37,6 +61,7 @@ export function toPublicScenario(def: ScenarioDefinition): PublicScenarioDTO {
       role: def.persona.role,
       organisation: def.persona.organisation,
     },
+    publicBrief: def.publicBrief,
     brief: def.brief,
     stageBriefs: Object.fromEntries(
       CALL_STAGES.map((stage) => [
@@ -144,6 +169,9 @@ export function toSessionDTO(
 ): SessionDTO {
   const traineeTurns = turns.filter((t) => t.role === 'trainee').length;
   const cfg = row.scenario.config;
+  // A call saved before Firefly was Microsoft-only has none of the newer fields.
+  const snapshot = normaliseStoredScenario(row.scenario);
+  const current = snapshot.product !== null;
   return {
     ...toSummary(row, traineeTurns),
     scenario: {
@@ -153,6 +181,9 @@ export function toSessionDTO(
       issueType: row.scenario.issueType,
       tags: row.scenario.tags,
       estimatedMinutes: row.scenario.estimatedMinutes,
+      product: snapshot.product ? toProductDTO(snapshot.product) : null,
+      caseReference: snapshot.caseReference,
+      publicBrief: current ? snapshot.publicBrief : null,
       persona: {
         name: row.scenario.persona.name,
         role: row.scenario.persona.role,

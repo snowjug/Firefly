@@ -43,6 +43,8 @@
   --lh-title1: 2.5rem; /* 40 */
   --fs-display: clamp(1.875rem, 1.25rem + 2.2vw, 2.5rem); /* 30 to 40 */
   --lh-display: 1.3;
+  --fs-lead: 1.125rem; /* 18: the one supporting line under a page title */
+  --lh-lead: 1.75rem; /* 28 */
   --fw-regular: 400;
   --fw-semibold: 600;
 
@@ -170,10 +172,12 @@
   --shadow-28: 0 0 8px rgb(0 0 0 / 0.12), 0 14px 28px rgb(0 0 0 / 0.14);
   --shadow-64: 0 0 8px rgb(0 0 0 / 0.12), 0 32px 64px rgb(0 0 0 / 0.14);
 
-  /* ---- Materials: acrylic only for the header, call controls, voice status and dialogs ---- */
-  --acrylic-bg: rgb(255 255 255 / 0.78);
-  --acrylic-solid: #ffffff; /* the fallback when blur is unavailable or reduced transparency is on */
-  --acrylic-filter: saturate(1.4) blur(20px);
+  /* ---- Surfaces for sticky bars: solid. The "acrylic" names stay so nothing that uses them breaks,
+          but the blur is gone: a calm, flat surface with a hairline edge, and no backdrop filter to
+          pay for on a corporate laptop. ------------------------------------------------------ */
+  --acrylic-bg: #ffffff;
+  --acrylic-solid: #ffffff;
+  --acrylic-filter: none;
   --acrylic-border: rgb(0 0 0 / 0.08);
 
   /* ---- Motion (Fluent 2 durations and curves) -------------------------------------------- */
@@ -191,6 +195,21 @@
   --ease-easy: cubic-bezier(0.33, 0, 0.67, 1);
   --ease-easy-max: cubic-bezier(0.8, 0, 0.2, 1);
 
+  /* Repeating motion has its own durations, so no stylesheet writes a time of its own. Each one has
+     a still equivalent under prefers-reduced-motion (see the block further down). */
+  --dur-spin: 900ms; /* a spinner turn */
+  --dur-slide: 1400ms; /* an indeterminate bar sliding across its track */
+  --dur-shimmer: 1600ms; /* a placeholder or an inline progress shimmer */
+  --dur-pulse: 1800ms; /* a soft ring while someone is speaking */
+  --dur-wave: 1100ms; /* one gentle swing of the preview waveform */
+
+  /* How far things travel. Only transform moves, so a layout never shifts. Zero when motion is
+     reduced, which turns every enter, press and nudge into a plain state change. */
+  --move-xs: 0.25rem; /* 4: a small entrance */
+  --move-sm: 0.5rem; /* 8: a larger entrance */
+  --press-shift: 1px; /* a button compresses this far while it is pressed */
+  --press-shift-lg: 2px; /* the large (48 px) button */
+
   /* ---- Layout ---------------------------------------------------------------------------- */
   --page-max: 80rem; /* 1280 */
   --page-max-wide: 90rem; /* 1440: the call workspace */
@@ -207,8 +226,10 @@
   --z-dialog: 1000;
 }
 
-/* People who ask for less motion get none: durations collapse and animation is switched off by the
-   base stylesheet. Every state change stays instant and every word stays the same. */
+/* People who ask for less motion get none: durations collapse, nothing travels and animation is
+   switched off by the base stylesheet. Every state change stays instant and every word stays the
+   same. Every motion token above (--dur-*, --move-*, --press-*) is listed here; a test fails if one
+   is added without its still equivalent. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur-instant: 0.01ms;
@@ -218,19 +239,15 @@
     --dur-gentle: 0.01ms;
     --dur-slow: 0.01ms;
     --dur-slower: 0.01ms;
-  }
-}
-
-/* No blur where it is not available or not wanted: a solid surface with the same border. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  :root {
-    --acrylic-bg: var(--acrylic-solid);
-  }
-}
-@media (prefers-reduced-transparency: reduce) {
-  :root {
-    --acrylic-bg: var(--acrylic-solid);
-    --acrylic-filter: none;
+    --dur-spin: 0.01ms;
+    --dur-slide: 0.01ms;
+    --dur-shimmer: 0.01ms;
+    --dur-pulse: 0.01ms;
+    --dur-wave: 0.01ms;
+    --move-xs: 0px;
+    --move-sm: 0px;
+    --press-shift: 0px;
+    --press-shift-lg: 0px;
   }
 }
 
@@ -241,7 +258,5 @@
     --stroke-2: #616161;
     --stroke-3: #8a8a8a;
     --fg-3: #424242;
-    --acrylic-bg: var(--acrylic-solid);
-    --acrylic-filter: none;
   }
 }

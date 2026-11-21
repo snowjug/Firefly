@@ -97,6 +97,17 @@ describe('Spinner and ProgressBar', () => {
       'aria-valuenow',
     );
   });
+
+  it('fills a determinate bar to its share of the track, and clamps what is out of range', () => {
+    const { container, rerender } = render(<ProgressBar label="Evaluating" value={60} />);
+    const fill = () => container.querySelector<HTMLElement>('.ff-progress__fill');
+    // The fill is as wide as the track and slides in from the left: 60 per cent leaves 40 hidden.
+    expect(fill()?.style.transform).toBe('translateX(-40%)');
+    rerender(<ProgressBar label="Evaluating" value={250} />);
+    expect(fill()?.style.transform).toBe('translateX(0%)');
+    rerender(<ProgressBar label="Evaluating" value={-5} />);
+    expect(fill()?.style.transform).toBe('translateX(-100%)');
+  });
 });
 
 describe('Badge', () => {
@@ -130,6 +141,19 @@ describe('ScoreBar', () => {
   it('is a labelled image when the text is left out', () => {
     render(<ScoreBar score={4} showText={false} />);
     expect(screen.getByRole('img', { name: '4 of 5, Strong' })).toBeInTheDocument();
+  });
+
+  it('fills a whole segment for each point and part of the next for a fraction', () => {
+    const { container } = render(<ScoreBar score={3.5} />);
+    const fills = [...container.querySelectorAll<HTMLElement>('.ff-scorebar__fill')];
+    // Each fill is as wide as its segment and slides in from the left: no shift is a full segment.
+    expect(fills.map((fill) => fill.style.transform)).toEqual([
+      'translateX(0%)',
+      'translateX(0%)',
+      'translateX(0%)',
+      'translateX(-50%)',
+      'translateX(-100%)',
+    ]);
   });
 });
 

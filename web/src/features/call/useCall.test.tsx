@@ -129,6 +129,8 @@ describe('loading', () => {
     expect(snap().support).toEqual({
       capture: 'server-speech',
       playback: 'server-speech',
+      provider: 'azure-speech',
+      chromium: false,
       secureContext: true,
       reason: null,
       captureLabel: 'Azure AI Speech',
@@ -267,7 +269,9 @@ describe('starting a spoken call', () => {
     expect(snap().phase).toBe('customer-speaking');
     expect(server.spoken).toEqual([1]);
     expect(env.audio.listeningWorklets()).toHaveLength(0);
-    expect(snap().announcement?.text).toBe('The customer is speaking.');
+    expect(snap().announcement?.text).toBe(
+      'The customer is speaking. You can stop the customer audio at any time.',
+    );
     expect(snap().voiceDetails).toMatchObject({
       voice: 'en-GB-SoniaNeural',
       style: 'none',
@@ -283,7 +287,12 @@ describe('starting a spoken call', () => {
     await advance(2);
     expect(snap().phase).toBe('listening');
     expect(env.audio.listeningWorklets()).toHaveLength(1);
-    expect(snap().announcement?.text).toBe('Listening.');
+    // Said once the capture reports that the microphone is open, and not before.
+    expect(snap().micOpen).toBe(true);
+    expect(snap().announcement).toMatchObject({
+      text: 'Listening. Speak when you are ready.',
+      politeness: 'polite',
+    });
   });
 
   it('does not speak old turns again when a call is resumed', async () => {
@@ -328,13 +337,18 @@ describe('starting a spoken call', () => {
       textFallback: true,
       severity: 'blocking',
     });
-    expect(snap().problem?.advice).toMatch(/lock icon at the left of the address bar/);
-    expect(snap().problem?.advice).toMatch(/Edge|Permissions for this site/);
+    expect(snap().problem?.advice).toMatch(/lock icon in the address bar/);
+    expect(snap().problem?.advice).toMatch(/Permissions for this site/);
     expect(env.mic.openTracks()).toHaveLength(0);
     expect(env.audio.openContexts()).toHaveLength(0);
-    expect(snap().announcement?.text).toMatch(/^Problem: The microphone is blocked/);
+    // A blocked microphone is the one thing said assertively, in the voice layer's own sentence.
+    expect(snap().announcement).toMatchObject({
+      text: 'The microphone is blocked. You can type your replies instead.',
+      politeness: 'assertive',
+    });
+    expect(snap().problem?.announce).toBe('assertive');
 
-    // Allowed after all: Try again starts the call.
+    // Allowed after all: Retry starts the call.
     env.mic.mode = 'grant';
     act(() => actions().retry());
     await flush();
@@ -522,7 +536,7 @@ describe('a spoken turn', () => {
     await openCall();
     await say();
     expect(snap().turns.at(-2)?.text).toBe('My email is [email removed]');
-    expect(snap().hint).toMatch(/removed an email address from your message/);
+    expect(snap().hint).toMatch(/removed an email address before saving/i);
   });
 
   it('listens again, with a hint, when nothing was heard, and gives up after a few tries', async () => {
@@ -553,8 +567,8 @@ describe('a spoken turn', () => {
     await say();
     expect(mocked.sendMessage).not.toHaveBeenCalled();
     expect(snap().turns).toHaveLength(1);
-    expect(snap().hint).toMatch(/no words could be made out/);
-    expect(snap().hint).toMatch(/type your reply/);
+    expect(snap().hint).toMatch(/no words could be made out/i);
+    expect(snap().hint).toMatch(/use text/);
     expect(snap().problem).toBeNull();
     expect(snap().phase).toBe('ready-for-next-turn');
   });
@@ -566,7 +580,7 @@ describe('a spoken turn', () => {
     await say();
     expect(mocked.sendMessage).not.toHaveBeenCalled();
     expect(snap().turns).toHaveLength(1);
-    expect(snap().hint).toMatch(/no words could be made out/);
+    expect(snap().hint).toMatch(/no words could be made out/i);
   });
 
   it('keeps push-to-talk calls closed until the trainee presses Talk, and Talk again finishes', async () => {
@@ -647,7 +661,7 @@ describe('typing during a spoken call', () => {
     await act(async () => {
       results.push(await actions().sendText('   '));
     });
-    expect(snap().hint).toBe('Type a message before sending.');
+    expect(snap().hint).toBe('Type a message first.');
     await act(async () => {
       results.push(await actions().sendText('x'.repeat(1501)));
     });
@@ -663,7 +677,7 @@ describe('typing during a spoken call', () => {
       accepted = await actions().sendText('hello');
     });
     expect(accepted).toBe(false);
-    expect(snap().hint).toBe('Start the call before sending a message.');
+    expect(snap().hint).toBe('Start the call first.');
   });
 
   it('resolves false, with a hint, when the server refuses the message itself', async () => {
@@ -676,7 +690,7 @@ describe('typing during a spoken call', () => {
     });
     expect(accepted).toBe(false);
     expect(snap().turns).toHaveLength(1);
-    expect(snap().hint).toBe('That message could not be sent. Check it and try again.');
+    expect(snap().hint).toBe('That message could not be sent. Check it and retry.');
     expect(snap().phase).toBe('ready-for-next-turn');
   });
 });

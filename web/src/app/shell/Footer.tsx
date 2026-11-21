@@ -1,23 +1,17 @@
 import { TextLink } from '../../design/primitives/TextLink.tsx';
-import { Wordmark } from './Wordmark.tsx';
 import './footer.css';
 
 export const REPOSITORY_URL = 'https://github.com/snowjug/Firefly';
 
 /**
- * The footer: what Firefly is, and three links. The slim form (inside the app) leaves out the
- * wordmark. There is no version string and no legal text that is not true.
+ * The footer: one line about what Firefly is, and three links. There is no version string and no
+ * legal text that is not true.
  */
-export function Footer({ slim = false }: { slim?: boolean }) {
+export function Footer() {
   return (
-    <footer className={slim ? 'ff-footer ff-footer--slim' : 'ff-footer'}>
+    <footer className="ff-footer">
       <div className="ff-footer__inner l-page">
-        <div className="ff-footer__about">
-          {slim ? null : <Wordmark size="sm" />}
-          <p className="ff-footer__text">
-            Firefly is a training aid. Every customer and scenario is fictional.
-          </p>
-        </div>
+        <p className="ff-footer__text">A training aid. Customers and scenarios are fictional.</p>
         <ul className="ff-footer__links" role="list">
           <li>
             <TextLink to="/responsible-ai" tone="inherit">

@@ -1,0 +1,70 @@
+/* SplitView: a list beside a detail pane from 64em; below that, the list or the detail, never both. */
+
+.ff-split {
+  --_list: 26rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+}
+.ff-split--sm {
+  --_list: 22rem;
+}
+.ff-split--lg {
+  --_list: 32rem;
+}
+.ff-split__list,
+.ff-split__detail {
+  min-inline-size: 0;
+}
+/* The panes take focus (tabindex -1) when the view changes, so the ring is not a control's. */
+.ff-split__list:focus-visible,
+.ff-split__detail:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Narrow: the list, or the detail once an item is chosen. */
+.ff-split:not([data-detail-open]) > .ff-split__detail,
+.ff-split[data-detail-open] > .ff-split__list {
+  display: none;
+}
+
+.ff-split__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-block-size: var(--target);
+  margin-block-end: var(--sp-2);
+  padding-inline: var(--sp-2) var(--sp-3);
+  margin-inline-start: calc(var(--sp-2) * -1);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--brand-fg-2);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  transition: background-color var(--dur-faster) var(--ease-easy);
+}
+.ff-split__back:hover {
+  background: var(--bg-hover);
+  text-decoration: underline;
+}
+.ff-split__back:active {
+  background: var(--bg-pressed);
+}
+
+@media (min-width: 64em) {
+  .ff-split {
+    grid-template-columns: minmax(18rem, var(--_list)) minmax(0, 1fr);
+  }
+  .ff-split:not([data-detail-open]) > .ff-split__detail,
+  .ff-split[data-detail-open] > .ff-split__list {
+    display: block;
+  }
+  /* Both panes are on screen, so there is nothing to go back to. */
+  .ff-split__back {
+    display: none;
+  }
+}

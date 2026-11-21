@@ -6,9 +6,11 @@ import { describe, expect, it } from 'vitest';
 // The web app must not ship a schema library, or the server. The shared modules that hold schemas
 // (they build them with zod when they load) may only be imported for their types, written as
 // `import type`, which is erased completely. `import { type X }` is not: with this project's
-// `verbatimModuleSyntax` it still loads the module.
+// `verbatimModuleSyntax` it still loads the module. `speech` is not in the list: it holds the
+// voices, the languages and the sample sentence as plain data, and no schema (its own header says
+// so), which is why the voice feature and this one import values from it.
 
-const SCHEMA_MODULES = ['scenario', 'report', 'classification', 'api', 'speech'];
+const SCHEMA_MODULES = ['scenario', 'report', 'classification', 'api'];
 
 const folder = fileURLToPath(new URL('.', import.meta.url));
 const sources = readdirSync(folder)

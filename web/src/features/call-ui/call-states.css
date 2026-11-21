@@ -1,34 +1,6 @@
-/* Loading, failing and finished: the pages a call shows when there is no workspace to show. */
+/* The call's page states: the skeleton while it loads, and the cards for "could not open", "not
+   found" and "opening your review". The skeleton has the shape of the workspace, so nothing jumps. */
 
-.cw-page {
-  display: grid;
-  place-items: center;
-  box-sizing: border-box;
-  min-block-size: 100vh;
-  min-block-size: 100dvh;
-  padding: var(--gutter);
-  background: var(--bg-subtle);
-}
-.ff-surface.cw-page__card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  inline-size: 100%;
-  max-inline-size: 36rem;
-  background: var(--bg-canvas);
-}
-.cw-page__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 3rem;
-  block-size: 3rem;
-  border-radius: var(--r-pill);
-  background: var(--bg-subtle);
-  color: var(--fg-2);
-}
-
-/* ---- The loading skeleton ------------------------------------------------------------------ */
 .cw-skel {
   display: flex;
   flex-direction: column;
@@ -40,24 +12,22 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  box-sizing: border-box;
   min-block-size: var(--header-h);
-  padding-inline: var(--gutter);
+  padding: var(--sp-2) var(--gutter);
   border-block-end: var(--stroke-w) solid var(--stroke-2);
   background: var(--bg-canvas);
 }
-.cw-skel__mark.ff-skeleton {
+.ff-skeleton.cw-skel__mark {
   inline-size: 1.5rem;
   block-size: 1.5rem;
 }
-.cw-skel__title.ff-skeleton {
+.ff-skeleton.cw-skel__title {
   flex: 1 1 auto;
   max-inline-size: 18rem;
 }
-.cw-skel__end.ff-skeleton {
-  flex: none;
-  inline-size: 6.5rem;
-  block-size: var(--target);
+.ff-skeleton.cw-skel__end {
+  inline-size: 6rem;
+  block-size: 2.75rem;
   margin-inline-start: auto;
 }
 .cw-skel__body {
@@ -67,63 +37,89 @@
   gap: var(--sp-4);
   padding: var(--sp-4) var(--gutter);
 }
+@media (min-width: 64em) {
+  .cw-skel__body {
+    grid-template-columns: minmax(20rem, 22rem) minmax(0, 1fr);
+  }
+}
+@media (min-width: 80em) {
+  .cw-skel__body {
+    grid-template-columns: minmax(21rem, 23rem) minmax(0, 1fr) minmax(18rem, 21rem);
+  }
+}
 .cw-skel__panel {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
-  box-sizing: border-box;
   padding: var(--sp-5);
   border: var(--stroke-w) solid var(--stroke-2);
   border-radius: var(--r-xl);
   background: var(--bg-canvas);
 }
-.cw-skel__stage,
-.cw-skel__context {
-  display: none;
-}
-.cw-skel__person {
-  display: flex;
+.cw-skel__stage {
   align-items: center;
-  gap: var(--sp-4);
 }
-.cw-skel__avatar.ff-skeleton {
+.ff-skeleton.cw-skel__avatar {
   inline-size: 4.5rem;
   block-size: 4.5rem;
 }
-.cw-skel__lines {
+.ff-skeleton.cw-skel__card {
+  inline-size: 100%;
+  block-size: 6rem;
+}
+.ff-skeleton.cw-skel__w30 {
+  inline-size: 30%;
+}
+.ff-skeleton.cw-skel__w40 {
+  inline-size: 40%;
+}
+.ff-skeleton.cw-skel__w60 {
+  inline-size: 60%;
+}
+.ff-skeleton.cw-skel__w80 {
+  inline-size: 80%;
+}
+@media (max-width: 63.99em) {
+  .cw-skel__stage,
+  .cw-skel__context {
+    display: none;
+  }
+}
+
+.cw-page {
+  display: grid;
+  place-items: center;
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
+  padding: var(--sp-6) var(--gutter);
+  background: var(--bg-subtle);
+}
+.cw-page__card {
   display: flex;
-  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-4);
+  inline-size: 100%;
+  max-inline-size: 32rem;
+}
+.cw-page__icon {
+  color: var(--status-warning-fg);
+}
+.cw-page__text {
+  display: flex;
   flex-direction: column;
   gap: var(--sp-2);
 }
-.cw-skel__card.ff-skeleton {
-  block-size: 5rem;
+.cw-page__title {
+  font-size: var(--fs-title3);
+  line-height: var(--lh-title3);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
 }
-.cw-skel__w30.ff-skeleton {
-  inline-size: 30%;
+.cw-page__text p {
+  color: var(--fg-2);
 }
-.cw-skel__w40.ff-skeleton {
-  inline-size: 40%;
-}
-.cw-skel__w60.ff-skeleton {
-  inline-size: 60%;
-}
-.cw-skel__w80.ff-skeleton {
-  inline-size: 80%;
-}
-@media (min-width: 64em) {
-  .cw-skel__body {
-    grid-template-columns: 22rem minmax(0, 1fr);
-  }
-  .cw-skel__stage {
-    display: flex;
-  }
-}
-@media (min-width: 80em) {
-  .cw-skel__body {
-    grid-template-columns: 24rem minmax(0, 1fr) 20rem;
-  }
-  .cw-skel__context {
-    display: flex;
-  }
+.cw-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
 }

@@ -1,251 +1,334 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
-import { useRef } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clock } from './call-model.ts';
-import { tracePoints, describeCustomerState } from './call-model.ts';
-import { TemperatureTrace } from './TemperatureTrace.tsx';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installDialogShim } from '../../design/dialog-shim.ts';
+import { AnnouncerProvider } from '../../design/index.ts';
+import type { CallSupport } from '../call/contract.ts';
+import { describeCustomerState, describeStatus, type WaveMode } from './call-model.ts';
+import { FIXTURES } from './call-fixtures.ts';
+import { CustomerStage, type CustomerStageProps } from './CustomerStage.tsx';
+import { fakeActions } from './test-utils.tsx';
+import { VoiceSettings, describeVoice, type VoiceSettingsProps } from './VoiceSettings.tsx';
 import { Waveform } from './Waveform.tsx';
-import { useVisualViewportHeight } from './use-layout.ts';
-import { describeVoice } from './VoiceSettings.tsx';
-import { clearViewport, renderCall, snapshotOf, WIDTH } from './test-utils.tsx';
 
 afterEach(() => {
   cleanup();
-  clearViewport();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe('the waveform', () => {
-  const shape = (container: HTMLElement) =>
-    container.querySelector('svg')?.getAttribute('data-shape');
-
-  it('is hidden from assistive technology in every mode', () => {
-    for (const mode of ['idle', 'trainee', 'customer', 'transcribing', 'thinking'] as const) {
-      const { container, unmount } = render(
-        <Waveform mode={mode} level={0.5} reducedMotion={false} />,
-      );
-      expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
-      unmount();
-    }
+  beforeEach(() => {
+    vi.useFakeTimers();
   });
 
-  it('draws a quiet line when idle and dots while something works, with no timers', () => {
-    vi.useFakeTimers();
-    const idle = render(<Waveform mode="idle" level={0} reducedMotion={false} />);
-    expect(shape(idle.container)).toBe('line');
-    idle.unmount();
-    const transcribing = render(<Waveform mode="transcribing" level={0} reducedMotion={false} />);
-    expect(shape(transcribing.container)).toBe('dots');
-    transcribing.unmount();
-    const thinking = render(<Waveform mode="thinking" level={0} reducedMotion={false} />);
-    expect(shape(thinking.container)).toBe('dots');
-    expect(vi.getTimerCount()).toBe(0);
+  const tick = (ms: number) =>
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+
+  const bars = (container: HTMLElement) =>
+    [...container.querySelectorAll('rect.cw-wave__bar')].map((bar) =>
+      Number(bar.getAttribute('height')),
+    );
+
+  it('is a still line while nothing is happening, with no timer running', () => {
+    const interval = vi.spyOn(window, 'setInterval');
+    const { container } = render(<Waveform mode="idle" level={0.9} reducedMotion={false} />);
+    const svg = container.querySelector('svg') as SVGElement;
+    expect(svg).toHaveAttribute('data-shape', 'line');
+    expect(svg).toHaveAttribute('aria-hidden', 'true');
+    tick(2000);
+    expect(interval).not.toHaveBeenCalled();
   });
 
-  it('is a still level meter under reduced motion: no timers, no scrolling bars', () => {
-    vi.useFakeTimers();
-    const { container, rerender } = render(<Waveform mode="trainee" level={0.2} reducedMotion />);
-    expect(shape(container)).toBe('meter');
-    expect(vi.getTimerCount()).toBe(0);
+  it.each<WaveMode>(['trainee', 'customer'])(
+    'moves with the %s’s voice, sampled about fifteen times a second and no faster',
+    (mode) => {
+      const interval = vi.spyOn(window, 'setInterval');
+      const { container } = render(<Waveform mode={mode} level={0.8} reducedMotion={false} />);
+      expect(interval).toHaveBeenCalledTimes(1);
+      expect(interval.mock.calls[0]?.[1]).toBeGreaterThanOrEqual(60);
+      expect(new Set(bars(container)).size).toBe(1);
+      tick(66 * 5 + 10);
+      const heights = bars(container);
+      expect(heights.length).toBe(28);
+      // The newest samples are at the right and the older ones have moved left.
+      expect(heights.at(-1)).toBeGreaterThan(heights[0] as number);
+    },
+  );
+
+  it('follows the level as it changes without starting another timer', () => {
+    const interval = vi.spyOn(window, 'setInterval');
+    const { container, rerender } = render(
+      <Waveform mode="trainee" level={0.1} reducedMotion={false} />,
+    );
+    tick(70);
+    const quiet = bars(container).at(-1) as number;
+    rerender(<Waveform mode="trainee" level={0.9} reducedMotion={false} />);
+    tick(70);
+    expect(bars(container).at(-1)).toBeGreaterThan(quiet);
+    expect(interval).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops its timer when the voice stops and when it is taken away', () => {
+    const clear = vi.spyOn(window, 'clearInterval');
+    const { rerender, unmount } = render(
+      <Waveform mode="trainee" level={0.5} reducedMotion={false} />,
+    );
+    rerender(<Waveform mode="idle" level={0} reducedMotion={false} />);
+    expect(clear).toHaveBeenCalledTimes(1);
+    rerender(<Waveform mode="customer" level={0.5} reducedMotion={false} />);
+    unmount();
+    expect(clear).toHaveBeenCalledTimes(2);
+  });
+
+  it('is a still level meter under reduced motion: its fill is the level, and no timer runs', () => {
+    const interval = vi.spyOn(window, 'setInterval');
+    const { container, rerender } = render(<Waveform mode="trainee" level={0.25} reducedMotion />);
+    const svg = container.querySelector('svg') as SVGElement;
+    expect(svg).toHaveAttribute('data-shape', 'meter');
     const fill = () => Number(container.querySelector('.cw-wave__bar')?.getAttribute('width'));
     const low = fill();
     rerender(<Waveform mode="trainee" level={0.9} reducedMotion />);
     expect(fill()).toBeGreaterThan(low);
-    expect(vi.getTimerCount()).toBe(0);
+    tick(2000);
+    expect(interval).not.toHaveBeenCalled();
   });
 
-  it('moves at most about fifteen times a second, and only while a voice is moving', () => {
-    vi.useFakeTimers();
-    const setIntervalSpy = vi.spyOn(window, 'setInterval');
-    const { container, unmount } = render(
-      <Waveform mode="customer" level={0.8} reducedMotion={false} />,
-    );
-    expect(shape(container)).toBe('bars');
-    const delays = setIntervalSpy.mock.calls.map(([, delay]) => Number(delay));
-    expect(delays).toHaveLength(1);
-    expect(1000 / delays[0]!).toBeLessThanOrEqual(15.2);
-    unmount();
-    expect(vi.getTimerCount()).toBe(0);
+  it('shows a shimmer, never a percentage, while speech is turned into text', () => {
+    const { container } = render(<Waveform mode="transcribing" level={0} reducedMotion={false} />);
+    const progress = screen.getByRole('progressbar', { name: 'Transcribing' });
+    expect(progress).not.toHaveAttribute('aria-valuenow');
+    expect(container.textContent).not.toMatch(/\d/);
   });
 
-  it('shows the level of the voice that is speaking', () => {
-    vi.useFakeTimers();
-    const heights = (level: number) => {
+  it('shows dots while the customer thinks, and keeps them still under reduced motion too', () => {
+    const interval = vi.spyOn(window, 'setInterval');
+    for (const reducedMotion of [false, true]) {
       const { container, unmount } = render(
-        <Waveform mode="trainee" level={level} reducedMotion={false} />,
+        <Waveform mode="thinking" level={0} reducedMotion={reducedMotion} />,
       );
-      act(() => vi.advanceTimersByTime(66 * 40));
-      const rects = [...container.querySelectorAll('.cw-wave__bar')];
-      const last = Number(rects.at(-1)?.getAttribute('height'));
+      expect(container.querySelectorAll('circle.cw-wave__dot')).toHaveLength(7);
       unmount();
-      return last;
-    };
-    expect(heights(1)).toBeGreaterThan(heights(0.1));
-  });
-});
-
-describe('the temperature trace', () => {
-  const history = [
-    { turnIndex: 1, band: 'calm', label: 'Calm' },
-    { turnIndex: 3, band: 'concerned', label: 'Concerned' },
-    { turnIndex: 5, band: 'frustrated', label: 'Frustrated' },
-  ] as const;
-  const state = (id: 'frustrated', trend: 'rising') => ({
-    band: { id, label: 'Frustrated' },
-    trend,
-    discoveredCount: 0,
-    silent: false,
-    shifts: 0,
-  });
-
-  it('labels five bands, the start and the latest point, and describes itself in words', () => {
-    const view = describeCustomerState(state('frustrated', 'rising'), history);
-    render(<TemperatureTrace points={tracePoints(history, null)} view={view} />);
-    const chart = screen.getByRole('img');
-    expect(chart).toHaveAccessibleName(
-      'Customer temperature over 3 points: started Calm, now Frustrated, rising.',
-    );
-    for (const label of ['Escalating', 'Angry', 'Frustrated', 'Concerned', 'Calm']) {
-      expect(within(chart.parentElement as HTMLElement).getAllByText(label).length).toBeGreaterThan(
-        0,
-      );
     }
-    expect(screen.getByText('Start:')).toBeInTheDocument();
-    expect(screen.getByText('Now:')).toBeInTheDocument();
+    expect(interval).not.toHaveBeenCalled();
   });
 
-  it('lists every point in a table for anyone who prefers to read it', () => {
-    render(<TemperatureTrace points={tracePoints(history, null)} view={null} />);
-    const table = screen.getByRole('table', { name: 'Customer state after each reply' });
-    const rows = within(table).getAllByRole('row');
-    expect(rows).toHaveLength(4);
-    expect(within(rows[1]!).getByText('Opening line')).toBeInTheDocument();
-    expect(within(rows[3]!).getByText('Reply 3 (now)')).toBeInTheDocument();
-    expect(within(rows[3]!).getByText('Frustrated')).toBeInTheDocument();
-  });
-
-  it('shows only "Now" when there is a single point, and nothing when there are none', () => {
-    const single = render(
-      <TemperatureTrace points={tracePoints([], state('frustrated', 'rising'))} view={null} />,
-    );
-    expect(screen.queryByText('Start:')).not.toBeInTheDocument();
-    expect(screen.getByText('Now:')).toBeInTheDocument();
-    single.unmount();
-    const none = render(<TemperatureTrace points={[]} view={null} />);
-    expect(none.container).toBeEmptyDOMElement();
+  it('says nothing to assistive technology but the shimmer’s name: the status says the rest', () => {
+    for (const mode of ['idle', 'trainee', 'customer', 'thinking'] as const) {
+      const { container, unmount } = render(
+        <Waveform mode={mode} level={0.5} reducedMotion={false} />,
+      );
+      expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+      expect(container.textContent).toBe('');
+      unmount();
+    }
   });
 });
 
-describe('the voice read-out', () => {
-  const server = { playback: 'server-speech', playbackLabel: 'Azure AI Speech' } as const;
-  const browser = {
-    playback: 'browser-synthesis',
-    playbackLabel: 'Browser voice (on this device): Microsoft David, en-US',
-  } as const;
-  const none = { playback: 'none', playbackLabel: 'Captions only' } as const;
-
-  it('says the voice that spoke and the style the provider really applied', () => {
-    expect(describeVoice('en-GB-RyanNeural', 'unfriendly', server)).toEqual({
-      voice: 'en-GB-RyanNeural',
-      style: 'unfriendly',
+describe('what the voice settings say about the voice', () => {
+  it('names the voice and the expressive style the provider really used', () => {
+    const support = { playback: 'server-speech', playbackLabel: 'Azure AI Speech' } as const;
+    expect(describeVoice('en-GB-SoniaNeural', 'cheerful', support)).toEqual({
+      voice: 'en-GB-SoniaNeural',
+      style: 'cheerful',
     });
-  });
-
-  it('says mood was approximated by pace and pitch when no style was applied', () => {
-    expect(describeVoice('en-GB-SoniaNeural', 'none', server).style).toBe(
-      'approximated by pace and pitch',
-    );
-    expect(describeVoice('Microsoft David', 'unfriendly', browser).style).toBe(
+    expect(describeVoice('en-GB-SoniaNeural', 'none', support).style).toBe(
       'approximated by pace and pitch',
     );
   });
 
-  it('shows the browser voice by the call’s own label, never as a bare voice name', () => {
-    expect(describeVoice('Microsoft David', null, browser).voice).toBe(
-      'Browser voice (on this device): Microsoft David, en-US',
-    );
-    expect(
-      describeVoice(null, null, { playback: 'browser-synthesis', playbackLabel: 'Browser voice' })
-        .voice,
-    ).toBe('Browser voice');
-    expect(
-      describeVoice(null, null, {
-        playback: 'browser-synthesis',
-        playbackLabel: 'Browser voice (default voice)',
-      }).voice,
-    ).toBe('Browser voice (default voice)');
-  });
-
-  it('admits when the server’s voice has not spoken yet', () => {
-    expect(describeVoice(null, null, server)).toEqual({
+  it('waits for the customer to speak rather than guessing a voice', () => {
+    const support = { playback: 'server-speech', playbackLabel: 'Azure AI Speech' } as const;
+    expect(describeVoice(null, null, support)).toEqual({
       voice: 'Shown once the customer has spoken',
       style: 'Shown once the customer has spoken',
     });
   });
 
-  it('says there is no voice at all on a captions-only call', () => {
-    expect(describeVoice(null, null, none).voice).toMatch(/captions/);
+  it('keeps the word "Browser" for the browser’s own voice, and approximates its style', () => {
+    const support = {
+      playback: 'browser-synthesis',
+      playbackLabel: 'Browser voice (on this device): Microsoft David, en-US',
+    } as const;
+    expect(describeVoice('whatever', 'whatever', support)).toEqual({
+      voice: 'Browser voice (on this device): Microsoft David, en-US',
+      style: 'approximated by pace and pitch',
+    });
+  });
+
+  it('has no voice when replies are captions', () => {
+    expect(describeVoice(null, null, { playback: 'none', playbackLabel: 'Captions only' })).toEqual(
+      {
+        voice: 'None. Replies are captions.',
+        style: 'not applicable',
+      },
+    );
   });
 });
 
-describe('the clock in the bar', () => {
-  it('counts up on screen each second without being announced', () => {
-    vi.useFakeTimers();
-    const base = snapshotOf('ready-for-next-turn');
-    const { update } = renderCall(base, { width: WIDTH.wide });
-    expect(screen.getByRole('timer')).toHaveTextContent(clock(base.elapsedSeconds));
-    update({ ...base, elapsedSeconds: base.elapsedSeconds + 1 });
-    expect(screen.getByRole('timer')).toHaveTextContent(clock(base.elapsedSeconds + 1));
-    expect(document.querySelector('[role="status"][aria-live="polite"]')).toBeEmptyDOMElement();
+describe('the voice settings dialog', () => {
+  const SERVER: CallSupport = FIXTURES['mic-ready'].snapshot.support;
+  const settings = (overrides: Partial<VoiceSettingsProps> = {}) => {
+    installDialogShim();
+    const props: VoiceSettingsProps = {
+      open: true,
+      onClose: vi.fn(),
+      handsFree: false,
+      language: 'en-GB',
+      audio: 'on',
+      voice: 'en-GB-SoniaNeural',
+      style: 'none',
+      support: SERVER,
+      actions: fakeActions(),
+      ...overrides,
+    };
+    render(
+      <AnnouncerProvider>
+        <VoiceSettings {...props} />
+      </AnnouncerProvider>,
+    );
+    return { props, dialog: within(screen.getByRole('dialog', { name: 'Voice settings' })) };
+  };
+
+  it('shows what is really in use: voice, style and recognition service', () => {
+    const { dialog } = settings();
+    const fact = (label: string) => dialog.getByText(label).nextElementSibling;
+    expect(fact('Customer voice')).toHaveTextContent('en-GB-SoniaNeural');
+    expect(fact('Expressive style')).toHaveTextContent('approximated by pace and pitch');
+    expect(fact('Speech recognition')).toHaveTextContent('Azure AI Speech');
+  });
+
+  it('warns that the browser’s recognition can miss words, and that typing always works', () => {
+    const { dialog } = settings({
+      support: {
+        ...SERVER,
+        capture: 'browser-recognition',
+        captureLabel: 'Browser speech recognition',
+      },
+    });
+    expect(dialog.getByText('It can miss words. Typing always works.')).toBeInTheDocument();
+  });
+
+  it('calls scripted demo speech a demo, not a service that understands audio', () => {
+    const { dialog } = settings({ support: { ...SERVER, speechDemo: true } });
+    expect(dialog.getByText('Scripted demo: it does not understand audio.')).toBeInTheDocument();
+  });
+
+  it('is honest when there is no recognition in this browser', () => {
+    const { dialog } = settings({ support: { ...SERVER, capture: 'none', captureLabel: 'None' } });
+    expect(dialog.getByText('Not available in this browser')).toBeInTheDocument();
+  });
+
+  it('turns the customer’s audio switch off and explains it when this browser has no voice', () => {
+    const { dialog } = settings({ audio: 'none' });
+    const toggle = dialog.getByRole('switch', { name: 'Customer audio' });
+    expect(toggle).toBeDisabled();
+    expect(toggle).toHaveAccessibleDescription('Not available here. Replies are captions.');
+  });
+
+  it('reports the switch’s state, and asks the engine for the opposite when it is pressed', async () => {
+    const user = userEvent.setup();
+    const { dialog, props } = settings({ audio: 'off', handsFree: true });
+    expect(dialog.getByRole('switch', { name: 'Customer audio' })).not.toBeChecked();
+    expect(dialog.getByRole('switch', { name: 'Hands-free' })).toBeChecked();
+    await user.click(dialog.getByRole('switch', { name: 'Customer audio' }));
+    expect(props.actions.setAudio).toHaveBeenCalledExactlyOnceWith(true);
+  });
+
+  it('lists the languages speech supports, by name, with the current one chosen', () => {
+    const { dialog } = settings({ language: 'en-IE' });
+    const select = dialog.getByRole('combobox', { name: 'Speech language' }) as HTMLSelectElement;
+    expect(select.value).toBe('en-IE');
+    expect(within(select).getByRole('option', { name: 'English (Ireland)' })).toBeInTheDocument();
+    expect(select.options.length).toBeGreaterThanOrEqual(5);
   });
 });
 
-describe('the on-screen keyboard', () => {
-  function Probe({ enabled }: { enabled: boolean }) {
-    const ref = useRef<HTMLDivElement>(null);
-    useVisualViewportHeight(ref, enabled);
-    return <div ref={ref} data-testid="probe" />;
-  }
-  const viewport = Object.assign(new EventTarget(), { height: 800, offsetTop: 0, scale: 1 });
-  const original = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+describe('the customer on screen', () => {
+  const baseProps = (): CustomerStageProps => {
+    const { snapshot } = FIXTURES['mic-ready'];
+    return {
+      name: 'Priya Raman',
+      role: 'IT coordinator',
+      organisation: 'Harbourline Logistics',
+      speaking: false,
+      state: describeCustomerState(snapshot.customerState, snapshot.stateHistory),
+      status: describeStatus({
+        stage: 'ready',
+        mode: 'voice',
+        phase: 'ready-for-next-turn',
+        speechDetected: false,
+        microphone: 'granted',
+      }),
+      statusId: 'status-line',
+      micLevel: 0,
+      customerLevel: 0,
+      reducedMotion: false,
+      compact: false,
+    };
+  };
 
-  afterEach(() => {
-    if (original) Object.defineProperty(window, 'visualViewport', original);
-    else Reflect.deleteProperty(window, 'visualViewport');
-    viewport.height = 800;
-    viewport.scale = 1;
+  it('shows initials, never a photograph, and says the customer is synthetic', () => {
+    const { container } = render(<CustomerStage {...baseProps()} />);
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('.ff-avatar__initials')).toHaveTextContent('PR');
+    expect(screen.getByText('Synthetic customer')).toBeInTheDocument();
   });
 
-  it('keeps the screen as tall as what is visible while the keyboard is open', () => {
-    Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true });
-    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
-    render(<Probe enabled />);
-    const probe = screen.getByTestId('probe');
-    expect(probe.style.getPropertyValue('--cw-vh')).toBe('');
-
-    viewport.height = 420;
-    act(() => {
-      viewport.dispatchEvent(new Event('resize'));
-    });
-    expect(probe.style.getPropertyValue('--cw-vh')).toBe('420px');
-
-    viewport.height = 800;
-    act(() => {
-      viewport.dispatchEvent(new Event('resize'));
-    });
-    expect(probe.style.getPropertyValue('--cw-vh')).toBe('');
+  it('reads the state as words, with the trend, and not by colour alone', () => {
+    render(<CustomerStage {...baseProps()} />);
+    const mood = screen.getByRole('group', { name: 'Customer state' });
+    expect(mood).toHaveTextContent('Concerned');
+    expect(mood).toHaveTextContent('Trend: steady');
+    expect(mood.querySelectorAll('svg').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('ignores a pinch zoom, which also shrinks the visible area', () => {
-    Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true });
-    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
-    render(<Probe enabled />);
-    viewport.height = 300;
-    viewport.scale = 2;
-    act(() => {
-      viewport.dispatchEvent(new Event('resize'));
-    });
-    expect(screen.getByTestId('probe').style.getPropertyValue('--cw-vh')).toBe('');
+  it('draws the speaking ring only while the customer’s voice plays', () => {
+    const props = baseProps();
+    const { container, rerender } = render(<CustomerStage {...props} />);
+    expect(container.querySelector('.ff-avatar--speaking')).toBeNull();
+    rerender(<CustomerStage {...props} speaking />);
+    expect(container.querySelector('.ff-avatar--speaking')).not.toBeNull();
+  });
+
+  it('gives the status line the id the controls point at, and keeps it out of the live regions', () => {
+    const { container } = render(<CustomerStage {...baseProps()} />);
+    const line = container.querySelector('#status-line') as HTMLElement;
+    expect(line).toHaveTextContent('Microphone ready');
+    expect(line.closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
+  });
+
+  it('replaces the label node when the status changes, so the change is drawn and not just swapped', () => {
+    const props = baseProps();
+    const { container, rerender } = render(<CustomerStage {...props} />);
+    const before = container.querySelector('.cw-status__label');
+    rerender(
+      <CustomerStage
+        {...props}
+        status={describeStatus({
+          stage: 'customer-speaking',
+          mode: 'voice',
+          phase: 'customer-speaking',
+          speechDetected: false,
+          microphone: 'granted',
+        })}
+      />,
+    );
+    const after = container.querySelector('.cw-status__label');
+    expect(after).toHaveTextContent('Customer speaking');
+    expect(after).not.toBe(before);
+  });
+
+  it('says nothing about a state before there is one', () => {
+    const { container } = render(<CustomerStage {...baseProps()} state={null} />);
+    expect(container.querySelector('.cw-mood')).toBeNull();
+  });
+
+  it('becomes one row on a narrow screen', () => {
+    const { container } = render(<CustomerStage {...baseProps()} compact />);
+    expect(container.querySelector('.cw-person--compact')).not.toBeNull();
+    expect(container.querySelector('.cw-wave--thin')).not.toBeNull();
   });
 });

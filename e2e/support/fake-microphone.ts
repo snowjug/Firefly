@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 // Chromium can replace the microphone with a WAV file (`--use-file-for-fake-audio-capture`). The
 // file is generated here, written under `test-results/` (which is git-ignored and never committed)
 // and played in a loop: a burst of speech-like sound, then silence, again and again. Whenever the
-// call's voice-activity detector (web/src/features/voice/capture/vad.ts) starts listening it finds
-// a burst within a few seconds, and an utterance ends after about 1.1 s of the silence that follows.
+// call's voice-activity detector (web/src/features/voice/capture/vad.ts, whose numbers are in
+// capture/tuning.ts) starts listening it finds a burst within a few seconds, and an utterance ends
+// after about 1.4 s of the silence that follows (or at once, when the trainee presses "Done
+// speaking").
 //
 // What this proves: the call's microphone, the worklet, the detector, the recording and the upload
 // work in a real browser. What it does NOT prove: that anything intelligible was heard. The server's
@@ -30,7 +32,7 @@ export interface SpeechLikeOptions {
   sampleRate?: number;
   /** How long the voiced burst lasts: well over the detector's 400 ms minimum. */
   burstSeconds?: number;
-  /** How long the silence lasts. It must be longer than the detector's 1.1 s end-of-speech pause. */
+  /** How long the silence lasts. It must be longer than the detector's 1.4 s end-of-speech pause. */
   silenceSeconds?: number;
   /** The RMS of the loudest part of the burst, 0 to 1. The detector wants well over 0.015. */
   peakRms?: number;

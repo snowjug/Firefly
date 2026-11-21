@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { classifyRouteError } from './shell/RouteError.tsx';
@@ -131,40 +131,42 @@ describe('focus and scroll after navigation', () => {
     const user = userEvent.setup();
     const { scrolling } = renderApp('/');
     await screen.findByRole('heading', { level: 1, name: 'Landing page' });
-    await user.click(within(screen.getByRole('banner')).getByRole('link', { name: 'About' }));
-    await screen.findByRole('heading', { level: 1, name: 'About page' });
+    await user.click(
+      within(screen.getByRole('banner')).getByRole('link', { name: 'Responsible AI' }),
+    );
+    await screen.findByRole('heading', { level: 1, name: 'Responsible AI page' });
     await waitFor(() => expect(screen.getByRole('main')).toHaveFocus());
     expect(scrolling.scrollTo).toHaveBeenCalledWith(0, 0);
   });
 
-  it('scrolls to the section a hash link names, and moves focus there', async () => {
-    const user = userEvent.setup();
-    const { scrolling } = renderApp('/about');
+  it('scrolls to the section a #fragment names, and moves focus there', async () => {
+    const { router, scrolling } = renderApp('/about');
     await screen.findByRole('heading', { level: 1, name: 'About page' });
-    await user.click(
-      within(screen.getByRole('banner')).getByRole('link', { name: 'How it works' }),
-    );
+    await act(async () => {
+      await router.navigate('/#how-it-works');
+    });
     await screen.findByRole('heading', { level: 1, name: 'Landing page' });
     await waitFor(() => expect(document.getElementById('how-it-works')).toHaveFocus());
     expect(scrolling.scrollIntoView).toHaveBeenCalled();
   });
 
-  it('follows a hash change on the same page, with no new page and no focus on main', async () => {
-    const user = userEvent.setup();
-    const { scrolling } = renderApp('/');
+  it('follows a #fragment change on the same page, with no new page and no focus on main', async () => {
+    const { router, scrolling } = renderApp('/');
     await screen.findByRole('heading', { level: 1, name: 'Landing page' });
-    await user.click(within(screen.getByRole('banner')).getByRole('link', { name: 'Overview' }));
+    await act(async () => {
+      await router.navigate('/#overview');
+    });
     await waitFor(() => expect(document.getElementById('overview')).toHaveFocus());
     scrolling.scrollIntoView.mockClear();
-    await user.click(
-      within(screen.getByRole('banner')).getByRole('link', { name: 'How it works' }),
-    );
+    await act(async () => {
+      await router.navigate('/#how-it-works');
+    });
     await waitFor(() => expect(document.getElementById('how-it-works')).toHaveFocus());
     expect(scrolling.scrollIntoView).toHaveBeenCalled();
     expect(screen.getByRole('main')).not.toHaveFocus();
   });
 
-  it('scrolls to the hash when the page loads with one, without taking focus', async () => {
+  it('scrolls to the #fragment when the page loads with one, without taking focus', async () => {
     const { scrolling } = renderApp('/#how-it-works');
     await screen.findByRole('heading', { level: 1, name: 'Landing page' });
     expect(scrolling.scrollIntoView).toHaveBeenCalled();
@@ -181,7 +183,7 @@ describe('when a page fails', () => {
       await screen.findByRole('heading', { level: 1, name: 'Something went wrong on this page' }),
     ).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('secret raw message');
-    expect(screen.getByRole('alert')).toHaveTextContent(/already saved are not affected/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/Saved calls and reports are not affected/);
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Go to scenarios' })).toHaveAttribute(
       'href',

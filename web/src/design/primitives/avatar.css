@@ -46,7 +46,9 @@
   --_fg: var(--ai-fg);
 }
 
-/* Speaking: a ring with a gap, so it reads on any background and without colour. */
+/* Speaking: a ring with a gap, so it reads on any background and without colour. The ring itself is
+   still. While someone speaks, a second ring grows from it and fades (transform and opacity only);
+   under reduced motion only the still ring is left. */
 .ff-avatar {
   --_ring: var(--brand);
 }
@@ -57,19 +59,25 @@
   box-shadow:
     0 0 0 2px var(--bg-canvas),
     0 0 0 4px var(--_ring);
-  animation: ff-avatar-speak 1.6s var(--ease-easy) infinite;
 }
-@keyframes ff-avatar-speak {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 2px var(--bg-canvas),
-      0 0 0 4px var(--_ring);
+.ff-avatar--speaking::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--_ring);
+  border-radius: var(--r-pill);
+  opacity: 0;
+  pointer-events: none;
+  animation: ff-avatar-pulse var(--dur-pulse) var(--ease-decelerate) infinite;
+}
+@keyframes ff-avatar-pulse {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
   }
-  50% {
-    box-shadow:
-      0 0 0 2px var(--bg-canvas),
-      0 0 0 6px color-mix(in srgb, var(--_ring) 35%, transparent);
+  to {
+    opacity: 0;
+    transform: scale(1.22);
   }
 }
 
@@ -83,6 +91,8 @@
     outline: 2px solid Highlight;
     outline-offset: 2px;
     box-shadow: none;
-    animation: none;
+  }
+  .ff-avatar--speaking::after {
+    display: none;
   }
 }

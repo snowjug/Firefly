@@ -40,6 +40,12 @@ export function changeText(previous: JourneyPoint | null, point: JourneyPoint): 
   return `Still ${point.band}`;
 }
 
+/** One line about a point, for the chart's readout and its accessible names: "Turn 4: Frustrated to Concerned". */
+export function pointSummary(previous: JourneyPoint | null, point: JourneyPoint): string {
+  if (point.kind === 'start') return `Start of the call: ${point.band}`;
+  return `Turn ${point.turnIndex}: ${changeText(previous, point)}`;
+}
+
 export function journeyListItems(journey: Journey): JourneyItem[] {
   const items: JourneyItem[] = [];
   journey.points.forEach((point, index) => {
@@ -48,7 +54,7 @@ export function journeyListItems(journey: Journey): JourneyItem[] {
     items.push({
       point,
       kindLabel: POINT_KIND_LABELS[point.kind],
-      heading: `Turn ${point.turnIndex}: ${changeText(previous, point)}`,
+      heading: pointSummary(previous, point),
       reason: point.reason ? plainUnexpectedTurn(point.reason) : null,
       quote: point.quote,
     });
@@ -89,8 +95,9 @@ export function journeySentence(journey: Journey): string {
   const last = points[points.length - 1];
   if (!first || !last) return 'The customer temperature was not recorded for this call.';
   const peak = points.find((p) => p.temperature === journey.peak) ?? first;
+  // The high point is worth a sentence only when it was somewhere the call neither began nor ended.
   const peakText =
-    peak === first || peak.band === first.band
+    peak === first || peak.band === first.band || peak.band === last.band
       ? ''
       : ` It was highest at turn ${peak.turnIndex}, when the customer was ${peak.band}.`;
   return `The customer started ${first.band} and ended ${last.band}.${peakText}`;
@@ -111,6 +118,8 @@ export interface ChartPoint {
   kind: PointKind;
   turnIndex: number;
   band: string;
+  /** Where the point sits in the journey's list of points. */
+  index: number;
 }
 
 export interface ChartTick {
@@ -171,6 +180,7 @@ export function layoutChart(points: readonly JourneyPoint[], size: ChartSize): C
     kind: point.kind,
     turnIndex: point.turnIndex,
     band: point.band,
+    index: i,
   }));
 
   // Label as many turns as fit, always the first and the last.

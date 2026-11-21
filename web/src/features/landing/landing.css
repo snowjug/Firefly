@@ -1,98 +1,44 @@
-/* The landing page below the hero: bands, headings and the parts of each section. White and quiet
-   bands, hairline dividers, no gradients. Tokens only. */
+/* The landing page below the hero: sections, headings and the parts of each. White and quiet bands,
+   hairlines, no gradients. Tokens only. */
 
-.lp-band {
-  padding-block: var(--sp-10);
-  border-block-start: var(--stroke-w) solid var(--stroke-2);
-  background: var(--bg-canvas);
+.lp-section {
+  padding-block: var(--sp-8);
 }
-.lp-band--quiet {
+.lp-section--quiet {
+  border-block: var(--stroke-w) solid var(--stroke-2);
   background: var(--bg-quiet);
 }
-.lp-band__inner {
+.lp-section__inner {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-8);
+  gap: var(--sp-5);
 }
 @media (min-width: 64em) {
-  .lp-band {
-    padding-block: var(--sp-16);
+  .lp-section {
+    padding-block: var(--sp-12);
   }
-  .lp-band__inner {
-    gap: var(--sp-10);
+  .lp-section__inner {
+    gap: var(--sp-6);
   }
 }
 
-/* ---- Section heading --------------------------------------------------------------------- */
-.lp-head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
 .lp-title {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: var(--fs-title3);
-  line-height: var(--lh-title3);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
   font-weight: var(--fw-semibold);
   color: var(--fg-1);
   text-wrap: balance;
 }
-.lp-intro {
-  margin: 0;
-  font-size: var(--fs-reading);
-  line-height: var(--lh-reading);
-  color: var(--fg-2);
-}
-@media (min-width: 48em) {
-  .lp-title {
-    font-size: var(--fs-title2);
-    line-height: var(--lh-title2);
-  }
+.lp-title--large {
+  font-family: var(--font-display);
+  font-size: var(--fs-title3);
+  line-height: var(--lh-title3);
 }
 
-/* ---- Three facts: columns with a rule above, not cards ----------------------------------------- */
-.lp-facts {
-  display: grid;
-  gap: var(--sp-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.lp-fact {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  padding-block-start: var(--sp-4);
-  border-block-start: var(--stroke-w-thick) solid var(--fg-1);
-}
-.lp-fact__icon {
-  margin-block-end: var(--sp-1);
-  color: var(--fg-1);
-}
-.lp-fact__lead {
-  margin: 0;
-  font-size: var(--fs-subtitle2);
-  line-height: var(--lh-subtitle2);
-  font-weight: var(--fw-semibold);
-  color: var(--fg-1);
-}
-.lp-fact__text {
-  margin: 0;
-  font-size: var(--fs-reading);
-  line-height: var(--lh-reading);
-  color: var(--fg-2);
-}
-@media (min-width: 48em) {
-  .lp-facts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--sp-10);
-  }
-}
-
-/* ---- How it works: a connected flow ----------------------------------------------------------- */
+/* ---- Three connected steps -------------------------------------------------------------------- */
 .lp-steps {
-  --lp-marker: 2.5rem;
+  --lp-icon: 2.5rem;
   display: grid;
   gap: var(--sp-6);
   margin: 0;
@@ -102,54 +48,44 @@
 .lp-step {
   position: relative;
   display: grid;
-  grid-template-columns: var(--lp-marker) minmax(0, 1fr);
+  grid-template-columns: var(--lp-icon) minmax(0, 1fr);
   column-gap: var(--sp-4);
-  /* Steps share a row height; their content stays at the top rather than spreading out. */
-  align-content: start;
+  align-items: start;
 }
-.lp-step__marker {
+.lp-step__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-sizing: border-box;
-  inline-size: var(--lp-marker);
-  block-size: var(--lp-marker);
-  border: var(--stroke-w-thick) solid var(--fg-1);
+  inline-size: var(--lp-icon);
+  block-size: var(--lp-icon);
   border-radius: var(--r-pill);
-  background: var(--bg-canvas);
-  color: var(--fg-1);
-  font-size: var(--fs-subtitle2);
-  line-height: 1;
-  font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
+  background: var(--brand-tint);
+  color: var(--brand-fg-2);
 }
 .lp-step__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
   min-inline-size: 0;
+  padding-block-start: var(--sp-0h);
 }
 .lp-step__title {
   margin: 0;
-  padding-block-start: var(--sp-1h);
-  font-size: var(--fs-subtitle1);
-  line-height: var(--lh-subtitle1);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
   font-weight: var(--fw-semibold);
   color: var(--fg-1);
 }
 .lp-step__text {
   margin: 0;
-  font-size: var(--fs-reading);
-  line-height: var(--lh-reading);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
   color: var(--fg-2);
 }
-/* The connector is decoration: drawn between the markers, never part of the content. Down the side on
-   a phone. */
+/* The connector joins one step to the next: down the side on a phone, across the top on a wide screen.
+   It is decoration only. */
 .lp-step:not(:last-child)::after {
   content: '';
   position: absolute;
-  inset-inline-start: calc(var(--lp-marker) / 2 - 1px);
-  inset-block-start: calc(var(--lp-marker) + var(--sp-1));
+  inset-inline-start: calc(var(--lp-icon) / 2 - 1px);
+  inset-block-start: calc(var(--lp-icon) + var(--sp-1));
   inset-block-end: calc(var(--sp-6) * -1 + var(--sp-1));
   border-inline-start: var(--stroke-w-thick) solid var(--stroke-1);
 }
@@ -160,238 +96,166 @@
   }
   .lp-step {
     grid-template-columns: minmax(0, 1fr);
-    row-gap: var(--sp-4);
+    row-gap: var(--sp-3);
+    align-content: start;
   }
-  /* Across the top on a wide screen, from one marker to the next. */
   .lp-step:not(:last-child)::after {
-    inset-inline-start: calc(var(--lp-marker) + var(--sp-2));
+    inset-inline-start: calc(var(--lp-icon) + var(--sp-2));
     inset-inline-end: calc(var(--sp-8) * -1 + var(--sp-2));
-    inset-block-start: calc(var(--lp-marker) / 2 - 1px);
+    inset-block-start: calc(var(--lp-icon) / 2 - 1px);
     inset-block-end: auto;
     border-inline-start: 0;
     border-block-start: var(--stroke-w-thick) solid var(--stroke-1);
   }
-  .lp-step__title {
+  .lp-step__body {
     padding-block-start: 0;
   }
 }
 
-.lp-why {
-  display: grid;
-  gap: var(--sp-2);
-  padding-block-start: var(--sp-6);
-  border-block-start: var(--stroke-w) solid var(--stroke-1);
+/* ---- Product coverage --------------------------------------------------------------------------- */
+.lp-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.lp-why__title {
+.lp-product {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: 2.25rem;
+  padding: var(--sp-1h) var(--sp-3);
+  border: var(--stroke-w) solid var(--stroke-1);
+  border-radius: var(--r-md);
+  background: var(--bg-canvas);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+.lp-product__icon {
+  display: inline-flex;
+  color: var(--brand-fg-2);
+}
+
+/* ---- One piece of coaching evidence ----------------------------------------------------------------- */
+.lp-evidence {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  box-shadow: var(--shadow-2);
+}
+.lp-evidence__part {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.lp-evidence__label {
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-3);
+}
+.lp-evidence__quote {
+  margin: 0;
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  color: var(--fg-1);
+  text-wrap: pretty;
+}
+.lp-evidence__coaching {
   margin: 0;
   font-size: var(--fs-subtitle1);
   line-height: var(--lh-subtitle1);
   font-weight: var(--fw-semibold);
   color: var(--fg-1);
 }
-.lp-why__text {
-  margin: 0;
-  font-size: var(--fs-reading);
-  line-height: var(--lh-reading);
-  color: var(--fg-2);
+.lp-evidence__arrow {
+  color: var(--fg-3);
+  /* Down on a phone, where the quote is above the coaching. */
+  transform: rotate(90deg);
 }
 @media (min-width: 48em) {
-  .lp-why {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    column-gap: var(--sp-8);
+  .lp-evidence {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--sp-6);
+    padding: var(--sp-6);
   }
-  .lp-why__title {
-    grid-column: 1;
-  }
-  .lp-why__text {
-    grid-column: 2 / span 2;
+  .lp-evidence__arrow {
+    transform: none;
   }
 }
 
-/* ---- Seven kinds of issue: a list of real examples ---------------------------------------------- */
-.lp-kinds-head {
-  display: none;
+/* ---- The responsible-use line -------------------------------------------------------------------------- */
+.lp-section--note {
+  padding-block: var(--sp-5);
 }
-.lp-kinds {
-  margin: 0;
-  border-block-end: var(--stroke-w) solid var(--stroke-2);
-}
-.lp-kind {
+/* The mark and the sentence stay together; the link follows the sentence, or sits under it on a phone. */
+.lp-note {
   display: grid;
-  grid-template-areas:
-    'family'
-    'title'
-    'meta';
-  gap: var(--sp-1h);
-  padding-block: var(--sp-4);
-  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-1) var(--sp-3);
 }
-.lp-kind__family {
-  grid-area: family;
+.lp-note__icon {
+  margin-block-start: var(--sp-0h);
+  color: var(--fg-2);
+}
+.lp-note__text {
   margin: 0;
   font-size: var(--fs-body);
   line-height: var(--lh-body);
-  color: var(--fg-2);
-}
-.lp-kind__title {
-  grid-area: title;
-  margin: 0;
-  font-size: var(--fs-subtitle2);
-  line-height: var(--lh-subtitle2);
-  font-weight: var(--fw-semibold);
   color: var(--fg-1);
 }
-.lp-kind__meta {
-  grid-area: meta;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2) var(--sp-4);
-  margin: 0;
-  margin-block-start: var(--sp-1);
-}
-.lp-kind__facet {
+.lp-note__link {
+  grid-column: 2;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
+  min-block-size: 1.5rem;
 }
-.lp-kind__facet-label {
-  font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
-  color: var(--fg-3);
-}
-.lp-kinds-more {
-  margin: 0;
-}
-/* A link that stands on its own line is a target of its own: give it the full height. */
-.lp-kinds-more > * {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: var(--target);
-}
-/* Wider than a phone: the kind and the example sit on the left, the badges on the right. */
-@media (min-width: 48em) {
-  .lp-kind {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'family meta'
-      'title meta';
-    column-gap: var(--sp-8);
+@media (min-width: 40em) {
+  .lp-note {
+    grid-template-columns: auto auto auto;
+    justify-content: start;
     align-items: center;
   }
-  .lp-kind__meta {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--sp-2);
+  .lp-note__icon {
     margin-block-start: 0;
   }
-  /* The badges line up in a column when each label has the same width. */
-  .lp-kind__facet-label {
-    min-inline-size: 4.5rem;
-  }
-}
-/* Wide: three columns under headings, so the labels beside each badge are no longer needed. */
-@media (min-width: 64em) {
-  .lp-kinds-head,
-  .lp-kind {
-    grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr) 20.5rem;
-    column-gap: var(--sp-6);
-    align-items: center;
-  }
-  .lp-kind {
-    grid-template-areas: 'family title meta';
-  }
-  .lp-kinds-head {
-    display: grid;
-    padding-block-end: var(--sp-2);
-    margin-block-end: calc(var(--sp-2) * -1);
-  }
-  .lp-kind__meta {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--sp-2) var(--sp-4);
-  }
-  /* The headings say what each badge is, so the small labels stay for assistive technology only. */
-  .lp-kind__facet-label {
-    position: absolute;
-    inline-size: 1px;
-    min-inline-size: 0;
-    block-size: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  .lp-note__link {
+    grid-column: auto;
   }
 }
 
-/* ---- Responsible use: one quiet panel ------------------------------------------------------------ */
-.lp-panel {
-  display: grid;
-  gap: var(--sp-6);
-  padding: var(--sp-6);
-  border: var(--stroke-w) solid var(--stroke-1);
-  border-radius: var(--r-xl);
-  background: var(--bg-quiet);
+/* ---- The last action ----------------------------------------------------------------------------------------- */
+.lp-section--final {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
 }
-.lp-panel__head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-}
-.lp-panel__icon {
-  flex: none;
-  color: var(--fg-1);
-}
-.lp-panel__list {
-  display: grid;
-  gap: var(--sp-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.lp-panel__item {
-  margin: 0;
-  padding-block-start: var(--sp-3);
-  border-block-start: var(--stroke-w) solid var(--stroke-1);
-  font-size: var(--fs-reading);
-  line-height: var(--lh-reading);
-  color: var(--fg-1);
-}
-.lp-panel__more {
-  margin: 0;
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--fg-2);
-}
-@media (min-width: 48em) {
-  .lp-panel {
-    padding: var(--sp-8);
-  }
-  .lp-panel__list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-6) var(--sp-10);
-  }
-}
-
-/* ---- The last action ------------------------------------------------------------------------------ */
 .lp-final {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--sp-6);
-}
-.lp-final__text {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  min-inline-size: 0;
+  gap: var(--sp-4);
 }
 @media (min-width: 48em) {
   .lp-final {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    gap: var(--sp-10);
+    gap: var(--sp-8);
+  }
+  /* The action keeps its width; it is the title that wraps when there is little room. */
+  .lp-final > a {
+    flex: none;
   }
 }
 @media (max-width: 30em) {
@@ -400,20 +264,17 @@
   }
 }
 
-/* ---- Forced colours: the edges and rules must survive ---------------------------------------------- */
+/* ---- Forced colours: edges and rules must survive --------------------------------------------------------------- */
 @media (forced-colors: active) {
-  .lp-band,
-  .lp-panel,
-  .lp-kind,
-  .lp-kinds,
-  .lp-why {
+  .lp-section--quiet,
+  .lp-section--final,
+  .lp-product,
+  .lp-evidence {
     border-color: CanvasText;
+    box-shadow: none;
   }
-  .lp-fact {
-    border-block-start-color: CanvasText;
-  }
-  .lp-step__marker {
-    border-color: CanvasText;
+  .lp-step__icon {
+    border: var(--stroke-w) solid CanvasText;
   }
   .lp-step:not(:last-child)::after {
     border-color: GrayText;

@@ -12,7 +12,7 @@ import type {
 // getting to a call that is already half way through, or finished, without clicking through it.
 //
 //   const api = new FireflyApi(context.request);          // the fixture `api` does this for you
-//   const call = await api.createCall({ scenarioId: 'locked-out-after-password-reset' });
+//   const call = await api.createCall({ scenarioId: 'outlook-shared-mailbox-missing' });
 //   await api.send(call.id, 'Hello, my name is Sam. What is happening?');
 //   const done = await api.finish(call.id);               // ends the call and waits for the report
 //
@@ -21,17 +21,46 @@ import type {
 // context's own request object shares that cookie with the page. A call made with the `request`
 // fixture would be somebody else's call to the browser.
 
-/** Said to the customer in this order, a spoken-or-typed call that covers what the coaching looks for. */
+// The conversations below are written for DEFAULT_SCENARIO (Marcus Bell, an Outlook shared mailbox:
+// a starter, first-contact scenario with a calm, terse, not very technical customer). The customer
+// opens with a greeting and gives the reason for the call only after the first line said to them, so
+// every call starts with a greeting. Which wording the customer uses to answer is the engine's; what
+// is fixed is which hidden fact a question uncovers.
+
+/**
+ * Said to the customer in this order: a call that covers what the coaching looks for. It asks for
+ * every hidden fact in DEFAULT_SCENARIO (when he last saw the mailbox, what changed while he was
+ * away, who else can see it, what he has tried), shows empathy, takes ownership, gives a time for the
+ * next contact and summarises correctly before it ends.
+ */
 export const GOOD_CALL: readonly string[] = [
-  'Hello, thanks for calling. My name is Sam. What is happening?',
-  "I'm sorry about the trouble this morning, I know you need the portal for your patients. Can you read me exactly what the sign-in message says?",
-  'Thanks. When did it last work, and did anything change before it stopped?',
-  'Is your work email or the portal signed in on another device, like a phone or tablet, that might still have your old password?',
-  'What have you already tried so far, and what did you see each time?',
-  "Let me summarise so I have it right: your account was locked after repeated attempts with the old password. I'll take ownership of this, get the account unlocked and call you back by ten o'clock to confirm you can sign in. Is there anything else I can help with?",
+  'Hello, thanks for calling Microsoft support. My name is Sam. How can I help you today?',
+  "I'm sorry to hear that, I know your team relies on that mailbox. When did you last see it in your list, and what had happened since then?",
+  'Thanks. Did anything change while you were away, for example who has access to the shared mailbox?',
+  'Can anyone else on the team still see the mailbox, and how are the enquiries being handled for now?',
+  'What have you already tried so far, and what happened each time?',
+  "Let me make sure I have this right: the shared mailbox went missing from your Outlook while you were on leave, the office manager changed who has access, and Jen can still see it. I'll take ownership of this, ask the office manager to check your access, and call you back by three o'clock today with an update. Is there anything else I can help with?",
 ];
 
-export const DEFAULT_SCENARIO = 'locked-out-after-password-reset';
+/**
+ * A good call that leaves two of the four hidden facts of DEFAULT_SCENARIO unasked (when he last saw
+ * the mailbox, and what he has tried), so its report has facts that were found and facts that were
+ * missed.
+ */
+export const PARTIAL_CALL: readonly string[] = [
+  GOOD_CALL[0] as string,
+  "I'm sorry to hear that, I know your team relies on that mailbox. Did anything change while you were away, for example who has access to the shared mailbox?",
+  GOOD_CALL[3] as string,
+  "Let me make sure I have this right: the shared mailbox is missing from your Outlook, the office manager changed who has access, and Jen can still see it. I'll take ownership of this, ask the office manager to check your access, and call you back by three o'clock today with an update. Is there anything else I can help with?",
+];
+
+/** A greeting and one question: the shortest call that has anything to report, and a report with limited evidence. */
+export const SHORT_CALL: readonly string[] = [
+  GOOD_CALL[0] as string,
+  'Which mailbox is it, and what do you see in your list instead?',
+];
+
+export const DEFAULT_SCENARIO = 'outlook-shared-mailbox-missing';
 
 export const FAILURE_TARGETS = [
   'customer',
@@ -59,6 +88,8 @@ export interface CreateCallOptions {
   overrides?: CreateSessionRequest['overrides'];
   /** `guided` shows live hints during the call; `immersive` (the default) is the standard call. */
   mode?: CreateSessionRequest['mode'];
+  /** The part of the day the customer's greeting fits ("Good morning"); the browser sends its own. */
+  timeOfDay?: CreateSessionRequest['timeOfDay'];
   clientRequestId?: string;
 }
 
@@ -105,6 +136,7 @@ export class FireflyApi {
       scenarioId: options.scenarioId ?? DEFAULT_SCENARIO,
       ...(options.overrides ? { overrides: options.overrides } : {}),
       mode: options.mode ?? 'immersive',
+      ...(options.timeOfDay ? { timeOfDay: options.timeOfDay } : {}),
       ...(options.clientRequestId ? { clientRequestId: options.clientRequestId } : {}),
     };
     const { session } = await bodyOf<{ session: SessionDTO }>(
@@ -118,6 +150,13 @@ export class FireflyApi {
     const path = `/api/sessions/${encodeURIComponent(id)}`;
     const { session } = await bodyOf<{ session: SessionDTO }>(await this.request.get(path), path);
     return session;
+  }
+
+  /** Deletes a call (and its report) from this profile. */
+  async remove(id: string): Promise<void> {
+    const path = `/api/sessions/${encodeURIComponent(id)}`;
+    const response = await this.request.delete(path);
+    if (!response.ok()) throw new ApiFailure(response.status(), null, path);
   }
 
   /** Sends one typed message. A rate limit is waited out, never failed on: a long call is sent quickly. */

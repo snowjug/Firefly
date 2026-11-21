@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CALL_PHASES, type CallPhase } from './contract.ts';
+import { CALL_PHASES, CALL_STAGES, type CallPhase } from './contract.ts';
 import {
   autoListens,
   checkSend,
@@ -15,8 +15,10 @@ import {
   type MachineEvent,
   type MachineState,
   type SendFailure,
+  type TranscribeFailure,
 } from './machine.ts';
 import { describeProblem } from './problems.ts';
+import { stageOf } from './stage.ts';
 
 // ---------------------------------------------------------------------------------------
 // Helpers
@@ -210,6 +212,38 @@ function violations(state: MachineState): string[] {
     'sending a message that is not the exchange',
   );
   bad(t.microphone && !state.voice, 'holding the microphone in a typed call');
+  // The brief's stage is always one of the fifteen, and says what the machine is doing.
+  const stage = stageOf(state);
+  bad(!CALL_STAGES.includes(stage), 'a state with no stage');
+  bad(
+    stage === 'listening' && !(state.phase === 'listening' && !state.finishing),
+    'listening stage',
+  );
+  bad(stage === 'endpointing' && !(state.phase === 'listening' && state.finishing), 'endpointing');
+  bad(stage === 'customer-speaking' && state.phase !== 'customer-speaking', 'speaking stage');
+  bad(stage === 'transcribing' && state.phase !== 'transcribing', 'transcribing stage');
+  bad(stage === 'idle' && state.phase !== 'idle', 'idle stage');
+  bad(stage === 'completed' && state.phase !== 'completed', 'completed stage');
+  bad(
+    (stage === 'ending' || stage === 'evaluating') && state.phase !== 'ending',
+    'ending stages outside ending',
+  );
+  bad(stage === 'paused' && !state.paused, 'paused stage');
+  bad(stage === 'muted' && !state.muted, 'muted stage');
+  bad(stage === 'retrying' && !((state.exchange?.attempt ?? 0) > 1), 'retrying stage');
+  // The Retry for a message that did not send never goes missing: while the call is under way and
+  // nothing else is asking for attention, the notice that answers the failed message is showing.
+  bad(
+    state.exchange?.status === 'failed' &&
+      state.begun &&
+      state.phase !== 'idle' &&
+      state.phase !== 'ending' &&
+      state.phase !== 'completed' &&
+      !state.limitReached &&
+      !state.sessionEnded &&
+      state.problem === null,
+    'a failed message with nothing to retry it',
+  );
   return out;
 }
 
@@ -543,33 +577,75 @@ describe('mute and pause', () => {
 });
 
 describe('interrupting', () => {
-  it('stops the customer at once and gives the turn to the trainee, marking the turn interrupted', () => {
+  it('stops the customer at once and gives the turn to the trainee, leaving the cut-off to the engine', () => {
     const state = reduce(atPhase('customer-speaking'), { type: 'interrupt' });
     expect(state.phase).toBe('ready-for-next-turn');
-    expect(state.interrupted).toEqual([3]);
+    // Whether the customer was really cut off depends on whether the voice was audible when it
+    // stopped, which only the engine knows (`customer-cut-off`).
+    expect(state.interrupted).toEqual([]);
     expect(targets(state).playback).toBeNull();
     // Reports about the stopped voice are stale now.
     expect(reduce(state, { type: 'speak-end', token: 1 })).toBe(state);
     expect(reduce(state, { type: 'speak-failed', token: 1, reason: 'playback' })).toBe(state);
-    // Hearing it all later clears the mark.
+  });
+
+  it('records a cut-off once the engine says the voice was audible, and hearing it all later clears the mark', () => {
+    const stopped = reduce(atPhase('customer-speaking'), { type: 'interrupt' });
+    const cut = reduce(stopped, { type: 'customer-cut-off', turnIndex: 3 });
+    expect(cut.interrupted).toEqual([3]);
+    // Said twice, it is still one mark.
+    expect(reduce(cut, { type: 'customer-cut-off', turnIndex: 3 })).toBe(cut);
     const replayed = run(
-      state,
+      cut,
       { type: 'replay' },
       { type: 'speak-start', token: 2, estimateMs: 100 },
       { type: 'speak-end', token: 2 },
     );
     expect(replayed.interrupted).toEqual([]);
+    expectValid(cut);
   });
 
-  it('is what talking over the customer does: the voice stops and the microphone opens', () => {
-    const state = reduce(atPhase('customer-speaking'), { type: 'talk' });
-    expect(state.phase).toBe('listening');
-    expect(state.interrupted).toEqual([3]);
-    expect(targets(state)).toMatchObject({ playback: null, capture: 'listen' });
-    expectValid(state);
+  it('clears the mark as soon as the reply starts again from the start, however it was started', () => {
+    const paused = run(
+      atPhase('customer-speaking'),
+      { type: 'speak-start', token: 1, estimateMs: 3000 },
+      { type: 'toggle-pause' },
+      { type: 'customer-cut-off', turnIndex: 3 },
+    );
+    expect(paused.interrupted).toEqual([3]);
+    expect(paused.pendingSpeech).toBe(3);
+    const resumed = reduce(paused, { type: 'toggle-pause' });
+    expect(resumed.phase).toBe('customer-speaking');
+    expect(resumed.interrupted).toEqual([]);
   });
 
-  it('is also what typing does while the customer speaks', () => {
+  it('is not something Talk can do: talking never opens the microphone while the customer speaks', () => {
+    // Controlled turn-taking. Barge-in is not supported, so the voice has to end or be stopped first.
+    const speaking = atPhase('customer-speaking');
+    const refused = reduce(speaking, { type: 'talk' });
+    expect(refused.phase).toBe('customer-speaking');
+    expect(refused.hint).toEqual({ code: 'wait-customer' });
+    expect(refused.interrupted).toEqual([]);
+    expect(targets(refused)).toMatchObject({
+      capture: 'off',
+      playback: { token: 1, turnIndex: 3 },
+    });
+    expectValid(refused);
+
+    // The same while the opening line is still being prepared.
+    const opening = reduce(atPhase('ready'), { type: 'talk' });
+    expect(opening.phase).toBe('ready');
+    expect(opening.hint).toEqual({ code: 'wait-customer' });
+    expect(targets(opening).capture).toBe('off');
+
+    // After the voice is stopped, the trainee talks.
+    const stopped = run(speaking, { type: 'interrupt' }, { type: 'talk' });
+    expect(stopped.phase).toBe('listening');
+    expect(targets(stopped)).toMatchObject({ playback: null, capture: 'listen' });
+    expectValid(stopped);
+  });
+
+  it('is also what typing does while the customer speaks: the voice stops', () => {
     const state = reduce(atPhase('customer-speaking'), {
       type: 'send-text',
       id: 't9',
@@ -577,13 +653,211 @@ describe('interrupting', () => {
       createdAt: 't',
     });
     expect(state.phase).toBe('processing');
-    expect(state.interrupted).toEqual([3]);
     expect(targets(state)).toMatchObject({ playback: null, send: { id: 't9', attempt: 1 } });
   });
 
   it('does nothing when nothing is speaking', () => {
     const state = listening();
     expect(reduce(state, { type: 'interrupt' })).toBe(state);
+  });
+});
+
+describe('sending a kept recording again', () => {
+  const failed = (failure: TranscribeFailure = { kind: 'failed' }) =>
+    reduce(atPhase('transcribing'), { type: 'transcribe-failed', id: 'u1', failure });
+
+  it('turns the same utterance, under the same id, into text again, and clears the problem', () => {
+    const state = failed();
+    expect(state).toMatchObject({
+      phase: 'ready-for-next-turn',
+      exchange: null,
+      problem: { code: 'transcription-failed' },
+    });
+    const retried = reduce(state, { type: 'transcribe-retry', id: 'u1', createdAt: 't2' });
+    expect(retried).toMatchObject({
+      phase: 'transcribing',
+      problem: null,
+      exchange: { id: 'u1', status: 'transcribing', inputMode: 'voice', text: '' },
+    });
+    // Nothing records: the words are asked for again, not said again.
+    expect(targets(retried)).toMatchObject({ transcribe: 'u1', send: null });
+    expect(isCurrentTranscription(retried, 'u1')).toBe(true);
+    expectValid(retried);
+    // And it goes on exactly as if it had just been said.
+    const done = reduce(retried, { type: 'transcribe-done', id: 'u1', text: 'hello' });
+    expect(done).toMatchObject({ phase: 'processing', exchange: { id: 'u1', status: 'sending' } });
+  });
+
+  it('is offered after being offline or rate limited while transcribing, and after nothing else', () => {
+    for (const failure of [
+      { kind: 'offline' },
+      { kind: 'rate-limited', retryAfterSeconds: 4 },
+      { kind: 'failed', timedOut: true },
+    ] as const) {
+      const state = failed(failure);
+      expect(reduce(state, { type: 'transcribe-retry', id: 'u1', createdAt: 't' }).phase).toBe(
+        'transcribing',
+      );
+    }
+    // No problem of that step: nothing to retry.
+    const quiet = atPhase('ready-for-next-turn');
+    expect(reduce(quiet, { type: 'transcribe-retry', id: 'u1', createdAt: 't' })).toBe(quiet);
+    const sendProblem = run(atPhase('processing'), {
+      type: 'send-failed',
+      id: 'u1',
+      attempt: 1,
+      failure: { kind: 'provider', saved: true },
+    });
+    expect(reduce(sendProblem, { type: 'transcribe-retry', id: 'u1', createdAt: 't' })).toBe(
+      sendProblem,
+    );
+  });
+
+  it('says a failure that ran out of time as such, and not as a failure', () => {
+    expect(failed({ kind: 'failed', timedOut: true }).problem).toEqual({
+      code: 'transcription-failed',
+      context: { timedOut: true },
+    });
+    expect(failed().problem).toEqual({ code: 'transcription-failed', context: {} });
+  });
+
+  it('is refused while another message is being handled, or once the call is over', () => {
+    const state = failed();
+    const sending = reduce(state, { type: 'send-text', id: 't5', text: 'hi', createdAt: 't' });
+    expect(reduce(sending, { type: 'transcribe-retry', id: 'u1', createdAt: 't' })).toBe(sending);
+    const ended = run(state, { type: 'end-requested' });
+    expect(reduce(ended, { type: 'transcribe-retry', id: 'u1', createdAt: 't' })).toBe(ended);
+  });
+});
+
+describe('text fallback as a mode', () => {
+  it('lets go of the microphone and the voice and carries on by typing', () => {
+    const state = reduce(listening(), { type: 'use-text' });
+    expect(state).toMatchObject({
+      phase: 'ready-for-next-turn',
+      voice: false,
+      micHeld: false,
+      muted: false,
+      paused: false,
+    });
+    expect(targets(state)).toMatchObject({ microphone: false, capture: 'off', playback: null });
+    expect(stageOf(state)).toBe('ready');
+    expectValid(state);
+  });
+
+  it('stops a voice that is playing without calling the reply interrupted, and keeps the call open for typing', () => {
+    const state = reduce(atPhase('customer-speaking'), { type: 'use-text' });
+    expect(state).toMatchObject({ phase: 'ready-for-next-turn', voice: false, speech: null });
+    expect(state.interrupted).toEqual([]);
+    expect(state.pendingSpeech).toBeNull();
+    expect(checkSend(state)).toBe('ok');
+    // A typed message is then one exchange, as ever.
+    const sent = reduce(state, { type: 'send-text', id: 't7', text: 'hello', createdAt: 't' });
+    expect(sent.exchange).toMatchObject({ id: 't7', inputMode: 'text', attempt: 1 });
+    expect(targets(sent)).toMatchObject({ send: { id: 't7', attempt: 1 }, microphone: false });
+  });
+
+  it('waits out a message that is being transcribed or sent instead of dropping it', () => {
+    for (const phase of ['transcribing', 'processing'] as const) {
+      const state = atPhase(phase);
+      expect(reduce(state, { type: 'use-text' })).toBe(state);
+    }
+    for (const phase of ['idle', 'requesting-microphone', 'ending', 'completed'] as const) {
+      const state = atPhase(phase);
+      expect(reduce(state, { type: 'use-text' })).toBe(state);
+    }
+    const alreadyTyped = typed();
+    expect(reduce(alreadyTyped, { type: 'use-text' })).toBe(alreadyTyped);
+  });
+
+  it('takes the problems of the voice with it, and keeps the ones that are about the message', () => {
+    const noWords = reduce(atPhase('transcribing'), {
+      type: 'transcribe-failed',
+      id: 'u1',
+      failure: { kind: 'failed' },
+    });
+    expect(noWords.problem?.code).toBe('transcription-failed');
+    expect(reduce(noWords, { type: 'use-text' }).problem).toBeNull();
+
+    const failed = reduce(atPhase('processing'), {
+      type: 'send-failed',
+      id: 'u1',
+      attempt: 1,
+      failure: { kind: 'provider', saved: false },
+    });
+    const kept = reduce(failed, { type: 'use-text' });
+    expect(kept.problem?.code).toBe('reply-failed');
+    expect(kept.exchange).toMatchObject({ id: 'u1', status: 'failed' });
+    // It is still retried, once, with the same id.
+    const retried = reduce(kept, { type: 'retry-send' });
+    expect(retried.exchange).toMatchObject({ id: 'u1', attempt: 2, status: 'sending' });
+  });
+
+  it('goes back to voice by asking for the microphone again, and records nothing until it is granted', () => {
+    const text = reduce(listening(), { type: 'use-text' });
+    const back = reduce(text, { type: 'begin', voice: true, canSpeak: true, opening: null });
+    expect(back).toMatchObject({ voice: true, micHeld: false, microphone: 'prompt' });
+    expect(stageOf(back)).toBe('mic-permission');
+    expect(targets(back)).toMatchObject({ microphone: true, capture: 'off' });
+    const granted = reduce(back, { type: 'permission-granted' });
+    expect(granted).toMatchObject({ micHeld: true, microphone: 'granted' });
+    expect(stageOf(granted)).toBe('ready');
+    expectValid(granted);
+  });
+});
+
+describe('the customer audio', () => {
+  it('can be switched off: the voice stops, nothing is owed, and replies are captions', () => {
+    const speaking = atPhase('customer-speaking');
+    const off = reduce(speaking, { type: 'set-audio', on: false, available: true });
+    expect(off).toMatchObject({ canSpeak: false, speech: null, pendingSpeech: null });
+    expect(off.phase).toBe('ready-for-next-turn');
+    expect(off.interrupted).toEqual([]);
+    expect(targets(off).playback).toBeNull();
+    // The next reply is not spoken.
+    const next = run(
+      off,
+      { type: 'send-text', id: 't2', text: 'again', createdAt: 't' },
+      {
+        type: 'send-done',
+        id: 't2',
+        attempt: 1,
+        customerIndex: 5,
+        turnsRemaining: 4,
+        redactions: [],
+      },
+    );
+    expect(next.phase).toBe('ready-for-next-turn');
+    expect(next.speech).toBeNull();
+    expect(reduce(next, { type: 'replay' })).toBe(next);
+    expectValid(off);
+  });
+
+  it('clears a voice problem when the trainee continues without audio', () => {
+    const failed = reduce(atPhase('customer-speaking'), {
+      type: 'speak-failed',
+      token: 1,
+      reason: 'playback',
+    });
+    expect(failed.problem?.code).toBe('playback-failed');
+    expect(reduce(failed, { type: 'set-audio', on: false, available: true }).problem).toBeNull();
+  });
+
+  it('can be switched on again, but never claims a voice that does not exist', () => {
+    const off = reduce(connected({ canSpeak: true }), {
+      type: 'set-audio',
+      on: false,
+      available: true,
+    });
+    expect(reduce(off, { type: 'set-audio', on: true, available: true }).canSpeak).toBe(true);
+    expect(reduce(off, { type: 'set-audio', on: true, available: false })).toBe(off);
+    const on = reduce(off, { type: 'set-audio', on: true, available: true });
+    expect(reduce(on, { type: 'set-audio', on: true, available: true })).toBe(on);
+  });
+
+  it('is a no-op when it is already off and nothing is owed', () => {
+    const state = connected({ canSpeak: false });
+    expect(reduce(state, { type: 'set-audio', on: false, available: true })).toBe(state);
   });
 });
 
@@ -874,6 +1148,34 @@ describe('sending', () => {
     expect(autoListens(state)).toBe(false);
     expect(state.timer).toBeNull();
     expect(reduce(state, { type: 'retry-send' }).phase).toBe('processing');
+  });
+
+  it('brings back the notice for a message that did not send when another notice has taken its place and gone', () => {
+    const failed = reduce(sending(), {
+      type: 'send-failed',
+      id: 't1',
+      attempt: 1,
+      failure: { kind: 'offline', saved: false },
+    });
+    // Ending the call fails as well, and its notice takes the one place a notice can be shown.
+    const endFailed = run(
+      failed,
+      { type: 'end-requested' },
+      { type: 'end-failed', failure: { kind: 'offline' } },
+    );
+    expect(endFailed.exchange?.status).toBe('failed');
+    expect(endFailed.problem).toEqual({ code: 'offline', context: { during: 'end' } });
+    expectValid(endFailed);
+    // Choosing to carry on puts that notice away. The message is still not sent, so its Retry returns.
+    const carriedOn = reduce(endFailed, { type: 'dismiss-problem' });
+    expect(carriedOn.problem).toEqual({ code: 'reply-failed', context: { saved: false } });
+    expect(describeProblem(carriedOn.problem!.code, carriedOn.problem!.context).retry).toBe('send');
+    expectValid(carriedOn);
+    expect(reduce(carriedOn, { type: 'retry-send' }).exchange).toMatchObject({
+      id: 't1',
+      status: 'sending',
+      attempt: 2,
+    });
   });
 
   it('refuses to begin when the session has already ended', () => {
@@ -1186,6 +1488,9 @@ describe('events that make no sense are ignored', () => {
     { type: 'toggle-mute' },
     { type: 'toggle-pause' },
     { type: 'set-hands-free', on: true },
+    { type: 'use-text' },
+    { type: 'set-audio', on: false, available: true },
+    { type: 'set-audio', on: true, available: true },
     { type: 'interrupt' },
     { type: 'replay' },
     { type: 'send-text', id: 'x', text: 'x', createdAt: 'n' },
@@ -1293,6 +1598,8 @@ function randomEvent(
     'toggle-mute',
     'toggle-pause',
     'set-hands-free',
+    'use-text',
+    'set-audio',
     'interrupt',
     'replay',
     'send-text',
@@ -1338,6 +1645,8 @@ function randomEvent(
       };
     case 'set-hands-free':
       return { type: 'set-hands-free', on: random() < 0.6 };
+    case 'set-audio':
+      return { type: 'set-audio', on: random() < 0.5, available: random() < 0.8 };
     case 'send-text':
       return { type: 'send-text', id: id(), text: 'hello', createdAt: 'now' };
     case 'speech-end':
@@ -1436,8 +1745,9 @@ describe('random event sequences', () => {
   const SEQUENCES = 400;
   const LENGTH = 140;
 
-  it('never throw, keep every invariant after every event, and visit every phase', () => {
+  it('never throw, keep every invariant after every event, and visit every phase and every stage', () => {
     const visited = new Set<CallPhase>();
+    const stages = new Set<string>();
     for (let seed = 1; seed <= SEQUENCES; seed++) {
       const random = mulberry32(seed);
       const counter = { n: 0 };
@@ -1461,10 +1771,12 @@ describe('random event sequences', () => {
           );
         }
         visited.add(next.phase);
+        stages.add(stageOf(next));
         state = next;
       }
     }
     expect([...visited].sort()).toEqual([...CALL_PHASES].sort());
+    expect([...stages].sort()).toEqual([...CALL_STAGES].sort());
   }, 60_000);
 
   it('create one exchange per utterance and apply each reply at most once', () => {

@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Tab, TabList, TabPanel, Tabs } from '../index.ts';
+import { Tab, TabList, TabPanel, TabPanels, Tabs } from '../index.ts';
 
 afterEach(cleanup);
 
@@ -98,5 +98,51 @@ describe('Tabs', () => {
     expect(screen.getByRole('tabpanel', { name: 'Transcript' })).toHaveTextContent(
       'Transcript panel',
     );
+  });
+});
+
+describe('Tabs with stacked panels', () => {
+  function Products() {
+    return (
+      <Tabs defaultValue="teams">
+        <TabList label="Products">
+          <Tab value="teams">Teams</Tab>
+          <Tab value="outlook">Outlook</Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel value="teams" stacked>
+            Teams call
+          </TabPanel>
+          <TabPanel value="outlook" stacked>
+            Outlook call
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+    );
+  }
+
+  it('keeps every panel in the layout but exposes, and lets you reach, only the selected one', () => {
+    render(<Products />);
+    // Both are in the document, so the group is as tall as the taller of the two.
+    expect(document.querySelectorAll('[role="tabpanel"]')).toHaveLength(2);
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
+    expect(screen.getByRole('tabpanel', { name: 'Teams' })).toHaveTextContent('Teams call');
+    const hidden = document.querySelector('[role="tabpanel"][aria-hidden="true"]');
+    expect(hidden).toHaveTextContent('Outlook call');
+    expect(hidden).toHaveAttribute('inert');
+    expect(hidden).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('tabpanel', { name: 'Teams' })).toHaveAttribute('data-selected');
+  });
+
+  it('swaps which panel is exposed when the selection changes, by arrow key as well as by click', async () => {
+    const user = userEvent.setup();
+    render(<Products />);
+    await user.tab();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('tabpanel', { name: 'Outlook' })).toHaveTextContent('Outlook call');
+    expect(screen.queryByRole('tabpanel', { name: 'Teams' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Teams' }));
+    expect(screen.getByRole('tabpanel', { name: 'Teams' })).toBeInTheDocument();
+    expect(document.querySelectorAll('[role="tabpanel"][data-selected]')).toHaveLength(1);
   });
 });

@@ -1,14 +1,17 @@
 import { render, type RenderResult } from '@testing-library/react';
+import axe from 'axe-core';
 import { MemoryRouter } from 'react-router';
 import { vi, type Mock } from 'vitest';
 import { AnnouncerProvider } from '../../design/index.ts';
+import { installDialogShim } from '../../design/dialog-shim.ts';
 import type { CallActions, CallSnapshot } from '../call/contract.ts';
 import { CallWorkspace, type CallWorkspaceProps } from './CallWorkspace.tsx';
 import { FIXTURES, type CallFixture, type FixtureName } from './call-fixtures.ts';
 
 // Helpers shared by the call screen's tests: a fake set of actions, a stand-in for the browser's
-// media queries (the screen picks its layout from them), and a render that wraps what the screen
-// needs around it (a router, and the polite announcer).
+// media queries (the screen picks its layout from them), a render that wraps what the screen needs
+// around it (a router, the polite announcer and the `main` landmark the call layout provides), and
+// an axe run for component tests.
 
 export type FakeActions = { [Name in keyof CallActions]: Mock<CallActions[Name]> };
 
@@ -21,12 +24,14 @@ export function fakeActions(overrides: Partial<CallActions> = {}): FakeActions {
     togglePause: vi.fn<CallActions['togglePause']>(),
     setHandsFree: vi.fn<CallActions['setHandsFree']>(),
     setLanguage: vi.fn<CallActions['setLanguage']>(),
+    useText: vi.fn<CallActions['useText']>(),
+    setAudio: vi.fn<CallActions['setAudio']>(),
     interrupt: vi.fn<CallActions['interrupt']>(),
     replay: vi.fn<CallActions['replay']>(),
     sendText: vi.fn<CallActions['sendText']>(async () => true),
     retry: vi.fn<CallActions['retry']>(),
     dismissProblem: vi.fn<CallActions['dismissProblem']>(),
-    endCall: vi.fn<CallActions['endCall']>(async () => ({ sessionId: 'ses_fixture_maya' })),
+    endCall: vi.fn<CallActions['endCall']>(async () => ({ sessionId: 'ses_fixture_priya' })),
     ...overrides,
   } as FakeActions;
 }
@@ -85,22 +90,27 @@ export function renderCall(
   source: Source,
   props: Partial<CallWorkspaceProps> & { width?: number; reducedMotion?: boolean } = {},
 ): RenderedCall {
-  const { width = WIDTH.narrow, reducedMotion, ...rest } = props;
+  const { width = WIDTH.wide, reducedMotion, ...rest } = props;
+  // jsdom has no modal dialogs: the design system's test shim gives it enough of them.
+  installDialogShim();
   mockViewport(width, { reducedMotion });
   const actions = (rest.actions as FakeActions | undefined) ?? fakeActions();
   const view: CallFixture['view'] = typeof source === 'string' ? FIXTURES[source].view : undefined;
   const screen = (snapshot: CallSnapshot) => (
     <AnnouncerProvider>
       <MemoryRouter>
-        <CallWorkspace
-          snapshot={snapshot}
-          actions={actions}
-          provider={view?.provider ?? DEMO}
-          online={view?.online}
-          preferText={view?.preferText}
-          initialUi={view?.initialUi}
-          {...rest}
-        />
+        <main id="main">
+          <CallWorkspace
+            snapshot={snapshot}
+            actions={actions}
+            provider={view?.provider ?? DEMO}
+            online={view?.online}
+            preferText={view?.preferText}
+            initialUi={view?.initialUi}
+            showInputMode={view?.showInputMode}
+            {...rest}
+          />
+        </main>
       </MemoryRouter>
     </AnnouncerProvider>
   );
@@ -115,4 +125,30 @@ export function renderCall(
 /** The visually hidden region that the page's announcer reads from. */
 export function announced(): string {
   return document.querySelector('[role="status"][aria-live="polite"]')?.textContent ?? '';
+}
+
+/**
+ * Runs axe on what is rendered and returns one readable line per violation of a WCAG A or AA rule or
+ * a best practice. The test DOM has no layout or colour engine, so contrast (and the rules that need
+ * a scroll height) is left to the browser run; everything structural is checked here.
+ */
+export async function axeViolations(root: Element = document.body): Promise<string[]> {
+  const results = await axe.run(root, {
+    runOnly: {
+      type: 'tag',
+      values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'],
+    },
+    rules: {
+      'color-contrast': { enabled: false },
+      'scrollable-region-focusable': { enabled: false },
+      region: { enabled: false },
+    },
+  });
+  return results.violations.map(
+    (violation) =>
+      `${violation.id}: ${violation.help} :: ${violation.nodes
+        .slice(0, 3)
+        .map((node) => `${node.target.join(' ')} ${node.html.slice(0, 100)}`)
+        .join(' | ')}`,
+  );
 }

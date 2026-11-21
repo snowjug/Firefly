@@ -75,6 +75,10 @@ export function createServerCapture(options: ServerCaptureOptions): Capture {
         for (const event of vad.push(message.data)) onEvent(event);
       };
       microphone.setListening(true);
+      // The tap on the microphone is open now: say so, unless the pass was ended in the meantime.
+      queueMicrotask(() => {
+        if (!closed) handlers.onListening?.();
+      });
 
       return {
         finish() {

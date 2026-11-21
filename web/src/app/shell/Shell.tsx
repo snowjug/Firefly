@@ -22,8 +22,8 @@ export function OfflineNotice() {
     <div className="ff-offline">
       <div className="l-page">
         <MessageBar intent="warning">
-          <strong>You are offline.</strong> Firefly keeps what you have done so far and will
-          reconnect when your connection returns.
+          <strong>You are offline.</strong> Firefly keeps your work and reconnects when you are
+          back.
         </MessageBar>
       </div>
     </div>

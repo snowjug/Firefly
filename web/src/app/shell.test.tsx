@@ -9,7 +9,7 @@ import { SectionProvider, useAppSection } from './section.tsx';
 import { AppHeader } from './shell/AppHeader.tsx';
 import { Footer } from './shell/Footer.tsx';
 import { PublicHeader } from './shell/PublicHeader.tsx';
-import { RootError } from './shell/RouteError.tsx';
+import { RootError, ErrorMessage } from './shell/RouteError.tsx';
 import { OfflineNotice } from './shell/Shell.tsx';
 import { Wordmark } from './shell/Wordmark.tsx';
 import { makeConfig, stubConfig } from './test-kit.tsx';
@@ -25,35 +25,33 @@ function inRouter(ui: ReactNode, path = '/') {
 }
 
 describe('PublicHeader', () => {
-  it('has the wordmark, four links with real addresses, and the main action', () => {
+  it('has the wordmark, two links with real addresses, and the main action', () => {
     render(inRouter(<PublicHeader />));
     const nav = screen.getByRole('navigation', { name: 'Primary' });
-    expect(within(nav).getByRole('link', { name: 'Overview' })).toHaveAttribute(
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Scenarios', 'Responsible AI']);
+    expect(within(nav).getByRole('link', { name: 'Scenarios' })).toHaveAttribute(
       'href',
-      '/#overview',
-    );
-    expect(within(nav).getByRole('link', { name: 'How it works' })).toHaveAttribute(
-      'href',
-      '/#how-it-works',
+      '/scenarios',
     );
     expect(within(nav).getByRole('link', { name: 'Responsible AI' })).toHaveAttribute(
       'href',
       '/responsible-ai',
     );
-    expect(within(nav).getByRole('link', { name: 'About' })).toHaveAttribute('href', '/about');
-    expect(screen.getByRole('link', { name: 'Start simulation' })).toHaveAttribute(
-      'href',
-      '/scenarios',
-    );
+    expect(screen.getByRole('link', { name: 'Start call' })).toHaveAttribute('href', '/scenarios');
     expect(screen.getByRole('link', { name: 'Firefly home' })).toHaveAttribute('href', '/');
   });
 
   it('marks the page you are on', () => {
-    render(inRouter(<PublicHeader />, '/about'));
-    expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: 'Responsible AI' })).not.toHaveAttribute(
+    render(inRouter(<PublicHeader />, '/responsible-ai'));
+    expect(screen.getByRole('link', { name: 'Responsible AI' })).toHaveAttribute(
       'aria-current',
+      'page',
     );
+    expect(screen.getByRole('link', { name: 'Scenarios' })).not.toHaveAttribute('aria-current');
   });
 
   it('collapses the links into a disclosure: aria-expanded, aria-controls, Escape closes and returns focus', async () => {
@@ -70,7 +68,7 @@ describe('PublicHeader', () => {
     expect(nav).toHaveAttribute('data-open');
 
     await user.tab();
-    expect(screen.getByRole('link', { name: 'Overview' })).toHaveFocus();
+    expect(screen.getByRole('link', { name: 'Scenarios' })).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(menu).toHaveAttribute('aria-expanded', 'false');
     expect(menu).toHaveFocus();
@@ -93,8 +91,20 @@ describe('PublicHeader', () => {
     expect(menu).toHaveAttribute('aria-expanded', 'false');
 
     await user.click(menu);
-    await user.click(screen.getByRole('link', { name: 'About' }));
+    await user.click(screen.getByRole('link', { name: 'Responsible AI' }));
     expect(menu).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('opens and closes with one press each, never twice', async () => {
+    const user = userEvent.setup();
+    render(inRouter(<PublicHeader />));
+    const menu = screen.getByRole('button', { name: 'Menu' });
+    await user.click(menu);
+    expect(menu).toHaveAttribute('aria-expanded', 'true');
+    await user.click(menu);
+    expect(menu).toHaveAttribute('aria-expanded', 'false');
+    await user.click(menu);
+    expect(menu).toHaveAttribute('aria-expanded', 'true');
   });
 });
 
@@ -195,14 +205,14 @@ describe('AppHeader', () => {
 });
 
 describe('OfflineNotice', () => {
-  it('says nothing while online, and explains what is kept when the connection drops', () => {
+  it('says nothing while online, and says what is kept when the connection drops', () => {
     const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
     render(<OfflineNotice />);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     online.mockReturnValue(false);
     act(() => window.dispatchEvent(new Event('offline')));
     expect(screen.getByRole('status')).toHaveTextContent(
-      'You are offline. Firefly keeps what you have done so far and will reconnect when your connection returns.',
+      'You are offline. Firefly keeps your work and reconnects when you are back.',
     );
     online.mockReturnValue(true);
     act(() => window.dispatchEvent(new Event('online')));
@@ -211,12 +221,10 @@ describe('OfflineNotice', () => {
 });
 
 describe('Footer', () => {
-  it('says what Firefly is, links to two pages and the source, and has no version string', () => {
+  it('says what Firefly is in one line, links to two pages and the source, and has no version string', () => {
     render(inRouter(<Footer />));
     const footer = screen.getByRole('contentinfo');
-    expect(footer).toHaveTextContent(
-      'Firefly is a training aid. Every customer and scenario is fictional.',
-    );
+    expect(footer).toHaveTextContent('A training aid. Customers and scenarios are fictional.');
     expect(within(footer).getByRole('link', { name: 'Responsible AI' })).toHaveAttribute(
       'href',
       '/responsible-ai',
@@ -231,7 +239,7 @@ describe('Footer', () => {
   });
 
   it('adds no navigation landmark of its own', () => {
-    render(inRouter(<Footer slim />));
+    render(inRouter(<Footer />));
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
 });
@@ -247,6 +255,49 @@ describe('Wordmark', () => {
     render(<Wordmark />);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.getByText('Firefly')).toBeInTheDocument();
+  });
+});
+
+describe('ErrorMessage', () => {
+  it('says a page is missing, offers no retry for it, and does not claim anything about saved work', () => {
+    render(inRouter(<ErrorMessage kind="not-found" />));
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'We cannot find that page' }),
+    ).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Check the address, or start from the scenarios.',
+    );
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Saved calls/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go to scenarios' })).toHaveAttribute(
+      'href',
+      '/scenarios',
+    );
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
+  });
+
+  it('says a page did not load, in words that depend on whether you are online, and retries once per press', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    const { rerender } = render(inRouter(<ErrorMessage kind="load" online onRetry={onRetry} />));
+    expect(screen.getByRole('alert')).toHaveTextContent('Check your connection, then try again.');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Saved calls and reports are not affected.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    rerender(inRouter(<ErrorMessage kind="load" online={false} onRetry={onRetry} />));
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'You are offline. Reconnect, then try again.',
+    );
+  });
+
+  it('never shows an error’s own message', () => {
+    render(inRouter(<ErrorMessage kind="unknown" onRetry={() => undefined} />));
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Something went wrong on this page',
+    );
+    expect(document.body).not.toHaveTextContent(/stack|TypeError|undefined|at \w+\.\w+/);
   });
 });
 

@@ -141,6 +141,13 @@
 .u-center {
   text-align: center;
 }
+/* A small entrance for something that has just appeared (a new row, a revealed panel). */
+.u-enter {
+  animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+}
+.u-fade {
+  animation: ff-fade var(--dur-normal) var(--ease-easy) both;
+}
 /* A table or code block that may scroll sideways inside its own box (give it tabindex="0"). */
 .u-scroll-x {
   max-inline-size: 100%;

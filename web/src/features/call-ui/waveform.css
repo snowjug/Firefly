@@ -1,46 +1,83 @@
-/* The voice strip: bars for a voice, a quiet line, dots while something works. The colour says whose
-   turn it is; the status line beside it says it in words. */
+/* The voice strip: a level, a quiet line, dots while the customer thinks, a shimmer while speech is
+   turned into text. Colour is never the only cue (the status label says it in words). */
 
-.cw-wave {
+.cw-wave,
+.cw-wave-shimmer {
   display: block;
   inline-size: 100%;
-  block-size: var(--cw-wave-h, 2.5rem);
-  color: var(--stroke-accessible);
+  block-size: 2.5rem;
 }
 .cw-wave--thin {
   block-size: 1.25rem;
 }
-.cw-wave--trainee,
-.cw-wave--transcribing {
-  color: var(--voice-trainee);
+.cw-wave-shimmer {
+  display: flex;
+  align-items: center;
 }
-.cw-wave--customer,
-.cw-wave--thinking {
-  color: var(--voice-customer);
+.cw-wave-shimmer > .ff-shimmer {
+  inline-size: 100%;
 }
 
-.cw-wave__bar,
-.cw-wave__dot {
-  fill: currentColor;
+.cw-wave--trainee {
+  color: var(--voice-trainee);
 }
-.cw-wave__base {
-  fill: var(--stroke-1);
+.cw-wave--customer {
+  color: var(--voice-customer);
+}
+.cw-wave__bar {
+  fill: currentColor;
 }
 .cw-wave__track {
   fill: var(--bg-strong);
 }
+.cw-wave__base {
+  fill: var(--stroke-1);
+}
+.cw-wave__dot {
+  fill: var(--fg-3);
+  opacity: 0.3;
+  animation: cw-dot var(--dur-wave) var(--ease-easy) infinite;
+}
+.cw-wave__dot:nth-child(2) {
+  animation-delay: 120ms;
+}
+.cw-wave__dot:nth-child(3) {
+  animation-delay: 240ms;
+}
+.cw-wave__dot:nth-child(4) {
+  animation-delay: 360ms;
+}
+.cw-wave__dot:nth-child(5) {
+  animation-delay: 480ms;
+}
+.cw-wave__dot:nth-child(6) {
+  animation-delay: 600ms;
+}
+.cw-wave__dot:nth-child(7) {
+  animation-delay: 720ms;
+}
+
+@keyframes cw-dot {
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Still dots, clearly visible, when motion is reduced. */
+@media (prefers-reduced-motion: reduce) {
+  .cw-wave__dot {
+    animation: none;
+    opacity: 0.65;
+  }
+}
 
 @media (forced-colors: active) {
-  .cw-wave {
-    forced-color-adjust: none;
-    color: CanvasText;
+  .cw-wave__bar,
+  .cw-wave__dot {
+    fill: CanvasText;
   }
-  .cw-wave__base,
-  .cw-wave__track {
+  .cw-wave__track,
+  .cw-wave__base {
     fill: GrayText;
-  }
-  .cw-wave--trainee,
-  .cw-wave--customer {
-    color: Highlight;
   }
 }

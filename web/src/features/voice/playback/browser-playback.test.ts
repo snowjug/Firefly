@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { VOICE_IDS } from '#shared/domain/voices.ts';
 import { installFakes, fakeVoice, type FakeEnv } from '../testing/fakes.ts';
 import { createBrowserPlayback } from './browser-playback.ts';
 import { cleanForSpeech, splitForSpeech } from './speech-text.ts';
 import type { PlaybackHandlers, PlayRequest, VoiceDetails } from './types.ts';
-import { deliveryFor, pickVoice } from './voices.ts';
+import { deliveryFor, pickVoice, pickVoiceForChoice } from './voices.ts';
 
 let env: FakeEnv;
 
@@ -339,5 +340,90 @@ describe('browser playback', () => {
     playback.play(request(), handlers);
     await vi.advanceTimersByTimeAsync(0);
     expect(log).toEqual(['failure:playback']);
+  });
+
+  describe('the chosen voice', () => {
+    const FOUR = [
+      fakeVoice('Voice One (United Kingdom)', 'en-GB', true),
+      fakeVoice('Voice Two (United Kingdom)', 'en-GB', true),
+      fakeVoice('Voice Three (United Kingdom)', 'en-GB', true),
+      fakeVoice('Voice Four (United Kingdom)', 'en-GB', true),
+    ];
+
+    it("speaks with the voice that stands for the choice, at that voice's own pace, and says which", async () => {
+      const playback = setup(FOUR);
+      const { details, handlers } = listener();
+      playback.play({ ...request('Hello there.', 'calm'), voice: 'voice-c' }, handlers);
+      await vi.advanceTimersByTimeAsync(0);
+      const utterance = env.speech.latest();
+      const expected = pickVoiceForChoice(FOUR, 'voice-c', 'en-GB');
+      expect(utterance.voice).toBe(expected);
+      const delivery = deliveryFor('calm', 'Alex Morgan', 'voice-c');
+      expect(utterance.rate).toBe(delivery.rate);
+      expect(utterance.pitch).toBe(delivery.pitch);
+      expect(details[0]).toMatchObject({ voice: expected?.name, style: 'none', local: true });
+    });
+
+    it('gives each choice its own voice when the browser has enough, and keeps it all call', async () => {
+      const playback = setup(FOUR);
+      const seen = new Map<string, string>();
+      for (const id of VOICE_IDS) {
+        for (let turn = 0; turn < 2; turn++) {
+          const job = playback.play({ ...request(), voice: id }, listener().handlers);
+          await vi.advanceTimersByTimeAsync(100);
+          const name = (env.speech.latest().voice as SpeechSynthesisVoice).name;
+          expect(seen.get(id) ?? name).toBe(name);
+          seen.set(id, name);
+          job.stop();
+          await vi.advanceTimersByTimeAsync(100);
+        }
+      }
+      expect(new Set(seen.values()).size).toBe(4);
+    });
+  });
+
+  describe('stopping tells the call whether the customer was cut off', () => {
+    it('says so, and how much was heard, once the voice had started', async () => {
+      const playback = setup();
+      const job = playback.play(request(LONG_REPLY), listener().handlers);
+      await vi.advanceTimersByTimeAsync(0);
+      env.speech.startLatest();
+      await vi.advanceTimersByTimeAsync(1500);
+      const result = job.stop();
+      expect(result).toEqual({ interrupted: true, playedMs: 1500 });
+      expect(job.stop()).toEqual(result);
+    });
+
+    it('says the customer was not cut off before the voice started, or after it finished', async () => {
+      const playback = setup();
+      const early = playback.play(request(), listener().handlers);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(early.stop()).toEqual({ interrupted: false, playedMs: 0 });
+
+      const finished = playback.play(request(), listener().handlers);
+      await vi.advanceTimersByTimeAsync(100);
+      env.speech.startLatest();
+      await vi.advanceTimersByTimeAsync(700);
+      env.speech.finishLatest();
+      expect(finished.stop()).toEqual({ interrupted: false, playedMs: 700 });
+    });
+
+    it('ends the wait for voices at once: no poll, time limit or listener outlives the reply', async () => {
+      const playback = setup([]);
+      const { log, handlers } = listener();
+      const job = playback.play(request(), handlers);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      expect(env.speech.listenerCount()).toBe(1);
+      job.stop();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(env.speech.listenerCount()).toBe(0);
+      // Voices that turn up afterwards are not used for a reply that was stopped.
+      env.speech.voices = [fakeVoice('Late English', 'en-GB', true)];
+      env.speech.emit('voiceschanged');
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(env.speech.spoken).toHaveLength(0);
+      expect(log).toEqual([]);
+    });
   });
 });

@@ -13,6 +13,7 @@ import {
   type DimensionId,
 } from '#shared/domain/vocab.ts';
 import type { ClassifierPrompt, ClassifierTarget } from '../prompts/classifier.ts';
+import { endListItems } from '../engine/conform.ts';
 
 // Turning model output into trusted values. Models are lenient about format, so this reads leniently
 // (code fences, stray prose, wrong case, numbers as strings) and then validates strictly with the
@@ -349,8 +350,6 @@ const DIRECTION = String.raw`(?:\*(?!\*)[^*\n]{1,80}\*(?!\*)|\([A-Za-z][A-Za-z' 
 const LEADING_DIRECTION = new RegExp(String.raw`^\s*${DIRECTION}\s*`);
 const TRAILING_DIRECTION = new RegExp(String.raw`\s*${DIRECTION}\s*$`);
 const WRAPPED_IN_QUOTES = /^["\u201c]([^"\u201c\u201d]*)["\u201d]$/;
-// Heading, quote and list markers at the start of a line. sanitizeModelText handles the rest.
-const MARKDOWN_LINE_START = /^[ \t]*(?:#{1,6}|>|[-*\u2022]|\d{1,2}[.)])[ \t]+/gm;
 
 const ROLE_BREAK = new RegExp(
   [
@@ -391,7 +390,7 @@ export function cleanCustomerText(
   // Only directions at the very start or end go: *emphasis* inside a sentence is part of the speech.
   for (let i = 0; i < 3; i++)
     text = text.replace(LEADING_DIRECTION, '').replace(TRAILING_DIRECTION, '');
-  text = text.replace(MARKDOWN_LINE_START, '');
+  text = endListItems(text);
   text = sanitizeModelText(text, 5000).replace(/\s+([.,!?;:])/g, '$1');
   return options.finishReason === 'length' ? dropCutOffSentence(text) : text;
 }

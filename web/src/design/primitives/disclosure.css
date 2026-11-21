@@ -1,0 +1,121 @@
+/* Disclosure: a button that shows or hides more. A row has a rule under it; an inline toggle sits in
+   text. Only the chevron (transform) and the panel's first appearance (opacity and transform) move. */
+
+.ff-disclosure {
+  min-inline-size: 0;
+}
+.ff-disclosure--row {
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+}
+
+/* In the accordion pattern the button sits in a heading, which must not change its type. */
+.ff-disclosure__heading {
+  margin: 0;
+  font: inherit;
+}
+
+.ff-disclosure__button {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  inline-size: 100%;
+  min-block-size: var(--target);
+  padding: var(--sp-2) var(--sp-2);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--fg-1);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  text-align: start;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--dur-faster) var(--ease-easy);
+}
+/* Hover only where there is a pointer to hover with, so a tap on a phone leaves no stuck highlight. */
+@media (hover: hover) {
+  .ff-disclosure__button:hover {
+    background: var(--bg-hover);
+  }
+}
+.ff-disclosure__button:active {
+  background: var(--bg-pressed);
+}
+
+.ff-disclosure__icon {
+  color: var(--fg-2);
+}
+.ff-disclosure__summary {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+.ff-disclosure__meta {
+  flex: none;
+  color: var(--fg-2);
+  font-weight: var(--fw-regular);
+  font-variant-numeric: tabular-nums;
+}
+.ff-disclosure__chevron {
+  flex: none;
+  color: var(--fg-2);
+  transition: transform var(--dur-fast) var(--ease-easy);
+}
+.ff-disclosure__button[aria-expanded='true'] .ff-disclosure__chevron {
+  transform: rotate(180deg);
+}
+
+.ff-disclosure__panel {
+  padding: var(--sp-1) var(--sp-2) var(--sp-4);
+}
+.ff-disclosure__panel:not([hidden]) {
+  animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+}
+
+/* ---- Inline: a quiet toggle in the flow of text ------------------------------------------- */
+.ff-disclosure--inline .ff-disclosure__button {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-block-size: var(--ctl-sm);
+  padding: var(--sp-1) var(--sp-2);
+  margin-inline-start: calc(var(--sp-2) * -1);
+  color: var(--brand-fg-2);
+  font-weight: var(--fw-regular);
+}
+.ff-disclosure--inline .ff-disclosure__summary {
+  flex: 0 1 auto;
+}
+.ff-disclosure--inline .ff-disclosure__chevron {
+  color: inherit;
+}
+.ff-disclosure--inline .ff-disclosure__panel {
+  padding-inline: 0;
+}
+/* A finger needs the full 44 px; a mouse is fine with 32. */
+@media (pointer: coarse) {
+  .ff-disclosure--inline .ff-disclosure__button {
+    min-block-size: var(--target);
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-disclosure--row {
+    border-color: GrayText;
+  }
+  .ff-disclosure__button {
+    border: 1px solid transparent;
+  }
+  .ff-disclosure__button:hover {
+    border-color: Highlight;
+  }
+}
+
+/* A printed page cannot be clicked: every panel is shown and the chevrons are left out. */
+@media print {
+  .ff-disclosure__panel[hidden] {
+    display: block !important;
+  }
+  .ff-disclosure__chevron {
+    display: none;
+  }
+}

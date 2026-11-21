@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigDTO } from '#shared/domain/api.ts';
+import { defaultVoiceFor } from '#shared/domain/voices.ts';
 import { AnnouncerProvider } from '../design/index.ts';
 import { FIXTURES, type FixtureName } from '../features/call-ui/call-fixtures.ts';
 import {
@@ -52,6 +53,8 @@ const CONFIG: AppConfigDTO = {
   features: { devDiagnostics: false, testHooks: false },
 };
 
+const CALL_PATH = '/calls/ses_fixture_priya';
+
 const mockedUseCall = vi.mocked(useCall);
 const mockedConfig = vi.mocked(useAppConfig);
 const reload = vi.fn();
@@ -62,7 +65,7 @@ function engine(source: FixtureName | CallSnapshot, actions: FakeActions = fakeA
   return actions;
 }
 
-function renderPage(path = '/calls/ses_fixture_maya') {
+function renderPage(path = CALL_PATH) {
   mockViewport(WIDTH.wide);
   const router = createMemoryRouter(
     [
@@ -80,6 +83,8 @@ function renderPage(path = '/calls/ses_fixture_maya') {
   return { ...view, router };
 }
 
+const bar = () => screen.getAllByRole('banner')[0] as HTMLElement;
+
 beforeEach(() => {
   mockedConfig.mockReturnValue({ config: CONFIG, loading: false, error: false, reload });
   vi.mocked(api.deleteSession).mockClear();
@@ -91,11 +96,12 @@ afterEach(() => {
   clearViewport();
   mockedUseCall.mockReset();
   document.title = '';
+  vi.restoreAllMocks();
 });
 
 describe('the call page', () => {
   it('runs the engine for the session in the address, with what the server offers', () => {
-    engine('ready-for-next-turn');
+    engine('mic-ready');
     renderPage('/calls/ses_abc');
     expect(mockedUseCall).toHaveBeenCalled();
     const [sessionId, options] = mockedUseCall.mock.calls[0]!;
@@ -104,14 +110,91 @@ describe('the call page', () => {
     expect(options.maxTraineeTurns).toBe(30);
   });
 
-  it('shows the workspace with the server’s provider label and message limit', () => {
-    engine('ready-for-next-turn');
+  describe('the customer’s voice', () => {
+    const lastOptions = () => mockedUseCall.mock.lastCall![1];
+
+    it('is the voice the trainee chose, from the address', () => {
+      engine('mic-ready');
+      renderPage(`${CALL_PATH}?input=voice&voice=voice-c`);
+      expect(lastOptions().voice).toBe('voice-c');
+    });
+
+    it('is the scenario’s own when the address names none, once the call has loaded', () => {
+      engine('mic-ready');
+      renderPage(`${CALL_PATH}?input=voice`);
+      expect(lastOptions().voice).toBe(defaultVoiceFor('fixture-teams-audio-drops'));
+    });
+
+    it('is the scenario’s own when the address names something that is not a voice', () => {
+      engine('mic-ready');
+      renderPage(`${CALL_PATH}?voice=en-GB-SoniaNeural`);
+      expect(lastOptions().voice).toBe(defaultVoiceFor('fixture-teams-audio-drops'));
+    });
+
+    it('names no voice while the call has not loaded, so nothing is guessed', () => {
+      engine('loading');
+      renderPage(CALL_PATH);
+      expect(lastOptions()).not.toHaveProperty('voice');
+    });
+  });
+
+  it('shows the workspace with the server’s provider label and the document title', () => {
+    engine('mic-ready');
     renderPage();
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Call with Maya Okafor' }),
+      screen.getByRole('heading', { level: 1, name: 'Call with Priya Raman' }),
     ).toBeInTheDocument();
-    expect(within(screen.getAllByRole('banner')[0]!).getByText('Demo mode')).toBeInTheDocument();
-    expect(document.title).toBe('Call with Maya Okafor · Firefly');
+    expect(within(bar()).getByText('Demo mode')).toBeInTheDocument();
+    expect(document.title).toBe('Call with Priya Raman · Firefly');
+  });
+
+  it('says a live model is live, from the server’s own settings', () => {
+    mockedConfig.mockReturnValue({
+      config: {
+        ...CONFIG,
+        provider: {
+          kind: 'azure-openai',
+          label: 'Azure OpenAI (gpt-4o)',
+          demo: false,
+          notice: null,
+        },
+      },
+      loading: false,
+      error: false,
+      reload,
+    });
+    engine('mic-ready');
+    renderPage();
+    expect(within(bar()).getByText('Live model')).toBeInTheDocument();
+    expect(within(bar()).queryByText('Demo mode')).toBeNull();
+  });
+
+  it('uses the server’s message limit for the reply box in a typed call', async () => {
+    mockedConfig.mockReturnValue({
+      config: { ...CONFIG, limits: { ...CONFIG.limits, maxMessageChars: 10 } },
+      loading: false,
+      error: false,
+      reload,
+    });
+    engine('text-fallback');
+    renderPage();
+    await userEvent.type(screen.getByRole('textbox', { name: 'Your reply' }), 'x'.repeat(12));
+    expect(screen.getByText('2 over the 10 character limit.')).toBeInTheDocument();
+  });
+
+  it('shows the developer’s input-mode tags only when the server says diagnostics are on', () => {
+    engine('end-confirm');
+    renderPage();
+    expect(screen.queryByText('Spoken')).toBeNull();
+    cleanup();
+    mockedConfig.mockReturnValue({
+      config: { ...CONFIG, features: { devDiagnostics: true, testHooks: false } },
+      loading: false,
+      error: false,
+      reload,
+    });
+    renderPage();
+    expect(screen.getAllByText('Spoken').length).toBeGreaterThan(0);
   });
 
   it('waits for the server’s settings with a skeleton, and does not start the engine', () => {
@@ -121,19 +204,19 @@ describe('the call page', () => {
     expect(mockedUseCall).not.toHaveBeenCalled();
   });
 
-  it('explains it when the settings cannot be fetched, and offers Try again', async () => {
+  it('explains it when the settings cannot be fetched, and offers Retry', async () => {
     mockedConfig.mockReturnValue({ config: null, loading: false, error: true, reload });
     renderPage();
     expect(
       screen.getByRole('heading', { level: 1, name: 'This call could not be opened.' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Nothing in the call was changed.')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(screen.getByText(/Nothing in the call was changed/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(reload).toHaveBeenCalledTimes(1);
     expect(mockedUseCall).not.toHaveBeenCalled();
   });
 
-  it('shows a designed error page when the call could not be loaded, with Try again and a way back', async () => {
+  it('shows a designed error page when the call could not be loaded, with Retry and a way back', async () => {
     const actions = engine('load-error');
     renderPage();
     expect(
@@ -143,14 +226,21 @@ describe('the call page', () => {
       'href',
       '/scenarios',
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(actions.retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells the screen when the browser is offline', () => {
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    engine('offline');
+    renderPage();
+    expect(within(bar()).getByText('Offline')).toBeInTheDocument();
   });
 });
 
 describe('a call that is over', () => {
   it('opens the report, replacing this page, when the session is not active', async () => {
-    const base = FIXTURES['ready-for-next-turn'].snapshot;
+    const base = FIXTURES['mic-ready'].snapshot;
     engine({ ...base, session: { ...base.session!, status: 'completed' } });
     const { router } = renderPage('/calls/ses_done');
     await waitFor(() => expect(router.state.location.pathname).toBe('/sessions/ses_done/report'));
@@ -159,7 +249,7 @@ describe('a call that is over', () => {
   });
 
   it('opens the report for a call that is being evaluated or failed to evaluate', async () => {
-    const base = FIXTURES['ready-for-next-turn'].snapshot;
+    const base = FIXTURES['mic-ready'].snapshot;
     for (const status of ['completing', 'evaluation_failed'] as const) {
       engine({ ...base, session: { ...base.session!, status } });
       const { router, unmount } = renderPage('/calls/ses_wait');
@@ -170,14 +260,14 @@ describe('a call that is over', () => {
   });
 
   it('opens the report as soon as the engine says the call is completed', async () => {
-    const base = FIXTURES['ready-for-next-turn'].snapshot;
+    const base = FIXTURES['mic-ready'].snapshot;
     engine({ ...base, phase: 'completed' });
     const { router } = renderPage('/calls/ses_x');
     await waitFor(() => expect(router.state.location.pathname).toBe('/sessions/ses_x/report'));
   });
 
   it('opens the report when the server says the call has already ended, as it can in another tab', async () => {
-    const base = FIXTURES['ready-for-next-turn'].snapshot;
+    const base = FIXTURES['mic-ready'].snapshot;
     engine({ ...base, problem: describeProblem('session-ended') });
     const { router } = renderPage('/calls/ses_elsewhere');
     await waitFor(() =>
@@ -191,17 +281,20 @@ describe('starting and ending from the page', () => {
     const actions = engine('preflight-voice');
     renderPage();
     expect(actions.begin).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Allow microphone and start' }));
-    expect(actions.begin).toHaveBeenCalledWith({ voice: true });
+    await userEvent.click(screen.getByRole('button', { name: 'Start voice call' }));
+    expect(actions.begin).toHaveBeenCalledExactlyOnceWith({ voice: true });
   });
 
   it('leads with the typed call when the address says ?input=text', async () => {
     const actions = engine('preflight-voice');
-    renderPage('/calls/ses_fixture_maya?input=text');
-    const buttons = screen.getAllByRole('button').map((button) => button.textContent);
-    expect(buttons.slice(0, 2)).toEqual(['Start text-only call', 'Allow microphone and start']);
-    await userEvent.click(screen.getByRole('button', { name: 'Start text-only call' }));
-    expect(actions.begin).toHaveBeenCalledWith({ voice: false });
+    renderPage(`${CALL_PATH}?input=text`);
+    const buttons = screen
+      .getAllByRole('button')
+      .map((button) => button.textContent)
+      .filter((text) => /^Start (text|voice) call$/.test(text ?? ''));
+    expect(buttons).toEqual(['Start text call', 'Start voice call']);
+    await userEvent.click(screen.getByRole('button', { name: 'Start text call' }));
+    expect(actions.begin).toHaveBeenCalledExactlyOnceWith({ voice: false });
   });
 
   it('links back to the brief for the scenario', () => {
@@ -209,17 +302,15 @@ describe('starting and ending from the page', () => {
     renderPage();
     expect(screen.getByRole('link', { name: 'Back to brief' })).toHaveAttribute(
       'href',
-      expect.stringContaining('/scenarios/locked-out-after-password-reset/brief'),
+      expect.stringContaining('/scenarios/fixture-teams-audio-drops/brief'),
     );
   });
 
   it('opens the report after End and review', async () => {
-    const actions = engine('ready-for-next-turn');
+    const actions = engine('mic-ready');
     actions.endCall.mockResolvedValue({ sessionId: 'ses_finished' });
     const { router } = renderPage();
-    await userEvent.click(
-      within(screen.getAllByRole('banner')[0]!).getByRole('button', { name: 'End call' }),
-    );
+    await userEvent.click(within(bar()).getByRole('button', { name: 'End call' }));
     await userEvent.click(screen.getByRole('button', { name: 'End and review' }));
     await waitFor(() =>
       expect(router.state.location.pathname).toBe('/sessions/ses_finished/report'),
@@ -228,26 +319,22 @@ describe('starting and ending from the page', () => {
   });
 
   it('stays on the call when ending did not work', async () => {
-    const actions = engine('ready-for-next-turn');
+    const actions = engine('mic-ready');
     actions.endCall.mockResolvedValue(null);
     const { router } = renderPage();
-    await userEvent.click(
-      within(screen.getAllByRole('banner')[0]!).getByRole('button', { name: 'End call' }),
-    );
+    await userEvent.click(within(bar()).getByRole('button', { name: 'End call' }));
     await userEvent.click(screen.getByRole('button', { name: 'End and review' }));
     await waitFor(() => expect(actions.endCall).toHaveBeenCalled());
-    expect(router.state.location.pathname).toBe('/calls/ses_fixture_maya');
+    expect(router.state.location.pathname).toBe(CALL_PATH);
   });
 
   it('leaves an empty call without a report: it closes the call and goes back to the scenarios', async () => {
     engine('end-nothing-to-review');
     const { router } = renderPage();
-    await userEvent.click(
-      within(screen.getAllByRole('banner')[0]!).getByRole('button', { name: 'End call' }),
-    );
+    await userEvent.click(within(bar()).getByRole('button', { name: 'End call' }));
     await userEvent.click(screen.getByRole('button', { name: 'Leave without a report' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/scenarios'));
-    expect(api.deleteSession).toHaveBeenCalledWith('ses_fixture_maya');
+    expect(api.deleteSession).toHaveBeenCalledWith('ses_fixture_priya');
     expect(router.state.historyAction).toBe('REPLACE');
   });
 
@@ -255,9 +342,7 @@ describe('starting and ending from the page', () => {
     vi.mocked(api.deleteSession).mockRejectedValueOnce(new Error('offline'));
     engine('end-nothing-to-review');
     const { router } = renderPage();
-    await userEvent.click(
-      within(screen.getAllByRole('banner')[0]!).getByRole('button', { name: 'End call' }),
-    );
+    await userEvent.click(within(bar()).getByRole('button', { name: 'End call' }));
     await userEvent.click(screen.getByRole('button', { name: 'Leave without a report' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/scenarios'));
   });

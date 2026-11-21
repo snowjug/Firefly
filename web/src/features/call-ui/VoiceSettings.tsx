@@ -1,14 +1,16 @@
 import { Button, Dialog, Field, Select, Switch } from '../../design/index.ts';
 import { SPEECH_LANGUAGES, type SpeechLanguage } from '#shared/domain/speech.ts';
-import type { CallActions, CallSupport } from '../call/contract.ts';
+import type { CallActions, CallSnapshot, CallSupport } from '../call/contract.ts';
 import { LANGUAGE_NAMES } from './call-model.ts';
-import './voice-settings.css';
+import './dialogs.css';
 
 export interface VoiceSettingsProps {
   open: boolean;
   onClose(): void;
   handsFree: boolean;
   language: SpeechLanguage;
+  /** Whether the customer's voice is on, off for this call, or not available here. */
+  audio: CallSnapshot['audio'];
   /** The voice that really spoke the latest reply, and the expressive style the provider applied. */
   voice: string | null;
   style: string | null;
@@ -16,7 +18,7 @@ export interface VoiceSettingsProps {
     CallSupport,
     'capture' | 'playback' | 'captureLabel' | 'playbackLabel' | 'speechDemo'
   >;
-  actions: Pick<CallActions, 'setHandsFree' | 'setLanguage'>;
+  actions: Pick<CallActions, 'setHandsFree' | 'setLanguage' | 'setAudio'>;
 }
 
 const APPROXIMATED = 'approximated by pace and pitch';
@@ -28,7 +30,7 @@ export function describeVoice(
   support: Pick<CallSupport, 'playback' | 'playbackLabel'>,
 ): { voice: string; style: string } {
   if (support.playback === 'none') {
-    return { voice: 'None. The customer is shown as captions.', style: 'not applicable' };
+    return { voice: 'None. Replies are captions.', style: 'not applicable' };
   }
   if (support.playback === 'browser-synthesis') {
     // The call names the browser's voice itself ("Browser voice (on this device): Microsoft David,
@@ -43,14 +45,15 @@ export function describeVoice(
 }
 
 /**
- * Hands-free, the language for speech, and a plain read-out of which voice and which recognition
- * service are really in use. Nothing here claims more than the provider reported.
+ * Hands-free, the customer's audio, the language for speech, and a plain read-out of which voice and
+ * which recognition service are really in use. Nothing here claims more than the provider reported.
  */
 export function VoiceSettings({
   open,
   onClose,
   handsFree,
   language,
+  audio,
   voice,
   style,
   support,
@@ -72,11 +75,18 @@ export function VoiceSettings({
       <div className="cw-settings">
         <Switch
           label="Hands-free"
-          description="The microphone opens by itself after each customer reply, and waits for you after three empty tries in a row. Turn it off to press Talk each time."
+          description="Opens the microphone after each reply."
           checked={handsFree}
           onChange={(event) => actions.setHandsFree(event.currentTarget.checked)}
         />
-        <Field label="Speech language" hint="Used to understand you and to speak for the customer.">
+        <Switch
+          label="Customer audio"
+          description={audio === 'none' ? 'Not available here. Replies are captions.' : undefined}
+          checked={audio === 'on'}
+          disabled={audio === 'none'}
+          onChange={(event) => actions.setAudio(event.currentTarget.checked)}
+        />
+        <Field label="Speech language">
           <Select
             value={language}
             onChange={(event) => actions.setLanguage(event.currentTarget.value as SpeechLanguage)}
@@ -102,13 +112,11 @@ export function VoiceSettings({
             <dd>
               {support.capture === 'none' ? 'Not available in this browser' : support.captureLabel}
               {support.capture === 'browser-recognition' ? (
-                <span className="cw-settings__note">
-                  It can miss words, so you can always type your reply.
-                </span>
+                <span className="cw-settings__note">It can miss words. Typing always works.</span>
               ) : null}
               {support.capture === 'server-speech' && support.speechDemo ? (
                 <span className="cw-settings__note">
-                  It does not understand audio: it returns scripted text instead of what you say.
+                  Scripted demo: it does not understand audio.
                 </span>
               ) : null}
             </dd>

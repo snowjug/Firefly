@@ -1,4 +1,5 @@
 import type { SpeechLanguage } from '#shared/domain/speech.ts';
+import type { VoiceId } from '#shared/domain/voices.ts';
 import type { SpokenTurn } from '../../../lib/api.ts';
 import { LEVEL_INTERVAL_MS, levelFromRms, rmsOf, smoothLevel } from '../capture/levels.ts';
 import { encodeWav, wavBlob } from '../capture/wav.ts';
@@ -13,6 +14,7 @@ import type {
   Playback,
   PlaybackHandlers,
   PlaybackJob,
+  PlaybackStop,
   PlayRequest,
   VoiceDetails,
 } from './types.ts';
@@ -23,12 +25,22 @@ import type {
 // blob URL is revoked as soon as it is no longer needed, and a browser that still refuses to play
 // is reported as `blocked` so the page can offer a Play button instead of an error.
 
-/** Fetches the speech for one stored customer turn. The text comes from the call, never the browser. */
+/** What a request for a voice may carry besides the turn: the voice the trainee chose. */
+export interface SpeakOptions {
+  voice?: VoiceId;
+}
+
+/**
+ * Fetches the speech for one stored customer turn. The text comes from the call, never the browser.
+ * The fifth argument is only passed when the trainee chose a voice, so a function that predates voice
+ * choice (and ignores it) is still called exactly as it always was.
+ */
 export type SpeakTurn = (
   sessionId: string,
   turnIndex: number,
   language: SpeechLanguage,
   signal: AbortSignal,
+  options?: SpeakOptions,
 ) => Promise<SpokenTurn>;
 
 export interface ServerPlaybackOptions {
@@ -46,7 +58,18 @@ interface Job {
   stopped: boolean;
   settled: boolean;
   url: string | null;
+  /**
+   * The reply's own audio is on the element. Until then the element's events are not this reply's:
+   * it may hold the silent unlock clip, or nothing at all.
+   */
+  onElement: boolean;
   meter: ReturnType<typeof setInterval> | undefined;
+  /** When the voice became audible, or null while it has not. */
+  startedAt: number | null;
+  /** How much of the voice had played when the job ended, was stopped or failed. */
+  playedMs: number | null;
+  /** What the first `stop` said, so a second one says the same. */
+  stopResult: PlaybackStop | null;
 }
 
 interface Kept {
@@ -55,7 +78,8 @@ interface Kept {
   details: VoiceDetails;
 }
 
-const keyOf = (request: PlayRequest) => `${request.sessionId}:${request.turnIndex}`;
+const keyOf = (request: PlayRequest) =>
+  `${request.sessionId}:${request.turnIndex}:${request.voice ?? ''}`;
 
 function isBlocked(error: unknown): boolean {
   return (error as { name?: unknown } | null)?.name === 'NotAllowedError';
@@ -80,16 +104,24 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
     if (!created) return null;
     element = created;
     created.preload = 'auto';
+    // The one element also plays the silent unlock clip and rests between replies, and what it
+    // reports then belongs to nobody: a reply that is still being fetched must not be finished,
+    // failed or given a length by it. Only a reply whose own audio is on the element is heard.
+    const owner = (): Job | null =>
+      current && !current.settled && current.onElement ? current : null;
     const onEnded = () => {
-      if (current && !current.settled) finish(current);
+      const job = owner();
+      if (job) finish(job);
     };
     const onError = () => {
-      if (current && !current.settled) fail(current, 'playback');
+      const job = owner();
+      if (job) fail(job, 'playback');
     };
     const onDuration = () => {
-      if (!current || current.settled) return;
+      const job = owner();
+      if (!job) return;
       const seconds = created.duration;
-      if (Number.isFinite(seconds) && seconds > 0) current.handlers.onDuration(seconds * 1000);
+      if (Number.isFinite(seconds) && seconds > 0) job.handlers.onDuration(seconds * 1000);
     };
     created.addEventListener('ended', onEnded);
     created.addEventListener('error', onError);
@@ -102,9 +134,7 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
     return created;
   }
 
-  function releaseElement(): void {
-    const el = element;
-    if (!el) return;
+  function rest(el: HTMLAudioElement): void {
     try {
       el.pause();
       el.removeAttribute('src');
@@ -112,6 +142,10 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
     } catch {
       // Nothing more to release.
     }
+  }
+
+  function releaseElement(): void {
+    if (element) rest(element);
   }
 
   function dropUrl(job: Job): void {
@@ -125,10 +159,20 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
   }
 
   function settle(job: Job): void {
+    // How much was heard, taken before anything is released: the element forgets it when it is.
+    if (job.playedMs === null) job.playedMs = playedSoFar(job);
     job.settled = true;
     clearInterval(job.meter);
     job.meter = undefined;
     if (current === job) current = null;
+  }
+
+  function playedSoFar(job: Job): number {
+    if (job.startedAt === null) return 0;
+    const seconds = element?.currentTime;
+    const fromElement =
+      typeof seconds === 'number' && Number.isFinite(seconds) ? seconds * 1000 : 0;
+    return Math.round(fromElement > 0 ? fromElement : Math.max(0, Date.now() - job.startedAt));
   }
 
   function finish(job: Job): void {
@@ -146,17 +190,25 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
     job.handlers.onFailure(kind);
   }
 
-  function stop(job: Job): void {
-    if (job.stopped) return;
+  function stop(job: Job): PlaybackStop {
+    if (job.stopResult) return job.stopResult;
+    // Cut off only if the voice was audible and had not already ended by itself.
+    const interrupted = job.startedAt !== null && !job.settled;
     job.stopped = true;
     job.controller.abort();
     const wasLoaded = job.url !== null;
     settle(job);
     dropUrl(job);
     if (wasLoaded) releaseElement();
+    job.stopResult = { interrupted, playedMs: job.playedMs ?? 0 };
+    return job.stopResult;
   }
 
-  // Lets sound play later without a gesture: a short silent clip is played inside the click.
+  // Lets sound play later without a gesture: a short silent clip is played inside the click. The clip
+  // is nobody's reply, so it is let go of as soon as it has started (or been refused), whether or not
+  // a reply has already been asked for: otherwise it would run on, reach its end a moment later and
+  // be taken for the end of that reply. A reply that has already put its own audio on the element
+  // is left alone.
   function unlock(el: HTMLAudioElement): void {
     if (unlocking || current) return;
     const url = createObjectUrl(wavBlob(encodeWav(new Float32Array(1600), 16000)));
@@ -166,15 +218,7 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
     const done = () => {
       unlocking = false;
       revokeObjectUrl(url);
-      if (!current && el.src === url) {
-        try {
-          el.pause();
-          el.removeAttribute('src');
-          el.load();
-        } catch {
-          // Nothing more to release.
-        }
-      }
+      if (el.src === url) rest(el);
     };
     try {
       void Promise.resolve(el.play()).then(done, done);
@@ -249,19 +293,26 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
       const timer = setTimeout(() => job.controller.abort(), timeoutMs);
       let spoken: SpokenTurn;
       try {
-        spoken = await options.speakTurn(
-          request.sessionId,
-          request.turnIndex,
-          request.language,
-          job.controller.signal,
-        );
+        const signal = job.controller.signal;
+        // The fifth argument is only there when a voice was chosen.
+        spoken = request.voice
+          ? await options.speakTurn(
+              request.sessionId,
+              request.turnIndex,
+              request.language,
+              signal,
+              {
+                voice: request.voice,
+              },
+            )
+          : await options.speakTurn(request.sessionId, request.turnIndex, request.language, signal);
       } catch {
         clearTimeout(timer);
         if (!job.stopped) fail(job, 'generation');
         return;
       }
       clearTimeout(timer);
-      if (job.stopped) return;
+      if (job.stopped || job.settled) return;
       const created = createObjectUrl(spoken.audio);
       if (!created) {
         fail(job, 'playback');
@@ -274,6 +325,8 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
     handlers.onDetails(details);
 
     wireMeter(el);
+    // From here the element is this reply's: it replaces whatever it held, such as the unlock clip.
+    job.onElement = true;
     el.src = url;
     try {
       await Promise.resolve(el.play());
@@ -292,6 +345,7 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
     }
     if (job.stopped || job.settled) return;
     const seconds = el.duration;
+    job.startedAt = Date.now();
     handlers.onStart({
       estimateMs:
         Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : estimateSpeechMs(request.text),
@@ -314,7 +368,11 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
         stopped: false,
         settled: false,
         url: null,
+        onElement: false,
         meter: undefined,
+        startedAt: null,
+        playedMs: null,
+        stopResult: null,
       };
       current = job;
       void run(job);

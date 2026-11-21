@@ -1,5 +1,11 @@
 import type { PublicStateDTO, SessionDTO } from '#shared/domain/api.ts';
-import type { InputMode, SpeechCapabilitiesDTO, SpeechLanguage } from '#shared/domain/speech.ts';
+import type {
+  InputMode,
+  SpeechCapabilitiesDTO,
+  SpeechLanguage,
+  SpeechProviderKind,
+} from '#shared/domain/speech.ts';
+import type { VoiceId } from '#shared/domain/voices.ts';
 import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 
 // The contract between the call engine (`useCall`, the turn machine and the audio adapters) and the
@@ -34,6 +40,47 @@ export const CALL_PHASES = [
   'completed',
 ] as const;
 export type CallPhase = (typeof CALL_PHASES)[number];
+
+/**
+ * The call in the product brief's words (the turn-taking machine of section 19), derived from the
+ * machine by `stageOf` in `stage.ts` and published with every snapshot. Exactly one at a time:
+ *
+ * | stage               | the machine is...                                                           |
+ * | ------------------- | --------------------------------------------------------------------------- |
+ * | `idle`              | `idle`: nothing started, no microphone asked for (or it was refused)         |
+ * | `mic-permission`    | `requesting-microphone`, or the microphone being asked for again             |
+ * | `ready`             | `ready` (the opening line is being prepared) or `ready-for-next-turn`        |
+ * | `listening`         | `listening`: the microphone is open                                         |
+ * | `endpointing`       | `listening` and the utterance is being finished (silence or "Done speaking") |
+ * | `transcribing`      | `transcribing`: the utterance is being turned into text                      |
+ * | `processing`        | `processing`: the message is sent and the customer's reply is being made     |
+ * | `customer-speaking` | `customer-speaking`: the customer's voice plays                              |
+ * | `paused`            | the voice loop is paused                                                    |
+ * | `muted`             | the microphone is muted while it would otherwise wait for the trainee        |
+ * | `retrying`          | a message is being sent again after it failed                               |
+ * | `offline`           | the last step failed because the network was gone                           |
+ * | `ending`            | `ending`: a message in flight is being finished before the call closes       |
+ * | `evaluating`        | `ending`: the call is being closed and the review prepared                   |
+ * | `completed`         | `completed`: the call is closed; the report is next                          |
+ */
+export const CALL_STAGES = [
+  'idle',
+  'mic-permission',
+  'ready',
+  'listening',
+  'endpointing',
+  'transcribing',
+  'processing',
+  'customer-speaking',
+  'paused',
+  'muted',
+  'retrying',
+  'offline',
+  'ending',
+  'evaluating',
+  'completed',
+] as const;
+export type CallStage = (typeof CALL_STAGES)[number];
 
 /** A problem the trainee can see. Every one says what happened, what was kept and what to do. */
 export type CallProblemCode =
@@ -70,6 +117,12 @@ export interface CallProblem {
   textFallback: boolean;
   /** `blocking` stops the call until handled; `degraded` leaves the call usable. */
   severity: 'blocking' | 'degraded';
+  /**
+   * How a screen reader should hear it. `assertive` only for what stops the trainee being heard (the
+   * microphone); the card for such a problem is announced as an alert, so the call's polite
+   * announcer says nothing for it. Everything else is `polite`.
+   */
+  announce: 'assertive' | 'polite';
 }
 
 /** What this browser and this server can do for a spoken call right now. */
@@ -78,6 +131,10 @@ export interface CallSupport {
   capture: 'server-speech' | 'browser-recognition' | 'none';
   /** Who speaks the customer's replies. */
   playback: 'server-speech' | 'browser-synthesis' | 'none';
+  /** The server's speech provider (`/api/config`): what the privacy details are about. */
+  provider: SpeechProviderKind;
+  /** This browser is Chrome or Edge, where the browser's own recognition is normally an online service. */
+  chromium: boolean;
   secureContext: boolean;
   /** One plain sentence saying why a voice call is not available, or null when it is. */
   reason: string | null;
@@ -124,6 +181,8 @@ export interface CallSnapshot {
   session: SessionDTO | null;
 
   phase: CallPhase;
+  /** The same moment in the product brief's words: see `CALL_STAGES`. */
+  stage: CallStage;
   /** How this call is being held: spoken, or typed only. */
   mode: InputMode;
   microphone: MicrophoneState;
@@ -131,8 +190,20 @@ export interface CallSnapshot {
   paused: boolean;
   /** Hands-free: the microphone reopens by itself after each customer reply. Otherwise push to talk. */
   handsFree: boolean;
+  /**
+   * The customer's voice: `on`, switched off for this call ("Continue without audio", replies are
+   * captions), or `none` when this browser and server cannot speak at all.
+   */
+  audio: 'on' | 'off' | 'none';
   /** True while the trainee is speaking (voice activity), for the "speech detected" indicator. */
   speechDetected: boolean;
+  /**
+   * The microphone is really open for this listening pass: the capture said so, so the browser's
+   * recording indicator is on. In `listening` before this, the trainee has asked to talk and the
+   * microphone is still starting (or waiting for the customer's voice to clear), and the screen does
+   * not say "Listening" yet.
+   */
+  micOpen: boolean;
   /** Microphone level, 0 to 1, at most about 15 updates a second; 0 whenever the microphone is closed. */
   micLevel: number;
   /** The customer's voice level, 0 to 1, while it plays. Shaped from the text when the engine cannot measure it. */
@@ -165,8 +236,10 @@ export interface CallSnapshot {
   /**
    * The latest thing a screen reader should hear, as whole sentences, one at a time: a new customer
    * reply, a change of phase, a problem. Never character by character. Changes identity per message.
+   * The sentences are the voice layer's (`VOICE_STATE_TEXT`) where it has one. `assertive` is for a
+   * problem that stops the trainee being heard; the screen announces that one as an alert.
    */
-  announcement: { id: number; text: string } | null;
+  announcement: { id: number; text: string; politeness: 'polite' | 'assertive' } | null;
 }
 
 export interface CallActions {
@@ -185,7 +258,19 @@ export interface CallActions {
   togglePause(): void;
   setHandsFree(on: boolean): void;
   setLanguage(language: SpeechLanguage): void;
-  /** Stops the customer's voice and gives the turn to the trainee. The transcript is unchanged. */
+  /**
+   * Text fallback as a mode: stops the microphone and the customer's voice and carries on by typing.
+   * `begin({ voice: true })` goes back to voice. Typed messages are the same messages to the
+   * customer and to the evaluator; nothing about the call changes but how the trainee's words arrive.
+   */
+  useText(): void;
+  /** Switches the customer's voice on or off for this call. Off, replies are captions only. */
+  setAudio(on: boolean): void;
+  /**
+   * Controlled turn-taking: stops the customer's voice and gives the turn to the trainee. The
+   * transcript is unchanged. Barge-in (speaking over the customer) is not supported, and the
+   * microphone never records while the customer's voice plays.
+   */
   interrupt(): void;
   /** Speaks the latest customer turn again. */
   replay(): void;
@@ -213,4 +298,10 @@ export interface UseCallOptions {
    * `turnsRemaining` is known as soon as the call loads; without it, after the first reply.
    */
   maxTraineeTurns?: number | null;
+  /**
+   * The neutral voice the trainee chose for the customer (`voice-a` to `voice-d`). The server does
+   * not store it: a call opened without one is spoken in the voice the scenario defaults to, which
+   * the page works out. Left out altogether, the server pairs a voice as it always did.
+   */
+  voice?: VoiceId;
 }

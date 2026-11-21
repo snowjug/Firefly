@@ -7,7 +7,7 @@ import type { EffectiveScenario } from '#shared/domain/config.ts';
 import { DISCOVERY_INTENTS, type DiscoveryIntent } from '#shared/domain/vocab.ts';
 import {
   ANYTHING_ELSE,
-  BLAME,
+  blames,
   BLAME_MORE,
   clip,
   contentWords,
@@ -20,8 +20,10 @@ import {
   hasSpecificNextSteps,
   HEDGES,
   IMPACT_ACK,
+  IMPATIENT_STATEMENT,
   INJECTION,
   INTENT_PATTERNS,
+  isAsking,
   isHousekeepingQuestion,
   isUnverifiedPromise,
   JARGON_EXPLAINED,
@@ -36,8 +38,7 @@ import {
   OWNERSHIP_VAGUE,
   prep,
   PROMISE_REALISTIC,
-  QUESTION_START,
-  REQUEST_PHRASE,
+  RECAP_LEAD,
   SELF_INTRO,
   splitSentences,
   STRUCTURE_MARKERS,
@@ -104,8 +105,7 @@ function mentionsSituation(sentenceLower: string, scenario: EffectiveScenario): 
 }
 
 function isQuestionSentence(sentence: string): boolean {
-  const lower = prep(sentence);
-  return sentence.trim().endsWith('?') || QUESTION_START.test(lower) || REQUEST_PHRASE.test(lower);
+  return isAsking(sentence);
 }
 
 export function detectIntents(sentenceLower: string): DiscoveryIntent[] {
@@ -227,11 +227,16 @@ export function classifyTurnRules(text: string, ctx: ClassifierContext): TurnCla
       note('promise-unverified', sentence);
     }
 
-    if (!asking && (BLAME.test(ls) || BLAME_MORE.some((p) => p.test(ls)))) {
+    // A recap ("So to confirm, you changed your password") plays back what was said; it blames no one.
+    if (!asking && (blames(ls) || (!RECAP_LEAD.test(ls) && BLAME_MORE.some((p) => p.test(ls))))) {
       out.blame = true;
       note('blame', sentence);
     }
-    if (DISMISSIVE.test(ls) || DISMISSIVE_MORE.some((p) => p.test(ls))) {
+    if (
+      DISMISSIVE.test(ls) ||
+      DISMISSIVE_MORE.some((p) => p.test(ls)) ||
+      (!question && IMPATIENT_STATEMENT.test(ls))
+    ) {
       out.dismissive = true;
       note('dismissive', sentence);
     }

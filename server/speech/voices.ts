@@ -1,10 +1,14 @@
 import {
   SPEECH_LANGUAGES,
   type SpeechLanguage,
+  type SpeechVoiceDTO,
   type VoiceDirection,
 } from '#shared/domain/speech.ts';
+import { toSpokenText } from '#shared/domain/spoken-text.ts';
+import { VOICE_CHOICES, VOICE_IDS, voiceChoice, type VoiceId } from '#shared/domain/voices.ts';
 import { normalizeWhitespace, sentences } from '#shared/domain/text.ts';
 import type { TemperatureBandId } from '#shared/domain/vocab.ts';
+import type { VoiceOption } from './types.ts';
 
 // How a customer's line is voiced: which Azure voice speaks it and how it is delivered. Everything
 // here is pure, so it can be tested without any speech service.
@@ -13,6 +17,11 @@ import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 // expressive style, that style is applied at a reduced, controlled degree. Everywhere else mood is
 // approximated by speaking rate and pitch alone, and the response says which one happened. Nothing
 // here clones, imitates or evokes a real person, and nothing is ever inferred from the trainee's voice.
+//
+// Pauses are not varied. The documentation describes SSML breaks and sentence-boundary silence, but
+// how each voice treats them (added to its own pauses, or in place of them) has not been checked
+// against the live service, so Firefly leaves every voice's own pauses alone rather than claim a
+// pause it cannot vouch for.
 
 export type Speaker = VoiceDirection['speaker'];
 
@@ -21,7 +30,9 @@ export type VoiceOverrides = Partial<Record<Speaker, string | null>>;
 
 /**
  * The built-in voices: standard neural voices whose locale is the language they are used for. Every
- * name appears in the "Text to speech voices" table of Microsoft's language support page.
+ * name appears in the "Text to speech voices" table of Microsoft's language support page. This is
+ * the pairing used when no voice is chosen (calls saved before voices could be chosen, and older
+ * clients), and the one the administrator's own voice names replace.
  */
 export const DEFAULT_VOICES: Record<SpeechLanguage, Record<Speaker, string>> = {
   'en-GB': { female: 'en-GB-SoniaNeural', male: 'en-GB-RyanNeural' },
@@ -29,6 +40,51 @@ export const DEFAULT_VOICES: Record<SpeechLanguage, Record<Speaker, string>> = {
   'en-IE': { female: 'en-IE-EmilyNeural', male: 'en-IE-ConnorNeural' },
   'en-AU': { female: 'en-AU-NatashaNeural', male: 'en-AU-WilliamNeural' },
   'en-IN': { female: 'en-IN-NeerjaNeural', male: 'en-IN-PrabhatNeural' },
+};
+
+/**
+ * The provider voice behind each of the four neutral choices, in every language. Every name is in
+ * the same table of Microsoft's language support page (checked against the page dated 18 November
+ * 2026; no voice was heard or called live). Where the provider has fewer than four standard voices
+ * in a language (Ireland has two), a choice shares the voice of an earlier one and differs by pace
+ * alone, and the voice list says so.
+ *
+ * The voices are arranged so that no choice always lands on the same kind of voice: across the four
+ * languages that have four, each choice gets two voices of each presentation. Nothing else in
+ * Firefly knows or uses a voice's presentation, and the choice a trainee sees is only a label and a
+ * delivery.
+ */
+export const VOICE_CATALOGUE: Record<SpeechLanguage, Record<VoiceId, string>> = {
+  'en-GB': {
+    'voice-a': 'en-GB-SoniaNeural',
+    'voice-b': 'en-GB-RyanNeural',
+    'voice-c': 'en-GB-LibbyNeural',
+    'voice-d': 'en-GB-ThomasNeural',
+  },
+  'en-US': {
+    'voice-a': 'en-US-GuyNeural',
+    'voice-b': 'en-US-AriaNeural',
+    'voice-c': 'en-US-DavisNeural',
+    'voice-d': 'en-US-JennyNeural',
+  },
+  'en-IE': {
+    'voice-a': 'en-IE-ConnorNeural',
+    'voice-b': 'en-IE-EmilyNeural',
+    'voice-c': 'en-IE-ConnorNeural',
+    'voice-d': 'en-IE-EmilyNeural',
+  },
+  'en-AU': {
+    'voice-a': 'en-AU-NatashaNeural',
+    'voice-b': 'en-AU-WilliamNeural',
+    'voice-c': 'en-AU-DarrenNeural',
+    'voice-d': 'en-AU-AnnetteNeural',
+  },
+  'en-IN': {
+    'voice-a': 'en-IN-AaravNeural',
+    'voice-b': 'en-IN-NeerjaNeural',
+    'voice-c': 'en-IN-AashiNeural',
+    'voice-d': 'en-IN-KunalNeural',
+  },
 };
 
 /**
@@ -40,12 +96,19 @@ export const DEFAULT_VOICES: Record<SpeechLanguage, Record<Speaker, string>> = {
 export const VOICE_STYLES: Readonly<Record<string, readonly string[]>> = {
   'en-GB-SoniaNeural': ['cheerful', 'sad'],
   'en-GB-RyanNeural': ['chat', 'cheerful', 'sad', 'whispering'],
+  'en-GB-LibbyNeural': [],
+  'en-GB-ThomasNeural': [],
   'en-IE-EmilyNeural': [],
   'en-IE-ConnorNeural': [],
   'en-AU-NatashaNeural': [],
   'en-AU-WilliamNeural': [],
+  'en-AU-DarrenNeural': [],
+  'en-AU-AnnetteNeural': [],
   'en-IN-NeerjaNeural': ['cheerful', 'empathetic', 'newscast'],
   'en-IN-PrabhatNeural': [],
+  'en-IN-AaravNeural': [],
+  'en-IN-AashiNeural': [],
+  'en-IN-KunalNeural': [],
   'en-US-AriaNeural': [
     'angry',
     'chat',
@@ -160,8 +223,18 @@ export function voiceDirection(args: {
   speaker: Speaker;
   language: SpeechLanguage;
   mood: TemperatureBandId;
+  /** The voice the trainee chose. Left out, the speaker picks the voice. */
+  voice?: VoiceId;
+  /** The customer is cooling down: a little slower and calmer than the mood alone would be. */
+  recovering?: boolean;
 }): VoiceDirection {
-  return { ...args, ...DELIVERY[args.mood] };
+  const { voice, recovering, ...rest } = args;
+  return {
+    ...rest,
+    ...DELIVERY[args.mood],
+    ...(voice ? { voice } : {}),
+    ...(recovering ? { recovering: true } : {}),
+  };
 }
 
 /** The one expressive style each mood asks for. Calm and concerned ask for none. */
@@ -174,21 +247,41 @@ const MOOD_STYLE: Partial<Record<TemperatureBandId, string>> = {
 /** Even the strongest mood is delivered below the style's default intensity (1): firm, never shouting. */
 const MAX_STYLE_DEGREE_HUNDREDTHS = 90;
 
+// However a mood, a recovery and a voice's pace add up, delivery stays inside these limits (percent).
+// The documented limits are far wider; these keep every customer plain, intelligible and unhurried.
+export const MAX_RATE_PERCENT = 22;
+export const MIN_RATE_PERCENT = -15;
+export const MAX_PITCH_PERCENT = 6;
+/** A customer who is cooling down speaks this much slower than their mood alone would make them. */
+const RECOVERY_RATE_DROP = 3;
+
 const clamp01 = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
-const percent = (n: number) => `${n >= 0 ? '+' : '-'}${Math.abs(Math.round(n))}%`;
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+const percent = (n: number) => {
+  const whole = Math.round(n);
+  return `${whole >= 0 ? '+' : '-'}${Math.abs(whole)}%`;
+};
 
 export function chooseVoice(
-  direction: Pick<VoiceDirection, 'speaker' | 'language'>,
+  direction: Pick<VoiceDirection, 'speaker' | 'language'> & Partial<Pick<VoiceDirection, 'voice'>>,
   overrides: VoiceOverrides = {},
 ): string {
+  // The administrator's own voice names replace the pairing by speaker, never a voice the trainee chose.
+  const chosen = direction.voice
+    ? VOICE_CATALOGUE[direction.language]?.[direction.voice]
+    : undefined;
+  if (chosen) return chosen;
   return overrides[direction.speaker] ?? DEFAULT_VOICES[direction.language][direction.speaker];
 }
 
 /** The style to apply for this mood, only when the voice really lists it, else null. */
 export function styleFor(
   voice: string,
-  direction: Pick<VoiceDirection, 'mood' | 'intensity'>,
+  direction: Pick<VoiceDirection, 'mood' | 'intensity'> &
+    Partial<Pick<VoiceDirection, 'recovering'>>,
 ): { style: string; degree: number } | null {
+  // A customer who is cooling down is calmer than their band says: no style, only a slower pace.
+  if (direction.recovering) return null;
   const style = MOOD_STYLE[direction.mood];
   if (!style || !VOICE_STYLES[voice]?.includes(style)) return null;
   // The degree grows with intensity from 0.2 and stops at 0.9.
@@ -200,32 +293,79 @@ export function styleFor(
 }
 
 /**
- * Speaking rate and pitch for a delivery, as the relative percentages SSML accepts (the documented
- * limits are far wider than anything used here). A style carries the tone by itself, so pitch is
- * only changed when no style is applied.
+ * Speaking rate and pitch for a delivery, as the relative percentages SSML accepts. A style carries
+ * the tone by itself, so pitch is only changed when no style is applied. A customer who is
+ * recovering is slower and calmer than their mood alone; the chosen voice adds its own small pace
+ * (Warm a little slower, Direct a little quicker, and so on). The sum always stays inside the limits
+ * above.
  */
 export function prosodyFor(
-  direction: Pick<VoiceDirection, 'pace' | 'intensity'>,
+  direction: Pick<VoiceDirection, 'pace' | 'intensity'> &
+    Partial<Pick<VoiceDirection, 'voice' | 'recovering'>>,
   styleApplied: boolean,
 ): { rate: string; pitch: string | null } {
   const i = clamp01(direction.intensity);
-  if (direction.pace === 'measured') return { rate: percent(-4), pitch: null };
   const brisk = direction.pace === 'brisk';
+  let rate = direction.pace === 'measured' ? -4 : brisk ? 2 + 16 * i : 2 + 12 * i;
+  let pitch = direction.pace === 'measured' || styleApplied ? null : brisk ? 1 + 8 * i : -4 * i;
+  if (direction.recovering) {
+    rate = (rate > 0 ? rate / 2 : rate) - RECOVERY_RATE_DROP;
+    pitch = pitch === null ? null : pitch / 2;
+  }
+  if (direction.voice) rate += voiceChoice(direction.voice).paceDelta;
   return {
-    rate: percent(brisk ? 2 + 16 * i : 2 + 12 * i),
-    pitch: styleApplied ? null : percent(brisk ? 1 + 8 * i : -4 * i),
+    rate: percent(clamp(rate, MIN_RATE_PERCENT, MAX_RATE_PERCENT)),
+    pitch: pitch === null ? null : percent(clamp(pitch, -MAX_PITCH_PERCENT, MAX_PITCH_PERCENT)),
   };
 }
 
 /** True when every language and speaker resolves to a voice that lists the styles moods ask for. */
 export function moodStylesAvailable(overrides: VoiceOverrides = {}): boolean {
-  const wanted = new Set(Object.values(MOOD_STYLE));
   return SPEECH_LANGUAGES.every((language) =>
-    (['female', 'male'] as const).every((speaker) => {
-      const styles = VOICE_STYLES[chooseVoice({ speaker, language }, overrides)] ?? [];
-      return [...wanted].every((style) => styles.includes(style));
-    }),
+    (['female', 'male'] as const).every((speaker) =>
+      listsMoodStyles(chooseVoice({ speaker, language }, overrides)),
+    ),
   );
+}
+
+/** True when the table lists every style moods ask for on this voice. */
+export function listsMoodStyles(voice: string): boolean {
+  const styles = VOICE_STYLES[voice] ?? [];
+  return Object.values(MOOD_STYLE).every((style) => styles.includes(style as string));
+}
+
+// ---------------------------------------------------------------------------------------
+// The four neutral choices
+
+/** How the catalogue makes each of the four choices in one language. */
+export function voiceOptions(language: SpeechLanguage): readonly VoiceOption[] {
+  const used = new Set<string>();
+  return VOICE_IDS.map((id) => {
+    const providerVoice = VOICE_CATALOGUE[language][id];
+    const shared = used.has(providerVoice);
+    used.add(providerVoice);
+    return { id, providerVoice, shared, styles: listsMoodStyles(providerVoice) };
+  });
+}
+
+/**
+ * The four choices as the web app sees them: label, trait and description, and for each language
+ * whether the choice has a synthetic voice of its own there and whether mood can be performed with
+ * a style. It carries no provider voice name, so nothing in it names or suggests a person.
+ */
+export function describeVoices(
+  optionsFor: (language: SpeechLanguage) => readonly VoiceOption[],
+): SpeechVoiceDTO[] {
+  return VOICE_CHOICES.map(({ id, label, trait, description }) => {
+    const languages: SpeechVoiceDTO['languages'] = {};
+    for (const language of SPEECH_LANGUAGES) {
+      const option = optionsFor(language).find((candidate) => candidate.id === id);
+      if (option) {
+        languages[language] = { voice: option.shared ? 'shared' : 'own', styles: option.styles };
+      }
+    }
+    return { id, label, trait, description, languages };
+  });
 }
 
 // ---------------------------------------------------------------------------------------
@@ -264,14 +404,18 @@ function cutAtSentence(text: string, max: number): { text: string; truncated: bo
 export const cleanText = (text: string): string => normalizeWhitespace(text.replace(UNSPOKEN, ''));
 
 /**
- * The words that will be spoken for a stored line: control characters removed, whitespace tidied,
- * and a line that is too long cut at a sentence boundary. The stored text is never changed.
+ * The words that will be spoken for a stored line: control characters removed, anything that is not
+ * speech taken out (markdown, JSON, stage directions, notes meant for the simulation, speaker
+ * labels, see `toSpokenText`), whitespace tidied, and a line that is too long cut at a sentence
+ * boundary. The stored text is never changed.
  */
 export function prepareSpokenText(
   text: string,
   max = MAX_SPOKEN_CHARS,
 ): { text: string; truncated: boolean } {
-  return cutAtSentence(cleanText(text), max);
+  // Control characters go first, but lines stay lines: speaker labels, bullets and notes are
+  // recognised by where a line starts.
+  return cutAtSentence(cleanText(toSpokenText(text.replace(UNSPOKEN, ''))), max);
 }
 
 const XML_ENTITIES: Record<string, string> = {
@@ -292,6 +436,8 @@ const localeOf = (voice: string): string | null =>
 export interface SpeechPlan {
   ssml: string;
   voice: string;
+  /** The neutral voice choice this was planned for, or null when no voice was chosen. */
+  voiceId: VoiceId | null;
   /** The style that is really applied, or `none` when only rate and pitch change. */
   style: string;
   /** What will be spoken: the stored line, cleaned and cut at a sentence boundary when long. */
@@ -321,6 +467,7 @@ export function planSpeech(
   return {
     ssml,
     voice,
+    voiceId: direction.voice ?? null,
     style: styled?.style ?? 'none',
     text: spoken.text,
     truncated: spoken.truncated,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CallActions, CallSnapshot } from '../../call/contract.ts';
+import type { CallActions, CallSnapshot, CallStage } from '../../call/contract.ts';
 import { SkipLink } from '../../../app/shell/Shell.tsx';
 import { TextLink } from '../../../design/index.ts';
 import { CallWorkspace } from '../CallWorkspace.tsx';
@@ -15,10 +15,10 @@ import {
 const GROUPS: FixtureGroup[] = [
   'Screens',
   'Stages of a turn',
-  'Call modes',
+  'Modes',
   'Problems',
   'Customer state',
-  'Content and dialogs',
+  'Dialogs',
 ];
 
 const DEMO_PROVIDER = { demo: true, label: 'Demo mode (built-in rules engine)' };
@@ -78,7 +78,10 @@ function FixtureView({
   offline: boolean;
 }) {
   const [snapshot, setSnapshot] = useState<CallSnapshot>(fixture.snapshot);
-  const previousPhase = useRef(fixture.snapshot.phase);
+  const before = useRef<{ phase: CallSnapshot['phase']; stage: CallStage }>({
+    phase: fixture.snapshot.phase,
+    stage: fixture.snapshot.stage,
+  });
 
   // A few actions do something, so the controls can be tried by hand. None of them goes anywhere.
   const actions = useMemo<CallActions>(() => {
@@ -91,24 +94,54 @@ function FixtureView({
       }));
     return {
       begin: async ({ voice }) =>
-        update({ phase: 'ready-for-next-turn', mode: voice ? 'voice' : 'text' }),
-      talk: () => update({ phase: 'listening' }),
-      stopTalking: () => update({ phase: 'transcribing', speechDetected: false, micLevel: 0 }),
-      toggleMute: () => update((current) => ({ muted: !current.muted })),
-      togglePause: () => update((current) => ({ paused: !current.paused })),
+        update({
+          phase: 'ready-for-next-turn',
+          stage: 'ready',
+          mode: voice ? 'voice' : 'text',
+          microphone: voice ? 'granted' : 'unknown',
+          problem: null,
+        }),
+      talk: () => update({ phase: 'listening', stage: 'listening', micOpen: true, hint: null }),
+      stopTalking: () =>
+        update({
+          phase: 'transcribing',
+          stage: 'transcribing',
+          speechDetected: false,
+          micLevel: 0,
+        }),
+      toggleMute: () =>
+        update((current) => ({
+          muted: !current.muted,
+          stage: current.muted ? 'ready' : 'muted',
+          phase: 'ready-for-next-turn',
+        })),
+      togglePause: () =>
+        update((current) => ({
+          paused: !current.paused,
+          stage: current.paused ? 'ready' : 'paused',
+          phase: 'ready-for-next-turn',
+        })),
       setHandsFree: (on) => update({ handsFree: on }),
       setLanguage: (language) =>
         update((current) => ({ voiceDetails: { ...current.voiceDetails, language } })),
-      interrupt: () => update({ phase: 'ready-for-next-turn', customerLevel: 0 }),
-      replay: () => update({ phase: 'customer-speaking' }),
+      useText: () => update({ mode: 'text', phase: 'ready-for-next-turn', stage: 'ready' }),
+      setAudio: (on) => update({ audio: on ? 'on' : 'off', problem: null }),
+      interrupt: () =>
+        update({
+          phase: 'ready-for-next-turn',
+          stage: 'ready',
+          customerLevel: 0,
+        }),
+      replay: () =>
+        update({ phase: 'customer-speaking', stage: 'customer-speaking', problem: null }),
       sendText: async () => true,
-      retry: () => update({ problem: null }),
+      retry: () => update({ problem: null, stage: 'retrying', phase: 'processing' }),
       dismissProblem: () => update({ problem: null }),
       endCall: async () => {
-        previousPhase.current = fixture.snapshot.phase;
-        update({ phase: 'ending' });
+        before.current = { phase: fixture.snapshot.phase, stage: fixture.snapshot.stage };
+        update({ phase: 'ending', stage: 'evaluating' });
         await new Promise((resolve) => window.setTimeout(resolve, 2500));
-        update({ phase: previousPhase.current });
+        update(before.current);
         return null;
       },
     };
@@ -147,8 +180,9 @@ function FixtureView({
           provider={live ? LIVE_PROVIDER : (fixture.view?.provider ?? DEMO_PROVIDER)}
           online={offline ? false : (fixture.view?.online ?? true)}
           preferText={fixture.view?.preferText}
-          briefTo="/scenarios/locked-out-after-password-reset/brief"
+          briefTo="/scenarios"
           initialUi={fixture.view?.initialUi}
+          showInputMode={fixture.view?.showInputMode}
           onDiscard={() => undefined}
         />
       </main>

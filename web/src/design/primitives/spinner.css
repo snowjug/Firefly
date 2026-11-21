@@ -34,7 +34,7 @@
 .ff-spinner__svg {
   inline-size: var(--_size);
   block-size: var(--_size);
-  animation: ff-spin 0.9s linear infinite;
+  animation: ff-spin var(--dur-spin) linear infinite;
 }
 .ff-spinner__track,
 .ff-spinner__arc {

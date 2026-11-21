@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { isRouteErrorResponse, useLocation, useNavigate, useRouteError } from 'react-router';
-import { Button, LinkButton } from '../../design/primitives/Button.tsx';
 import { Icon } from '../../design/icons.tsx';
+import { Button, LinkButton } from '../../design/primitives/Button.tsx';
 import { Surface } from '../../design/primitives/Surface.tsx';
 import { useDocumentTitle, useOnline } from '../../lib/hooks.ts';
 import { SkipLink } from './Shell.tsx';
@@ -29,44 +29,79 @@ export function classifyRouteError(error: unknown): RouteErrorKind {
   return 'unknown';
 }
 
-const SAVED = 'Calls, transcripts and reports that Firefly has already saved are not affected.';
+const SAFE = 'Saved calls and reports are not affected.';
 
 function copyFor(kind: RouteErrorKind, online: boolean) {
   if (kind === 'not-found') {
     return {
       title: 'We cannot find that page',
-      body: 'The address may be mistyped, or the page may have moved.',
-      saved: SAVED,
+      body: 'Check the address, or start from the scenarios.',
     };
   }
   if (kind === 'load') {
     return {
       title: 'This page did not load',
       body: online
-        ? 'Firefly could not fetch part of this page. Check your connection, then try again.'
-        : 'You are offline, so part of this page could not be fetched. Reconnect, then try again.',
-      saved: SAVED,
+        ? 'Check your connection, then try again.'
+        : 'You are offline. Reconnect, then try again.',
     };
   }
   return {
     title: 'Something went wrong on this page',
-    body: 'Firefly hit a problem while showing this page. Try again, or carry on from the scenarios or the home page.',
-    saved: SAVED,
+    body: 'Try again, or carry on from the scenarios.',
   };
 }
 
 /**
- * What a person sees when a page fails: what happened, that saved work is safe, and three ways
- * forward. It never shows the error's message or stack, which could say more than anyone should
- * see; development builds log the error to the console instead.
+ * What a person sees when a page is missing or fails: what happened in a line, that saved work is
+ * safe, and the ways forward. It never shows an error's message or stack, which could say more than
+ * anyone should see. Without `onRetry` there is nothing to retry (a page that does not exist).
  */
+export function ErrorMessage({
+  kind,
+  online = true,
+  onRetry,
+}: {
+  kind: RouteErrorKind;
+  online?: boolean;
+  onRetry?: () => void;
+}) {
+  const copy = copyFor(kind, online);
+  return (
+    <div className="ff-errorpage l-page l-page--read">
+      <Surface appearance="outlined" padding="xl" className="ff-errorpage__card">
+        <span className="ff-errorpage__icon" aria-hidden="true">
+          <Icon name={kind === 'not-found' ? 'search' : 'warning'} size={28} />
+        </span>
+        <div className="ff-errorpage__text l-stack l-gap-2" role="alert">
+          <h1 className="t-title2">{copy.title}</h1>
+          <p className="t-reading t-muted">{copy.body}</p>
+          {kind === 'not-found' ? null : <p className="t-reading t-muted">{SAFE}</p>}
+        </div>
+        <div className="l-cluster l-gap-3">
+          {onRetry ? (
+            <Button appearance="primary" icon="refresh" onClick={onRetry}>
+              Try again
+            </Button>
+          ) : null}
+          <LinkButton to="/scenarios" appearance={onRetry ? 'outline' : 'primary'}>
+            Go to scenarios
+          </LinkButton>
+          <LinkButton to="/" appearance="subtle">
+            Home
+          </LinkButton>
+        </div>
+      </Surface>
+    </div>
+  );
+}
+
 function ErrorView() {
   const error = useRouteError();
   const online = useOnline();
   const location = useLocation();
   const navigate = useNavigate();
   const kind = classifyRouteError(error);
-  const copy = copyFor(kind, online);
   useDocumentTitle(kind === 'not-found' ? 'Page not found' : 'Something went wrong');
   useEffect(() => {
     if (import.meta.env.DEV) console.error(error);
@@ -80,29 +115,7 @@ function ErrorView() {
   };
 
   return (
-    <div className="ff-errorpage l-page l-page--read">
-      <Surface appearance="outlined" padding="xl" className="ff-errorpage__card">
-        <span className="ff-errorpage__icon" aria-hidden="true">
-          <Icon name="warning" size={28} />
-        </span>
-        <div className="ff-errorpage__text l-stack l-gap-2" role="alert">
-          <h1 className="t-title2">{copy.title}</h1>
-          <p className="t-reading t-muted">{copy.body}</p>
-          <p className="t-reading t-muted">{copy.saved}</p>
-        </div>
-        <div className="l-cluster l-gap-3">
-          <Button appearance="primary" icon="refresh" onClick={retry}>
-            Try again
-          </Button>
-          <LinkButton to="/scenarios" appearance="outline">
-            Go to scenarios
-          </LinkButton>
-          <LinkButton to="/" appearance="subtle">
-            Home
-          </LinkButton>
-        </div>
-      </Surface>
-    </div>
+    <ErrorMessage kind={kind} online={online} onRetry={kind === 'not-found' ? undefined : retry} />
   );
 }
 

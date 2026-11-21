@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MAX_MESSAGE_CHARS } from '#shared/domain/text.ts';
 import {
+  NOTHING_TO_SPEAK_MESSAGE,
   SPEECH_LIMITS,
   SpeechError,
   type SpeechConfig,
@@ -10,7 +11,13 @@ import {
   type TranscribeRequest,
   type TranscribeResult,
 } from './types.ts';
-import { cleanText, moodStylesAvailable, planSpeech } from './voices.ts';
+import {
+  cleanText,
+  describeVoices,
+  moodStylesAvailable,
+  planSpeech,
+  voiceOptions,
+} from './voices.ts';
 
 // Azure AI Speech over its REST APIs: short-audio speech to text and text to speech.
 //
@@ -30,11 +37,19 @@ export interface AzureSpeechOptions {
   sleep?: Sleep;
   /** Shown as the notice in the capabilities, for a configuration that works but was adjusted. */
   notice?: string | null;
+  /**
+   * The audio format asked of text to speech. Calls always use the one mp3 format; only the live
+   * smoke test asks for WAV, because speech to text cannot read an mp3.
+   */
+  outputFormat?: AzureOutputFormat;
 }
 
 export const AZURE_SPEECH_LABEL = 'Azure AI Speech';
 /** The one audio format asked for: mono mp3 at 24 kHz, 48 kbit/s, which every browser plays. */
 export const AZURE_OUTPUT_FORMAT = 'audio-24khz-48kbitrate-mono-mp3';
+/** The format of a recording as speech to text accepts it: used to bring a spoken line back as text in the smoke test. */
+export const AZURE_WAV_OUTPUT_FORMAT = 'riff-16khz-16bit-mono-pcm';
+export type AzureOutputFormat = typeof AZURE_OUTPUT_FORMAT | typeof AZURE_WAV_OUTPUT_FORMAT;
 export const AZURE_STT_CONTENT_TYPE = 'audio/wav; codecs=audio/pcm; samplerate=16000';
 const USER_AGENT = 'Firefly';
 
@@ -56,7 +71,7 @@ export const SPEECH_MESSAGES = {
   unreachable: 'Could not reach the speech service. Please try again in a moment.',
   rejected: 'The speech service did not accept that request.',
   badOutput: 'The speech service returned something Firefly could not use. Please try again.',
-  nothingToSpeak: 'There is nothing to speak in that line.',
+  nothingToSpeak: NOTHING_TO_SPEAK_MESSAGE,
 } as const;
 
 const abortError = () => new DOMException('The request was cancelled.', 'AbortError');
@@ -260,6 +275,7 @@ export function createAzureSpeechProvider(
 ): SpeechProvider {
   const sleep = options.sleep ?? defaultSleep;
   const notice = options.notice ?? null;
+  const outputFormat = options.outputFormat ?? AZURE_OUTPUT_FORMAT;
 
   async function perform(out: Outgoing, signal?: AbortSignal): Promise<Buffer> {
     for (let retries = 0; ; retries++) {
@@ -286,8 +302,12 @@ export function createAzureSpeechProvider(
       synthesize: true,
       expressiveStyles: moodStylesAvailable(config.voices),
       notice,
+      voices: describeVoices(voiceOptions),
       limits: SPEECH_LIMITS,
     }),
+    // The four neutral choices are fixed by the catalogue: an administrator's own voice names
+    // replace the pairing used when no choice is made, and never a voice the trainee picked.
+    listVoices: voiceOptions,
 
     async transcribe(request: TranscribeRequest, signal?: AbortSignal): Promise<TranscribeResult> {
       // Profanity is kept as spoken (`raw`; the default `masked` would turn it into asterisks and
@@ -325,7 +345,7 @@ export function createAzureSpeechProvider(
           headers: {
             'Ocp-Apim-Subscription-Key': config.apiKey,
             'Content-Type': 'application/ssml+xml',
-            'X-Microsoft-OutputFormat': AZURE_OUTPUT_FORMAT,
+            'X-Microsoft-OutputFormat': outputFormat,
             'User-Agent': USER_AGENT,
           },
           body: plan.ssml,
@@ -334,7 +354,13 @@ export function createAzureSpeechProvider(
         signal,
       );
       if (!looksLikeAudio(audio)) throw badOutput();
-      return { audio, contentType: 'audio/mpeg', voice: plan.voice, style: plan.style };
+      return {
+        audio,
+        contentType: outputFormat === AZURE_WAV_OUTPUT_FORMAT ? 'audio/wav' : 'audio/mpeg',
+        voice: plan.voice,
+        style: plan.style,
+        ...(plan.voiceId ? { voiceId: plan.voiceId } : {}),
+      };
     },
   };
 }

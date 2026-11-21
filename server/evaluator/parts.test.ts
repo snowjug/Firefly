@@ -16,6 +16,7 @@ import {
   verifiedQuote,
 } from './parts.ts';
 import { evaluateWithRules } from './rules.ts';
+import { FIXTURE_ID } from './fixture.ts';
 import {
   LIBRARY,
   buildInput,
@@ -560,26 +561,27 @@ describe('what to practise next', () => {
   });
 
   it('picks a different scenario at the suggested difficulty when one covers the dimension', () => {
-    expect(
-      pickScenario(LIBRARY, 'locked-out-after-password-reset', 'empathy-deescalation', 'standard'),
-    ).toEqual({
-      id: 'team-cannot-open-shared-workspace',
-      title: 'A team cannot open a shared workspace',
+    expect(pickScenario(LIBRARY, FIXTURE_ID, 'empathy-deescalation', 'standard')).toEqual({
+      id: 'sharepoint-site-access-denied-for-a-team',
+      title: 'A team is denied access to a shared site',
     });
   });
 
   it('falls back to the closest difficulty, then to the same scenario, then to nothing', () => {
     expect(
-      pickScenario(LIBRARY, 'team-cannot-open-shared-workspace', 'empathy-deescalation', 'starter')
-        ?.id,
-    ).toBe('checkout-outage-before-investor-event');
-    expect(
-      pickScenario(LIBRARY, 'locked-out-after-password-reset', 'scoping-discovery', 'challenge')
-        ?.id,
-    ).toBe('locked-out-after-password-reset');
-    expect(
-      pickScenario(LIBRARY, 'locked-out-after-password-reset', 'closing', 'standard')?.id,
-    ).toBe('checkout-outage-before-investor-event');
+      pickScenario(
+        LIBRARY,
+        'sharepoint-site-access-denied-for-a-team',
+        'empathy-deescalation',
+        'starter',
+      )?.id,
+    ).toBe('azure-checkout-outage-before-a-launch');
+    expect(pickScenario(LIBRARY, FIXTURE_ID, 'scoping-discovery', 'challenge')?.id).toBe(
+      FIXTURE_ID,
+    );
+    expect(pickScenario(LIBRARY, FIXTURE_ID, 'closing', 'standard')?.id).toBe(
+      'azure-checkout-outage-before-a-launch',
+    );
     expect(pickScenario([], 'x', 'closing', 'standard')).toBeNull();
     expect(pickScenario(LIBRARY.slice(0, 1), 'x', 'closing', 'standard')).toBeNull();
   });
@@ -598,8 +600,8 @@ describe('what to practise next', () => {
 
   it('suggests a scenario from the library whose focus includes the dimension', () => {
     const weak = run(weakCall());
-    expect(weak.nextPractice.suggestedScenarioId).toBe('locked-out-after-password-reset');
-    expect(weak.nextPractice.suggestedScenarioTitle).toBe('Locked out after a password reset');
+    expect(weak.nextPractice.suggestedScenarioId).toBe(FIXTURE_ID);
+    expect(weak.nextPractice.suggestedScenarioTitle).toBe('Locked out after a password change');
     const noLibrary = run({ ...weakCall(), library: [] });
     expect(noLibrary.nextPractice.suggestedScenarioId).toBeNull();
     expect(noLibrary.nextPractice.suggestedScenarioTitle).toBeNull();
@@ -609,7 +611,7 @@ describe('what to practise next', () => {
     const { recommendation } = run(weakCall()).nextPractice;
     expect(recommendation).toMatch(/three different areas before you suggest any fix/);
     expect(recommendation).toContain(
-      'Is your work email or the portal signed in on any other device, like a phone or tablet, that might still have your old password?',
+      'Is your work email signed in on any other device, like a phone or tablet, that might still have your old password?',
     );
     expect(recommendation.length).toBeLessThanOrEqual(500);
   });

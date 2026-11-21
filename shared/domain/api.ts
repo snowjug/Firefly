@@ -1,6 +1,6 @@
 import type { CoachingReport } from './report.ts';
 import type { RedactionKind } from './text.ts';
-import type { ScenarioOverrides } from './scenario.ts';
+import type { PublicBrief, ScenarioOverrides } from './scenario.ts';
 import type { InputMode, SpeechCapabilitiesDTO } from './speech.ts';
 import type {
   BusinessImpact,
@@ -13,6 +13,8 @@ import type {
   IssueType,
   PracticeMode,
   Proficiency,
+  ProductFamily,
+  ProductId,
   SessionStatus,
   StartTemperature,
   TemperatureBandId,
@@ -62,13 +64,24 @@ export interface AppConfigDTO {
 
 // ---- Scenarios ----------------------------------------------------------------------------
 
+export interface PublicProductDTO {
+  id: ProductId;
+  name: string; // for example "Microsoft Teams"
+  family: ProductFamily;
+  familyLabel: string; // for example "Microsoft 365"
+  area: string; // for example "Meetings"
+}
+
 export interface PublicScenarioDTO {
   id: string;
   version: number;
   title: string;
-  summary: string;
+  listSummary: string; // one line, at most 18 words, for the scenario list
+  summary: string; // at most 60 words, for the detail view
   tags: string[];
   estimatedMinutes: number;
+  product: PublicProductDTO;
+  caseReference: string | null; // made up; never a real service request number
   issueType: IssueType;
   impact: BusinessImpact;
   startingTemperature: StartTemperature;
@@ -77,6 +90,8 @@ export interface PublicScenarioDTO {
   callStage: CallStage;
   difficulty: Difficulty;
   persona: { name: string; role: string; organisation: string };
+  /** What the trainee may read before the call. It never contains a hidden fact. */
+  publicBrief: PublicBrief;
   brief: { situation: string; goal: string; groundRules: string[] };
   /**
    * What the trainee is told about the call stage, by stage (empty for a first contact). A call's
@@ -128,6 +143,10 @@ export interface SessionScenarioView {
   issueType: IssueType;
   tags: string[];
   estimatedMinutes: number;
+  /** Null for a call saved before Firefly became a Microsoft-only simulator. */
+  product: PublicProductDTO | null;
+  caseReference: string | null;
+  publicBrief: PublicBrief | null;
   persona: { name: string; role: string; organisation: string };
   brief: { situation: string; goal: string; groundRules: string[] };
   config: {
@@ -182,6 +201,11 @@ export interface CreateSessionRequest {
   scenarioId: string;
   overrides?: ScenarioOverrides;
   mode?: PracticeMode;
+  /**
+   * The part of the day where the trainee is, from their own clock, so that the customer's
+   * greeting ("Good morning") fits. Left out, the server chooses one from the call's seed.
+   */
+  timeOfDay?: 'morning' | 'afternoon' | 'evening';
   clientRequestId?: string; // makes creation idempotent when the client retries
 }
 
@@ -211,11 +235,4 @@ export interface SendMessageResponse {
 
 export interface EndSessionRequest {
   reason?: 'finished' | 'ended-early';
-}
-
-// ---- History -------------------------------------------------------------------------------
-
-export interface SessionListDTO {
-  sessions: SessionSummaryDTO[];
-  total: number;
 }

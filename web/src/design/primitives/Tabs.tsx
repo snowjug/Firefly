@@ -158,17 +158,42 @@ export interface TabPanelProps {
   value: string;
   children: ReactNode;
   className?: string;
+  /**
+   * Keep every panel in the layout, one on top of the other, and crossfade between them: the group
+   * is as tall as its tallest panel, so choosing a tab never moves what is below it. Wrap the
+   * panels in `TabPanels`. A panel that is not showing is inert and hidden from assistive
+   * technology, so only the selected one is read or reached.
+   */
+  stacked?: boolean;
 }
 
 /** The content of one tab. Only the selected panel is shown. */
-export function TabPanel({ value, children, className }: TabPanelProps) {
+export function TabPanel({ value, children, className, stacked = false }: TabPanelProps) {
   const { value: selected, base } = useTabs();
   const isSelected = selected === value;
+  const id = `${base}-panel-${safe(value)}`;
+  const labelledBy = `${base}-tab-${safe(value)}`;
+  if (stacked) {
+    return (
+      <div
+        role="tabpanel"
+        id={id}
+        aria-labelledby={labelledBy}
+        aria-hidden={isSelected ? undefined : true}
+        inert={!isSelected}
+        tabIndex={isSelected ? 0 : -1}
+        data-selected={isSelected ? '' : undefined}
+        className={cx('ff-tabpanel', 'ff-tabpanel--stacked', className)}
+      >
+        {children}
+      </div>
+    );
+  }
   return (
     <div
       role="tabpanel"
-      id={`${base}-panel-${safe(value)}`}
-      aria-labelledby={`${base}-tab-${safe(value)}`}
+      id={id}
+      aria-labelledby={labelledBy}
       hidden={!isSelected}
       tabIndex={0}
       className={cx('ff-tabpanel', className)}
@@ -176,4 +201,9 @@ export function TabPanel({ value, children, className }: TabPanelProps) {
       {isSelected ? children : null}
     </div>
   );
+}
+
+/** Holds `stacked` panels in one cell, so they crossfade in place. */
+export function TabPanels({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx('ff-tabpanels', className)}>{children}</div>;
 }

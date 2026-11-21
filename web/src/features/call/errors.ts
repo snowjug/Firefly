@@ -1,9 +1,12 @@
 import { isApiError, type ApiError } from '../../lib/api.ts';
-import type { EndFailure, SendFailure, TranscribeFailure } from './machine.ts';
+import type { CaptureFailure } from '../voice/capture/types.ts';
+import { apiError as voiceApiError, captureError, type VoiceError } from '../voice/errors.ts';
+import type { EndFailure, MicReason, SendFailure, TranscribeFailure } from './machine.ts';
 
 // What the server's and the network's errors mean for the call. Pure: an `ApiError` (or anything
 // else that was thrown) goes in, and a failure the machine understands comes out. The machine alone
-// decides what the trainee sees.
+// decides what the trainee sees. Failures of the voice (the microphone, speech to text) are first
+// sorted by the voice layer (`VoiceError`), and only then turned into what the machine needs.
 
 /** Waits before each retry of a request that failed because another message was still being handled. */
 export const CONFLICT_RETRY_DELAYS_MS: readonly number[] = [400, 800, 1600, 3200];
@@ -60,23 +63,41 @@ export function classifySendError(error: unknown): SendFailure {
   }
 }
 
-export function classifyTranscribeError(error: unknown): TranscribeFailure {
-  if (!isApiError(error)) return { kind: 'failed' };
-  if (isNetwork(error)) return { kind: 'offline' };
+const MICROPHONE_REASONS: Partial<Record<VoiceError['code'], MicReason>> = {
+  'microphone-denied': 'denied',
+  'microphone-missing': 'missing',
+  'microphone-busy': 'busy',
+  'microphone-unsupported': 'unsupported',
+};
+
+/** What the machine does about a failure of the voice: the voice layer's error, in the machine's terms. */
+export function failureFromVoice(error: VoiceError): TranscribeFailure {
+  const reason = MICROPHONE_REASONS[error.code];
+  if (reason) return { kind: 'microphone', reason };
   switch (error.code) {
-    case 'rate_limited':
-    case 'speech_rate_limited': {
-      const wait = retryAfterSeconds(error);
-      return wait === undefined
+    case 'offline':
+      return { kind: 'offline' };
+    case 'rate-limited':
+      return error.retryAfterSeconds === undefined
         ? { kind: 'rate-limited' }
-        : { kind: 'rate-limited', retryAfterSeconds: wait };
-    }
-    case 'speech_unavailable':
-    case 'provider_not_configured':
+        : { kind: 'rate-limited', retryAfterSeconds: error.retryAfterSeconds };
+    case 'speech-unavailable':
       return { kind: 'service-unavailable' };
+    case 'transcription-timeout':
+      return { kind: 'failed', timedOut: true };
     default:
       return { kind: 'failed' };
   }
+}
+
+/** A listening pass that failed (from `CaptureHandlers.onFailure`). */
+export function classifyCaptureFailure(failure: CaptureFailure): TranscribeFailure {
+  return failureFromVoice(captureError(failure));
+}
+
+/** A call to the speech service that failed, as the API client reports it. */
+export function classifyTranscribeError(error: unknown): TranscribeFailure {
+  return failureFromVoice(voiceApiError(error, 'transcription'));
 }
 
 export function classifyEndError(error: unknown): EndFailure {

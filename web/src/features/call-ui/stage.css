@@ -1,31 +1,157 @@
-/* The stage panel (wide screens) and the dock (narrow screens), around the same voice zone. */
+/* The customer and the call as it is now: synthetic initials, name, role, how they feel, the status in
+   words and the waveform. Colour is never the only cue: every state has a word and an icon. */
 
-.cw-stage {
+.cw-person {
   display: flex;
   flex-direction: column;
-  min-block-size: 0;
+  align-items: center;
+  gap: var(--sp-3);
+  text-align: center;
+}
+.cw-person__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
   min-inline-size: 0;
+}
+.cw-person__id {
+  min-inline-size: 0;
+}
+.cw-person__name {
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.cw-person__role {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  text-wrap: balance;
+}
+.cw-person__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+}
+
+/* How the customer feels: the label fades in place and the colour eases to the next state. */
+.cw-mood {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.cw-mood .ff-badge {
+  transition:
+    color var(--dur-slow) var(--ease-easy),
+    background-color var(--dur-slow) var(--ease-easy),
+    border-color var(--dur-slow) var(--ease-easy);
+}
+.cw-mood__trend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+/* The status: one label that changes in place, with the waveform under it. */
+.cw-status {
+  --_c: var(--fg-2);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
   border: var(--stroke-w) solid var(--stroke-2);
   border-radius: var(--r-xl);
-  background: var(--bg-canvas);
-  overflow: hidden;
+  background: var(--bg-subtle);
+  transition: border-color var(--dur-normal) var(--ease-easy);
 }
-.cw-stage__scroll {
-  flex: 1 1 0px;
-  min-block-size: 0;
-  padding: var(--sp-5) var(--sp-5) var(--sp-3);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+.cw-status[data-who='trainee'] {
+  --_c: var(--brand-fg-2);
 }
-.cw-stage__voice {
+.cw-status[data-who='customer'] {
+  --_c: var(--voice-customer);
+}
+.cw-status[data-who='alert'] {
+  --_c: var(--status-danger-fg);
+  border-color: var(--status-danger-border);
+}
+.cw-status__line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.cw-status__icon {
   flex: none;
-  padding: var(--sp-3) var(--sp-5) var(--sp-5);
-  border-block-start: var(--stroke-w) solid var(--stroke-3);
-  background: var(--bg-quiet);
+  color: var(--_c);
+}
+.cw-status__label {
+  display: inline-block;
+  animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+}
+
+/* A narrow screen: the initials and the name, how they feel, then the status on its own slim row. A
+   tablet puts how they feel beside the name. */
+.cw-person--compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-1h) var(--sp-3);
+  text-align: start;
+}
+@media (min-width: 48em) {
+  .cw-person--compact {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+.cw-person--compact .cw-person__card {
+  flex-direction: row;
+  gap: var(--sp-3);
+}
+.cw-person--compact .cw-person__name {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+}
+.cw-person--compact .cw-person__meta {
+  justify-content: flex-start;
+}
+@media (min-width: 48em) {
+  .cw-person--compact .cw-person__meta {
+    justify-content: flex-end;
+  }
+}
+.cw-person--compact .cw-status {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1h) var(--sp-3);
+}
+.cw-person--compact .cw-status__line {
+  flex: none;
+}
+.cw-person--compact .cw-status .cw-wave,
+.cw-person--compact .cw-status .cw-wave-shimmer {
+  flex: 1 1 0;
+  min-inline-size: 3rem;
 }
 
 @media (forced-colors: active) {
-  .cw-stage {
+  .cw-status {
     border-color: CanvasText;
+    background: Canvas;
+  }
+  .cw-status__icon {
+    color: CanvasText;
   }
 }

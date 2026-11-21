@@ -12,8 +12,8 @@ import { expect, test } from '@playwright/test';
 //   $env:E2E_BASE_URL = 'http://127.0.0.1:8787'
 //   npx playwright test e2e/real-provider.spec.ts
 //
-// What it checks, and no more: that the provider names the pages show (the brief's explainer, the
-// call's badge and pre-flight, the report) are the ones /api/config reports, that one typed
+// What it checks, and no more: that the provider names the pages show (the brief's details, the
+// call's pre-flight and badge, the report's explanation) are the ones /api/config reports, that one typed
 // exchange with the real customer returns a non-empty reply, and that ending the call gives a
 // report. It does not judge the quality of anything the model writes. It never uses the microphone.
 //
@@ -37,28 +37,39 @@ test.describe('a real provider (set FIREFLY_E2E_REAL=1 and start a server with r
     expect(settings.provider.label.length).toBeGreaterThan(0);
 
     await test.step('the brief says who plays the customer and who handles speech', async () => {
-      await page.goto('/scenarios/locked-out-after-password-reset/brief');
-      const aside = page.getByRole('complementary', { name: 'Before you start' });
-      await expect(aside).toContainText(
-        settings.provider.demo ? 'Demo mode' : `Live model: ${settings.provider.label}`,
+      await page.goto('/scenarios/outlook-shared-mailbox-missing/brief');
+      await page.getByRole('button', { name: 'How your voice is handled' }).first().click();
+      const brief = page.getByRole('main');
+      await expect(brief).toContainText(
+        settings.provider.demo
+          ? "Demo mode: the customer is played by Firefly's built-in rules engine."
+          : `Live model: ${settings.provider.label}`,
       );
       if (settings.speech.transcribe || settings.speech.synthesize) {
-        await expect(aside).toContainText(settings.speech.label);
+        await expect(brief).toContainText(settings.speech.label);
       }
     });
 
-    await test.step('a typed call shows the same provider in the command bar', async () => {
-      await page.getByRole('button', { name: /^Start (a )?text(-only)? call$/ }).click();
-      await page.getByRole('button', { name: 'Start text-only call' }).click();
+    await test.step('a typed call shows the same provider in the pre-flight and in the call bar', async () => {
+      await page.getByRole('button', { name: 'Start a text-only call' }).click();
+      await expect(page.getByRole('heading', { level: 1, name: 'Ready to call?' })).toBeVisible();
+      await expect(page.getByRole('list', { name: 'What is ready' })).toContainText(
+        settings.provider.demo
+          ? "Demo mode: Firefly's built-in rules engine"
+          : `Live model: ${settings.provider.label}`,
+      );
+      await page.getByRole('button', { name: 'Start text call' }).click();
       await expect(
-        page.getByText(settings.provider.demo ? 'Demo mode' : 'Live model', { exact: true }),
+        page
+          .getByText(settings.provider.demo ? 'Demo mode' : 'Live model', { exact: true })
+          .first(),
       ).toBeVisible();
     });
 
     await test.step('one exchange with the customer gets a reply', async () => {
       const log = page.getByRole('log', { name: 'Call transcript' });
       await page
-        .getByRole('textbox', { name: 'Type a reply' })
+        .getByRole('textbox', { name: 'Your reply' })
         .fill('Hello, my name is Sam. Can you tell me what is happening?');
       await page.getByRole('button', { name: 'Send', exact: true }).click();
       await expect(log.getByRole('listitem')).toHaveCount(3, { timeout: 90_000 });
@@ -73,11 +84,12 @@ test.describe('a real provider (set FIREFLY_E2E_REAL=1 and start a server with r
         .getByRole('dialog', { name: 'End the call?' })
         .getByRole('button', { name: 'End and review' })
         .click();
-      await expect(page.getByRole('region', { name: 'Overall coaching summary' })).toBeVisible({
+      await expect(page.getByRole('region', { name: 'Summary', exact: true })).toBeVisible({
         timeout: 150_000,
       });
+      // The explanation is folded away until it is wanted; its text is in the page all the same.
       await expect(page.getByRole('region', { name: 'About this report' })).toContainText(
-        settings.provider.demo ? 'Demo mode' : settings.provider.label,
+        settings.provider.demo ? /demo mode/i : settings.provider.label,
       );
     });
   });

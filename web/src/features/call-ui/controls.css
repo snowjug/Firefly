@@ -1,0 +1,75 @@
+/* The call controls: Microphone is the large control; Stop customer audio, Mute and Text sit under it;
+   Pause, Replay and Settings are quieter. One grid serves the stage panel and the narrow dock. */
+
+.cw-ctl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.cw-ctl:focus-visible {
+  outline-offset: 4px;
+}
+.cw-ctl > .ff-button {
+  inline-size: 100%;
+}
+
+/* Microphone: ready is a stable outline, listening is a soft pulse that grows and fades. */
+.ff-button.cw-talk::after {
+  content: '';
+  position: absolute;
+  inset: -0.375rem;
+  border: var(--stroke-w-thick) solid var(--brand-stroke-2);
+  border-radius: calc(var(--r-md) + 0.375rem);
+  opacity: 0;
+  pointer-events: none;
+}
+.ff-button.cw-talk[data-kind='talk']:not([aria-disabled='true'])::after {
+  opacity: 1;
+}
+.ff-button.cw-talk[data-kind='done']::after {
+  border-color: var(--brand);
+  animation: cw-ring var(--dur-pulse) var(--ease-decelerate) infinite;
+}
+/* Returning to voice from text is the one thing the panel offers: it takes the whole row. */
+.ff-button.cw-talk[data-kind='voice'] {
+  grid-column: 1 / -1;
+}
+@keyframes cw-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+/* Still, and clearly on, when motion is reduced. */
+@media (prefers-reduced-motion: reduce) {
+  .ff-button.cw-talk[data-kind='done']::after {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+.cw-ctl__more {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  justify-content: center;
+  gap: var(--sp-1) var(--sp-2);
+}
+.cw-ctl__hint {
+  grid-column: 1 / -1;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  text-align: center;
+  text-wrap: balance;
+}
+
+@media (forced-colors: active) {
+  .ff-button.cw-talk::after {
+    border-color: Highlight;
+  }
+}

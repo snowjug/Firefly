@@ -45,32 +45,36 @@
   border-radius: var(--r-pill);
   background: var(--bg-strong);
 }
+/* The fill is as wide as the track and slides in from the left: only transform moves, and its
+   rounded end is never squashed the way a scaled bar's would be. */
 .ff-progress__fill {
   block-size: 100%;
   border-radius: var(--r-pill);
   background: var(--_fill);
-  transition: inline-size var(--dur-slow) var(--ease-decelerate);
+  transform: translateX(-100%);
+  transition: transform var(--dur-slow) var(--ease-decelerate);
 }
 
 /* Indeterminate: a segment slides along. Under reduced motion it is a still, striped bar. */
 .ff-progress--indeterminate .ff-progress__fill {
   position: absolute;
   inset-block: 0;
+  inset-inline-start: 0;
   inline-size: 40%;
-  animation: ff-progress-slide 1.4s var(--ease-easy) infinite;
+  animation: ff-progress-slide var(--dur-slide) var(--ease-easy) infinite;
 }
 @keyframes ff-progress-slide {
   from {
-    inset-inline-start: -40%;
+    transform: translateX(-100%);
   }
   to {
-    inset-inline-start: 100%;
+    transform: translateX(250%);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .ff-progress--indeterminate .ff-progress__fill {
-    inset-inline-start: 0;
     inline-size: 100%;
+    transform: none;
     animation: none;
     background: repeating-linear-gradient(
       -45deg,

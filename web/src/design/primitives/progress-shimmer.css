@@ -1,0 +1,52 @@
+/* ProgressShimmer: indeterminate work, shown as a soft band sweeping across a thin track. The band
+   moves by transform only. Under reduced motion it is a still, striped track. */
+
+.ff-shimmer {
+  --_h: 0.375rem;
+  position: relative;
+  display: block;
+  overflow: hidden;
+  inline-size: 100%;
+  block-size: var(--_h);
+  border-radius: var(--r-pill);
+  background: var(--bg-strong);
+}
+.ff-shimmer--small {
+  --_h: 0.25rem;
+}
+
+.ff-shimmer__band {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--brand) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: ff-shimmer-sweep var(--dur-shimmer) var(--ease-easy) infinite;
+}
+@keyframes ff-shimmer-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-shimmer__band {
+    transform: none;
+    animation: none;
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--brand-stroke-2) 0 0.375rem,
+      var(--bg-strong) 0.375rem 0.75rem
+    );
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-shimmer {
+    border: 1px solid ButtonText;
+    background: Canvas;
+  }
+  .ff-shimmer__band {
+    forced-color-adjust: none;
+    background: linear-gradient(90deg, transparent 0%, Highlight 50%, transparent 100%);
+  }
+}

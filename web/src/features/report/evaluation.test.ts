@@ -52,7 +52,7 @@ describe('phaseAnnouncement', () => {
   it('says one whole sentence for a step that has started, and nothing for the first', () => {
     expect(phaseAnnouncement('transcript_locked')).toBeNull();
     expect(phaseAnnouncement(null)).toBeNull();
-    expect(phaseAnnouncement('scoring')).toBe('Scoring the six coaching skills.');
+    expect(phaseAnnouncement('scoring')).toBe('Scoring six skills.');
   });
 });
 

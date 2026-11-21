@@ -3,12 +3,18 @@ import type { SessionDTO } from '#shared/domain/api.ts';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { errorMessage, isAbort, isApiError } from '../../lib/api.ts';
 import { POLL_HIDDEN_MS, POLL_MS, safeEvaluationMessage } from './evaluation.ts';
+import type { ScenarioRef } from './scenario-index.ts';
 
 /** What the page needs from the server. `api` from `lib/api.ts` satisfies it; the gallery and the tests pass others. */
 export interface ReportClient {
   getSession(id: string, signal?: AbortSignal): Promise<SessionDTO>;
   evaluate(id: string): Promise<SessionDTO>;
   deleteSession(id: string): Promise<unknown>;
+  /**
+   * The scenarios that exist now, so a link to one that was retired is never offered. Optional: a
+   * client without it is treated as not knowing, and the page decides from the call alone.
+   */
+  scenarios?(signal?: AbortSignal): Promise<readonly ScenarioRef[]>;
 }
 
 export type ReportViewState =

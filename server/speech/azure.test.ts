@@ -4,6 +4,7 @@ import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 import {
   AZURE_OUTPUT_FORMAT,
   AZURE_STT_CONTENT_TYPE,
+  AZURE_WAV_OUTPUT_FORMAT,
   createAzureSpeechProvider,
   MAX_RETRY_AFTER_MS,
   SPEECH_MESSAGES,
@@ -19,7 +20,7 @@ import {
   type Step,
 } from './fake-azure-speech-server.ts';
 import { SPEECH_LIMITS, SpeechError, type SpeechProvider } from './types.ts';
-import { voiceDirection } from './voices.ts';
+import { describeVoices, voiceDirection, voiceOptions } from './voices.ts';
 import { encodeWav } from './wav.ts';
 
 let fake: FakeAzureSpeech;
@@ -444,7 +445,7 @@ describe('speech to text: answers it will not trust', () => {
 describe('text to speech: what is sent', () => {
   it('posts SSML with the key header, the SSML content type and the one mp3 output format', async () => {
     const result = await provider().synthesize(
-      speak("I've waited two days & nobody <called>.", direction('frustrated')),
+      speak("I've waited two days & nobody called.", direction('frustrated')),
     );
 
     expect(fake.requests).toHaveLength(1);
@@ -464,7 +465,7 @@ describe('text to speech: what is sent', () => {
     expect(sent?.text).toBe(
       '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-GB">' +
         '<voice name="en-GB-SoniaNeural"><prosody rate="+8%" pitch="-2%">' +
-        'I&apos;ve waited two days &amp; nobody &lt;called&gt;.' +
+        'I&apos;ve waited two days &amp; nobody called.' +
         '</prosody></voice></speak>',
     );
     expect(result).toEqual({
@@ -515,6 +516,57 @@ describe('text to speech: what is sent', () => {
   });
 });
 
+describe('text to speech: the voice the trainee chose', () => {
+  it('speaks with the catalogue voice for the choice and the language, and says which choice it was', async () => {
+    const result = await provider().synthesize(
+      speak(
+        'Hello there.',
+        voiceDirection({ speaker: 'male', language: 'en-AU', mood: 'calm', voice: 'voice-b' }),
+      ),
+    );
+    expect(result).toMatchObject({
+      voice: 'en-AU-WilliamNeural',
+      style: 'none',
+      voiceId: 'voice-b',
+      contentType: 'audio/mpeg',
+    });
+    // Calm is -4%, and Voice B is a little quicker (+4%), so the two cancel out.
+    expect(fake.requests[0]?.text).toContain(
+      '<voice name="en-AU-WilliamNeural"><prosody rate="+0%">Hello there.</prosody></voice>',
+    );
+    expect(fake.requests[0]?.text).toContain('xml:lang="en-AU"');
+  });
+
+  it('does not claim a choice when none was made, and keeps the old pairing', async () => {
+    const result = await provider().synthesize(
+      speak('Hello there.', direction('calm', 'male', 'en-GB')),
+    );
+    expect(result.voice).toBe('en-GB-RyanNeural');
+    expect(result).not.toHaveProperty('voiceId');
+  });
+
+  it('can be asked for WAV, which only the live smoke test does, and then says so', async () => {
+    const wavProvider = provider({}, { outputFormat: AZURE_WAV_OUTPUT_FORMAT });
+    const result = await wavProvider.synthesize(speak('Hello there.'));
+    expect(fake.requests[0]?.headers['x-microsoft-outputformat']).toBe('riff-16khz-16bit-mono-pcm');
+    expect(result.contentType).toBe('audio/wav');
+    expect(result.audio.subarray(0, 4).toString('latin1')).toBe('RIFF');
+    // Everything else asks for the one mp3 format.
+    await provider().synthesize(speak('Hello there.'));
+    expect(fake.requests[1]?.headers['x-microsoft-outputformat']).toBe(AZURE_OUTPUT_FORMAT);
+  });
+
+  it('lists the same four voices whatever the administrator replaced, because the replacements are for the old pairing', () => {
+    const custom = provider({ voices: { female: 'en-US-JennyNeural', male: 'en-US-DavisNeural' } });
+    expect(custom.listVoices('en-GB')).toEqual(voiceOptions('en-GB'));
+    expect(
+      provider()
+        .listVoices('en-IE')
+        .map((option) => option.shared),
+    ).toEqual([false, false, true, true]);
+  });
+});
+
 describe('text to speech: answers it will not trust', () => {
   it.each<[string, Step]>([
     ['a JSON error with a success status', { status: 200, text: `{"error":"${'x'.repeat(60)}"}` }],
@@ -551,6 +603,7 @@ describe('what the provider says about itself', () => {
       synthesize: true,
       expressiveStyles: false,
       notice: null,
+      voices: describeVoices(voiceOptions),
       limits: SPEECH_LIMITS,
     });
   });

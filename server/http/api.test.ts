@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import exemplar from '../scenarios/library/outlook-shared-mailbox-missing.ts';
 import { LIMITS } from '../services/sessions.ts';
 import { createTestApp, type TestApp } from './harness.ts';
+
+// The one scenario the test server holds (see harness.ts).
+const SCENARIO = exemplar.id;
 
 let app: TestApp;
 beforeAll(async () => {
@@ -13,7 +17,7 @@ afterAll(async () => {
 
 const newSession = async (client = app.client(), body: Record<string, unknown> = {}) => {
   const res = await client.post('/api/sessions', {
-    scenarioId: 'locked-out-after-password-reset',
+    scenarioId: SCENARIO,
     ...body,
   });
   expect(res.status).toBe(201);
@@ -89,10 +93,11 @@ describe('scenarios', () => {
     const text = JSON.stringify(res.body);
     expect(text).not.toContain('hiddenFacts');
     expect(text).not.toContain('evaluatorNotes');
-    expect(text).not.toMatch(/old password|temporarily locked/i);
+    for (const fact of exemplar.hiddenFacts) expect(text).not.toContain(fact.statement);
     expect(res.body.scenarios[0].synthetic).toBe(true);
-    const one = await app.client().get('/api/scenarios/locked-out-after-password-reset');
-    expect(one.body.scenario.persona.name).toBe('Maya Okafor');
+    const one = await app.client().get(`/api/scenarios/${SCENARIO}`);
+    expect(one.body.scenario.persona.name).toBe(exemplar.persona.name);
+    expect(one.body.scenario.product).toMatchObject({ id: 'outlook', name: 'Outlook' });
     expect((await app.client().get('/api/scenarios/unknown')).status).toBe(404);
   });
 });
@@ -102,11 +107,11 @@ describe('sessions and messages', () => {
     const c = app.client();
     const clientRequestId = randomUUID();
     const a = await c.post('/api/sessions', {
-      scenarioId: 'locked-out-after-password-reset',
+      scenarioId: SCENARIO,
       clientRequestId,
     });
     const b = await c.post('/api/sessions', {
-      scenarioId: 'locked-out-after-password-reset',
+      scenarioId: SCENARIO,
       clientRequestId,
     });
     expect(a.body.session.id).toBe(b.body.session.id);
@@ -118,7 +123,6 @@ describe('sessions and messages', () => {
     });
     expect(a.body.session.status).toBe('active');
     expect(a.body.session.providerLabel).toMatch(/demo mode/i);
-    expect((await c.get('/api/sessions')).body.total).toBe(1);
   });
 
   it('applies configuration overrides and validates them', async () => {
@@ -131,7 +135,7 @@ describe('sessions and messages', () => {
       style: 'terse',
     });
     const bad = await app.client().post('/api/sessions', {
-      scenarioId: 'locked-out-after-password-reset',
+      scenarioId: SCENARIO,
       overrides: { difficulty: 'impossible' },
     });
     expect(bad.status).toBe(400);
@@ -142,15 +146,23 @@ describe('sessions and messages', () => {
     const { client, session } = await newSession(app.client(), {
       overrides: { difficulty: 'standard' },
     });
-    const res = await say(
+    // The first message is answered with why the customer is calling. Nothing is discovered yet.
+    const first = await say(
       client,
       session.id,
-      "Hi, I'm Sam. Is your work email signed in on your phone?",
+      "Hi, I'm Sam from Microsoft support. How can I help?",
     );
+    expect(first.status).toBe(200);
+    expect(first.body.traineeTurn.index).toBe(2);
+    expect(first.body.customerTurn).toMatchObject({ index: 3, role: 'customer', source: 'demo' });
+    expect(first.body.customerTurn.text).toMatch(/shared mailbox/i);
+    expect(first.body.state.discoveredCount).toBe(0);
+
+    const res = await say(client, session.id, 'Did anything change while you were away?');
     expect(res.status).toBe(200);
-    expect(res.body.traineeTurn.index).toBe(2);
-    expect(res.body.customerTurn).toMatchObject({ index: 3, role: 'customer', source: 'demo' });
-    expect(res.body.customerTurn.text).toMatch(/phone/i);
+    expect(res.body.traineeTurn.index).toBe(4);
+    expect(res.body.customerTurn).toMatchObject({ index: 5, role: 'customer', source: 'demo' });
+    expect(res.body.customerTurn.text).toMatch(/access|tidying/i);
     expect(Object.keys(res.body.state).sort()).toEqual([
       'band',
       'discoveredCount',
@@ -163,6 +175,8 @@ describe('sessions and messages', () => {
     const reload = await client.get(`/api/sessions/${session.id}`);
     expect(JSON.stringify(reload.body)).not.toContain('hiddenFacts');
     expect(reload.body.session.turns.map((t: { markers?: unknown }) => t.markers)).toEqual([
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -361,15 +375,11 @@ describe('input validation and abuse limits', () => {
     const c = app.client();
     const res = await c.post(
       '/api/sessions',
-      { scenarioId: 'locked-out-after-password-reset' },
+      { scenarioId: SCENARIO },
       { origin: 'https://evil.example' },
     );
     expect(res.status).toBe(403);
-    const same = await c.post(
-      '/api/sessions',
-      { scenarioId: 'locked-out-after-password-reset' },
-      { origin: app.baseUrl },
-    );
+    const same = await c.post('/api/sessions', { scenarioId: SCENARIO }, { origin: app.baseUrl });
     expect(same.status).toBe(201);
   });
 
@@ -390,7 +400,7 @@ describe('input validation and abuse limits', () => {
   it('stops a runaway call at the turn limit', async () => {
     const profile = 'a'.repeat(32);
     const session = app.service.createSession(profile, {
-      scenarioId: 'locked-out-after-password-reset',
+      scenarioId: SCENARIO,
     });
     for (let i = 0; i < LIMITS.maxTraineeTurns; i++) {
       await app.service.sendMessage(profile, session.id, {
@@ -531,7 +541,8 @@ describe('ending a call', () => {
     const { client, session } = await newSession(app.client(), {
       overrides: { difficulty: 'standard' },
     });
-    await say(client, session.id, 'Is your work email signed in on your phone?');
+    await say(client, session.id, "Hi, I'm Sam from Microsoft support. How can I help?");
+    await say(client, session.id, 'Did anything change while you were away?');
     await client.post(`/api/sessions/${session.id}/end`, {});
     await app.service.settle(session.id);
     const done = await client.get(`/api/sessions/${session.id}`);
@@ -539,7 +550,9 @@ describe('ending a call', () => {
       (t: { markers?: unknown[] }) => t.markers?.length,
     );
     expect(withMarkers.length).toBeGreaterThan(0);
-    expect(JSON.stringify(withMarkers)).toMatch(/Uncovered: Phone still using the old password/);
+    expect(JSON.stringify(withMarkers)).toMatch(
+      /Uncovered: The access lists were tidied while he was away/,
+    );
   });
 
   it('keeps the transcript when evaluation fails and lets the trainee retry', async () => {
@@ -564,25 +577,18 @@ describe('ending a call', () => {
   });
 });
 
-describe('history', () => {
-  it('lists, filters and deletes sessions', async () => {
-    const c = app.client();
-    await newSession(c, { overrides: { difficulty: 'starter' } });
-    await newSession(c, { overrides: { difficulty: 'challenge' } });
-    const all = await c.get('/api/sessions');
-    expect(all.body.total).toBe(2);
-    const starter = await c.get('/api/sessions?difficulty=starter');
-    expect(starter.body.sessions).toHaveLength(1);
-    expect((await c.get('/api/sessions?difficulty=bogus')).status).toBe(400);
-    const id = all.body.sessions[0].id;
-    expect((await c.del(`/api/sessions/${id}`)).body.deleted).toBe(true);
-    expect((await c.get('/api/sessions')).body.total).toBe(1);
+describe('a saved call', () => {
+  it('can be read and deleted by its id', async () => {
+    const { client, session } = await newSession();
+    expect((await client.get(`/api/sessions/${session.id}`)).body.session.id).toBe(session.id);
+    expect((await client.del(`/api/sessions/${session.id}`)).body.deleted).toBe(true);
+    expect((await client.get(`/api/sessions/${session.id}`)).status).toBe(404);
   });
 
-  it('summarises a call without any sample-data or mentor-review fields', async () => {
-    const c = app.client();
-    await newSession(c);
-    const summary = (await c.get('/api/sessions')).body.sessions[0];
+  it('is not listed: there is no history endpoint and no sample-data or mentor-review field', async () => {
+    const { client, session } = await newSession();
+    expect([404, 405]).toContain((await client.get('/api/sessions')).status);
+    const summary = (await client.get(`/api/sessions/${session.id}`)).body.session;
     expect(summary).toMatchObject({ status: 'active', traineeTurns: 0, overallScore: null });
     expect(summary).not.toHaveProperty('isSample');
     expect(summary).not.toHaveProperty('mentorReviewed');

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { VOICE_IDS, voiceChoice, type VoiceId } from '#shared/domain/voices.ts';
 import { TEMPERATURE_BANDS } from '#shared/domain/vocab.ts';
 import { fakeVoice } from '../testing/fakes.ts';
-import { deliveryFor, normaliseLang, pickVoice, rankVoice } from './voices.ts';
+import {
+  deliveryFor,
+  describeBrowserVoices,
+  normaliseLang,
+  pickVoice,
+  pickVoiceForChoice,
+  rankVoice,
+} from './voices.ts';
 
 const SEEDS = ['Alex Morgan', 'Sam Patel', 'Dana Wu', 'Marcus Reid', 'Priya Nair', 'Lee Chen'];
 
@@ -111,6 +119,118 @@ describe('deliveryFor', () => {
       expect(pitches).toEqual([...pitches].sort((a, b) => a - b));
       expect(Math.max(...pitches)).toBeLessThanOrEqual(1.2);
       expect(deliveryFor('calm', seed)).toEqual(deliveryFor('calm', seed));
+    }
+  });
+
+  it("with a chosen voice, leaves the pitch plain and adds only the voice's own small pace", () => {
+    for (const band of TEMPERATURE_BANDS) {
+      const plain = deliveryFor(band.id, 'Alex Morgan');
+      const chosen = VOICE_IDS.map((voice) => deliveryFor(band.id, 'Alex Morgan', voice));
+      // The same customer seed does not change what a chosen voice sounds like.
+      expect(chosen).toEqual(VOICE_IDS.map((voice) => deliveryFor(band.id, 'Sam Patel', voice)));
+      chosen.forEach((delivery, index) => {
+        const pace = voiceChoice(VOICE_IDS[index] as VoiceId).paceDelta;
+        expect(delivery.rate).toBeCloseTo(plain.rate * (1 + pace / 100), 5);
+        expect(delivery.pitch).toBeLessThanOrEqual(1.2);
+        expect(delivery.pitch).toBeGreaterThanOrEqual(1);
+      });
+    }
+    // Restrained: no choice is more than a few percent from the mood's own pace, and never theatrical.
+    for (const voice of VOICE_IDS) {
+      const { rate } = deliveryFor('escalating', 'x', voice);
+      expect(rate).toBeLessThanOrEqual(1.3);
+      expect(rate).toBeGreaterThanOrEqual(0.8);
+    }
+  });
+});
+
+describe('pickVoiceForChoice', () => {
+  const four = [
+    fakeVoice('Voice One (United Kingdom)', 'en-GB', true),
+    fakeVoice('Voice Two (United Kingdom)', 'en-GB', true),
+    fakeVoice('Voice Three (United Kingdom)', 'en-GB', true),
+    fakeVoice('Voice Four (United Kingdom)', 'en-GB', true),
+  ];
+
+  it('gives every choice a voice of its own when the browser has four of the same standing', () => {
+    const picked = VOICE_IDS.map((id) => pickVoiceForChoice(four, id, 'en-GB')?.name);
+    expect(new Set(picked).size).toBe(4);
+  });
+
+  it('shares voices when there are fewer than four, and uses the one voice there is for all', () => {
+    const two = four.slice(0, 2);
+    const picked = VOICE_IDS.map((id) => pickVoiceForChoice(two, id, 'en-GB')?.name);
+    expect(new Set(picked).size).toBe(2);
+    const one = VOICE_IDS.map((id) => pickVoiceForChoice(four.slice(0, 1), id, 'en-GB')?.name);
+    expect(new Set(one).size).toBe(1);
+  });
+
+  it('gives a choice the same voice whatever order the browser lists them in', () => {
+    const reversed = [...four].reverse();
+    for (const id of VOICE_IDS) {
+      expect(pickVoiceForChoice(reversed, id, 'en-GB')).toBe(pickVoiceForChoice(four, id, 'en-GB'));
+    }
+  });
+
+  it('deals only from the best voices in the language', () => {
+    const online = fakeVoice('Online Natural English (United Kingdom)', 'en-GB', false);
+    const plain = fakeVoice('Plain English (United Kingdom)', 'en-GB', true);
+    const french = fakeVoice('Voix (France)', 'fr-FR', false);
+    for (const id of VOICE_IDS) {
+      expect(pickVoiceForChoice([plain, french, online], id, 'en-GB')).toBe(online);
+    }
+  });
+
+  it('has no voice to give when the browser has none in the language', () => {
+    expect(pickVoiceForChoice([fakeVoice('Voix', 'fr-FR')], 'voice-a', 'en-GB')).toBeNull();
+    expect(pickVoiceForChoice([], 'voice-d', 'en-GB')).toBeNull();
+  });
+});
+
+describe('describeBrowserVoices', () => {
+  // All of the same standing (local, same language), so every one of them is dealt a choice.
+  const voices = (count: number) =>
+    Array.from({ length: count }, (_, index) =>
+      fakeVoice(`English Voice ${index + 1} (United Kingdom)`, 'en-GB', true),
+    );
+
+  it('says nothing when the four choices really are four voices', () => {
+    const report = describeBrowserVoices(voices(4), 'en-GB');
+    expect(report).toMatchObject({ distinct: 4, tellApart: true, note: null });
+    expect(report.choices.map((choice) => choice.id)).toEqual([...VOICE_IDS]);
+    expect(new Set(report.choices.map((choice) => choice.name)).size).toBe(4);
+    for (const choice of report.choices) expect(typeof choice.local).toBe('boolean');
+  });
+
+  it('says honestly when two or three voices are all the browser has', () => {
+    const report = describeBrowserVoices(voices(2), 'en-GB');
+    expect(report.distinct).toBe(2);
+    expect(report.tellApart).toBe(false);
+    expect(report.note).toMatch(/2 English voices/);
+    expect(report.note).toMatch(/sound alike/);
+  });
+
+  it('says honestly when the browser has one English voice, and the choices differ only in pace', () => {
+    const report = describeBrowserVoices(voices(1), 'en-GB');
+    expect(report).toMatchObject({ distinct: 1, tellApart: false });
+    expect(report.note).toMatch(/one English voice/);
+    expect(report.note).toMatch(/pace/);
+  });
+
+  it('says honestly when it has none, and names no voice', () => {
+    const report = describeBrowserVoices([fakeVoice('Voix', 'fr-FR')], 'en-GB');
+    expect(report).toMatchObject({ distinct: 0, tellApart: false });
+    expect(report.note).toMatch(/default voice/);
+    expect(report.choices.every((choice) => choice.name === null && choice.local === null)).toBe(
+      true,
+    );
+  });
+
+  it('agrees with the voice that really speaks for each choice', () => {
+    const list = voices(3);
+    const report = describeBrowserVoices(list, 'en-GB');
+    for (const choice of report.choices) {
+      expect(choice.name).toBe(pickVoiceForChoice(list, choice.id, 'en-GB')?.name);
     }
   });
 });

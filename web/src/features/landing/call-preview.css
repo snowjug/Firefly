@@ -1,0 +1,247 @@
+/* The hero's call preview: a moment from a call, drawn with real components. Tokens only. The one
+   movement is the waveform swinging for a few seconds when a panel appears; it is switched on only
+   for people who have not asked for less motion, and it ends by itself. */
+
+.cp {
+  margin: 0;
+  min-inline-size: 0;
+  max-inline-size: 40rem;
+}
+/* Beside the copy it fills its column, so its edge lines up with the page's. */
+@media (min-width: 64em) {
+  .cp {
+    max-inline-size: none;
+  }
+}
+.cp__tabs {
+  margin-block-end: var(--sp-3);
+}
+.cp__caption {
+  margin-block-start: var(--sp-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-3);
+}
+
+.cp__window {
+  overflow: hidden;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  box-shadow: var(--shadow-8);
+}
+.cp__call {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- The product and the state of the call ------------------------------------------------ */
+.cp__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-block-end: var(--stroke-w) solid var(--stroke-3);
+  background: var(--bg-quiet);
+}
+.cp__product {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+}
+
+/* ---- The customer ---------------------------------------------------------------------------- */
+.cp__person {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-4) var(--sp-4) var(--sp-2);
+}
+.cp__avatar {
+  display: inline-flex;
+  flex: none;
+  border-radius: var(--r-pill);
+  /* A still ring with a gap: this is the customer speaking. */
+  box-shadow:
+    0 0 0 2px var(--bg-canvas),
+    0 0 0 4px var(--voice-customer);
+}
+.cp__who {
+  flex: 1 1 8rem;
+  min-inline-size: 0;
+}
+.cp__name {
+  margin: 0;
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+}
+.cp__role {
+  margin: 0;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  color: var(--fg-2);
+}
+
+/* ---- The voice ------------------------------------------------------------------------------- */
+.cp__wave {
+  inline-size: calc(100% - 2 * var(--sp-4));
+  max-inline-size: 18rem;
+  block-size: auto;
+  margin-inline: var(--sp-4);
+  color: var(--voice-customer);
+  fill: currentColor;
+}
+.cp__bar {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* ---- The words so far ------------------------------------------------------------------------- */
+.cp__turns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  list-style: none;
+}
+.cp__turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+}
+.cp__turn--you {
+  margin-inline: calc(var(--sp-3) * -1);
+  padding: var(--sp-2h) var(--sp-3);
+  border-radius: var(--r-lg);
+  background: var(--brand-tint);
+}
+.cp__meta {
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+.cp__speaker {
+  font-weight: var(--fw-semibold);
+  color: var(--fg-2);
+}
+.cp__text {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+
+/* ---- A first look at the coaching ------------------------------------------------------------- */
+.cp__coaching {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
+  background: var(--bg-quiet);
+}
+.cp__label {
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-3);
+}
+.cp__scores {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cp__score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-4);
+}
+/* One width for the names keeps the bars in a column; on a narrow window the name takes its own line. */
+.cp__skill {
+  flex: 0 0 6rem;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+
+/* ---- Motion: the waveform swings for a few seconds, then rests --------------------------------
+   Each bar leans on the one before it, so the swing travels along the wave. It starts when the panel
+   is selected (the attribute appears), so choosing a tab plays it again. */
+@media (prefers-reduced-motion: no-preference) {
+  .cp__panel[data-selected] .cp__bar {
+    animation: cp-swing var(--dur-wave) var(--ease-easy) 3 both;
+  }
+  .cp__panel[data-selected] .cp__bar:nth-child(4n + 2) {
+    animation-delay: var(--dur-instant);
+  }
+  .cp__panel[data-selected] .cp__bar:nth-child(4n + 3) {
+    animation-delay: calc(var(--dur-instant) * 2);
+  }
+  .cp__panel[data-selected] .cp__bar:nth-child(4n) {
+    animation-delay: calc(var(--dur-instant) * 3);
+  }
+}
+@keyframes cp-swing {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  45% {
+    transform: scaleY(0.45);
+  }
+}
+
+@media (max-width: 30em) {
+  .cp__person,
+  .cp__top,
+  .cp__turns,
+  .cp__coaching {
+    padding-inline: var(--sp-3);
+  }
+  .cp__wave {
+    inline-size: calc(100% - 2 * var(--sp-3));
+    margin-inline: var(--sp-3);
+  }
+  .cp__turn--you {
+    margin-inline: calc(var(--sp-2) * -1);
+    padding-inline: var(--sp-2);
+  }
+}
+
+/* ---- Forced colours: edges instead of shadows ---------------------------------------------------- */
+@media (forced-colors: active) {
+  .cp__window {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .cp__avatar {
+    box-shadow: none;
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
+  }
+  .cp__turn--you {
+    border: var(--stroke-w) solid CanvasText;
+  }
+  .cp__wave {
+    color: CanvasText;
+  }
+}

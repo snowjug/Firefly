@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../lib/api.ts';
+import { voiceError } from '../voice/errors.ts';
 import {
+  classifyCaptureFailure,
   classifyEndError,
   classifyLoadError,
   classifySendError,
   classifyTranscribeError,
   CONFLICT_RETRY_DELAYS_MS,
+  failureFromVoice,
   isRetryableConflict,
 } from './errors.ts';
 import { hintText } from './hints.ts';
@@ -84,15 +87,60 @@ describe('the other classifiers', () => {
     expect(classifyTranscribeError(error(429, 'rate_limited', true))).toEqual({
       kind: 'rate-limited',
     });
-    for (const code of [
-      'speech_failed',
-      'speech_timeout',
-      'unsupported_media',
-      'validation_failed',
-    ]) {
+    for (const code of ['speech_failed', 'unsupported_media', 'validation_failed']) {
       expect(classifyTranscribeError(error(502, code, true))).toEqual({ kind: 'failed' });
     }
+    // A service that did not answer in time is a failure that says so.
+    expect(classifyTranscribeError(error(504, 'speech_timeout', true))).toEqual({
+      kind: 'failed',
+      timedOut: true,
+    });
+    expect(classifyTranscribeError(new DOMException('Timed out waiting.', 'TimeoutError'))).toEqual(
+      { kind: 'failed', timedOut: true },
+    );
     expect(classifyTranscribeError(new Error('weird'))).toEqual({ kind: 'failed' });
+  });
+
+  it('maps what the voice layer reports onto what the machine does about it', () => {
+    expect(failureFromVoice(voiceError('microphone-denied'))).toEqual({
+      kind: 'microphone',
+      reason: 'denied',
+    });
+    expect(failureFromVoice(voiceError('microphone-busy'))).toEqual({
+      kind: 'microphone',
+      reason: 'busy',
+    });
+    expect(failureFromVoice(voiceError('offline'))).toEqual({ kind: 'offline' });
+    expect(failureFromVoice(voiceError('speech-unavailable'))).toEqual({
+      kind: 'service-unavailable',
+    });
+    expect(failureFromVoice(voiceError('rate-limited', { retryAfterSeconds: 7 }))).toEqual({
+      kind: 'rate-limited',
+      retryAfterSeconds: 7,
+    });
+    expect(failureFromVoice(voiceError('transcription-timeout'))).toEqual({
+      kind: 'failed',
+      timedOut: true,
+    });
+    expect(failureFromVoice(voiceError('transcription-failed'))).toEqual({ kind: 'failed' });
+  });
+
+  it('classifies a failed listening pass the way the voice layer does', () => {
+    expect(classifyCaptureFailure({ kind: 'microphone', reason: 'missing' })).toEqual({
+      kind: 'microphone',
+      reason: 'missing',
+    });
+    // The browser's own service could not be reached, or did not answer: it is the network.
+    expect(classifyCaptureFailure({ kind: 'service', reason: 'network' })).toEqual({
+      kind: 'offline',
+    });
+    // A language its recogniser does not do cannot be fixed by trying again.
+    expect(classifyCaptureFailure({ kind: 'service', reason: 'language' })).toEqual({
+      kind: 'service-unavailable',
+    });
+    expect(classifyCaptureFailure({ kind: 'service', reason: 'unknown' })).toEqual({
+      kind: 'failed',
+    });
   });
 
   it('classifies ending failures and loading failures', () => {
@@ -135,19 +183,21 @@ describe('hintText', () => {
     'discarded-paused': true,
     'no-voice': true,
     'not-started': true,
+    'wait-customer': true,
   };
 
-  it('has a whole plain sentence for every hint', () => {
+  it('has a whole plain sentence for every hint, in a few words', () => {
     for (const code of Object.keys(CODES) as HintCode[]) {
       const text = hintText({ code });
       expect(text, code).toMatch(/^[A-Z].*[.]$/);
       expect(text, code).not.toMatch(/!|error|undefined|null/i);
+      expect(text.split(/\s+/).length, code).toBeLessThanOrEqual(14);
     }
   });
 
   it('names what was removed from a message, in the trainee\u2019s own terms', () => {
     expect(hintText({ code: 'redacted', kinds: ['email'] })).toBe(
-      'Firefly removed an email address from your message before saving it. Please never use real customer details.',
+      'Removed an email address before saving. Never use real customer details.',
     );
     expect(hintText({ code: 'redacted', kinds: ['email', 'phone', 'card'] })).toMatch(
       /an email address, a phone number and a long number/,

@@ -1,18 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { SPEECH_LANGUAGES, type SpeechLanguage } from '#shared/domain/speech.ts';
+import { VOICE_CHOICES, VOICE_IDS, type VoiceId } from '#shared/domain/voices.ts';
 import { TEMPERATURE_BANDS, type TemperatureBandId } from '#shared/domain/vocab.ts';
 import {
   chooseVoice,
   cleanText,
   DEFAULT_VOICES,
+  describeVoices,
   escapeXml,
+  listsMoodStyles,
+  MAX_PITCH_PERCENT,
+  MAX_RATE_PERCENT,
   MAX_SPOKEN_CHARS,
+  MIN_RATE_PERCENT,
   moodStylesAvailable,
   planSpeech,
   prepareSpokenText,
   prosodyFor,
   styleFor,
   voiceDirection,
+  voiceOptions,
+  VOICE_CATALOGUE,
   VOICE_STYLES,
   type Speaker,
 } from './voices.ts';
@@ -270,16 +278,17 @@ describe('escaping', () => {
 });
 
 describe('planSpeech: the SSML request', () => {
-  const line = `I've been waiting for two days & nobody has called <me> back.`;
+  const line = "I've been waiting for two days & nobody has called me back.";
 
   it('uses prosody alone for a frustrated customer on a voice with no styles, with the text escaped', () => {
     const plan = planSpeech(line, direction('frustrated'));
     expect(plan.voice).toBe('en-GB-SoniaNeural');
+    expect(plan.voiceId).toBeNull();
     expect(plan.style).toBe('none');
     expect(plan.ssml).toBe(
       '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-GB">' +
         '<voice name="en-GB-SoniaNeural"><prosody rate="+8%" pitch="-2%">' +
-        'I&apos;ve been waiting for two days &amp; nobody has called &lt;me&gt; back.' +
+        'I&apos;ve been waiting for two days &amp; nobody has called me back.' +
         '</prosody></voice></speak>',
     );
     expect(wellFormed(plan.ssml)).toBe(true);
@@ -292,9 +301,15 @@ describe('planSpeech: the SSML request', () => {
     expect(plan.ssml).toBe(
       '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-US">' +
         '<voice name="en-US-GuyNeural"><mstts:express-as style="angry" styledegree="0.73">' +
-        '<prosody rate="+11%">I&apos;ve been waiting for two days &amp; nobody has called &lt;me&gt; back.</prosody>' +
+        '<prosody rate="+11%">I&apos;ve been waiting for two days &amp; nobody has called me back.</prosody>' +
         '</mstts:express-as></voice></speak>',
     );
+    expect(wellFormed(plan.ssml)).toBe(true);
+  });
+
+  it('escapes the characters XML treats specially, when they are plainly part of what is said', () => {
+    const plan = planSpeech('It took 5 < 6 days, and "they" said 7 > 3.', direction('calm'));
+    expect(plan.ssml).toContain('It took 5 &lt; 6 days, and &quot;they&quot; said 7 &gt; 3.');
     expect(wellFormed(plan.ssml)).toBe(true);
   });
 
@@ -355,13 +370,20 @@ describe('planSpeech: the SSML request', () => {
 
   it('cannot be made to carry markup from the text', () => {
     const hostile =
-      '</prosody></voice></speak><speak><voice name="evil"><audio src="http://x/y.wav"/>';
+      '</prosody></voice></speak><speak><voice name="evil"><audio src="http://x/y.wav"/>Hello there.';
     const plan = planSpeech(hostile, direction('angry', 'female', 'en-US'));
     expect(wellFormed(plan.ssml)).toBe(true);
     expect(plan.ssml.match(/<voice /g)).toHaveLength(1);
     expect(plan.ssml.match(/<speak /g)).toHaveLength(1);
+    // The markup-like words never reach the voice at all, and what is left is only what was said.
+    expect(plan.text).toBe('Hello there.');
     expect(plan.ssml).not.toContain('<audio');
-    expect(plan.ssml).toContain('&lt;/prosody&gt;');
+    expect(plan.ssml).not.toContain('evil');
+    expect(plan.ssml).not.toContain('y.wav');
+    // Anything that does look like text is escaped, so it can never be read as markup.
+    const escaped = planSpeech('Typed </prosody and "x"> oddly', direction('calm'));
+    expect(wellFormed(escaped.ssml)).toBe(true);
+    expect(escaped.ssml.match(/<prosody /g)).toHaveLength(1);
   });
 
   it('strips control characters before building the document', () => {
@@ -395,5 +417,376 @@ describe('planSpeech: the SSML request', () => {
 
   it('has nothing to speak for text that is only control characters', () => {
     expect(planSpeech('\u0000\u0001  \u200b', direction('calm')).text).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// The four neutral choices
+
+/**
+ * Who the documentation says each voice is (Microsoft's language support page, "Text to speech
+ * voices"). It is here so a test can check that no choice is always the same kind of voice. Nothing
+ * outside this test knows or uses it.
+ */
+const PRESENTATION: Record<string, 'f' | 'm'> = {
+  'en-GB-SoniaNeural': 'f',
+  'en-GB-RyanNeural': 'm',
+  'en-GB-LibbyNeural': 'f',
+  'en-GB-ThomasNeural': 'm',
+  'en-US-GuyNeural': 'm',
+  'en-US-AriaNeural': 'f',
+  'en-US-DavisNeural': 'm',
+  'en-US-JennyNeural': 'f',
+  'en-AU-NatashaNeural': 'f',
+  'en-AU-WilliamNeural': 'm',
+  'en-AU-DarrenNeural': 'm',
+  'en-AU-AnnetteNeural': 'f',
+  'en-IN-AaravNeural': 'm',
+  'en-IN-NeerjaNeural': 'f',
+  'en-IN-AashiNeural': 'f',
+  'en-IN-KunalNeural': 'm',
+  'en-IE-ConnorNeural': 'm',
+  'en-IE-EmilyNeural': 'f',
+};
+
+describe('the four neutral customer voices', () => {
+  it('are Voice A to Voice D, named by how they are delivered and nothing else', () => {
+    expect(VOICE_CHOICES.map((choice) => [choice.id, choice.label])).toEqual([
+      ['voice-a', 'Voice A - Warm'],
+      ['voice-b', 'Voice B - Direct'],
+      ['voice-c', 'Voice C - Measured'],
+      ['voice-d', 'Voice D - Concise'],
+    ]);
+    expect(VOICE_IDS).toEqual(['voice-a', 'voice-b', 'voice-c', 'voice-d']);
+    // No person, gender, accent, age or other stereotype in anything a trainee can read.
+    const stereotype =
+      /\b(?:male|female|man|woman|men|women|boy|girl|guy|lady|young|old|elderly|senior|british|english|american|irish|australian|indian|scottish|welsh|accent|posh|deep|husky|sweet|motherly|fatherly|sassy|nerdy)\b/i;
+    for (const choice of VOICE_CHOICES) {
+      expect(`${choice.label} ${choice.trait} ${choice.description}`).not.toMatch(stereotype);
+    }
+  });
+
+  it('map to a different synthetic voice each, in every language that has four, and say so where it has fewer', () => {
+    for (const language of SPEECH_LANGUAGES) {
+      const options = voiceOptions(language);
+      expect(options.map((option) => option.id)).toEqual([...VOICE_IDS]);
+      const distinct = new Set(options.map((option) => option.providerVoice)).size;
+      // Ireland has two standard voices in the documentation: the other two choices share them.
+      expect(distinct, language).toBe(language === 'en-IE' ? 2 : 4);
+      expect(
+        options.map((option) => option.shared),
+        language,
+      ).toEqual(language === 'en-IE' ? [false, false, true, true] : [false, false, false, false]);
+    }
+  });
+
+  it('are standard neural voices of the language they speak, from the documented table, never a cloned, celebrity or HD voice', () => {
+    for (const language of SPEECH_LANGUAGES) {
+      for (const id of VOICE_IDS) {
+        const voice = VOICE_CATALOGUE[language][id];
+        expect(voice.startsWith(`${language}-`), voice).toBe(true);
+        expect(voice, voice).toMatch(/^[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural$/);
+        expect(voice).not.toMatch(/Multilingual|Dragon|MAI|Child|Maisie|Indic|:/);
+        // Listed in the verified table, even if it lists no styles.
+        expect(VOICE_STYLES[voice], voice).toBeDefined();
+      }
+    }
+  });
+
+  it('are arranged so that no choice is always the same kind of voice', () => {
+    for (const id of VOICE_IDS) {
+      const kinds = (['en-GB', 'en-US', 'en-AU', 'en-IN'] as const).map(
+        (language) => PRESENTATION[VOICE_CATALOGUE[language][id]],
+      );
+      expect(
+        kinds.filter((kind) => kind === 'f'),
+        id,
+      ).toHaveLength(2);
+      expect(
+        kinds.filter((kind) => kind === 'm'),
+        id,
+      ).toHaveLength(2);
+    }
+    // Each language with four voices has two of each.
+    for (const language of ['en-GB', 'en-US', 'en-AU', 'en-IN'] as const) {
+      const kinds = VOICE_IDS.map((id) => PRESENTATION[VOICE_CATALOGUE[language][id]]);
+      expect(
+        kinds.filter((kind) => kind === 'f'),
+        language,
+      ).toHaveLength(2);
+    }
+  });
+
+  it('can speak every mood in a style only where the voice lists the styles moods ask for', () => {
+    for (const language of SPEECH_LANGUAGES) {
+      for (const option of voiceOptions(language)) {
+        expect(option.styles, `${language} ${option.id}`).toBe(language === 'en-US');
+        expect(option.styles).toBe(listsMoodStyles(option.providerVoice));
+      }
+    }
+    // The default pairing still cannot: only the US voices list the styles.
+    expect(moodStylesAvailable()).toBe(false);
+  });
+
+  it('are described for the web app without naming any provider voice', () => {
+    const described = describeVoices(voiceOptions);
+    expect(described.map((voice) => voice.id)).toEqual([...VOICE_IDS]);
+    for (const voice of described) {
+      expect(Object.keys(voice.languages).sort()).toEqual([...SPEECH_LANGUAGES].sort());
+    }
+    expect(described[0]?.languages['en-IE']).toEqual({ voice: 'own', styles: false });
+    expect(described[2]?.languages['en-IE']).toEqual({ voice: 'shared', styles: false });
+    expect(described[2]?.languages['en-US']).toEqual({ voice: 'own', styles: true });
+    const text = JSON.stringify(described);
+    expect(text).not.toMatch(/Neural|Sonia|Ryan|Aria|Guy|Jenny|Davis|Libby|Thomas|Emily|Connor/);
+    expect(text).not.toMatch(/female|male|speaker/i);
+  });
+});
+
+describe('choosing the voice', () => {
+  it('uses the voice the trainee chose, in the language asked for, whatever the speaker pairing says', () => {
+    for (const language of SPEECH_LANGUAGES) {
+      for (const id of VOICE_IDS) {
+        for (const speaker of SPEAKERS) {
+          expect(chooseVoice({ speaker, language, voice: id }), `${language} ${id}`).toBe(
+            VOICE_CATALOGUE[language][id],
+          );
+        }
+      }
+    }
+  });
+
+  it('never lets the administrator replace a voice the trainee chose, only the old pairing', () => {
+    const overrides = { female: 'en-US-JennyNeural', male: 'en-US-DavisNeural' };
+    expect(chooseVoice({ speaker: 'female', language: 'en-GB', voice: 'voice-a' }, overrides)).toBe(
+      'en-GB-SoniaNeural',
+    );
+    expect(chooseVoice({ speaker: 'female', language: 'en-GB' }, overrides)).toBe(
+      'en-US-JennyNeural',
+    );
+  });
+
+  it('still pairs a voice by speaker when none is chosen, exactly as before', () => {
+    for (const language of SPEECH_LANGUAGES) {
+      for (const speaker of SPEAKERS) {
+        expect(chooseVoice({ speaker, language })).toBe(DEFAULT_VOICES[language][speaker]);
+        const direction = voiceDirection({ speaker, language, mood: 'calm' });
+        expect(direction).not.toHaveProperty('voice');
+        expect(direction).not.toHaveProperty('recovering');
+        expect(planSpeech('Hello.', direction).voiceId).toBeNull();
+      }
+    }
+  });
+
+  it('plans the chosen voice, and says which choice it was', () => {
+    const plan = planSpeech(
+      'Hello.',
+      voiceDirection({ speaker: 'male', language: 'en-AU', mood: 'calm', voice: 'voice-d' }),
+    );
+    expect(plan.voice).toBe('en-AU-AnnetteNeural');
+    expect(plan.voiceId).toBe('voice-d');
+    expect(plan.ssml).toContain('<voice name="en-AU-AnnetteNeural">');
+    expect(plan.ssml).toContain('xml:lang="en-AU"');
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Restrained delivery
+
+const rateOf = (ssml: string) => Number(/rate="([+-]\d+)%"/.exec(ssml)?.[1]);
+const pitchOf = (ssml: string) => {
+  const found = /pitch="([+-]\d+)%"/.exec(ssml)?.[1];
+  return found === undefined ? null : Number(found);
+};
+
+describe('delivery by the customer’s state', () => {
+  const rate = (mood: TemperatureBandId, extra: { voice?: VoiceId; recovering?: boolean } = {}) =>
+    Number.parseInt(prosodyFor({ ...direction(mood), ...extra }, false).rate, 10);
+
+  it('is a calm, moderate pace for a calm customer, a little quicker for an anxious one, and firmer as the mood heats', () => {
+    expect(MOODS.map((mood) => rate(mood))).toEqual([-4, 6, 8, 11, 14]);
+    // Never faster than the cap, so nothing sounds rushed or shouted.
+    expect(Math.max(...MOODS.map((mood) => rate(mood)))).toBeLessThanOrEqual(MAX_RATE_PERCENT);
+  });
+
+  it('keeps an anxious customer’s pitch up a little and a frustrated or angry one’s down a little, never a style on a voice without one', () => {
+    const pitch = (mood: TemperatureBandId) => prosodyFor(direction(mood), false).pitch;
+    expect(pitch('calm')).toBeNull();
+    expect(Number.parseInt(pitch('concerned') ?? '0', 10)).toBeGreaterThan(0);
+    for (const mood of ['frustrated', 'angry', 'escalating'] as const) {
+      expect(Number.parseInt(pitch(mood) ?? '0', 10)).toBeLessThan(0);
+    }
+  });
+
+  it('gives each voice choice its own small pace: Measured slowest, Warm a little slow, Concise a little quick, Direct quickest', () => {
+    const calm = Object.fromEntries(VOICE_IDS.map((voice) => [voice, rate('calm', { voice })]));
+    expect(calm).toEqual({ 'voice-a': -6, 'voice-b': 0, 'voice-c': -10, 'voice-d': -2 });
+    expect(calm['voice-c']).toBeLessThan(calm['voice-a'] as number);
+    expect(calm['voice-a']).toBeLessThan(calm['voice-d'] as number);
+    expect(calm['voice-d']).toBeLessThan(calm['voice-b'] as number);
+    // A voice choice never changes pitch: pitch belongs to mood alone.
+    for (const mood of MOODS) {
+      for (const voice of VOICE_IDS) {
+        expect(prosodyFor({ ...direction(mood), voice }, false).pitch).toBe(
+          prosodyFor(direction(mood), false).pitch,
+        );
+      }
+    }
+  });
+
+  it('is slower and calmer, never louder, for a customer who is recovering, and gradually so as the mood cools', () => {
+    for (const mood of MOODS) {
+      expect(rate(mood, { recovering: true }), mood).toBeLessThan(rate(mood));
+      const plain = prosodyFor(direction(mood), false).pitch;
+      const cooling = prosodyFor({ ...direction(mood), recovering: true }, false).pitch;
+      expect(Math.abs(Number.parseInt(cooling ?? '0', 10))).toBeLessThanOrEqual(
+        Math.abs(Number.parseInt(plain ?? '0', 10)),
+      );
+    }
+    // Cooling down band by band: each step is slower than the one before it.
+    const steps = (['frustrated', 'concerned', 'calm'] as const).map((mood) =>
+      rate(mood, { recovering: true }),
+    );
+    expect(steps).toEqual([1, 0, -7]);
+    expect(steps[0]).toBeGreaterThan(steps[1] as number);
+    expect(steps[1]).toBeGreaterThan(steps[2] as number);
+  });
+
+  it('puts no speaking style on a recovering customer, even on a voice that lists one', () => {
+    expect(styleFor('en-US-AriaNeural', { ...direction('angry'), recovering: true })).toBeNull();
+    const plan = planSpeech(
+      'Thank you, that helps.',
+      voiceDirection({
+        speaker: 'female',
+        language: 'en-US',
+        mood: 'angry',
+        voice: 'voice-b',
+        recovering: true,
+      }),
+    );
+    expect(plan.style).toBe('none');
+    expect(plan.ssml).not.toContain('express-as');
+  });
+
+  it('never leaves the limits, whatever the mood, the recovery, the voice, the language or the intensity', () => {
+    for (const language of SPEECH_LANGUAGES) {
+      for (const mood of MOODS) {
+        for (const voice of [undefined, ...VOICE_IDS]) {
+          for (const recovering of [false, true]) {
+            const plan = planSpeech(
+              'Thanks for calling. I need this fixed.',
+              voiceDirection({
+                speaker: 'female',
+                language,
+                mood,
+                ...(voice ? { voice } : {}),
+                ...(recovering ? { recovering } : {}),
+              }),
+            );
+            const label = `${language} ${mood} ${voice ?? 'old pairing'} ${recovering}`;
+            expect(wellFormed(plan.ssml), label).toBe(true);
+            expect(rateOf(plan.ssml), label).toBeGreaterThanOrEqual(MIN_RATE_PERCENT);
+            expect(rateOf(plan.ssml), label).toBeLessThanOrEqual(MAX_RATE_PERCENT);
+            expect(Math.abs(pitchOf(plan.ssml) ?? 0), label).toBeLessThanOrEqual(MAX_PITCH_PERCENT);
+            expect(plan.ssml, label).not.toMatch(/shouting|whispering|terrified|excited/);
+            const degree = Number(/styledegree="([\d.]+)"/.exec(plan.ssml)?.[1] ?? 0);
+            expect(degree, label).toBeLessThanOrEqual(0.9);
+            // A style is only ever one a voice lists, and only unfriendly or angry.
+            if (plan.style !== 'none') {
+              expect(['unfriendly', 'angry']).toContain(plan.style);
+              expect(VOICE_STYLES[plan.voice]).toContain(plan.style);
+            }
+          }
+        }
+      }
+    }
+    // Even an out-of-range intensity is held to the limits.
+    const wild = prosodyFor({ pace: 'brisk', intensity: 40, voice: 'voice-b' }, false);
+    expect(Number.parseInt(wild.rate, 10)).toBeLessThanOrEqual(MAX_RATE_PERCENT);
+  });
+
+  it('does not vary pauses, because no pause control was verified, and never writes a break or silence', () => {
+    for (const mood of MOODS) {
+      const { ssml } = planSpeech('One. Two. Three.', direction(mood, 'female', 'en-US'));
+      expect(ssml).not.toMatch(/<break|mstts:silence/);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// What is read aloud
+
+describe('what a voice is given to say', () => {
+  const spoken = (text: string) => prepareSpokenText(text).text;
+
+  it('is the plain words of the line: markdown is gone', () => {
+    expect(
+      spoken('**Hello**, I need *help* with `Outlook`. See [the guide](https://x.example/g).'),
+    ).toBe('Hello, I need help with Outlook. See the guide.');
+    expect(spoken('# Problem\n- cannot sign in\n- every day')).toBe(
+      'Problem. cannot sign in. every day',
+    );
+    expect(spoken('```\nconsole.log(1)\n```Please help.')).toBe('Please help.');
+  });
+
+  it('is never JSON', () => {
+    expect(spoken('{"mood":"angry","text":"I want a refund"}')).toBe('');
+    expect(spoken('I want a refund. {"mood": "angry"} Please.')).toBe('I want a refund. Please.');
+    expect(spoken('["a","b"]')).toBe('');
+  });
+
+  it('has no stage directions', () => {
+    expect(spoken('*sighs* I have been waiting for two days.')).toBe(
+      'I have been waiting for two days.',
+    );
+    expect(spoken('Hello. (long pause) I need help. [pauses]')).toBe('Hello. I need help.');
+    expect(spoken('I have been waiting for two days (sighs).')).toBe(
+      'I have been waiting for two days.',
+    );
+  });
+
+  it('has no metadata or notes meant for the simulation', () => {
+    expect(spoken('[mood: angry] I am not happy. (state=frustrated) Really.')).toBe(
+      'I am not happy. Really.',
+    );
+    expect(spoken('mood: angry\nI want my money back')).toBe('I want my money back');
+    expect(spoken('My email is [email removed], call me on [phone removed].')).not.toMatch(
+      /removed|\[/,
+    );
+  });
+
+  it('has no role labels', () => {
+    expect(spoken('Customer: Hello there')).toBe('Hello there');
+    expect(spoken('**Customer:** Hello there')).toBe('Hello there');
+    expect(spoken('Customer: Hello.\nSupport: Hi.')).toBe('Hello. Hi.');
+  });
+
+  it('keeps everything a customer plausibly says, so plain lines are spoken as they were written', () => {
+    for (const plain of [
+      "I've tried option (b) and it failed twice.",
+      'We lost access about three o’clock, and it is costing us money.',
+      'It took 5 minutes. Then, nothing: no error, no message.',
+      'The other one (the second one) is the one that broke.',
+      'Can you check order 4471, please? It is urgent!',
+    ]) {
+      expect(spoken(plain), plain).toBe(plain);
+    }
+  });
+
+  it('reaches the SSML only as plain words, and the stored line is left alone', () => {
+    const stored = '**Customer:** *sighs* I need [help](https://x.example) {"mood":"angry"}';
+    const plan = planSpeech(stored, direction('frustrated'));
+    expect(plan.text).toBe('I need help');
+    for (const leak of ['Customer', 'sighs', 'x.example', 'mood', '*', '{', '[']) {
+      expect(plan.ssml).not.toContain(leak);
+    }
+    expect(stored).toBe('**Customer:** *sighs* I need [help](https://x.example) {"mood":"angry"}');
+  });
+
+  it('is cleaned once, so a second pass changes nothing', () => {
+    for (const text of ['**a** *b* (c d) [mood: x]', 'Hello. (pause) Hello there. [sighs]', '']) {
+      const once = prepareSpokenText(text).text;
+      expect(prepareSpokenText(once).text).toBe(once);
+    }
   });
 });

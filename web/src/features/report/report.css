@@ -1,7 +1,8 @@
-/* The coaching report: the page frame, the header and summary, the score table, strengths and
-   opportunities, skill details, discovery review, next practice, actions and the About section.
-   The transcript, the temperature chart and the evaluating and failed states have their own
-   stylesheets. Tokens only: no raw colours. Every class is prefixed rp-. */
+/* The coaching report: the page frame, the header, the summary, the score rows, CARE, strengths and
+   improvements, better wording, discovery, next practice, actions and About. The customer journey,
+   the transcript and the states around the report have their own stylesheets. Tokens only: no raw
+   colours. Every class is prefixed rp-. Motion is transform and opacity only, and only where motion
+   is not reduced. */
 
 /* ---- Frame -------------------------------------------------------------------------------- */
 .rp-page {
@@ -20,7 +21,7 @@
      page, so a keyboard reaches the title and its actions first. */
   .rp-layout {
     display: grid;
-    grid-template-columns: 13.5rem minmax(0, 56rem);
+    grid-template-columns: 12rem minmax(0, 56rem);
     grid-template-areas:
       'nav head'
       'nav body';
@@ -38,8 +39,6 @@
     grid-area: body;
   }
 }
-
-/* Shown on paper only. */
 .rp-print-head {
   display: none;
 }
@@ -78,8 +77,6 @@
   padding: var(--sp-1h) var(--sp-3);
   border-inline-start: var(--stroke-w-thick) solid transparent;
   color: var(--fg-2);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
   text-decoration: none;
 }
 .rp-nav__link:hover {
@@ -94,7 +91,7 @@
 }
 
 .rp-jump {
-  margin-block: var(--sp-2) var(--sp-4);
+  margin-block: var(--sp-4);
   border: var(--stroke-w) solid var(--stroke-1);
   border-radius: var(--r-xl);
   background: var(--bg-canvas);
@@ -105,11 +102,11 @@
   }
 }
 .rp-jump__summary,
-.rp-skill__summary {
+.rp-about__summary {
   list-style: none;
 }
 .rp-jump__summary::-webkit-details-marker,
-.rp-skill__summary::-webkit-details-marker {
+.rp-about__summary::-webkit-details-marker {
   display: none;
 }
 .rp-jump__summary {
@@ -135,7 +132,6 @@
   transition: transform var(--dur-fast) var(--ease-easy);
 }
 .rp-jump[open] > .rp-jump__summary::after {
-  margin-block: 0.25rem 0;
   transform: rotate(-135deg);
 }
 .rp-jump__summary:hover {
@@ -161,7 +157,7 @@
   background: var(--bg-hover);
 }
 
-/* ---- Header ------------------------------------------------------------------------------- */
+/* ---- Header: which call this is ----------------------------------------------------------- */
 .rp-header {
   display: flex;
   flex-direction: column;
@@ -184,6 +180,13 @@
   color: var(--fg-2);
   font-size: var(--fs-subtitle1);
   line-height: var(--lh-subtitle1);
+  text-wrap: balance;
+}
+.rp-header__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-block-start: var(--sp-1);
 }
 .rp-header__actions {
   display: flex;
@@ -192,22 +195,18 @@
 }
 .rp-meta {
   display: grid;
-  /* Up to four columns, fewer as the space shrinks, whatever the window: larger text takes room. */
+  /* Up to five facts a row, fewer as the space shrinks, whatever the window: larger text takes room.
+     A column never asks for more than the row has. */
   grid-template-columns: repeat(
     auto-fit,
-    minmax(max(8.5rem, calc((100% - 3 * var(--sp-4)) / 4)), 1fr)
+    minmax(min(100%, max(8rem, calc((100% - 4 * var(--sp-4)) / 5))), 1fr)
   );
-  gap: var(--sp-4);
+  gap: var(--sp-3) var(--sp-4);
   margin: 0;
-  padding: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
   border: var(--stroke-w) solid var(--stroke-2);
   border-radius: var(--r-xl);
   background: var(--bg-quiet);
-}
-@media (min-width: 40em) {
-  .rp-meta {
-    padding: var(--sp-5);
-  }
 }
 .rp-meta__item {
   display: flex;
@@ -215,6 +214,12 @@
   align-items: flex-start;
   gap: var(--sp-1);
   min-inline-size: 0;
+}
+.rp-meta__label {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
 }
 .rp-meta__strong {
   display: block;
@@ -233,6 +238,8 @@
   min-inline-size: 0;
   padding-block: var(--sp-8);
   border-block-start: var(--stroke-w) solid var(--stroke-2);
+  /* What is inside a section answers to the room the section has, not to the window. */
+  container-type: inline-size;
 }
 .rp-section--first {
   padding-block-start: var(--sp-6);
@@ -240,17 +247,16 @@
 }
 .rp-section__head {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
 }
 .rp-section__title {
   font-size: var(--fs-subtitle1);
   line-height: var(--lh-subtitle1);
   font-weight: var(--fw-semibold);
-}
-.rp-section__lead {
-  max-inline-size: var(--read-max);
-  color: var(--fg-2);
+  text-wrap: balance;
 }
 .rp-subtitle {
   font-size: var(--fs-subtitle2);
@@ -262,10 +268,7 @@
   padding: var(--sp-4);
   border: var(--stroke-w) dashed var(--stroke-accessible);
   border-radius: var(--r-xl);
-  color: var(--fg-1);
 }
-
-/* A small label above the text it names. */
 .rp-field {
   display: flex;
   flex-direction: column;
@@ -283,19 +286,18 @@
   max-inline-size: var(--read-max);
 }
 
-/* Labelled values in a grid: "Suggested difficulty", "Written by". */
+/* Labelled values, one a row: "This call" and the scores' scale in About. */
 .rp-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), max-content));
-  gap: var(--sp-3) var(--sp-8);
+  display: flex;
+  flex-direction: column;
   margin: 0;
 }
 .rp-facts__item {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  min-inline-size: 0;
+  gap: var(--sp-0h);
+  padding-block: var(--sp-2);
+  border-block-end: var(--stroke-w) solid var(--stroke-3);
 }
 .rp-facts__item dt {
   color: var(--fg-3);
@@ -304,90 +306,40 @@
   font-weight: var(--fw-semibold);
 }
 @media (min-width: 40em) {
-  .rp-facts--stacked {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-  .rp-facts--stacked .rp-facts__item {
+  .rp-facts__item {
     flex-direction: row;
     gap: var(--sp-4);
-    padding-block: var(--sp-2);
-    border-block-end: var(--stroke-w) solid var(--stroke-3);
   }
-  .rp-facts--stacked .rp-facts__item dt {
-    flex: 0 0 14rem;
+  .rp-facts__item dt {
+    flex: 0 0 13rem;
+    color: var(--fg-2);
     font-size: var(--fs-body);
     line-height: var(--lh-body);
     font-weight: var(--fw-regular);
-    color: var(--fg-2);
   }
 }
 
-/* ---- Summary ------------------------------------------------------------------------------ */
-.rp-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-5);
-  align-items: start;
-}
-@media (min-width: 48em) {
-  .rp-summary {
-    grid-template-columns: minmax(0, 1fr) 13.5rem;
-    gap: var(--sp-8);
-  }
-}
-.rp-summary__text {
-  max-inline-size: var(--read-max);
-}
-.rp-overall {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  padding: var(--sp-3) var(--sp-4);
-  border: var(--stroke-w) solid var(--stroke-2);
-  border-radius: var(--r-xl);
-  background: var(--bg-canvas);
-}
-.rp-overall__score {
-  color: var(--fg-2);
-  font-size: var(--fs-subtitle2);
-  line-height: var(--lh-subtitle2);
-}
-.rp-overall__number {
-  color: var(--fg-1);
-  font-size: var(--fs-title3);
-  line-height: var(--lh-title3);
+/* ---- "Show more" on text kept to a word budget -------------------------------------------- */
+.rp-more {
+  align-self: flex-start;
+  min-block-size: var(--target-min);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand-fg-2);
   font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
-.rp-overall__none {
-  font-weight: var(--fw-semibold);
-}
-.rp-focus {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-1) var(--sp-3);
-}
-.rp-aid {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4);
-  border: var(--stroke-w) solid var(--ai-border);
-  border-radius: var(--r-xl);
-  background: var(--ai-bg);
-}
-.rp-aid__text {
-  max-inline-size: var(--read-max);
+.rp-more:hover {
+  color: var(--brand-pressed);
 }
 
 /* ---- Quotes: the trainee's words, set apart as evidence ----------------------------------- */
 .rp-quote {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--sp-1h);
   margin: 0;
   padding: var(--sp-3) var(--sp-4);
   border-inline-start: 3px solid var(--stroke-accessible);
@@ -398,12 +350,11 @@
 .rp-quote__text {
   margin: 0;
 }
-.rp-quote__foot,
-.rp-turnref {
+.rp-quote__foot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-1) var(--sp-4);
+  gap: var(--sp-1) var(--sp-3);
   color: var(--fg-2);
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
@@ -421,153 +372,320 @@
   flex-direction: column;
   gap: var(--sp-2);
 }
-
-/* ---- Scores ------------------------------------------------------------------------------- */
-/* The table stacks into one block per skill when the space it has is small, whatever the window:
-   larger text makes a wide window a narrow one. The threshold is in rem so it grows with the text. */
-.rp-scores-box {
-  container: rp-scores / inline-size;
-}
-.rp-scores {
-  inline-size: 100%;
-}
-.rp-scores__caption {
-  padding-block-end: var(--sp-2);
+.rp-skilltag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1h);
   color: var(--fg-2);
-  text-align: start;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
 }
-.rp-scores th,
-.rp-scores td {
-  padding: var(--sp-3);
-  border-block-end: var(--stroke-w) solid var(--stroke-2);
-  text-align: start;
-  vertical-align: middle;
+
+/* ---- Summary ------------------------------------------------------------------------------ */
+.rp-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
 }
-.rp-scores thead th {
-  border-block-end-color: var(--stroke-1);
+@media (min-width: 48em) {
+  .rp-summary {
+    grid-template-columns: minmax(0, 1fr) 12rem;
+    gap: var(--sp-8);
+  }
+}
+.rp-summary__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+}
+.rp-summary__text {
+  max-inline-size: var(--read-max);
+  text-wrap: pretty;
+}
+.rp-summary__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-summary__note .ff-icon {
+  flex: none;
+  margin-block-start: 1px;
+}
+.rp-overall {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+}
+.rp-overall__label {
   color: var(--fg-3);
   font-size: var(--fs-caption);
   line-height: var(--lh-caption);
   font-weight: var(--fw-semibold);
 }
-.rp-scores__skill {
+.rp-overall__score {
+  color: var(--fg-2);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+}
+.rp-overall__number {
+  color: var(--fg-1);
+  font-size: var(--fs-title2);
+  line-height: var(--lh-title2);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.rp-overall__note {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-overall__none {
   font-weight: var(--fw-semibold);
 }
-.rp-scores__link a {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: var(--target-min);
-}
-.rp-level {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-1h);
-}
-.rp-level--ok .rp-level__icon {
-  color: var(--status-success-fg);
-}
-.rp-level--limited .rp-level__icon {
-  color: var(--status-warning-fg);
-}
-.rp-level--none .rp-level__icon {
-  color: var(--fg-2);
-}
-/* Narrow: each skill is one block (name and link, the score, the evidence), still a table to
-   assistive technology; the header row stays for it but is not drawn. */
-@container rp-scores (max-width: 36rem) {
-  .rp-scores,
-  .rp-scores tbody,
-  .rp-scores caption {
-    display: block;
-  }
-  .rp-scores thead {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-  }
-  .rp-scores tr {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--sp-1) var(--sp-3);
-    padding-block: var(--sp-3);
-    border-block-end: var(--stroke-w) solid var(--stroke-2);
-  }
-  .rp-scores th,
-  .rp-scores td {
-    padding: 0;
-    border: 0;
-  }
-  .rp-scores__skill {
-    grid-column: 1;
-  }
-  .rp-scores__link {
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: end;
-  }
-  .rp-scores__score,
-  .rp-scores__evidence {
-    grid-column: 1 / -1;
-  }
-  .rp-scores__evidence {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-2);
-  }
-  .rp-scores__evidence::before {
-    content: 'Evidence';
-    content: 'Evidence' / '';
-    color: var(--fg-3);
-    font-size: var(--fs-caption);
-    line-height: var(--lh-caption);
-  }
-}
 
-/* ---- Strengths and opportunities ---------------------------------------------------------- */
+/* ---- Score rows: six skills, each opening in place ---------------------------------------- */
+.rp-rows,
+.rp-care,
 .rp-items {
   display: flex;
   flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  overflow: hidden;
+}
+.rp-row + .rp-row,
+.rp-care__item + .rp-care__item,
+.rp-item + .rp-item {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+/* A row is the design system's Disclosure (the whole line is the button). The list draws the rules
+   between rows, so the row's own rule is dropped; the focus ring is drawn inside the button because
+   the list clips what is outside it. */
+.rp-row .ff-disclosure--row {
+  border-block-end: 0;
+}
+.rp-row .ff-disclosure__button {
+  flex-wrap: wrap;
+  padding-inline: var(--sp-4);
+  border-radius: 0;
+}
+.rp-row .ff-disclosure__button:focus-visible {
+  outline-offset: -2px;
+  box-shadow: none;
+}
+/* Every row lays out the same way: the score takes a line and the count and "Expand details" sit
+   under it; with room for all of it, they share one line. */
+.rp-row .ff-disclosure__summary {
+  flex: 1 0 100%;
+}
+@container (min-width: 44rem) {
+  .rp-row .ff-disclosure__summary {
+    flex: 1 1 0%;
+  }
+}
+.rp-row .ff-disclosure__meta {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  max-inline-size: calc(100% - 2rem);
+  margin-inline-start: auto;
+}
+.rp-row .ff-disclosure__panel {
+  padding-inline: var(--sp-4);
+}
+.rp-row__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-4);
+  min-inline-size: 0;
+}
+.rp-row__name {
+  flex: 0 1 11rem;
+  min-inline-size: 0;
+}
+@container (max-width: 40rem) {
+  .rp-row__name {
+    flex-basis: 100%;
+  }
+}
+.rp-row__meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-1) var(--sp-3);
+}
+.rp-row__evidence,
+.rp-row__toggle {
+  white-space: nowrap;
+}
+.rp-row__toggle {
+  color: var(--brand-fg-2);
+}
+.rp-row__body {
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-4);
+}
+.rp-row__confidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+}
+
+/* ---- CARE: four principles, a sentence each, the behaviours behind a click ---------------- */
+.rp-care__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'head'
+    'summary'
+    'more';
+  gap: var(--sp-2) var(--sp-6);
+  padding: var(--sp-4);
+}
+@media (min-width: 48em) {
+  .rp-care__item {
+    grid-template-columns: 13rem minmax(0, 1fr);
+    grid-template-areas:
+      'head summary'
+      'head more';
+  }
+}
+.rp-care__head {
+  grid-area: head;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.rp-care__name {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-care__summary {
+  grid-area: summary;
+  max-inline-size: var(--read-max);
+  text-wrap: pretty;
+}
+.rp-care__more {
+  grid-area: more;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-4);
+}
+/* The toggle and what it opens are part of this row: the counts on the left, the button on the
+   right, the behaviours on a line of their own below. */
+.rp-care__toggle {
+  display: contents;
+}
+.rp-care__more .ff-disclosure__panel {
+  flex: 1 0 100%;
+}
+.rp-care__more .ff-disclosure__summary {
+  white-space: nowrap;
+}
+.rp-care__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-behaviours {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
   margin: 0;
   padding: 0;
   list-style: none;
 }
+.rp-behaviour {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1h);
+  padding-block-start: var(--sp-3);
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
+}
+.rp-behaviour__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+}
+.rp-behaviour__label {
+  font-weight: var(--fw-semibold);
+}
+.rp-behaviour__note {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+/* ---- Strengths and improvements ----------------------------------------------------------- */
 .rp-item {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  align-items: flex-start;
+  gap: var(--sp-2);
   min-inline-size: 0;
-  padding: var(--sp-5);
-  border: var(--stroke-w) solid var(--stroke-2);
-  border-radius: var(--r-xl);
-  background: var(--bg-canvas);
+  padding: var(--sp-4) var(--sp-5);
+  border-inline-start: 3px solid transparent;
 }
-@media (max-width: 30em) {
-  .rp-item {
-    padding: var(--sp-4);
-  }
+.rp-item--strength {
+  border-inline-start-color: var(--status-success-fg);
 }
-.rp-item__skill {
-  color: var(--fg-3);
-  font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
-  font-weight: var(--fw-semibold);
+.rp-item--improvement {
+  border-inline-start-color: var(--status-warning-fg);
+}
+.rp-item--strength .rp-skilltag .ff-icon {
+  color: var(--status-success-fg);
+}
+.rp-item--improvement .rp-skilltag .ff-icon {
+  color: var(--status-warning-fg);
+}
+.rp-item__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  max-inline-size: var(--read-max);
 }
 .rp-item__title {
   font-size: var(--fs-subtitle2);
   line-height: var(--lh-subtitle2);
   font-weight: var(--fw-semibold);
 }
-/* The wording to try: a calm green panel, distinct from the quote and from the risk. */
-.rp-suggestion {
-  padding: var(--sp-3) var(--sp-4);
-  border: var(--stroke-w) solid var(--status-success-border);
-  border-radius: var(--r-lg);
-  background: var(--status-success-bg);
-  color: var(--fg-1);
-  overflow-wrap: anywhere;
+.rp-item__text {
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+.rp-item > .rp-quote,
+.rp-item > .rp-gap {
+  align-self: stretch;
+  max-inline-size: var(--read-max);
 }
 .rp-gap {
   display: flex;
@@ -582,146 +700,247 @@
   padding: var(--sp-1) var(--sp-3);
   border: var(--stroke-w) dashed var(--stroke-accessible);
   border-radius: var(--r-md);
-  color: var(--fg-1);
   font-weight: var(--fw-semibold);
 }
 
-/* ---- Skill details ------------------------------------------------------------------------ */
-.rp-skills {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-.rp-skill {
-  border: var(--stroke-w) solid var(--stroke-2);
-  border-radius: var(--r-xl);
-  background: var(--bg-canvas);
-}
-.rp-skill[open] {
-  border-color: var(--stroke-1);
-}
-.rp-skill__summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    'name chevron'
-    'score chevron';
-  align-items: center;
-  gap: var(--sp-1) var(--sp-4);
-  min-block-size: var(--target);
-  padding: var(--sp-3) var(--sp-4);
-  border-radius: var(--r-xl);
-  cursor: pointer;
-}
-@media (min-width: 40em) {
-  .rp-skill__summary {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas: 'name score chevron';
-    gap: var(--sp-4);
-  }
-}
-.rp-skill__summary:hover {
-  background: var(--bg-hover);
-}
-.rp-skill__name {
-  grid-area: name;
-  font-size: var(--fs-subtitle2);
-  line-height: var(--lh-subtitle2);
-  font-weight: var(--fw-semibold);
-}
-.rp-skill__score {
-  grid-area: score;
-}
-.rp-skill__chevron {
-  grid-area: chevron;
-  color: var(--fg-2);
-  transition: transform var(--dur-fast) var(--ease-easy);
-}
-.rp-skill[open] .rp-skill__chevron {
-  transform: rotate(180deg);
-}
-.rp-skill__body {
+/* ---- Better wording: what was said, and what could be said ------------------------------- */
+.rp-wordings {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  padding: var(--sp-4) var(--sp-4) var(--sp-5);
-  border-block-start: var(--stroke-w) solid var(--stroke-3);
-}
-.rp-skill__rubric {
-  max-inline-size: var(--read-max);
-  color: var(--fg-2);
-}
-.rp-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
-
-/* ---- Discovery review --------------------------------------------------------------------- */
-.rp-discovery__total {
+.rp-wording {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+}
+.rp-wording__for {
   font-size: var(--fs-subtitle2);
   line-height: var(--lh-subtitle2);
   font-weight: var(--fw-semibold);
+}
+.rp-wording__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-2);
+  align-self: stretch;
+  --rp-from: translateY(-0.5rem);
+}
+@media (min-width: 48em) {
+  .rp-wording__pair {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--sp-3);
+    --rp-from: translateX(-0.5rem);
+  }
+}
+.rp-wording__before,
+.rp-wording__after {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  align-self: stretch;
+  min-inline-size: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  overflow-wrap: anywhere;
+}
+.rp-wording__before {
+  background: var(--bg-quiet);
+}
+.rp-wording__after {
+  border-color: var(--status-success-border);
+  background: var(--status-success-bg);
+}
+.rp-wording__label {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.rp-wording__none {
+  color: var(--fg-2);
+}
+.rp-wording__after .rp-wording__text {
+  font-style: normal;
+}
+.rp-wording__arrow {
+  justify-self: center;
+  color: var(--fg-3);
+  transform: rotate(90deg);
+}
+@media (min-width: 48em) {
+  .rp-wording__arrow {
+    transform: none;
+  }
+}
+.rp-wording__why {
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+}
+
+/* ---- Discovery ---------------------------------------------------------------------------- */
+.rp-discovery__total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-discovery__number {
+  font-size: var(--fs-title2);
+  line-height: var(--lh-title2);
+  font-variant-numeric: tabular-nums;
+}
+.rp-discovery__split {
+  flex-basis: 100%;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-regular);
+}
+.rp-discovery__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5) var(--sp-6);
+  align-items: start;
+}
+@media (min-width: 48em) {
+  .rp-discovery__columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.rp-discovery__column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-inline-size: 0;
 }
 .rp-group {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
-  margin-block-start: var(--sp-2);
+  gap: var(--sp-2);
 }
 .rp-facts-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
   margin: 0;
   padding: 0;
   list-style: none;
-}
-.rp-fact {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  min-inline-size: 0;
-  padding: var(--sp-4) var(--sp-5);
   border: var(--stroke-w) solid var(--stroke-2);
   border-radius: var(--r-xl);
-  background: var(--bg-canvas);
+  overflow: hidden;
 }
-@media (max-width: 30em) {
-  .rp-fact {
-    padding: var(--sp-4);
-  }
+.rp-fact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+}
+.rp-fact + .rp-fact {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
 }
 .rp-fact__head {
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--sp-2) var(--sp-4);
+  gap: var(--sp-1) var(--sp-3);
 }
 .rp-fact__title {
-  flex: 1 1 14rem;
+  flex: 1 1 12rem;
   min-inline-size: 0;
-  font-size: var(--fs-subtitle2);
-  line-height: var(--lh-subtitle2);
   font-weight: var(--fw-semibold);
 }
-.rp-fact__badges {
+.rp-fact__tags {
   display: flex;
   flex-wrap: wrap;
+  gap: var(--sp-1h);
+}
+.rp-fact__turn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-0h) var(--sp-3);
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+/* The toggle and what it opens join the fact's grid: the button at the end of the line that says
+   where you asked, the details across the full width below it. */
+.rp-fact__toggle {
+  display: contents;
+}
+.rp-fact .ff-disclosure__button {
+  grid-column: 2;
+  justify-self: end;
+}
+.rp-fact .ff-disclosure__summary {
+  white-space: nowrap;
+}
+.rp-fact .ff-disclosure__panel {
+  grid-column: 1 / -1;
+}
+.rp-fact__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.rp-suggestion {
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--status-success-border);
+  border-radius: var(--r-lg);
+  background: var(--status-success-bg);
+  overflow-wrap: anywhere;
+}
+.rp-suggest {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-4) var(--sp-5);
+  border: var(--stroke-w) solid var(--status-info-border);
+  border-radius: var(--r-xl);
+  background: var(--brand-tint);
+}
+.rp-suggest__label {
+  display: inline-flex;
+  align-items: center;
   gap: var(--sp-2);
+  font-weight: var(--fw-semibold);
+}
+.rp-suggest__label .ff-icon {
+  color: var(--brand);
+}
+.rp-suggest__text {
+  max-inline-size: var(--read-max);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  text-wrap: pretty;
+}
+.rp-suggest__why {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
 }
 
 /* ---- Next practice ------------------------------------------------------------------------ */
 .rp-next {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--sp-5) var(--sp-8);
+  gap: var(--sp-4) var(--sp-8);
   padding: var(--sp-5);
   border: var(--stroke-w) solid var(--stroke-2);
   border-radius: var(--r-xl);
@@ -731,19 +950,38 @@
   display: flex;
   flex: 1 1 22rem;
   flex-direction: column;
-  gap: var(--sp-3);
+  align-items: flex-start;
+  gap: var(--sp-2);
   min-inline-size: 0;
   max-inline-size: var(--read-max);
 }
-.rp-next__skill {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-0h);
+.rp-next__title {
   font-size: var(--fs-subtitle1);
   line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
 }
-.rp-next__what {
-  margin-block-start: calc(var(--sp-1) * -1);
+.rp-next__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-next__product {
+  font-weight: var(--fw-semibold);
+}
+.rp-next__text {
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+/* Large text must not push the card wider than the screen: the label wraps inside the button. */
+.ff-button.rp-next__cta {
+  --_px: var(--sp-4);
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* ---- Actions ------------------------------------------------------------------------------ */
@@ -752,26 +990,82 @@
   flex-wrap: wrap;
   gap: var(--sp-2) var(--sp-3);
 }
+/* Narrow: one button to a line, all as wide as the line, so the stack is even. */
+@container (max-width: 30rem) {
+  .rp-actions > * {
+    flex: 1 1 100%;
+  }
+}
 .rp-actions--danger {
   padding-block-start: var(--sp-4);
   border-block-start: var(--stroke-w) solid var(--stroke-3);
 }
-
-/* ---- About -------------------------------------------------------------------------------- */
-.rp-about__note,
-.rp-disclaimers {
+.rp-actions__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
   max-inline-size: var(--read-max);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
 }
-.rp-disclaimers {
-  margin: 0;
-  padding-inline-start: var(--sp-5);
-  list-style: disc;
-}
-.rp-disclaimers li + li {
-  margin-block-start: var(--sp-1);
+.rp-actions__note .ff-icon {
+  flex: none;
+  margin-block-start: 1px;
 }
 
-/* ---- Reveal: the report fades in once, when it has just been made ------------------------- */
+/* ---- About: closed until it is wanted ----------------------------------------------------- */
+.rp-about {
+  padding-block: var(--sp-4) 0;
+}
+.rp-about__details {
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+}
+.rp-about__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--target);
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-xl);
+  cursor: pointer;
+}
+.rp-about__summary:hover {
+  background: var(--bg-hover);
+}
+.rp-about__chevron {
+  flex: none;
+  color: var(--fg-2);
+  transition: transform var(--dur-fast) var(--ease-easy);
+}
+.rp-about__details[open] .rp-about__chevron {
+  transform: rotate(180deg);
+}
+.rp-about__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-5) var(--sp-5);
+}
+.rp-about__plain {
+  max-inline-size: var(--read-max);
+  font-weight: var(--fw-semibold);
+}
+.rp-about__note {
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+}
+
+/* ---- Motion: only where it is not reduced, and only transform and opacity ----------------- */
+@keyframes rp-after {
+  from {
+    opacity: 0;
+    transform: var(--rp-from);
+  }
+}
 @keyframes rp-reveal {
   from {
     opacity: 0;
@@ -779,6 +1073,9 @@
   }
 }
 @media (prefers-reduced-motion: no-preference) {
+  .rp-wording__after {
+    animation: rp-after var(--dur-slow) var(--ease-decelerate) 160ms both;
+  }
   .rp-reveal .rp-header,
   .rp-reveal .rp-main > * {
     animation: rp-reveal var(--dur-slow) var(--ease-decelerate) both;
@@ -794,36 +1091,17 @@
   }
 }
 
-/* ---- Forced colours: system colours and borders, no shadows or tints ---------------------- */
+/* ---- Forced colours: the system draws borders and text; fills and the chosen edge need help --- */
 @media (forced-colors: active) {
   .rp-nav__link[aria-current='location'] {
     border-inline-start-color: Highlight;
   }
-  .rp-meta,
-  .rp-overall,
-  .rp-aid,
-  .rp-item,
-  .rp-fact,
-  .rp-next,
-  .rp-skill,
-  .rp-jump,
-  .rp-empty,
-  .rp-suggestion {
-    border-color: CanvasText;
-  }
-  .rp-quote {
-    border-inline-start-color: CanvasText;
-  }
-  .rp-scores th,
-  .rp-scores td {
-    border-block-end-color: CanvasText;
-  }
-  .rp-level__icon {
-    color: CanvasText;
+  .rp-more {
+    color: LinkText;
   }
 }
 
-/* ---- Print: the report on paper, black on white -------------------------------------------- */
+/* ---- Print: the report on paper, black on white ------------------------------------------- */
 @media print {
   @page {
     margin: 14mm 12mm;
@@ -839,6 +1117,25 @@
     padding: 0;
     background: Canvas;
     color: CanvasText;
+    /* Paper is black on white: the greys, tints and blues of the screen become lines and text. */
+    --fg-1: CanvasText;
+    --fg-2: CanvasText;
+    --fg-3: CanvasText;
+    --brand: CanvasText;
+    --stroke-1: CanvasText;
+    --stroke-2: CanvasText;
+    --stroke-3: CanvasText;
+    --stroke-accessible: CanvasText;
+    --bg-canvas: Canvas;
+    --bg-quiet: Canvas;
+    --bg-hover: Canvas;
+    --bg-strong: Canvas;
+    --brand-tint: Canvas;
+    --status-success-bg: Canvas;
+    --status-success-fg: CanvasText;
+    --status-success-border: CanvasText;
+    --status-warning-fg: CanvasText;
+    --status-info-border: CanvasText;
   }
   .rp-layout {
     display: block;
@@ -858,73 +1155,55 @@
   .rp-nav,
   .rp-jump,
   .rp-header__actions,
+  .rp-section__aside,
+  .rp-row__toggle,
+  .rp-more,
   .rp-next__cta,
-  .rp-turnlink,
+  .rp-about__chevron,
   #actions {
     display: none !important;
   }
+  /* Everything is open on paper, so the buttons that open the behaviours and the details of a fact
+     have nothing left to do. */
+  .rp-care__more .ff-disclosure__button,
+  .rp-fact .ff-disclosure__button {
+    display: none;
+  }
   .rp-section {
     padding-block: var(--sp-4);
-    border-block-start-color: CanvasText;
   }
   .rp-section__head,
   .rp-section__title,
-  .rp-subtitle,
-  .rp-skill__summary {
+  .rp-subtitle {
     break-after: avoid;
   }
+  .rp-row,
+  .rp-care__item,
   .rp-item,
   .rp-fact,
   .rp-quote,
   .rp-field,
   .rp-meta,
-  .rp-aid,
   .rp-next,
-  .rp-scores tr,
+  .rp-wording,
+  .rp-suggest,
   .rp-suggestion {
     break-inside: avoid;
   }
-  /* A skill's detail may run over a page; what is inside it keeps together. */
-  .rp-skill {
-    break-inside: auto;
-  }
-  .rp-meta,
-  .rp-aid,
-  .rp-quote,
-  .rp-suggestion,
-  .rp-next,
-  .rp-overall,
-  .rp-empty {
-    border-color: CanvasText;
-    background: Canvas;
-    color: CanvasText;
-  }
-  .rp-quote {
-    border-inline-start-color: CanvasText;
-  }
-  /* Details are opened for paper; the arrow that says they could be closed is not needed. */
-  .rp-skill__chevron {
-    display: none;
-  }
-  /* Browsers leave backgrounds out of a printout, which would empty the score bars. Their numbers and
-     words are still there; this keeps the bar as well (a workaround for the shared ScoreBar). */
-  .rp-page .ff-scorebar__fill,
-  .rp-page .ff-scorebar__segment {
+  /* Browsers leave backgrounds out of a printout, which would empty the score segments. Their
+     numbers and words are still there; this keeps the segments as well. */
+  .rp-row .ff-scorebar .ff-scorebar__segment,
+  .rp-row .ff-scorebar .ff-scorebar__fill {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }
-  .rp-page .ff-scorebar__fill {
-    background: CanvasText;
+  .rp-row .ff-scorebar .ff-scorebar__fill,
+  .rp-wording__after {
+    animation: none;
   }
-  /* Links shown as text, and the table's link column is empty on paper, so it goes. */
-  a,
-  .rp-scores__link a {
+  a {
     color: inherit;
     text-decoration: none;
-  }
-  .rp-scores__link,
-  .rp-scores thead th:last-child {
-    display: none;
   }
   .rp-reveal .rp-header,
   .rp-reveal .rp-main > * {

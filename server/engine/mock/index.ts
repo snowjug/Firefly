@@ -12,15 +12,7 @@ export function mockClassifier(scenario: EffectiveScenario) {
 }
 
 export function mockGenerate(ctx: CustomerGenerationContext): Promise<CustomerGeneration> {
-  const reply = composeCustomerReply({
-    scenario: ctx.scenario,
-    runtime: ctx.runtime,
-    c: ctx.classification,
-    discovery: ctx.discovery,
-    curveball: ctx.curveball,
-    traineeTurnNumber: ctx.traineeTurnNumber,
-    rng: ctx.rng,
-  });
+  const reply = composeCustomerReply(ctx);
   return Promise.resolve({
     text: reply.text,
     source: 'demo',
@@ -28,9 +20,16 @@ export function mockGenerate(ctx: CustomerGenerationContext): Promise<CustomerGe
       used: reply.used,
       toldIds: reply.toldIds,
       hintIds: reply.hintIds,
+      revealedIds: reply.revealedIds,
       voicedAssumptions: reply.voicedAssumptions,
       timelineAsked: reply.timelineAsked,
       followUpGiven: reply.followUpGiven,
+      pushed: reply.pushed,
+      flavoured: reply.flavoured,
+      echoed: reply.echoed,
+      customerChecks: reply.customerChecks,
+      confusedBy: reply.confusedBy,
+      limit: reply.limit,
     },
   });
 }

@@ -1,8 +1,15 @@
 import type { SpeechLanguage } from '#shared/domain/speech.ts';
+import type { VoiceId } from '#shared/domain/voices.ts';
 import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 
 // The shapes shared by the two ways of speaking the customer's replies (the server's speech service
 // and the browser's own voices). The call engine only ever talks to these.
+//
+// Turn-taking is controlled: the customer speaks, the trainee can stop the customer at any time
+// ("Stop customer audio"), and the trainee speaks after the customer has finished or been stopped. Firefly
+// does not let the trainee talk over the customer and have the voice stop by itself ("barge-in"):
+// a microphone cannot tell the customer's own voice, coming back out of the speakers, from the
+// trainee's, and a voice that stops on its own echo is worse than one that waits. See ../turn-taking.ts.
 
 export type PlaybackEngine = 'server-speech' | 'browser-synthesis';
 
@@ -15,6 +22,12 @@ export interface PlayRequest {
   mood: TemperatureBandId;
   /** Anything stable for one customer (such as the persona's name): it keeps their voice the same. */
   voiceSeed: string;
+  /**
+   * The voice the trainee chose (`voice-a` to `voice-d`). The server speaks with the provider voice
+   * behind it; the browser uses the best local voice it has. Left out, the old pairing by `voiceSeed`
+   * is used, so a call saved before voices could be chosen sounds as it always did.
+   */
+  voice?: VoiceId;
 }
 
 export interface VoiceDetails {
@@ -32,6 +45,10 @@ export interface VoiceDetails {
  * What one spoken reply tells the call engine. The order is: details (when known), start, then end.
  * A reply that cannot play ends with `onBlocked` or `onFailure` instead. After `stop`, or after any
  * of those, nothing more is reported.
+ *
+ * `onStart` is "customer speaking"; `onLevel` is the meter that shows it; `onEnd` hands the turn to
+ * the trainee; `onFailure('generation')` is a voice that could not be made and `onFailure('playback')`
+ * one that could not be played; `onBlocked` is a browser that wants a tap first.
  */
 export interface PlaybackHandlers {
   /** The voice is audible now. `estimateMs` is the best guess at how long it will take. */
@@ -48,9 +65,20 @@ export interface PlaybackHandlers {
   onDetails(details: VoiceDetails): void;
 }
 
+/**
+ * What stopping a reply says, so the call can record that the customer was cut off. The words of the
+ * reply are already in the transcript in full, whatever was heard of them.
+ */
+export interface PlaybackStop {
+  /** The voice was audible when it was stopped: the trainee cut the customer off. */
+  interrupted: boolean;
+  /** How much of the voice had played, in milliseconds. 0 when it had not started. */
+  playedMs: number;
+}
+
 export interface PlaybackJob {
-  /** Stops the voice at once. Nothing is reported afterwards. */
-  stop(): void;
+  /** Stops the voice at once. Nothing is reported afterwards. Safe to call again. */
+  stop(): PlaybackStop;
 }
 
 export interface Playback {

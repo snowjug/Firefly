@@ -4,7 +4,13 @@ import {
   type TurnClassification,
 } from '#shared/domain/classification.ts';
 import { applyConfig, type EffectiveScenario } from '#shared/domain/config.ts';
-import type { CoachingReport } from '#shared/domain/report.ts';
+import type {
+  CareBehaviourResult,
+  CareLevel,
+  CoachingReport,
+  Milestone,
+  MilestoneId,
+} from '#shared/domain/report.ts';
 import { ScenarioDefinitionSchema, type ScenarioOverrides } from '#shared/domain/scenario.ts';
 import {
   startingState,
@@ -15,11 +21,15 @@ import {
 } from '#shared/domain/state.ts';
 import { quoteInText } from '#shared/domain/text.ts';
 import { expect } from 'vitest';
+import { classifyTurnRules } from '#server/engine/classifier.ts';
 import type { DiscoveryMap, EvaluationInput, TranscriptTurn } from '#server/engine/types.ts';
-import exemplar from '#server/scenarios/library/locked-out-after-password-reset.ts';
+import { FIXTURE_LIBRARY, FIXTURE_SCENARIO } from './fixture.ts';
+import { evaluateWithRules } from './rules.ts';
 
 // Hand-built inputs for the evaluator tests. Each step is one trainee turn: what was said, what
 // the classifier recorded (with quotes that must be verbatim), and what the customer's state did.
+// The scenario is an inline fixture (./fixture.ts), never the scenario library, so these tests do
+// not move when the library does.
 
 /** [category, key, previous, next, reason, optional quote] */
 export type EventSpec = [StateCategory, StateKey, number, number, string, string?];
@@ -40,37 +50,12 @@ export interface BuildOptions {
   library?: EvaluationInput['library'];
 }
 
-export const LIBRARY: EvaluationInput['library'] = [
-  {
-    id: 'locked-out-after-password-reset',
-    title: 'Locked out after a password reset',
-    difficulty: 'starter',
-    coachingFocus: ['scoping-discovery', 'clarity'],
-  },
-  {
-    id: 'team-cannot-open-shared-workspace',
-    title: 'A team cannot open a shared workspace',
-    difficulty: 'standard',
-    coachingFocus: ['empathy-deescalation', 'ownership-next-steps'],
-  },
-  {
-    id: 'checkout-outage-before-investor-event',
-    title: 'Checkout outage before an investor event',
-    difficulty: 'challenge',
-    coachingFocus: ['empathy-deescalation', 'closing'],
-  },
-  {
-    id: 'cannot-find-export-feature',
-    title: 'Cannot find the export feature',
-    difficulty: 'starter',
-    coachingFocus: ['clarity', 'opening-rapport'],
-  },
-];
+export const LIBRARY: EvaluationInput['library'] = FIXTURE_LIBRARY;
 
-/** The exemplar scenario, configured for a frustrated customer at Standard difficulty. */
+/** The fixture scenario, configured for a frustrated customer at Standard difficulty. */
 export function makeScenario(overrides: ScenarioOverrides = {}): EffectiveScenario {
   return applyConfig(
-    ScenarioDefinitionSchema.parse(exemplar),
+    ScenarioDefinitionSchema.parse(FIXTURE_SCENARIO),
     { difficulty: 'standard', startingTemperature: 'frustrated', impact: 'medium', ...overrides },
     { seed: 3 },
   );
@@ -478,6 +463,53 @@ export function simpleCall(
   return buildInput(makeScenario(scenarioOverrides), lines, options);
 }
 
+/** One scripted trainee line for a call that runs through the real rules classifier. */
+export interface Line {
+  say: string;
+  reply?: string;
+  /** Applied on top of what the rules classifier recorded for this line. */
+  cls?: Partial<TurnClassification>;
+  events?: EventSpec[];
+  finds?: Step['finds'];
+}
+
+/**
+ * A call whose trainee lines are classified by the real rules classifier, so the flags and the
+ * evidence quotes are the ones the product records for those words. The customer's replies, the
+ * state events and the discovery records are scripted by the test.
+ */
+export function classified(
+  lines: (string | Line)[],
+  scenarioOverrides: ScenarioOverrides = {},
+  options: BuildOptions = {},
+): EvaluationInput {
+  return classifiedFor(makeScenario(scenarioOverrides), lines, options);
+}
+
+/** The same, for a scenario the test built itself (for example one from the scenario library). */
+export function classifiedFor(
+  scenario: EffectiveScenario,
+  lines: (string | Line)[],
+  options: BuildOptions = {},
+): EvaluationInput {
+  const steps = lines.map((line, i): Step => {
+    const scripted: Line = typeof line === 'string' ? { say: line } : line;
+    const { evidence, ...flags } = classifyTurnRules(scripted.say, {
+      scenario,
+      traineeTurnNumber: i + 1,
+    });
+    return {
+      say: scripted.say,
+      ...(scripted.reply ? { reply: scripted.reply } : {}),
+      cls: { ...flags, ...scripted.cls },
+      evidence: evidence.map((e): [EvidenceBehaviour, string] => [e.behaviour, e.quote]),
+      ...(scripted.events ? { events: scripted.events } : {}),
+      ...(scripted.finds ? { finds: scripted.finds } : {}),
+    };
+  });
+  return buildInput(scenario, steps, options);
+}
+
 /** Every quote in a report, with the trainee turn it cites. */
 export function citedQuotes(
   report: CoachingReport,
@@ -494,8 +526,46 @@ export function citedQuotes(
       out.push({ where: 'discovery', turnIndex: r.revealedAtTurn, quote: r.revealingQuestion });
   for (const p of report.journey.points)
     if (p.quote) out.push({ where: 'journey', turnIndex: p.turnIndex, quote: p.quote });
+  for (const principal of report.care ?? [])
+    for (const b of principal.behaviours)
+      for (const e of b.evidence) out.push({ where: `care ${b.id}`, ...e });
+  for (const m of report.journey.milestones ?? [])
+    if (m.quote) out.push({ where: `milestone ${m.id}`, turnIndex: m.turnIndex, quote: m.quote });
   return out;
 }
+
+export type CarePrincipleId = 'communicate' | 'accountable' | 'resourceful' | 'empathetic';
+
+/** What a report says about one CARE behaviour, or 'unlisted' when the report does not list it. */
+export function careStatus(
+  report: CoachingReport,
+  id: string,
+): CareBehaviourResult['status'] | 'unlisted' {
+  const row = report.care?.flatMap((p) => p.behaviours).find((b) => b.id === id);
+  return row?.status ?? 'unlisted';
+}
+
+export function careBehaviour(report: CoachingReport, id: string): CareBehaviourResult | undefined {
+  return report.care?.flatMap((p) => p.behaviours).find((b) => b.id === id);
+}
+
+export function careLevel(report: CoachingReport, principal: CarePrincipleId): CareLevel {
+  const found = report.care?.find((p) => p.id === principal);
+  if (!found) throw new Error(`The report has no ${principal} principal`);
+  return found.level;
+}
+
+export function milestone(report: CoachingReport, id: MilestoneId): Milestone {
+  const found = report.journey.milestones?.find((m) => m.id === id);
+  if (!found) throw new Error(`The report has no ${id} milestone`);
+  return found;
+}
+
+export const NOW = new Date('2026-03-01T10:00:00Z');
+
+/** The rules evaluator's report for a call, generated at a fixed time. */
+export const evaluate = (input: EvaluationInput): CoachingReport =>
+  evaluateWithRules(input, { now: NOW });
 
 /** Fails unless every quote is a short, verbatim part of the trainee turn it cites. */
 export function expectQuotesVerified(report: CoachingReport, input: EvaluationInput): void {

@@ -1,22 +1,19 @@
 import { useCallback, useId, useRef, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router';
+import { NavLink, useLocation } from 'react-router';
 import { Button, LinkButton } from '../../design/primitives/Button.tsx';
 import { useDismiss } from './use-dismiss.ts';
 import { Wordmark } from './Wordmark.tsx';
 import './header.css';
 
 const LINKS = [
-  { to: '/#overview', label: 'Overview', current: false },
-  { to: '/#how-it-works', label: 'How it works', current: false },
-  { to: '/responsible-ai', label: 'Responsible AI', current: true },
-  { to: '/about', label: 'About', current: true },
+  { to: '/scenarios', label: 'Scenarios' },
+  { to: '/responsible-ai', label: 'Responsible AI' },
 ] as const;
 
 /**
- * The header of the public pages: the wordmark, four links, and the main action. Below 48em the
- * links collapse into a disclosure menu (aria-expanded, aria-controls, Escape closes and returns
- * focus to the button) while "Start simulation" stays in the bar, as "Start" on the narrowest
- * screens (the rest of its name is still read out).
+ * The header of the public pages: the wordmark, two links and the main action. Below 48em the links
+ * collapse into a disclosure menu (aria-expanded, aria-controls, Escape closes it and returns focus
+ * to the button) while "Start call" stays in the bar.
  */
 export function PublicHeader() {
   const location = useLocation();
@@ -53,22 +50,16 @@ export function PublicHeader() {
           <ul className="ff-header__links" role="list">
             {LINKS.map((link) => (
               <li key={link.label}>
-                {link.current ? (
-                  <NavLink to={link.to} className="ff-navlink">
-                    {link.label}
-                  </NavLink>
-                ) : (
-                  <Link to={link.to} className="ff-navlink">
-                    {link.label}
-                  </Link>
-                )}
+                <NavLink to={link.to} className="ff-navlink">
+                  {link.label}
+                </NavLink>
               </li>
             ))}
           </ul>
         </nav>
         <div className="ff-header__actions">
-          <LinkButton to="/scenarios" appearance="primary" aria-label="Start simulation">
-            Start<span className="ff-header__cta-rest"> simulation</span>
+          <LinkButton to="/scenarios" appearance="primary">
+            Start call
           </LinkButton>
         </div>
       </div>

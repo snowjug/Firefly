@@ -17,9 +17,9 @@ export interface PhaseStep {
 /** The five steps the server really reports, in order, in the words the page uses for them. */
 export const PHASE_STEPS: readonly PhaseStep[] = [
   { phase: 'transcript_locked', title: 'Transcript saved' },
-  { phase: 'discovery_review', title: 'Checking what you found out from the customer' },
-  { phase: 'scoring', title: 'Scoring the six coaching skills' },
-  { phase: 'building_report', title: 'Writing your coaching report' },
+  { phase: 'discovery_review', title: 'Checking what you found out' },
+  { phase: 'scoring', title: 'Scoring six skills' },
+  { phase: 'building_report', title: 'Writing the report' },
   { phase: 'saved', title: 'Report saved' },
 ];
 

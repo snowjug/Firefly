@@ -1,36 +1,41 @@
-import { LinkButton } from '../../design/index.ts';
-import { ProductPreview } from './ProductPreview.tsx';
+import { LinkButton } from '../../design/primitives/Button.tsx';
+import { HERO } from './landing-copy.ts';
+import { CallPreview } from './CallPreview.tsx';
 import './hero.css';
 
-/** The top of the landing page: what Firefly is, how to start, and one real moment from a call. */
+/**
+ * The top of the page: a short promise, the way in and a real moment from a call. The region is
+ * named by the title and described by the supporting line.
+ */
 export function Hero() {
   return (
-    <div className="lp-hero">
+    <section className="lp-hero" aria-labelledby="lp-hero-title" aria-describedby="lp-hero-lead">
       <div className="l-page lp-hero__inner">
         <div className="lp-hero__copy">
-          <p className="t-label lp-hero__eyebrow">Customer call practice for support engineers</p>
-          <h1 className="t-display">
-            Practise the conversation before it becomes a real customer call.
+          <h1 id="lp-hero-title" className="t-display">
+            {HERO.title}
           </h1>
-          <p className="t-reading lp-hero__lead">
-            Choose a realistic support scenario, speak with an AI customer and receive
-            evidence-based coaching after the call.
+          <p id="lp-hero-lead" className="t-lead lp-hero__lead">
+            {HERO.lead}
           </p>
           <div className="lp-hero__actions">
-            <LinkButton to="/scenarios" appearance="primary" size="large">
-              Start a simulation
+            <LinkButton
+              to="/scenarios"
+              appearance="primary"
+              size="large"
+              icon="arrow-right"
+              iconPosition="end"
+              nudge
+            >
+              {HERO.primary}
             </LinkButton>
-            <LinkButton to="#how-it-works" appearance="outline" size="large">
-              See how it works
+            <LinkButton to="/scenarios" appearance="outline" size="large">
+              {HERO.secondary}
             </LinkButton>
           </div>
-          <p className="t-meta lp-hero__note">
-            Every customer is fictional. Scores are for coaching practice, not{' '}
-            <span className="u-nowrap">employee-performance</span> assessment.
-          </p>
         </div>
-        <ProductPreview />
+        <CallPreview />
       </div>
-    </div>
+    </section>
   );
 }

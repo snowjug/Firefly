@@ -1,45 +1,47 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { MAX_MESSAGE_CHARS } from '#shared/domain/text.ts';
-import { useAnnouncer, type CustomerState } from '../../design/index.ts';
-import type { CallActions, CallSnapshot, CallProblem } from '../call/contract.ts';
+import { Button, cx, Dialog, useAnnouncer, type CustomerState } from '../../design/index.ts';
+import type { CallActions, CallSnapshot } from '../call/contract.ts';
 import {
   briefPathFor,
   composerGate,
   describeConnection,
+  describeControls,
   describeCustomerState,
   describeStatus,
   isEndFailure,
   latestCustomerTurn,
+  recoveryOptions,
   stateChangeSentence,
-  tracePoints,
   traineeTurnCount,
+  unsavedMessage,
   type CustomerStateView,
+  type RecoveryAction,
 } from './call-model.ts';
+import { CallBar } from './CallBar.tsx';
 import { CallLoadError, CallSkeleton, CallUnavailable, OpeningReport } from './CallStates.tsx';
-import { CommandBar } from './CommandBar.tsx';
+import { CaseBody, CaseContext } from './CaseContext.tsx';
 import { Composer } from './Composer.tsx';
-import { ContextBody, ContextPanel } from './ContextPanel.tsx';
-import { CustomerPanel } from './CustomerPanel.tsx';
-import { DetailsSheet } from './DetailsSheet.tsx';
+import { Controls } from './Controls.tsx';
+import { CustomerStage } from './CustomerStage.tsx';
 import { EndCallDialog } from './EndCallDialog.tsx';
 import { JumpLinks } from './JumpLinks.tsx';
 import { Preflight } from './Preflight.tsx';
-import { ProblemNotice } from './ProblemNotice.tsx';
-import { StagePanel } from './StagePanel.tsx';
+import { Recovery, RecoveryConfirmed, useRecoveryFeedback } from './Recovery.tsx';
 import { Transcript } from './Transcript.tsx';
-import { findControlsZone, useRescueFocus } from './use-rescue-focus.ts';
-import { VoiceSettings } from './VoiceSettings.tsx';
-import { VoiceZone } from './VoiceZone.tsx';
+import { findControlsZone, findTalkControl, useRescueFocus } from './use-rescue-focus.ts';
 import { useLayoutMode, useReducedMotion, useVisualViewportHeight } from './use-layout.ts';
+import { VoiceSettings } from './VoiceSettings.tsx';
 import './workspace.css';
 
 /** The screen's own open and closed state, which a fixture or a test can start from. */
 export interface InitialUi {
-  detailsOpen?: boolean;
+  caseOpen?: boolean;
   endOpen?: boolean;
   settingsOpen?: boolean;
-  composerOpen?: boolean;
+  /** What is already typed in the reply box. */
   draft?: string;
+  notes?: string;
 }
 
 export interface CallWorkspaceProps {
@@ -55,6 +57,8 @@ export interface CallWorkspaceProps {
   preferText?: boolean;
   /** Where "Back to brief" goes. Left out, it is the brief for this scenario with this call's choices. */
   briefTo?: string;
+  /** Developer diagnostics: say how each trainee turn arrived. Never on for a trainee. */
+  showInputMode?: boolean;
   initialUi?: InitialUi;
   /** Called with the session id once ending has finished, so the page can open the report. */
   onEnded?(sessionId: string): void;
@@ -95,7 +99,9 @@ function useCallAnnouncements(
   state: CustomerStateView | null,
 ) {
   const announce = useAnnouncer();
-  const said = announcement?.text ?? '';
+  // An assertive announcement is for a problem that stops the trainee being heard: its card is an
+  // alert, which says it, so the polite announcer must not say it a second time.
+  const said = announcement && announcement.politeness === 'polite' ? announcement.text : '';
   const id = announcement?.id ?? 0;
   useEffect(() => {
     if (said) announce(said);
@@ -113,18 +119,8 @@ function useCallAnnouncements(
 
 // ---- One active call -----------------------------------------------------------------------------
 
-function ActiveCall({
-  snapshot,
-  actions,
-  provider,
-  maxMessageChars = MAX_MESSAGE_CHARS,
-  online = true,
-  preferText = false,
-  briefTo,
-  initialUi,
-  onEnded,
-  onDiscard,
-}: CallWorkspaceProps) {
+function ActiveCall(props: CallWorkspaceProps) {
+  const { snapshot, actions, provider, preferText = false, briefTo } = props;
   const session = snapshot.session as NonNullable<CallSnapshot['session']>;
   const state = snapshot.customerState ?? session.state;
   const stateView = useMemo(
@@ -144,129 +140,102 @@ function ActiveCall({
       />
     );
   }
-  return (
-    <Workspace
-      snapshot={snapshot}
-      actions={actions}
-      provider={provider}
-      maxMessageChars={maxMessageChars}
-      online={online}
-      initialUi={initialUi}
-      onEnded={onEnded}
-      onDiscard={onDiscard}
-      stateView={stateView}
-    />
-  );
-}
-
-interface WorkspaceProps {
-  snapshot: CallSnapshot;
-  actions: CallActions;
-  provider: { demo: boolean; label: string };
-  maxMessageChars: number;
-  online: boolean;
-  initialUi?: InitialUi;
-  onEnded?(sessionId: string): void;
-  onDiscard?(): void | Promise<void>;
-  stateView: CustomerStateView | null;
-}
-
-/** A problem that is shown once the call can carry on through it, or when ending failed. */
-function inlineProblem(problem: CallProblem | null, endDialogOpen: boolean): CallProblem | null {
-  if (!problem || problem.severity !== 'degraded') return null;
-  return isEndFailure(problem) && endDialogOpen ? null : problem;
+  return <Workspace {...props} stateView={stateView} />;
 }
 
 function Workspace({
   snapshot,
   actions,
   provider,
-  maxMessageChars,
-  online,
+  maxMessageChars = MAX_MESSAGE_CHARS,
+  online = true,
+  showInputMode = false,
   initialUi,
   onEnded,
   onDiscard,
   stateView,
-}: WorkspaceProps) {
+}: CallWorkspaceProps & { stateView: CustomerStateView | null }) {
   const session = snapshot.session as NonNullable<CallSnapshot['session']>;
   const { scenario } = session;
   const { persona } = scenario;
   const publicState = snapshot.customerState ?? session.state;
   const layout = useLayoutMode();
   const narrow = layout === 'narrow';
+  const wide = layout === 'wide';
   const reducedMotion = useReducedMotion();
+  const announce = useAnnouncer();
   const root = useRef<HTMLDivElement>(null);
   useVisualViewportHeight(root, narrow);
 
   const transcriptTitle = useId();
-  const stageTitle = useId();
-  const contextTitle = useId();
+  const caseTitle = useId();
+  const statusId = useId();
 
-  const [detailsOpen, setDetailsOpen] = useState(initialUi?.detailsOpen ?? false);
+  const [caseOpen, setCaseOpen] = useState(initialUi?.caseOpen ?? false);
   const [settingsOpen, setSettingsOpen] = useState(initialUi?.settingsOpen ?? false);
   const [endOpen, setEndOpen] = useState(initialUi?.endOpen ?? false);
   const [endBusy, setEndBusy] = useState(false);
   const [discarding, setDiscarding] = useState(false);
-  const [composer, setComposer] = useState({
-    open: initialUi?.composerOpen ?? false,
-    focusRequest: 0,
-  });
+  const [notes, setNotes] = useState(initialUi?.notes ?? '');
 
-  const { phase, problem } = snapshot;
+  const { phase, stage, problem } = snapshot;
   const voice = snapshot.mode === 'voice';
   const closing = phase === 'ending' || phase === 'completed';
   const guided = scenario.config.mode === 'guided';
+  const feedback = useRecoveryFeedback(snapshot, announce);
+
   const status = useMemo(
     () =>
       describeStatus({
-        phase,
+        stage,
         mode: snapshot.mode,
-        muted: snapshot.muted,
-        paused: snapshot.paused,
+        phase,
         speechDetected: snapshot.speechDetected,
-        handsFree: snapshot.handsFree,
+        microphone: snapshot.microphone,
         problem,
-        hint: snapshot.hint,
+        online,
+        micOpen: snapshot.micOpen,
       }),
     [
-      phase,
+      stage,
       snapshot.mode,
-      snapshot.muted,
-      snapshot.paused,
+      phase,
       snapshot.speechDetected,
-      snapshot.handsFree,
-      snapshot.hint,
+      snapshot.microphone,
+      snapshot.micOpen,
       problem,
+      online,
     ],
   );
-  const connection = describeConnection(snapshot, online);
-  const points = useMemo(
-    () => tracePoints(snapshot.stateHistory, publicState),
-    [snapshot.stateHistory, publicState],
-  );
-  const gate = composerGate({ phase, problem });
+  const connection = describeConnection({ online, reconnecting: feedback.reconnecting });
   const limitReached = problem?.code === 'turn-limit';
-  const traineeTurns = traineeTurnCount(snapshot.turns);
-  const canReplay =
-    snapshot.support.playback !== 'none' && latestCustomerTurn(snapshot.turns) !== undefined;
   const blocking = problem?.severity === 'blocking' ? problem : null;
-  const inline = inlineProblem(problem, endOpen);
-  // A notice above the reply box goes away with the button that was pressed on it.
-  useRescueFocus(inline?.code ?? null, findControlsZone);
+  const controls = describeControls({
+    phase,
+    stage,
+    mode: snapshot.mode,
+    muted: snapshot.muted,
+    paused: snapshot.paused,
+    audio: snapshot.audio,
+    canReplay: latestCustomerTurn(snapshot.turns) !== undefined,
+    blocked: blocking !== null,
+    limitReached,
+    micOpen: snapshot.micOpen,
+  });
+  const gate = composerGate({ phase, problem });
 
-  const openComposer = useCallback(
-    () => setComposer((current) => ({ open: true, focusRequest: current.focusRequest + 1 })),
-    [],
-  );
-  const closeComposer = useCallback(
-    () => setComposer((current) => ({ ...current, open: false })),
-    [],
-  );
-  // The same function every render, so the transcript's rows are not redrawn when only the clock or
-  // the microphone level changed (see Transcript.tsx).
-  const retryTurn = useCallback(() => actions.retry(), [actions]);
-  // A typed call always has the box; a spoken one also shows it while a problem offers typing.
-  const composerOpen = !voice || composer.open || Boolean(problem?.textFallback);
+  // A failure to end the call is told inside the end dialog, never as a second card.
+  const card = problem && !isEndFailure(problem) ? problem : feedback.retrying;
+  // A card that appears or goes takes the control that was pressed on it: if the keyboard was on
+  // something that is gone, it goes to the call's controls and not to the top of the page.
+  useRescueFocus(card?.code ?? null, findControlsZone);
+  // Back to voice removes the reply box that held the keyboard: it goes to the microphone control.
+  useRescueFocus(snapshot.mode, findTalkControl);
+  // The pre-flight's button is gone once the call has begun: the keyboard starts on the microphone.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (!active || active === document.body) findTalkControl()?.focus({ preventScroll: true });
+  }, []);
 
   const confirmEnd = async () => {
     setEndBusy(true);
@@ -291,132 +260,152 @@ function Workspace({
     }
   };
 
+  const recover = (action: RecoveryAction) => {
+    const target = problem ?? feedback.retrying;
+    switch (action) {
+      case 'retry':
+        if (target) feedback.begin(target);
+        actions.retry();
+        return;
+      case 'replay':
+        if (target) feedback.begin(target);
+        actions.replay();
+        return;
+      case 'use-text':
+        actions.useText();
+        return;
+      case 'continue-without-audio':
+        actions.setAudio(false);
+        return;
+      case 'end-safely':
+      case 'end':
+        setEndOpen(true);
+        return;
+    }
+  };
+
   const zone = (layoutName: 'panel' | 'dock') => (
-    <VoiceZone
-      layout={layoutName}
-      status={status}
-      micLevel={snapshot.micLevel}
-      customerLevel={snapshot.customerLevel}
-      reducedMotion={reducedMotion}
-      voice={voice}
-      blocking={blocking}
-      problemActions={{
-        onRetry: () => actions.retry(),
-        onTypeInstead: openComposer,
-        onEnd: () => setEndOpen(true),
-      }}
-      controls={{
-        phase,
-        muted: snapshot.muted,
-        paused: snapshot.paused,
-        handsFree: snapshot.handsFree,
-        canReplay,
-        limitReached,
-        hint: snapshot.hint,
-        actions,
-        onTypeInstead: openComposer,
-        onOpenSettings: () => setSettingsOpen(true),
-      }}
-    />
+    <div className={cx('cw-zone', `cw-zone--${layoutName}`)}>
+      {card ? (
+        <Recovery
+          problem={card}
+          options={recoveryOptions(card, { mode: snapshot.mode })}
+          busy={feedback.retrying !== null}
+          live={card.announce === 'assertive'}
+          onAction={recover}
+        />
+      ) : feedback.confirmed ? (
+        <RecoveryConfirmed text={feedback.confirmed} onDismiss={feedback.dismiss} />
+      ) : null}
+      <Controls
+        layout={layoutName}
+        view={controls}
+        statusId={statusId}
+        hint={snapshot.hint}
+        actions={actions}
+        onSettings={() => setSettingsOpen(true)}
+      />
+    </div>
   );
 
-  const customer = {
-    name: persona.name,
-    role: persona.role,
-    organisation: persona.organisation,
-    speaking: phase === 'customer-speaking' && !snapshot.paused,
-    view: stateView,
-    points,
+  const caseBody = {
+    session,
+    found: publicState.discoveredCount,
     guided,
-    contextFound: publicState.discoveredCount,
+    notes,
+    onNotes: setNotes,
   };
+  const speaking = phase === 'customer-speaking' && !snapshot.paused;
 
   return (
     <div className="cw-root" ref={root} data-layout={layout}>
-      <JumpLinks onReply={openComposer} />
+      <JumpLinks reply={!voice} />
       <h1 className="visually-hidden">Call with {persona.name}</h1>
-      <CommandBar
-        compact={narrow}
-        showDetails={layout !== 'wide'}
+      <CallBar
+        showCase={!wide}
         scenarioTitle={scenario.title}
-        customerName={persona.name}
-        customerRole={persona.role}
+        product={scenario.product ? { id: scenario.product.id, name: scenario.product.name } : null}
         connection={connection}
         elapsedSeconds={snapshot.elapsedSeconds}
-        difficulty={scenario.config.difficulty}
         provider={provider}
-        state={stateView}
-        onDetails={() => setDetailsOpen(true)}
+        onCase={() => setCaseOpen(true)}
         onEnd={() => setEndOpen(true)}
       />
 
       <div className="cw-body">
-        {narrow ? null : (
-          <StagePanel titleId={stageTitle} customer={customer}>
-            {zone('panel')}
-          </StagePanel>
-        )}
+        <section className="cw-stage" aria-label="Customer">
+          <div className="cw-stage__scroll">
+            <CustomerStage
+              name={persona.name}
+              role={persona.role}
+              organisation={persona.organisation}
+              speaking={speaking}
+              state={stateView}
+              status={status}
+              statusId={statusId}
+              micLevel={snapshot.micLevel}
+              customerLevel={snapshot.customerLevel}
+              reducedMotion={reducedMotion}
+              compact={narrow}
+            />
+          </div>
+          {narrow ? null : <div className="cw-stage__zone">{zone('panel')}</div>}
+        </section>
 
-        <section className="cw-transcript">
-          <header className="cw-transcript__head">
-            <h2 className="cw-transcript__title" id={transcriptTitle}>
-              Transcript
-            </h2>
-            <p className="cw-transcript__note">
-              Everything the customer says is shown here as it is spoken.
-            </p>
-          </header>
+        <div className="cw-transcript">
+          <h2 className="cw-transcript__title" id={transcriptTitle}>
+            Transcript
+          </h2>
           <Transcript
             turns={snapshot.turns}
             customerName={persona.name}
             startedAt={session.startedAt}
             interim={phase === 'listening' ? snapshot.interim : ''}
+            speaking={speaking}
             reducedMotion={reducedMotion}
             titleId={transcriptTitle}
-            onRetry={retryTurn}
+            showInputMode={showInputMode}
           />
-          {inline ? (
-            <ProblemNotice
-              problem={inline}
-              variant="inline"
-              onRetry={() => actions.retry()}
-              onTypeInstead={openComposer}
-              onDismiss={() => actions.dismissProblem()}
-              onPlay={() => actions.replay()}
+          {voice ? null : (
+            <Composer
+              maxChars={maxMessageChars}
+              gate={gate}
+              turnsRemaining={snapshot.turnsRemaining}
+              sendText={actions.sendText}
+              initialDraft={initialUi?.draft}
             />
-          ) : null}
-          <Composer
-            open={composerOpen}
-            canClose={voice && composer.open && !problem?.textFallback}
-            showRow={voice && !narrow}
-            focusRequest={composer.focusRequest}
-            onOpen={openComposer}
-            onClose={closeComposer}
-            maxChars={maxMessageChars}
-            gate={gate}
-            turnsRemaining={snapshot.turnsRemaining}
-            sendText={actions.sendText}
-            initialDraft={initialUi?.draft}
-          />
-        </section>
+          )}
+        </div>
 
-        {layout === 'wide' ? (
-          <ContextPanel session={session} provider={provider} titleId={contextTitle} />
-        ) : null}
+        {wide ? <CaseContext titleId={caseTitle} {...caseBody} /> : null}
       </div>
 
       {narrow ? <div className="cw-dock">{zone('dock')}</div> : null}
 
-      <DetailsSheet open={detailsOpen && layout !== 'wide'} onClose={() => setDetailsOpen(false)}>
-        {narrow ? <CustomerPanel {...customer} /> : null}
-        <ContextBody session={session} provider={provider} />
-      </DetailsSheet>
+      <Dialog
+        open={caseOpen && !wide}
+        onClose={() => setCaseOpen(false)}
+        title="Case"
+        size="md"
+        mobile="fullscreen"
+        closeLabel="Close case"
+        actions={
+          <Button appearance="primary" onClick={() => setCaseOpen(false)}>
+            Close
+          </Button>
+        }
+      >
+        <div className="cw-sheet">
+          <CaseBody {...caseBody} />
+        </div>
+      </Dialog>
 
       <VoiceSettings
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         handsFree={snapshot.handsFree}
         language={snapshot.voiceDetails.language}
+        audio={snapshot.audio}
         voice={snapshot.voiceDetails.voice}
         style={snapshot.voiceDetails.style}
         support={snapshot.support}
@@ -426,11 +415,12 @@ function Workspace({
       <EndCallDialog
         open={endOpen}
         ending={closing}
+        progressLabel={status.label}
         busy={endBusy || closing}
         elapsedSeconds={snapshot.elapsedSeconds}
-        traineeTurns={traineeTurns}
-        voice={voice}
+        traineeTurns={traineeTurnCount(snapshot.turns)}
         stateLabel={stateView?.label ?? null}
+        unsaved={unsavedMessage(snapshot.turns)}
         problem={problem}
         onDiscard={onDiscard ? () => void discardCall() : undefined}
         discarding={discarding}

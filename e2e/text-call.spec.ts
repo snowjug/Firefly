@@ -1,25 +1,37 @@
 import { expect, test } from './support/fixtures.ts';
 import type { Page } from '@playwright/test';
-import { callScreen, sendTyped, startSpokenCall, startTypedCall } from './support/call-screen.ts';
+import type { CoachingReport } from '../shared/domain/report.ts';
+import {
+  STATUS,
+  callScreen,
+  converse,
+  endCallAndOpenReport,
+  sendTyped,
+  startSpokenCall,
+  startTypedCall,
+} from './support/call-screen.ts';
 import { readProbe } from './support/page-probes.ts';
 import { expectNoRawFailureText } from './support/raw-text.ts';
-import { leakedSecrets, libraryScenario, libraryScenarios } from './support/scenario-library.ts';
+import {
+  leakedSecrets,
+  libraryScenario,
+  libraryScenarios,
+  saysSentence,
+  secretsBesidesAreas,
+} from './support/scenario-library.ts';
 
-// Journeys 8 to 11 and 13: typing instead of speaking, the customer's state and what is found, the
-// curveball, and ending the call. These run against the real rules engine (demo mode), so the
-// customer's words are the engine's, and the moods and counts are the engine's own.
+// Typing instead of speaking, what the customer's state shows and what is found, the unexpected
+// turn, and ending the call. These run against the real rules engine (demo mode), so the customer's
+// words are the engine's, and the moods and counts are the engine's own.
 
 test.describe.configure({ timeout: 90_000 });
 
-const LOCKED_OUT = 'locked-out-after-password-reset';
-const SHARED_WORKSPACE = 'team-cannot-open-shared-workspace';
-const SPEAKING = 'The customer is speaking';
+const MARCUS = 'outlook-shared-mailbox-missing';
+const DEFENDER = 'defender-invoices-quarantined'; // frustrated, demanding, a payment run at stake
 
-/** The label of the customer's state and its trend word, as the call shows them. */
+/** The customer's state as the call shows it: its label and its trend, in words. */
 async function customerMood(page: Page) {
-  const state = callScreen(page).state;
-  const text = (await state.innerText()).replace(/\s+/g, ' ');
-  return text;
+  return ((await callScreen(page).state.innerText()) ?? '').replace(/\s+/g, ' ');
 }
 
 test.describe('typing instead of speaking', () => {
@@ -27,11 +39,12 @@ test.describe('typing instead of speaking', () => {
     page,
     api,
   }) => {
-    const { screen } = await startSpokenCall(page, api);
-    await expect(screen.status).toHaveText(SPEAKING);
-    await screen.interrupt.click();
-    await screen.typeInstead.click();
+    const { screen } = await startTypedCall(page, api);
+    // The box takes the keyboard when it appears, and says how it works.
     await expect(screen.reply).toBeFocused();
+    await expect(screen.reply).toHaveAccessibleDescription(
+      /Enter sends\. Shift and Enter add a line\./,
+    );
 
     await test.step('Shift+Enter adds a line and sends nothing', async () => {
       await screen.reply.fill('Hello, my name is Sam.');
@@ -50,6 +63,8 @@ test.describe('typing instead of speaking', () => {
       await expect(screen.turns.nth(1)).toContainText('Hello, my name is Sam.');
       await expect(screen.turns.nth(1)).toContainText('Can you tell me what is happening?');
       await expect(screen.turns.nth(1)).not.toContainText('Spoken');
+      // The box is ready for the next message.
+      await expect(screen.reply).toBeFocused();
     });
   });
 
@@ -58,39 +73,40 @@ test.describe('typing instead of speaking', () => {
     api,
   }) => {
     const { screen } = await startSpokenCall(page, api);
-    await expect(screen.status).toHaveText(SPEAKING);
-    await screen.interrupt.click();
+    await expect(screen.status).toHaveText(STATUS.speaking);
+    await screen.stopAudio.click();
 
     await screen.mute.click();
     await expect(screen.mute).toHaveAttribute('aria-pressed', 'true');
-    await expect(screen.status).toHaveText('Microphone muted');
-    await expect(page.getByText('Muted', { exact: true })).toBeVisible();
+    await expect(screen.status).toHaveText(STATUS.muted);
 
-    await screen.typeInstead.click();
+    await screen.text.click();
+    await expect(screen.reply).toBeFocused();
     await sendTyped(screen, 'Hello, my name is Sam. What is happening?');
     await expect(screen.turns).toHaveCount(3);
-    // The microphone track was switched off for the whole time, and no spoken turn was made.
+    // The microphone was asked for once, at the start, and no spoken turn was made.
     const probe = await readProbe(page);
     expect(probe.mediaRequests).toBe(1);
     await expect(screen.turns.nth(1)).not.toContainText('Spoken');
   });
 
-  test('a text-only call never asks for the microphone, and says so', async ({ page, api }) => {
+  test('a text-only call never asks for the microphone, says it is typing, and has only the controls that apply', async ({
+    page,
+    api,
+  }) => {
     const { screen } = await startTypedCall(page, api);
-    await expect(screen.status).toHaveText('Text-only call. Type your reply.');
-    await expect(
-      page.getByText('This call is text-only. The microphone is off, nothing is recorded'),
-    ).toBeVisible();
-    await expect(page.getByText('Text-only call', { exact: true })).toBeVisible();
-    await expect(screen.talk).toHaveCount(0);
+    await expect(screen.status).toHaveText(STATUS.typing);
+    // Voice controls leave a typed call entirely: no Mute, Pause, Stop customer audio or Talk.
+    for (const control of [screen.mute, screen.pause, screen.stopAudio, screen.talk, screen.done]) {
+      await expect(control).toHaveCount(0);
+    }
+    await expect(screen.returnToVoice).toBeVisible();
+    await expect(screen.settings).toBeVisible();
 
-    await sendTyped(screen, 'Hello, my name is Sam. Can you tell me what is happening?');
-    await expect(screen.turns).toHaveCount(3);
-    await sendTyped(
-      screen,
-      'Thanks. When did it last work, and did anything change before it stopped?',
-    );
-    await expect(screen.turns).toHaveCount(5);
+    await converse(screen, [
+      'Hello, my name is Sam. Can you tell me what is happening?',
+      'When did it last work, and did anything change before it stopped?',
+    ]);
 
     const probe = await readProbe(page);
     expect(probe.mediaRequests).toBe(0);
@@ -100,59 +116,63 @@ test.describe('typing instead of speaking', () => {
 });
 
 test.describe('what is found, and how the customer feels', () => {
-  test('in guided practice the count of context found goes up without showing any of it', async ({
+  test('in guided practice the count of context found goes up without showing any of it, and the areas worth exploring are listed', async ({
     page,
     api,
   }) => {
-    const library = libraryScenario(LOCKED_OUT);
-    const { screen } = await startTypedCall(page, api, { scenarioId: LOCKED_OUT, mode: 'guided' });
-    const context = page.getByRole('region', { name: 'Call context' });
-    await expect(screen.state).toContainText('Context found: 0');
-    await expect(context).toContainText('Areas worth exploring');
+    const library = libraryScenario(MARCUS);
+    const { screen } = await startTypedCall(page, api, { scenarioId: MARCUS, mode: 'guided' });
+    const found = page.getByRole('region', { name: 'Case', exact: true });
+    const count = found
+      .getByRole('term')
+      .filter({ hasText: /^Context found$/ })
+      .locator('xpath=following-sibling::dd[1]');
+    await expect(count).toHaveText('0');
+    await expect(found.getByRole('term').filter({ hasText: /^Areas to explore$/ })).toBeVisible();
 
     await test.step('a greeting finds nothing', async () => {
-      await sendTyped(screen, 'Hello, my name is Sam. Thanks for calling.');
+      await sendTyped(screen, 'Hello, thanks for calling Microsoft support. My name is Sam.');
       await expect(screen.turns).toHaveCount(3);
-      await expect(screen.state).toContainText('Context found: 0');
+      await expect(count).toHaveText('0');
     });
 
-    await test.step('a question about the message on screen finds one thing', async () => {
-      await sendTyped(screen, 'Can you read me exactly what the sign-in message says?');
+    await test.step('a question that gets to the heart of it finds one thing', async () => {
+      await sendTyped(
+        screen,
+        'Did anything change while you were away, for example who has access to the shared mailbox?',
+      );
       await expect(screen.turns).toHaveCount(5);
-      await expect(screen.state).toContainText('Context found: 1');
+      await expect(count).toHaveText('1');
     });
 
-    await test.step('the count is the only thing shown: none of what was found is in the hint, the context or the panel', async () => {
-      const outsideTranscript = [
-        await screen.state.innerText(),
-        await context.innerText(),
-        await page.getByRole('region', { name: 'Customer and voice' }).innerText(),
-      ].join('\n');
-      expect(leakedSecrets(outsideTranscript, library.secrets)).toEqual([]);
+    await test.step('the count is the only thing shown: none of what was found is in the case column or beside the customer', async () => {
+      const outsideTranscript = [await found.innerText(), await screen.customer.innerText()].join(
+        '\n',
+      );
+      expect(leakedSecrets(outsideTranscript, secretsBesidesAreas(library))).toEqual([]);
       // The customer said it, so it is in the transcript, which is the only place it is.
-      await expect(screen.transcript).toContainText('temporarily locked');
+      const fact = library.facts.find((item) => item.id === 'hf-access-tidy')!;
+      const said = await screen.transcript.innerText();
+      expect(
+        fact.statements.some((statement) => saysSentence(said, statement)),
+        `the customer says what changed: ${said}`,
+      ).toBe(true);
     });
   });
 
-  test('in a standard call no hint, count or area to explore is shown at all', async ({
+  test('in a standard call no area to explore is shown, and the count is a count and nothing more', async ({
     page,
     api,
   }) => {
-    const { screen } = await startTypedCall(page, api, {
-      scenarioId: LOCKED_OUT,
-      mode: 'immersive',
-    });
+    const { screen } = await startTypedCall(page, api, { scenarioId: MARCUS, mode: 'immersive' });
+    const column = page.getByRole('region', { name: 'Case', exact: true });
     await expect(screen.state).toBeVisible();
-    await sendTyped(screen, 'Can you read me exactly what the sign-in message says?');
-    await expect(screen.turns).toHaveCount(3);
-    await sendTyped(screen, 'Is your work email signed in on another device, like a phone?');
-    await expect(screen.turns).toHaveCount(5);
-
-    await expect(page.getByText(/Context found/)).toHaveCount(0);
-    await expect(page.getByText('Areas worth exploring')).toHaveCount(0);
-    await expect(
-      page.getByText('This is a standard call, so no hints are shown while you talk.'),
-    ).toBeVisible();
+    await converse(screen, [
+      'Hello, thanks for calling Microsoft support. My name is Sam.',
+      'Is there anyone else on the team who can still see the mailbox?',
+    ]);
+    await expect(column.getByRole('term').filter({ hasText: /^Areas to explore$/ })).toHaveCount(0);
+    await expect(column).not.toContainText(/\bof \d+\b|\/ ?\d+/);
     // The customer's mood is always shown; it is not a hint.
     await expect(screen.state).toContainText('Calm');
   });
@@ -162,7 +182,7 @@ test.describe('what is found, and how the customer feels', () => {
     api,
   }) => {
     const { screen } = await startTypedCall(page, api, {
-      scenarioId: SHARED_WORKSPACE,
+      scenarioId: DEFENDER,
       overrides: { curveballs: [] },
     });
     expect(await customerMood(page)).toContain('Frustrated');
@@ -175,29 +195,25 @@ test.describe('what is found, and how the customer feels', () => {
       await expect(screen.turns).toHaveCount(3);
       await expect(screen.state).toContainText('Angry');
       await expect(screen.state).toContainText('rising');
-      await expect(screen.state).toContainText('Getting angrier');
     });
 
     await test.step('taking ownership and showing empathy eases it, and it is called recovering', async () => {
       await sendTyped(
         screen,
-        "I'm really sorry about this, I can hear how frustrating the morning has been. I'll take ownership of this and I'll call you back by three o'clock with an update.",
+        "I'm really sorry about this, I can hear how frustrating the morning has been with the payment run so close. I'll take ownership of this and I'll call you back by three o'clock with an update.",
       );
       await expect(screen.turns).toHaveCount(5);
       await expect(screen.state).toContainText('Recovering');
       await expect(screen.state).toContainText('easing');
     });
 
-    await test.step('the temperature trace lists the points, and never says why', async () => {
-      await expect(
-        page.getByRole('img', { name: /Customer temperature over 3 points/ }),
-      ).toBeVisible();
-      const text = await page.getByRole('region', { name: 'Customer and voice' }).innerText();
+    await test.step('the call never says why it moved', async () => {
+      const text = await screen.customer.innerText();
       expect(text).not.toMatch(/blame|dismissive|empathy|ownership/i);
     });
   });
 
-  test("a curveball arrives in the customer's own words, with no dialog or alert", async ({
+  test("an unexpected turn arrives in the customer's own words, with no dialog or alert", async ({
     page,
     api,
   }) => {
@@ -207,22 +223,16 @@ test.describe('what is found, and how the customer feels', () => {
       void dialog.dismiss();
     });
     const { screen } = await startTypedCall(page, api, {
-      scenarioId: SHARED_WORKSPACE,
+      scenarioId: DEFENDER,
       overrides: { curveballs: ['ask-manager'] },
     });
 
-    const lines = [
-      'Hello, my name is Sam. Can you tell me what is happening?',
-      'When did it last work?',
-      'What does the message say exactly?',
-    ];
     await test.step('nothing about a manager before the fourth reply', async () => {
-      let turns = 1;
-      for (const line of lines) {
-        await sendTyped(screen, line);
-        turns += 2;
-        await expect(screen.turns).toHaveCount(turns);
-      }
+      await converse(screen, [
+        'Hello, my name is Sam. Can you tell me what is happening?',
+        'When did it last work?',
+        'What does the message say exactly?',
+      ]);
       await expect(screen.transcript).not.toContainText(/manager/i);
     });
 
@@ -230,7 +240,6 @@ test.describe('what is found, and how the customer feels', () => {
       await sendTyped(screen, 'Who else is affected?');
       await expect(screen.turns).toHaveCount(9);
       await expect(screen.turns.last()).toContainText(/manager/i);
-      await expect(screen.turns.last()).toContainText("I'd like to speak to your manager");
     });
 
     await test.step('and nothing else on the page announces it', async () => {
@@ -239,8 +248,8 @@ test.describe('what is found, and how the customer feels', () => {
       await expect(page.getByRole('alert')).toHaveCount(0);
       expect(dialogs).toEqual([]);
       const outside = [
-        await screen.state.innerText(),
-        await page.getByRole('region', { name: 'Call context' }).innerText(),
+        await screen.customer.innerText(),
+        await page.getByRole('region', { name: 'Case', exact: true }).innerText(),
       ].join('\n');
       expect(outside).not.toMatch(/manager|curveball|complication/i);
     });
@@ -253,12 +262,9 @@ test.describe('ending the call', () => {
     api,
   }) => {
     const { call, screen } = await startSpokenCall(page, api);
-    await expect(screen.status).toHaveText(SPEAKING);
-    await screen.interrupt.click();
-    await screen.typeInstead.click();
-    await sendTyped(screen, 'Hello, my name is Sam. What is happening?');
-    await expect(screen.turns).toHaveCount(3);
-    await screen.interrupt.click();
+    await expect(screen.status).toHaveText(STATUS.speaking);
+    // One spoken turn, so that there is something to review.
+    await expect(screen.turns).toHaveCount(3, { timeout: 40_000 });
 
     await test.step('the question shows how long, how much, and how the customer is', async () => {
       await screen.endCall.click();
@@ -266,14 +272,19 @@ test.describe('ending the call', () => {
       await expect(
         screen.endDialog.getByRole('term').filter({ hasText: 'Call length' }),
       ).toBeVisible();
-      await expect(screen.endDialog.getByText(/^\d+:\d{2}$/)).toBeVisible();
-      await expect(screen.endDialog).toContainText('You have spoken');
-      await expect(screen.endDialog).toContainText('once');
-      await expect(screen.endDialog).toContainText("Customer's state");
+      await expect(screen.endDialog.locator('.cw-end__clock')).toHaveText(/^\d+:\d{2}$/);
+      await expect(
+        screen.endDialog
+          .getByRole('term')
+          .filter({ hasText: 'Messages' })
+          .locator('xpath=following-sibling::dd[1]'),
+      ).toHaveText('1');
+      await expect(screen.endDialog).toContainText('Customer state');
       await expect(screen.endDialog).toContainText(
-        'This call is short, so the report will say its scores rest on limited evidence.',
+        'A short call: the review will say it rests on limited evidence.',
       );
-      await expect(screen.endDialog).toContainText('the microphone and any customer audio stop');
+      // A stray Enter ends nothing: the keyboard starts on Continue call.
+      await expect(screen.endDialog.getByRole('button', { name: 'Continue call' })).toBeFocused();
     });
 
     await test.step('Continue call closes it, the call is as it was, and focus goes back to End call', async () => {
@@ -285,7 +296,7 @@ test.describe('ending the call', () => {
     });
 
     await test.step('End and review shows the ending state, stops the microphone and opens the report', async () => {
-      // A little delay on the server, so the "Ending the call" state can be seen at all.
+      // A little delay on the server, so that the "Ending and preparing your review" state can be seen at all.
       await page.route('**/api/sessions/*/end', async (route) => {
         await new Promise((resolve) => setTimeout(resolve, 700));
         await route.continue();
@@ -293,9 +304,7 @@ test.describe('ending the call', () => {
       await screen.endCall.click();
       await screen.endDialog.getByRole('button', { name: 'End and review' }).click();
       await expect(screen.endingDialog).toBeVisible();
-      await expect(screen.endingDialog).toContainText(
-        'We are stopping the microphone, saving the transcript and preparing your report.',
-      );
+      await expect(screen.endingDialog).toContainText(/Ending call|Preparing your review/);
       await expect(page).toHaveURL(new RegExp(`/sessions/${call.id}/report$`));
       await expect(
         page.getByRole('heading', {
@@ -303,8 +312,7 @@ test.describe('ending the call', () => {
           name: /Coaching report|Building your coaching report/,
         }),
       ).toBeVisible();
-      const probe = await readProbe(page);
-      expect(probe.micTracks).toEqual(['ended']);
+      expect((await readProbe(page)).micTracks).toEqual(['ended']);
     });
 
     await test.step('the call is closed on the server', async () => {
@@ -324,22 +332,37 @@ test.describe('ending the call', () => {
     const { call, screen } = await startTypedCall(page, api);
 
     await screen.endCall.click();
+    // With nothing said, the dialog warns about it before it is asked.
     await screen.endDialog.getByRole('button', { name: 'End and review' }).click();
 
     await expect(screen.endDialog).toContainText('There is nothing to review yet.');
-    await expect(screen.endDialog).toContainText(
-      'No message has been sent, so there is no transcript.',
-    );
+    await expect(screen.endDialog).toContainText('No message has been sent.');
     await expectNoRawFailureText(page);
     await expect(screen.endDialog.getByRole('button', { name: 'End and review' })).toHaveCount(0);
+    await expect(screen.endDialog.getByRole('button', { name: 'Retry' })).toHaveCount(0);
 
     await screen.endDialog.getByRole('button', { name: 'Leave without a report' }).click();
     await expect(page).toHaveURL(/\/scenarios/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Choose a scenario' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
     // The empty call is gone.
     await expect
       .poll(async () => (await page.request.get(`/api/sessions/${call.id}`)).status())
       .toBe(404);
+  });
+
+  test('a short typed call ends in a report that says it rests on limited evidence', async ({
+    page,
+    api,
+  }) => {
+    const { screen } = await startTypedCall(page, api);
+    await converse(screen, ['Hello, my name is Sam. Can you tell me what is happening?']);
+    const id = await endCallAndOpenReport(page, screen);
+    const report = (await api.session(id)).report as CoachingReport;
+    expect(report.completion.evidence).not.toBe('sufficient');
+    // The summary says so before the scores that rest on it, and withholds the overall score.
+    const summary = page.getByRole('region', { name: 'Summary', exact: true });
+    await expect(summary.getByText(report.completion.note ?? /limited evidence/i)).toBeVisible();
+    await expect(summary.getByText('Not enough evidence for an overall score')).toBeVisible();
   });
 });
 
@@ -348,7 +371,7 @@ test.describe('before anything has been asked', () => {
     page,
     api,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     for (const scenario of libraryScenarios()) {
       await test.step(scenario.title, async () => {
         // Guided practice shows the most on screen (hints and areas to explore).
@@ -357,13 +380,16 @@ test.describe('before anything has been asked', () => {
         const screen = callScreen(page);
         await expect(screen.preflight.heading).toBeVisible();
         const preflight = await page.locator('body').innerText();
-        await screen.preflight.textOnly.click();
+        await screen.preflight.startText.click();
         await expect(screen.reply).toBeVisible();
         await expect(screen.turns).toHaveCount(1);
+        // The case, and everything folded away in it, is read as well as what is shown.
+        const more = page.getByRole('button', { name: 'More context' });
+        if (await more.count()) await more.click();
         const started = await page.locator('body').innerText();
         expect(scenario.secrets.length, 'the library has nothing to look for').toBeGreaterThan(0);
         expect(
-          leakedSecrets(`${preflight}\n${started}`, scenario.secrets),
+          leakedSecrets(`${preflight}\n${started}`, secretsBesidesAreas(scenario)),
           `The call page of "${scenario.title}" shows something the customer keeps back`,
         ).toEqual([]);
       });

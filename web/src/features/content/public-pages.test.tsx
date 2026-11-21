@@ -18,6 +18,7 @@ const PAGES = [
   ['/', 'the landing page'],
   ['/responsible-ai', 'the Responsible AI page'],
   ['/about', 'the About page'],
+  ['/no/such/page', 'the not-found page'],
 ] as const;
 
 // The first test to visit each page compiles it; give a busy machine room.
@@ -75,14 +76,27 @@ describe('the copy guard', () => {
       'A seamless call',
       'Your learning journey',
       'Mastery of calls',
+      'AI insights for every call',
+      'A compliant tool',
+      'Certified by Microsoft',
+      'CBCF-aligned scoring',
+      'Real-time emotion detection',
     ]) {
       expect(() => expectNoForbiddenCopy(text), text).toThrow();
     }
   });
 
   it('lets ordinary product language through', () => {
+    expect(() => expectNoForbiddenCopy('Practise Microsoft support calls safely.')).not.toThrow();
     expect(() =>
-      expectNoForbiddenCopy('Practise the conversation before it becomes a real customer call.'),
+      expectNoForbiddenCopy(
+        'No compliance or certification claims. No official CBCF mapping is applied.',
+      ),
+    ).not.toThrow();
+    expect(() =>
+      expectNoForbiddenCopy(
+        'Firefly does not analyse your voice for emotion, tone, accent or pace.',
+      ),
     ).not.toThrow();
   });
 });

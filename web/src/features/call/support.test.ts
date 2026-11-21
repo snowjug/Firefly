@@ -25,6 +25,8 @@ describe('describeCallSupport', () => {
     expect(describeCallSupport(input())).toEqual({
       capture: 'server-speech',
       playback: 'server-speech',
+      provider: 'none',
+      chromium: false,
       secureContext: true,
       reason: null,
       captureLabel: 'Azure AI Speech',

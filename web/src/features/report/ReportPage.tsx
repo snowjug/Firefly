@@ -4,6 +4,7 @@ import { useAnnouncer } from '../../design/index.ts';
 import { api } from '../../lib/api.ts';
 import { useDocumentTitle } from '../../lib/hooks.ts';
 import { useAppSection } from '../../app/section.tsx';
+import { SCENARIO_LIST } from './brief-href.ts';
 import { EvaluatingView, FailedView, LoadingView, UnavailableView } from './states.tsx';
 import { ReportView } from './ReportView.tsx';
 import { SLOW_AFTER_MS } from './evaluation.ts';
@@ -45,7 +46,7 @@ export function ReportPage({
 }: ReportPageProps) {
   const { view, retry, retrying, retryError, reload } = useReportSession(sessionId, client);
   const announce = useAnnouncer();
-  useAppSection('Report', { backTo: '/scenarios' });
+  useAppSection('Report', { backTo: SCENARIO_LIST, backLabel: 'Scenarios' });
   useDocumentTitle(TITLES[view.kind]);
 
   // When the page changes state under the person's hands (the evaluation finishes, fails, or is

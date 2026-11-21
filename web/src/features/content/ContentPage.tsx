@@ -1,45 +1,48 @@
 import { useId, type ReactNode } from 'react';
-import { cx } from '../../design/index.ts';
-import { OnThisPage, type TocItem } from './OnThisPage.tsx';
+import { Disclosure } from '../../design/primitives/Disclosure.tsx';
 import './content.css';
 
 /**
- * The frame of a content page: one h1 and a lead, then the sections. With `toc` it adds an "On this
- * page" list (sticky beside the text on a wide screen, a disclosure above it on a narrow one);
- * without it the text is a single centred reading column.
+ * The frame of a content page: one h1 and one supporting line, then short sections. There is no
+ * "on this page" list because there is no page long enough to need one: the detail is folded away.
  */
 export function ContentPage({
   title,
   lead,
-  toc,
   children,
 }: {
   title: string;
-  lead: ReactNode;
-  toc?: readonly TocItem[];
+  lead: string;
   children: ReactNode;
 }) {
   return (
-    <div className={cx('ct-page', toc && 'ct-page--toc')}>
+    <div className="ct-page">
       <div className="ct-header">
         <h1 className="t-title1">{title}</h1>
-        <p className="ct-lead">{lead}</p>
+        <p className="t-lead">{lead}</p>
       </div>
-      {toc ? <OnThisPage items={toc} /> : null}
       <div className="ct-body">{children}</div>
     </div>
   );
 }
 
-/** One section of a content page: a labelled region whose id is the anchor for "On this page". */
+/**
+ * One section of a content page: a heading, a few short bullets, and the detail folded into a
+ * disclosure that opens on request. Each section is a labelled region.
+ */
 export function ContentSection({
   id,
   title,
-  children,
+  bullets,
+  detailsLabel,
+  details,
 }: {
   id: string;
   title: string;
-  children: ReactNode;
+  bullets: readonly ReactNode[];
+  /** The words on the control that opens the detail. Each one is different, so a list of buttons makes sense. */
+  detailsLabel?: string;
+  details?: ReactNode;
 }) {
   const titleId = useId();
   return (
@@ -47,7 +50,16 @@ export function ContentSection({
       <h2 id={titleId} className="ct-h2">
         {title}
       </h2>
-      {children}
+      <ul className="ct-bullets" role="list">
+        {bullets.map((bullet, index) => (
+          <li key={index}>{bullet}</li>
+        ))}
+      </ul>
+      {details ? (
+        <Disclosure appearance="inline" summary={detailsLabel ?? 'Details'}>
+          <div className="ct-details">{details}</div>
+        </Disclosure>
+      ) : null}
     </section>
   );
 }

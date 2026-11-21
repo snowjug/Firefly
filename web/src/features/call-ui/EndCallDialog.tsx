@@ -1,22 +1,24 @@
 import { useEffect, useRef } from 'react';
-import { Button, Dialog, MessageBar, Spinner } from '../../design/index.ts';
+import { Button, Dialog, MessageBar, ProgressBar } from '../../design/index.ts';
 import type { CallProblem } from '../call/contract.ts';
-import { clock, isEndFailure, SHORT_CALL_TURNS, timesWord } from './call-model.ts';
-import { ProblemNotice } from './ProblemNotice.tsx';
-import './end-dialog.css';
+import { clock, isEndFailure, SHORT_CALL_TURNS } from './call-model.ts';
+import { Recovery } from './Recovery.tsx';
+import './dialogs.css';
 
 export interface EndCallDialogProps {
   /** The person asked to end the call and has not answered yet. */
   open: boolean;
-  /** The call is being closed: the same dialog becomes the "Ending the call" screen. */
+  /** The call is being closed: the same dialog becomes the progress screen. */
   ending: boolean;
+  /** What the progress says now: "Ending call", "Preparing your review" or "Call complete". */
+  progressLabel: string;
   /** Ending was confirmed and has not come back yet. */
   busy: boolean;
   elapsedSeconds: number;
   traineeTurns: number;
-  /** A spoken call has a microphone and customer audio to stop; a typed one does not. */
-  voice: boolean;
   stateLabel: string | null;
+  /** The trainee's last message was never saved, so the review will not have it. */
+  unsaved: boolean;
   /** The problem an attempt to end the call left (ending failed, or the browser was offline), if any. */
   problem: CallProblem | null;
   /**
@@ -31,21 +33,22 @@ export interface EndCallDialogProps {
 }
 
 /**
- * The question before a call ends, and what the screen looks like while it ends. Continue call is
- * where the keyboard starts, so a stray Enter never ends anything. Ending keeps the dialog open
- * with a loading button, and a failure is explained inside it, with Try again. A call with no
- * message in it cannot have a report, and then the way out is to carry on or to leave without one.
- * Once the call is closing, the dialog stays as the "Ending the call" screen, never blank, with its
- * heading focused.
+ * The question before a call ends, and what the screen looks like while it ends. The accurate length
+ * and state are on the dialog, "Continue call" is where the keyboard starts so a stray Enter ends
+ * nothing, and ending keeps the dialog open with a loading button. Once the call is closing the same
+ * dialog becomes "Ending and preparing your review", with progress that has no percentage because
+ * none is known, and its heading focused. A failure is explained inside it, with Retry. A call with
+ * no message in it has no report: the way out is to carry on or to leave without one.
  */
 export function EndCallDialog({
   open,
   ending,
+  progressLabel,
   busy,
   elapsedSeconds,
   traineeTurns,
-  voice,
   stateLabel,
+  unsaved,
   problem,
   onDiscard,
   discarding = false,
@@ -78,31 +81,20 @@ export function EndCallDialog({
         className="cw-end"
         title={
           <span className="cw-end__heading" tabIndex={-1} ref={heading} data-autofocus>
-            Ending the call
+            Ending and preparing your review
           </span>
-        }
-        description={
-          voice
-            ? 'We are stopping the microphone, saving the transcript and preparing your report.'
-            : 'We are saving the transcript and preparing your report.'
         }
       >
         <div className="cw-end__progress">
-          <Spinner size="large" label="Ending the call" />
+          <ProgressBar label={progressLabel} showLabel />
         </div>
       </Dialog>
     );
   }
 
   const short = traineeTurns < SHORT_CALL_TURNS;
-  const spoken = voice
-    ? { term: 'You have spoken', value: timesWord(traineeTurns) }
-    : {
-        term: 'You have sent',
-        value: `${traineeTurns} ${traineeTurns === 1 ? 'message' : 'messages'}`,
-      };
   const failure = isEndFailure(problem) ? problem : null;
-  // Ending failed because there was nothing to report: trying again cannot help.
+  // Ending failed because there was nothing to report: retrying cannot help.
   const nothingToReview = failure !== null && failure.retry === null;
 
   return (
@@ -128,7 +120,7 @@ export function EndCallDialog({
               <Button
                 appearance="danger"
                 loading={discarding}
-                loadingLabel="Leaving the call"
+                loadingLabel="Leaving the call."
                 onClick={onDiscard}
               >
                 Leave without a report
@@ -143,7 +135,7 @@ export function EndCallDialog({
             <Button
               appearance="primary"
               loading={busy}
-              loadingLabel="Ending the call"
+              loadingLabel="Ending the call."
               onClick={onConfirm}
             >
               End and review
@@ -156,34 +148,40 @@ export function EndCallDialog({
         <dl className="cw-end__facts">
           <div className="cw-end__fact">
             <dt>Call length</dt>
-            <dd>{clock(elapsedSeconds)}</dd>
+            <dd className="cw-end__clock">{clock(elapsedSeconds)}</dd>
           </div>
           <div className="cw-end__fact">
-            <dt>{spoken.term}</dt>
-            <dd>{spoken.value}</dd>
+            <dt>Messages</dt>
+            <dd>{traineeTurns}</dd>
           </div>
           {stateLabel ? (
             <div className="cw-end__fact">
-              <dt>Customer&apos;s state</dt>
+              <dt>Customer state</dt>
               <dd>{stateLabel}</dd>
             </div>
           ) : null}
         </dl>
+        {unsaved ? (
+          <MessageBar intent="warning" live={false}>
+            Your last message was not sent, so it will not be in the review.
+          </MessageBar>
+        ) : null}
         {short && !failure ? (
           <MessageBar intent="info" live={false}>
-            This call is short, so the report will say its scores rest on limited evidence.
+            A short call: the review will say it rests on limited evidence.
           </MessageBar>
         ) : null}
         {failure ? (
-          <ProblemNotice problem={failure} variant="panel" live onRetry={onConfirm} />
-        ) : (
-          <p className="cw-end__next">
-            <strong>What happens next: </strong>
-            {voice
-              ? 'the microphone and any customer audio stop, the transcript is saved and your coaching report is built.'
-              : 'the transcript is saved and your coaching report is built.'}
-          </p>
-        )}
+          <Recovery
+            problem={failure}
+            live
+            busy={false}
+            options={
+              failure.retry === null ? [] : [{ action: 'retry', label: 'Retry', icon: 'refresh' }]
+            }
+            onAction={onConfirm}
+          />
+        ) : null}
       </div>
     </Dialog>
   );

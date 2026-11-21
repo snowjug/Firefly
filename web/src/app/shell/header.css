@@ -232,18 +232,6 @@
     gap: var(--sp-2);
   }
 }
-/* On the narrowest screens the main action reads "Start"; "simulation" is still part of its name. */
-@media (max-width: 22em) {
-  .ff-header__cta-rest {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
 
 /* ---- Wide ---------------------------------------------------------------------------------- */
 @media (min-width: 48em) {

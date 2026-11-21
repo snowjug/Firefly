@@ -1,16 +1,13 @@
-import type { PublicScenarioDTO } from '#shared/domain/api.ts';
+﻿import type { PublicScenarioDTO } from '#shared/domain/api.ts';
 import type { ScenarioOverrides } from '#shared/domain/scenario.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import {
   CALL_STAGES,
   DIFFICULTIES,
   IMPACTS,
-  IMPACT_LABELS,
   PROFICIENCIES,
-  PROFICIENCY_LABELS,
   START_TEMPERATURES,
   STYLES,
-  STYLE_LABELS,
   type BusinessImpact,
   type CallStage,
   type CommunicationStyle,
@@ -20,7 +17,8 @@ import {
   type Proficiency,
   type StartTemperature,
 } from '#shared/domain/vocab.ts';
-import { complicationCount, curveballChoices, temperatureWord } from './labels.ts';
+import { curveballChoices } from './labels.ts';
+import { defaultVoiceFor, isVoiceId, type VoiceId } from './voice-choice.ts';
 
 // The call configuration, and how it travels in the address bar.
 //
@@ -30,7 +28,9 @@ import { complicationCount, curveballChoices, temperatureWord } from './labels.t
 // `proficiency` (novice | intermediate | expert), `style` (talkative | terse | demanding | vague |
 // non-native), `stage` (first-contact | follow-up | escalated | closure), `curveballs` (`none`, or a
 // comma-separated list of curveball types; absent means the difficulty's own default) and `hints`
-// (`on` | `off`; absent means the difficulty's own default: on for Starter, off otherwise).
+// (`on` | `off`; absent means the difficulty's own default: on for Starter, off otherwise). One key
+// is added to those eight and is not sent by the report: `voice` (voice-a to voice-d; absent means
+// the scenario's own voice).
 //
 // A value that is missing or not valid is ignored and the scenario's own value is used: nothing here
 // throws. Values equal to the scenario's own settings are left out of a serialised query.
@@ -44,12 +44,14 @@ export const CONFIG_KEYS = [
   'stage',
   'curveballs',
   'hints',
+  'voice',
 ] as const;
 export type ConfigKey = (typeof CONFIG_KEYS)[number];
 
 /** What the configuration needs to know about a scenario: its own settings and what it offers. */
 export type ConfigScenario = Pick<
   PublicScenarioDTO,
+  | 'id'
   | 'difficulty'
   | 'impact'
   | 'startingTemperature'
@@ -73,6 +75,8 @@ export interface CallConfig {
   curveballs: CurveballSetting;
   /** `null` follows the difficulty: on for Starter, off for Standard and Challenge. */
   hints: boolean | null;
+  /** `null` is the scenario's own voice (see `defaultVoiceFor`). */
+  voice: VoiceId | null;
 }
 
 // ---- Difficulty-dependent defaults -------------------------------------------------------
@@ -120,7 +124,13 @@ export function defaultConfig(scenario: ConfigScenario): CallConfig {
     stage: scenario.callStage,
     curveballs: { mode: 'default' },
     hints: null,
+    voice: null,
   };
+}
+
+/** The voice a call will use: the one chosen, else the scenario's own. */
+export function effectiveVoice(config: Pick<CallConfig, 'voice'>, scenarioId: string): VoiceId {
+  return config.voice ?? defaultVoiceFor(scenarioId);
 }
 
 /** The valid values in a query, key by key. A key that is missing, empty or not valid is `undefined`. */
@@ -134,6 +144,7 @@ export interface ConfigQuery {
   /** `none`, or a comma-separated list: read against the scenario afterwards. */
   curveballs?: string;
   hints?: 'on' | 'off';
+  voice?: VoiceId;
 }
 
 const HINTS_VALUES = ['on', 'off'] as const;
@@ -160,6 +171,7 @@ export function parseConfigQuery(
     stage: oneOf(CALL_STAGES, raw.stage),
     curveballs: raw.curveballs,
     hints: oneOf(HINTS_VALUES, raw.hints),
+    voice: isVoiceId(raw.voice) ? raw.voice : undefined,
   };
 }
 
@@ -220,6 +232,10 @@ export function inspectConfig(
     curveballs: curveballs.setting,
     // A value that says what the difficulty would say anyway is the same as no value.
     hints: explicitHints === hintsDefault(difficulty) ? null : explicitHints,
+    voice:
+      parsed.voice === undefined || parsed.voice === defaultVoiceFor(scenario.id)
+        ? null
+        : parsed.voice,
   };
   const ignored = CONFIG_KEYS.filter((key) => {
     if (raw[key] === undefined) return false;
@@ -258,6 +274,9 @@ export function serializeConfig(config: CallConfig, scenario: ConfigScenario): U
   }
   if (config.hints !== null && config.hints !== hintsDefault(config.difficulty)) {
     params.set('hints', config.hints ? 'on' : 'off');
+  }
+  if (config.voice !== null && config.voice !== defaultVoiceFor(scenario.id)) {
+    params.set('voice', config.voice);
   }
   return params;
 }
@@ -342,6 +361,9 @@ export function changedFromDefault(config: CallConfig, scenario: ConfigScenario)
   if (config.hints !== null && config.hints !== hintsDefault(config.difficulty)) {
     changed.push('hints');
   }
+  if (config.voice !== null && config.voice !== defaultVoiceFor(scenario.id)) {
+    changed.push('voice');
+  }
   return changed;
 }
 
@@ -359,65 +381,4 @@ export function withDifficulty(
     next.curveballs = { mode: 'choose', types: fit.kept };
   }
   return { config: next, dropped };
-}
-
-// ---- Words -------------------------------------------------------------------------------
-
-const capitalise = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
-
-/** How many curveballs are in play, as words: "up to two complications", or null for none. */
-export function complicationsPhrase(config: CallConfig): string | null {
-  const { curveballs, difficulty } = config;
-  const count =
-    curveballs.mode === 'choose'
-      ? curveballs.types.length
-      : curveballs.mode === 'none'
-        ? 0
-        : DIFFICULTY_PROFILES[difficulty].defaultCurveballCount;
-  if (count === 0) return null;
-  const phrase = complicationCount(count);
-  return curveballs.mode === 'default' ? `up to ${phrase}` : phrase;
-}
-
-/** "Up to two complications", "One complication" or "No complications": for a chip. */
-export function complicationsChip(config: CallConfig): string {
-  const phrase = complicationsPhrase(config);
-  return phrase ? capitalise(phrase) : 'No complications';
-}
-
-const STAGE_PHRASES: Record<CallStage, string> = {
-  'first-contact': 'is calling about the issue for the first time',
-  'follow-up': 'is following up on an open case',
-  escalated: 'is calling about an escalated case',
-  closure: 'is calling to close the case',
-};
-
-const withArticle = (word: string) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
-
-/** The first sentence of a description, without its full stop, ready to follow a colon. */
-function firstClause(description: string): string {
-  const first = description.split(/(?<=\.)\s+/)[0] ?? description;
-  return lowerFirst(first.trim().replace(/\.$/, ''));
-}
-
-/**
- * The call preview in plain sentences, built from the shared descriptions. It says what the
- * customer is like and how much is at stake, and only how many complications to expect: never which,
- * never when, and nothing the customer keeps back.
- */
-export function summarise(config: CallConfig, _scenario?: ConfigScenario): string[] {
-  const mood = temperatureWord(config.temperature);
-  const proficiency = PROFICIENCY_LABELS[config.proficiency].label.toLowerCase();
-  const who =
-    config.style === 'non-native'
-      ? `${capitalise(withArticle(mood))} customer who is a non-native English speaker, with ${proficiency} technical proficiency,`
-      : `${capitalise(withArticle(mood))}, ${STYLE_LABELS[config.style].label.toLowerCase()} customer with ${proficiency} technical proficiency`;
-  const impact = IMPACT_LABELS[config.impact];
-  const complications = complicationsPhrase(config);
-  return [
-    `${who} ${STAGE_PHRASES[config.stage]}.`,
-    `The business impact is ${impact.label.toLowerCase()}: ${firstClause(impact.description)}.`,
-    complications ? `Expect ${complications}.` : 'No complications are set.',
-  ];
 }

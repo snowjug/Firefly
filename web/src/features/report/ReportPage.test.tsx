@@ -1,16 +1,15 @@
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { ApiError } from '../../lib/api.ts';
 import { ReportPage } from './ReportPage.tsx';
 import {
+  CALLS,
   SERVER_EVALUATION_ERRORS,
-  callFixtures,
   evaluatingSession,
   failedSession,
   unreadableReportSession,
-  type CallFixture,
 } from './fixtures.ts';
 import {
   clientWith,
@@ -21,8 +20,10 @@ import {
   type FakeClient,
 } from './test-utils.tsx';
 
-let strong: CallFixture;
-let weak: CallFixture;
+const { strong, weak } = CALLS;
+
+// Role queries over a whole report are slow in jsdom, and slower on a busy machine.
+vi.setConfig({ testTimeout: 20_000 });
 
 const page = (client: FakeClient, slowAfterMs?: number) => (
   <ReportPage sessionId="s1" client={client} slowAfterMs={slowAfterMs} />
@@ -34,9 +35,8 @@ async function settle(ms = 0) {
   });
 }
 
-beforeEach(async () => {
-  ({ strong, weak } = await callFixtures());
-});
+const steps = () =>
+  within(screen.getByRole('list', { name: 'Report progress' })).getAllByRole('listitem');
 
 afterEach(() => {
   cleanup();
@@ -91,29 +91,23 @@ describe('loading and not found', () => {
 });
 
 describe('the evaluation under way', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
   it('shows the five steps with an icon and a word each, and says the transcript is saved', async () => {
+    vi.useFakeTimers();
     renderAtReport(page(scriptedClient(evaluatingSession(strong, 'scoring'))));
     await settle();
     expect(
       screen.getByRole('heading', { level: 1, name: 'Building your coaching report' }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Your transcript is saved\./)).toBeInTheDocument();
-    const steps = within(screen.getByRole('list', { name: 'Report progress' })).getAllByRole(
-      'listitem',
-    );
-    expect(steps).toHaveLength(5);
-    expect(steps.map((step) => step.textContent)).toEqual([
+    expect(screen.getByText('Your transcript is saved.')).toBeInTheDocument();
+    expect(steps()).toHaveLength(5);
+    expect(steps().map((step) => step.textContent)).toEqual([
       expect.stringContaining('Transcript saved'),
       expect.stringContaining('Checking what you found out'),
-      expect.stringContaining('Scoring the six coaching skills'),
-      expect.stringContaining('Writing your coaching report'),
+      expect.stringContaining('Scoring six skills'),
+      expect.stringContaining('Writing the report'),
       expect.stringContaining('Report saved'),
     ]);
-    expect(steps.map((step) => step.getAttribute('data-status'))).toEqual([
+    expect(steps().map((step) => step.getAttribute('data-status'))).toEqual([
       'done',
       'done',
       'current',
@@ -121,12 +115,13 @@ describe('the evaluation under way', () => {
       'waiting',
     ]);
     // Each step says its state in words, not only in its icon.
-    expect(steps[0]).toHaveTextContent('Done');
-    expect(steps[2]).toHaveTextContent('In progress');
-    expect(steps[3]).toHaveTextContent('Waiting');
+    expect(steps()[0]).toHaveTextContent('Done');
+    expect(steps()[2]).toHaveTextContent('In progress');
+    expect(steps()[3]).toHaveTextContent('Waiting');
   });
 
   it('asks again every 800 ms and moves each step on as the server reports it', async () => {
+    vi.useFakeTimers();
     const client = scriptedClient(
       evaluatingSession(strong, 'discovery_review'),
       evaluatingSession(strong, 'scoring'),
@@ -135,10 +130,7 @@ describe('the evaluation under way', () => {
     );
     renderAtReport(page(client));
     await settle();
-    const status = () =>
-      within(screen.getByRole('list', { name: 'Report progress' }))
-        .getAllByRole('listitem')
-        .map((step) => step.getAttribute('data-status'));
+    const status = () => steps().map((step) => step.getAttribute('data-status'));
     expect(client.getSession).toHaveBeenCalledTimes(1);
     expect(status()).toEqual(['done', 'current', 'waiting', 'waiting', 'waiting']);
 
@@ -160,6 +152,7 @@ describe('the evaluation under way', () => {
   });
 
   it('asks only every 3 seconds while the tab is in the background', async () => {
+    vi.useFakeTimers();
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
     try {
       const client = scriptedClient(evaluatingSession(strong, 'scoring'));
@@ -176,6 +169,7 @@ describe('the evaluation under way', () => {
   });
 
   it('says the wait is longer than usual after 40 seconds, and offers the saved transcript', async () => {
+    vi.useFakeTimers();
     const client = scriptedClient(evaluatingSession(strong, 'scoring'));
     renderAtReport(page(client));
     await settle();
@@ -196,9 +190,11 @@ describe('the evaluation under way', () => {
     // The transcript works without a report: every turn is there, with no markers or citations.
     expect(screen.getAllByText(/^Turn \d+$/)).toHaveLength(strong.session.turns.length);
     expect(screen.queryByText(/Cited for/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Mood: /)).not.toBeInTheDocument();
   });
 
   it('stops asking, and cancels the request in flight, when the page is left', async () => {
+    vi.useFakeTimers();
     const client = scriptedClient(evaluatingSession(strong, 'scoring'));
     const { unmount } = renderAtReport(page(client));
     await settle();
@@ -214,6 +210,7 @@ describe('the evaluation under way', () => {
   });
 
   it('keeps trying after the server stops answering, and says so, then carries on when it answers', async () => {
+    vi.useFakeTimers();
     const trouble = new ApiError(0, 'network', "Can't reach Firefly right now.", true);
     const getSession = vi
       .fn()
@@ -227,18 +224,17 @@ describe('the evaluation under way', () => {
     await settle(800 * 3);
     expect(screen.getByText(/cannot reach the server to check progress/)).toBeInTheDocument();
     expect(
-      screen.getByText(/Your transcript is saved, and the page keeps trying/),
+      screen.getByText(/Your transcript is saved, and this page keeps trying/),
     ).toBeInTheDocument();
     // Never the raw error.
     expect(document.body).not.toHaveTextContent("Can't reach Firefly right now.");
     await settle(800);
     expect(screen.queryByText(/cannot reach the server/)).not.toBeInTheDocument();
-    expect(
-      within(screen.getByRole('list', { name: 'Report progress' })).getAllByRole('listitem')[3],
-    ).toHaveAttribute('data-status', 'current');
+    expect(steps()[3]).toHaveAttribute('data-status', 'current');
   });
 
   it('moves focus to the report heading and says so when the report is ready', async () => {
+    vi.useFakeTimers();
     const client = scriptedClient(evaluatingSession(strong, 'building_report'), strong.session);
     renderAtReport(page(client));
     await settle();
@@ -256,13 +252,10 @@ describe('the evaluation under way', () => {
 });
 
 describe('revealing the report', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
   const root = () => document.querySelector('.rp-page');
 
   it('fades the report in when it has just been made while the page was open', async () => {
+    vi.useFakeTimers();
     renderAtReport(
       page(scriptedClient(evaluatingSession(strong, 'building_report'), strong.session)),
     );
@@ -272,6 +265,7 @@ describe('revealing the report', () => {
   });
 
   it('does not, under reduced motion', async () => {
+    vi.useFakeTimers();
     const restore = stubMatchMedia((query) => query.includes('prefers-reduced-motion'));
     try {
       renderAtReport(
@@ -287,6 +281,7 @@ describe('revealing the report', () => {
   });
 
   it('does not when the report was already there on opening the page', async () => {
+    vi.useFakeTimers();
     renderAtReport(page(scriptedClient(strong.session)));
     await settle();
     expect(screen.getByRole('navigation', { name: 'On this page' })).toBeInTheDocument();
@@ -301,12 +296,22 @@ describe('a failed evaluation', () => {
     const alert = await screen.findByRole('alert');
     expect(screen.getByRole('heading', { level: 1, name: 'Coaching report' })).toBeInTheDocument();
     expect(alert).toHaveTextContent('The coaching report could not be finished');
+    // The server's message already says the transcript is safe, so it is not said a second time.
     expect(alert).toHaveTextContent(SERVER_EVALUATION_ERRORS.internal.message);
-    expect(alert).toHaveTextContent('Your call and its transcript are saved. Nothing was lost.');
+    expect(alert.textContent?.match(/transcript/gi)).toHaveLength(1);
     expect(within(alert).getByRole('button', { name: 'Retry evaluation' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Transcript' })).toBeInTheDocument();
     expect(screen.getAllByText(/^Turn \d+$/)).toHaveLength(weak.session.turns.length);
     expect(screen.queryByRole('navigation', { name: 'On this page' })).not.toBeInTheDocument();
+  });
+
+  it('says the call is saved when the server\u2019s words do not', async () => {
+    renderAtReport(
+      page(scriptedClient(failedSession(weak, SERVER_EVALUATION_ERRORS.providerBusy))),
+    );
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(SERVER_EVALUATION_ERRORS.providerBusy.message);
+    expect(alert).toHaveTextContent('Your call and its transcript are saved. Nothing was lost.');
   });
 
   it('retries the evaluation, follows it, and shows the report when it is done', async () => {
@@ -403,21 +408,41 @@ describe('a failed evaluation', () => {
   it('lets the person leave, or delete the call, from the failure', async () => {
     renderAtReport(page(scriptedClient(failedSession(weak, SERVER_EVALUATION_ERRORS.internal))));
     await screen.findByRole('alert');
-    expect(screen.getByRole('link', { name: 'Try another scenario' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Try another call' })).toHaveAttribute(
       'href',
       '/scenarios',
     );
-    expect(screen.getByRole('link', { name: 'Return home' })).toHaveAttribute('href', '/');
     expect(screen.getByRole('button', { name: 'Delete this call' })).toBeInTheDocument();
   });
 });
 
 describe('the completed report', () => {
-  it('opens at the report with one level-one heading', async () => {
+  it('opens at the report with one level-one heading and its own title', async () => {
     renderAtReport(page(scriptedClient(strong.session)));
     await screen.findByRole('navigation', { name: 'On this page' });
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(document.title).toBe('Coaching report \u00b7 Firefly');
+  });
+
+  it('shows a call saved before the Microsoft scenarios without a product, CARE or milestones', async () => {
+    renderAtReport(page(scriptedClient(CALLS.legacy.session)));
+    await screen.findByRole('navigation', { name: 'On this page' });
+    expect(screen.getByRole('heading', { level: 1, name: 'Coaching report' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'CARE summary' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Call milestones')).not.toBeInTheDocument();
+    expect(screen.queryByText('Product', { selector: 'dt' })).not.toBeInTheDocument();
+  });
+
+  it('asks which scenarios exist once, and only for a finished report', async () => {
+    const client = scriptedClient(strong.session);
+    renderAtReport(page(client));
+    await screen.findByRole('navigation', { name: 'On this page' });
+    await vi.waitFor(() => expect(client.scenarios).toHaveBeenCalledTimes(1));
+    cleanup();
+    const evaluating = scriptedClient(evaluatingSession(strong, 'scoring'));
+    renderAtReport(page(evaluating));
+    await screen.findByRole('heading', { level: 1, name: 'Building your coaching report' });
+    expect(evaluating.scenarios).not.toHaveBeenCalled();
   });
 
   it('jumps to a section and puts focus on its heading', async () => {
@@ -425,8 +450,8 @@ describe('the completed report', () => {
     try {
       renderAtReport(page(scriptedClient(strong.session)));
       const nav = await screen.findByRole('navigation', { name: 'On this page' });
-      await userEvent.click(within(nav).getByRole('link', { name: 'Discovery review' }));
-      expect(screen.getByRole('heading', { level: 2, name: 'Discovery review' })).toHaveFocus();
+      await userEvent.click(within(nav).getByRole('link', { name: 'Discovery' }));
+      expect(screen.getByRole('heading', { level: 2, name: 'Discovery' })).toHaveFocus();
       expect(scroll).toHaveBeenCalled();
     } finally {
       restore();

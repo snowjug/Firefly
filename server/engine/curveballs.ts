@@ -18,6 +18,8 @@ export interface CurveballTurnInput {
   classification: TurnClassification;
   turnIndex: number; // conversation index of the trainee turn
   traineeTurnNumber: number;
+  /** The engineer's turn number, not counting a first exchange that was only a greeting. */
+  effectiveTurn: number;
   discovery: DiscoveryMap; // including anything revealed this turn
 }
 
@@ -74,7 +76,7 @@ export function isHandled(type: CurveballType, c: TurnClassification): boolean {
 
 function conditionsHold(def: CurveballDefinition, input: CurveballTurnInput): boolean {
   const t = def.trigger;
-  const n = input.traineeTurnNumber;
+  const n = input.effectiveTurn;
   if (n < t.earliestTurn) return false;
   if (t.latestTurn !== undefined && n >= t.latestTurn) return true; // forced
   if (
@@ -96,9 +98,14 @@ function pickCurveball(input: CurveballTurnInput): CurveballDefinition | null {
   if (runtime.lastCurveballTurn > 0 && traineeTurnNumber - runtime.lastCurveballTurn < 3)
     return null;
   if (c.wrapsUp || c.injectionAttempt) return null;
+  // Only the types the scenario allows for this call are ever fired.
+  const allowed = new Set(scenario.config.curveballTypes);
   return (
     scenario.curveballs.find(
-      (def) => !runtime.firedCurveballs.includes(def.id) && conditionsHold(def, input),
+      (def) =>
+        allowed.has(def.type) &&
+        !runtime.firedCurveballs.includes(def.id) &&
+        conditionsHold(def, input),
     ) ?? null
   );
 }

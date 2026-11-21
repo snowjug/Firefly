@@ -38,7 +38,8 @@
   transition:
     background-color var(--dur-faster) var(--ease-easy),
     border-color var(--dur-faster) var(--ease-easy),
-    color var(--dur-faster) var(--ease-easy);
+    color var(--dur-faster) var(--ease-easy),
+    transform var(--dur-faster) var(--ease-easy);
 }
 
 /* ---- Sizes ----------------------------------------------------------------------------- */
@@ -116,10 +117,32 @@
 .ff-button:active:not(:disabled, [aria-disabled='true']) {
   background: var(--_bg-active, var(--_bg));
   border-color: var(--_bd-active, var(--_bd-hover, var(--_bd)));
+  /* A press compresses the button by a pixel or two: the answer to a click is immediate. */
+  transform: translateY(var(--press-shift));
+}
+.ff-button--large:active:not(:disabled, [aria-disabled='true']) {
+  transform: translateY(var(--press-shift-lg));
 }
 /* A link used as a button keeps its colours from base's link rules. */
 a.ff-button:hover {
   color: var(--_fg-hover, var(--_fg));
+}
+
+/* ---- Nudge: the arrow of a main action leans forward on focus, on hover where there is a hover
+   (not on a touch screen, where it would stay leaning after a tap), and a little more on press ---- */
+.ff-button--nudge .ff-icon {
+  transition: transform var(--dur-fast) var(--ease-decelerate);
+}
+.ff-button--nudge:focus-visible .ff-icon {
+  transform: translateX(calc(var(--move-xs) / 2));
+}
+@media (hover: hover) {
+  .ff-button--nudge:hover .ff-icon {
+    transform: translateX(calc(var(--move-xs) / 2));
+  }
+}
+.ff-button--nudge:active .ff-icon {
+  transform: translateX(var(--move-xs));
 }
 
 /* ---- Pressed (ToggleButton): a tint and a heavier edge, not colour alone --------------- */

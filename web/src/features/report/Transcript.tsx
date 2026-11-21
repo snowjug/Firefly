@@ -24,6 +24,7 @@ import {
   buildTranscript,
   filterCounts,
   findMatches,
+  hasSpokenTurns,
   locateQuote,
   segmentText,
   shownTurns,
@@ -128,11 +129,6 @@ const TurnRow = memo(function TurnRow({
           <VisuallyHidden>at </VisuallyHidden>
           {view.clock}
         </span>
-        {view.spoken ? (
-          <Tag size="small" icon="microphone">
-            Spoken
-          </Tag>
-        ) : null}
         {cited ? (
           <Badge tone="info" size="small" icon="quote">
             Cited
@@ -187,7 +183,7 @@ export function TranscriptReview({
 }) {
   const turns = useMemo(() => buildTranscript(session, report), [session, report]);
   const counts = useMemo(() => filterCounts(turns), [turns]);
-  const { target, origin, backToOrigin } = useEvidence();
+  const { target, highlight, origin, backToOrigin } = useEvidence();
 
   const [filter, setFilter] = useState<TranscriptFilter>('all');
   const [query, setQuery] = useState('');
@@ -272,13 +268,16 @@ export function TranscriptReview({
           : pluralise(matches.length, 'match', 'matches');
   const replies = shown.filter((s) => s.context).length;
   const hasReport = report !== null;
+  const spoken = hasSpokenTurns(session);
 
   return (
-    <Section
-      id="transcript"
-      title="Transcript"
-      lead={lead ?? 'The full conversation as it was saved. Nothing here has been edited.'}
-    >
+    <Section id="transcript" title="Transcript">
+      <p className="rp-transcript__lead">
+        {lead ?? 'The conversation as it was saved. Nothing has been edited.'}
+        {spoken
+          ? ' Spoken turns were transcribed automatically and may contain recognition errors.'
+          : ''}
+      </p>
       <div className="rp-tools">
         <div className="rp-find">
           <div className="rp-find__box">
@@ -338,7 +337,7 @@ export function TranscriptReview({
 
       <ol className="rp-turns" role="list" aria-label="Transcript">
         {shown.map(({ turn, context }) => {
-          const isTarget = target?.turnIndex === turn.index;
+          const isCited = highlight?.turnIndex === turn.index;
           return (
             <TurnRow
               key={turn.index}
@@ -346,8 +345,8 @@ export function TranscriptReview({
               context={context}
               matches={byTurn.get(turn.index) ?? NO_MATCHES}
               currentStart={currentMatch?.turnIndex === turn.index ? currentMatch.start : null}
-              cited={isTarget}
-              quote={isTarget ? target.quote : null}
+              cited={isCited}
+              quote={isCited ? highlight.quote : null}
             />
           );
         })}

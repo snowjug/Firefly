@@ -1,0 +1,63 @@
+/* The case: what the trainee was told about it, to read again during the call. */
+
+.cw-case__scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-block-size: 0;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.cw-case__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+}
+.cw-case__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+}
+.cw-case__label {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.cw-case__value {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  overflow-wrap: anywhere;
+}
+.cw-case__muted {
+  display: block;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.cw-case__product {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: var(--fw-semibold);
+}
+.cw-case__ref {
+  margin-inline-end: var(--sp-2);
+  font-variant-numeric: tabular-nums;
+}
+.cw-case__count {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+}
+.cw-case__areas {
+  margin: 0;
+  padding-inline-start: 1.1rem;
+}
+.ff-input.cw-case__notes {
+  resize: vertical;
+}

@@ -10,7 +10,7 @@ import type { BrowserContext, Page } from '@playwright/test';
 //                   should only ever use one, so two voices cannot overlap)
 //   playCalls       every play() call, with the address it played and the length once it had ended
 //   synthesisCalls  how many times the browser's own text-to-speech was asked to speak
-//   statuses        every change of the call's status line (its text and its `data-stage`), in order
+//   statuses        every change of the call's status line (its text and its `data-status`), in order
 //
 // The state lives in the page, so a full reload starts it again; moving around inside the app (which
 // is a single page) keeps it.
@@ -25,7 +25,9 @@ export interface PlayCall {
 
 export interface StatusChange {
   at: number;
-  stage: string;
+  /** The status line's `data-status`: `listening`, `speech-detected`, `customer-speaking` ... */
+  status: string;
+  /** The words the status line showed: "Listening", "Hearing you", "Customer speaking" ... */
   label: string;
   /** How many turns the transcript showed at that moment. */
   turns: number;
@@ -136,20 +138,20 @@ function installProbe(): void {
 
   let last = '';
   const record = () => {
-    const element = document.querySelector('[data-stage]');
-    const stage = element?.getAttribute('data-stage') ?? '';
-    const label = element?.querySelector('.cw-voice__label')?.textContent?.trim() ?? '';
-    const key = `${stage}|${label}`;
+    const element = document.querySelector('.cw-status[data-status]');
+    const status = element?.getAttribute('data-status') ?? '';
+    const label = element?.querySelector('.cw-status__label')?.textContent?.trim() ?? '';
+    const key = `${status}|${label}`;
     if (key === last) return;
     last = key;
-    if (stage || label) state.statuses.push({ at: now(), stage, label, turns: turnsShown() });
+    if (status || label) state.statuses.push({ at: now(), status, label, turns: turnsShown() });
   };
   new MutationObserver(record).observe(document, {
     subtree: true,
     childList: true,
     characterData: true,
     attributes: true,
-    attributeFilter: ['data-stage'],
+    attributeFilter: ['data-status'],
   });
 
   window.__fireflyE2E = {

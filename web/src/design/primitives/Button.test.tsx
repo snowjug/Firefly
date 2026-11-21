@@ -152,14 +152,11 @@ describe('LinkButton', () => {
     render(
       <MemoryRouter>
         <LinkButton to="/scenarios" appearance="primary">
-          Start simulation
+          Start call
         </LinkButton>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: 'Start simulation' })).toHaveAttribute(
-      'href',
-      '/scenarios',
-    );
+    expect(screen.getByRole('link', { name: 'Start call' })).toHaveAttribute('href', '/scenarios');
   });
 
   it('opens an address elsewhere in a new tab, safely, and says so', () => {

@@ -1,0 +1,372 @@
+/* The chosen scenario: the details, the customer as the call will start, the preset and the setup. */
+
+.scn-pane {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+.scn-pane__scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-block-size: 0;
+}
+/* The details fade in when another scenario is chosen. */
+.scn-fade {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-inline-size: 0;
+  animation: scn-fade var(--dur-normal) var(--ease-decelerate) both;
+}
+@keyframes scn-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* A value that changes (a mood, a level, a sentence) fades in, so a change is seen, not jumped to. */
+.scn-swap {
+  animation: scn-swap var(--dur-normal) var(--ease-decelerate) both;
+}
+@keyframes scn-swap {
+  from {
+    opacity: 0;
+  }
+}
+
+.scn-pane__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.scn-pane__product {
+  color: var(--fg-3);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-pane__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.scn-pane__summary {
+  max-inline-size: 60ch;
+  color: var(--fg-2);
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
+  text-wrap: pretty;
+}
+
+.scn-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--sp-3) var(--sp-5);
+}
+.scn-fact {
+  min-inline-size: 0;
+}
+.scn-fact--wide {
+  grid-column: 1 / -1;
+}
+.scn-fact dt {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.scn-fact dd {
+  color: var(--fg-1);
+}
+
+.scn-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+.scn-block__title {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- The customer ----------------------------------------------------------------------- */
+.scn-cust {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-quiet);
+}
+.scn-cust__name {
+  font-weight: var(--fw-semibold);
+}
+.scn-cust__role {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-cust__note {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-cust__state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-5);
+}
+@media (min-width: 48em) {
+  .scn-cust {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .scn-cust__state {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+}
+.scn-cust__levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+}
+.scn-meter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.scn-meter__label {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-meter__value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1h);
+  min-inline-size: 5rem;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+}
+.scn-meter__bars {
+  display: inline-flex;
+  gap: 2px;
+}
+.scn-meter__bars > span {
+  inline-size: 0.625rem;
+  block-size: 0.375rem;
+  border-radius: 1px;
+  background: var(--stroke-1);
+  transition: background-color var(--dur-normal) var(--ease-easy);
+}
+.scn-meter__bars[data-steps='1'] > span:nth-child(-n + 1),
+.scn-meter__bars[data-steps='2'] > span:nth-child(-n + 2),
+.scn-meter__bars[data-steps='3'] > span {
+  background: var(--brand);
+}
+
+/* ---- The preset ------------------------------------------------------------------------- */
+.scn-preset {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+.scn-preset__control {
+  flex: 1 1 auto;
+}
+.scn-preset .ff-segmented__legend {
+  margin-block-end: var(--sp-1);
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-preset .ff-segmented__track {
+  display: flex;
+}
+.scn-note {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+/* ---- Customise -------------------------------------------------------------------------- */
+.scn-pane__custom {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  padding-block-start: var(--sp-1);
+}
+.scn-custom__head {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: var(--sp-2);
+}
+.scn-custom__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--sp-4) var(--sp-5);
+}
+.scn-custom .ff-segmented__track {
+  display: flex;
+}
+.scn-cf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1h);
+  min-inline-size: 0;
+}
+.scn-cf--full {
+  grid-column: 1 / -1;
+}
+.scn-cf__head,
+.scn-cf__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.scn-cf__row {
+  justify-content: space-between;
+}
+.scn-cf__label {
+  color: var(--fg-1);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+}
+.scn-cf__changed {
+  margin-inline: var(--sp-2) 0;
+  color: var(--brand-fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.scn-cf__help {
+  padding: var(--sp-2) var(--sp-3);
+  border-inline-start: 2px solid var(--stroke-1);
+  background: var(--bg-quiet);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-cf__defs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-block-start: var(--sp-2);
+}
+.scn-picks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-block-start: var(--sp-1);
+}
+.scn-picks__legend {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-picks__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+
+/* ---- The way on ------------------------------------------------------------------------- */
+.scn-pane__bar {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-block-start: var(--sp-5);
+  padding: var(--sp-3) var(--gutter);
+  padding-block-end: calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+  margin-inline: calc(var(--gutter) * -1);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-canvas);
+}
+.scn-pane__summary-line {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+@media (max-width: 30em) {
+  .scn-pane__bar .ff-button {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---- Loading and nothing chosen --------------------------------------------------------- */
+.scn-pane--quiet {
+  background: var(--bg-quiet);
+}
+.scn-pane--empty {
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-10) var(--sp-6);
+  color: var(--fg-3);
+}
+.scn-pane__empty-title {
+  color: var(--fg-1);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Wide: a panel of its own, scrolling inside, with the way on pinned under it ---------- */
+@media (min-width: 64em) {
+  .scn-pane {
+    border: var(--stroke-w) solid var(--stroke-2);
+    border-radius: var(--r-xl);
+    background: var(--bg-canvas);
+    box-shadow: var(--shadow-2);
+    overflow: hidden;
+  }
+  .scn-pane__scroll {
+    flex: 1 1 auto;
+    padding: var(--sp-5) var(--sp-6);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .scn-pane__bar {
+    position: static;
+    margin: 0;
+    padding: var(--sp-3) var(--sp-6);
+    background: var(--bg-quiet);
+  }
+}
+
+@media (forced-colors: active) {
+  .scn-cust,
+  .scn-pane {
+    border-color: ButtonText;
+    box-shadow: none;
+  }
+  .scn-meter__bars > span {
+    forced-color-adjust: none;
+    background: GrayText;
+  }
+  .scn-meter__bars[data-steps='1'] > span:nth-child(-n + 1),
+  .scn-meter__bars[data-steps='2'] > span:nth-child(-n + 2),
+  .scn-meter__bars[data-steps='3'] > span {
+    background: Highlight;
+  }
+}

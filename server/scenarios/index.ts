@@ -1,35 +1,50 @@
+import { GENERIC_CURVEBALLS } from '#shared/domain/curveballs.ts';
 import { ScenarioDefinitionSchema, type ScenarioDefinition } from '#shared/domain/scenario.ts';
-import { DIFFICULTY_RANK, DISCOVERY_INTENTS, type Difficulty } from '#shared/domain/vocab.ts';
-import cannotFindExport from './library/cannot-find-export-feature.ts';
-import checkoutOutage from './library/checkout-outage-before-investor-event.ts';
-import closureCallReport from './library/closure-call-report-fix-unconfirmed.ts';
-import confidentButIncorrect from './library/confident-but-incorrect-diagnosis.ts';
-import escalatedIntegration from './library/escalated-integration-failures.ts';
-import followUpNoUpdate from './library/follow-up-no-recent-update.ts';
-import invoiceShock from './library/invoice-shock-and-cancellation-threat.ts';
-import licenceSeat from './library/licence-seat-not-assigned.ts';
-import lockedOut from './library/locked-out-after-password-reset.ts';
-import missingOrders from './library/missing-orders-after-settings-change.ts';
-import recurringSlowdowns from './library/recurring-midday-slowdowns.ts';
-import slowDashboard from './library/slow-dashboard-with-workaround.ts';
-import sharedWorkspace from './library/team-cannot-open-shared-workspace.ts';
+import {
+  CALL_STAGES,
+  DIFFICULTY_RANK,
+  DISCOVERY_INTENTS,
+  type Difficulty,
+} from '#shared/domain/vocab.ts';
+import azureDeploymentFails from './library/azure-deployment-fails-permissions.ts';
+import azureUnexpectedCharges from './library/azure-unexpected-charges.ts';
+import azureVmUnreachable from './library/azure-vm-unreachable-production.ts';
+import defenderInvoices from './library/defender-invoices-quarantined.ts';
+import dynamicsRecords from './library/dynamics-records-not-visible-after-role-change.ts';
+import entraNewHires from './library/entra-new-hires-blocked-sign-in.ts';
+import exchangeMailDelays from './library/exchange-mail-delays-follow-up.ts';
+import intuneDevices from './library/intune-devices-not-compliant-closure.ts';
+import m365AppsExcel from './library/m365-apps-excel-crashes-after-update.ts';
+import onedriveSync from './library/onedrive-sync-closure.ts';
+import outlookSharedMailbox from './library/outlook-shared-mailbox-missing.ts';
+import powerAutomate from './library/power-automate-approvals-stopped.ts';
+import sharepointAccess from './library/sharepoint-site-access-escalated.ts';
+import teamsExternalMeetings from './library/teams-cannot-join-external-meetings.ts';
+import windowsBitlocker from './library/windows-bitlocker-recovery-prompt.ts';
+import windowsSlow from './library/windows-11-slow-after-update.ts';
 
-// Registry of the built-in synthetic scenarios, easiest first. Add a scenario by creating a file
-// in ./library and listing it here; `npm run validate:scenarios` checks everything.
+// Registry of the built-in synthetic Microsoft support scenarios, easiest first. Add a scenario by
+// creating a file in ./library and listing it here; `npm run validate:scenarios` checks everything.
 const LIBRARY_INPUT: unknown[] = [
-  lockedOut,
-  cannotFindExport,
-  slowDashboard,
-  licenceSeat,
-  closureCallReport,
-  sharedWorkspace,
-  missingOrders,
-  recurringSlowdowns,
-  followUpNoUpdate,
-  checkoutOutage,
-  escalatedIntegration,
-  invoiceShock,
-  confidentButIncorrect,
+  // Starter
+  outlookSharedMailbox,
+  onedriveSync,
+  powerAutomate,
+  windowsSlow,
+  // Standard
+  teamsExternalMeetings,
+  exchangeMailDelays,
+  m365AppsExcel,
+  intuneDevices,
+  defenderInvoices,
+  windowsBitlocker,
+  azureUnexpectedCharges,
+  dynamicsRecords,
+  // Challenge
+  sharepointAccess,
+  entraNewHires,
+  azureVmUnreachable,
+  azureDeploymentFails,
 ];
 
 export interface LoadedScenarios {
@@ -85,25 +100,206 @@ export function distinctiveTokens(text: string): string[] {
   return [...tokens];
 }
 
+const PRODUCT_CLAIM_PATTERNS: [string, RegExp][] = [
+  ['a KB article number', /\bKB\s?\d{5,}\b/i],
+  ['a hexadecimal error code', /\b0x[0-9a-f]{4,}\b/i],
+  ['an error code', /\b[A-Z]{3,}[A-Z0-9_-]*\d{3,}[A-Z0-9_-]*\b/],
+  ['a web address', /\bhttps?:\/\/|\bwww\.\S+/i],
+  ['an email address', /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/],
+  ['a phone number', /\+?\d{1,3}[\s-]?\(?\d{2,4}\)?[\s-]\d{3,4}[\s-]\d{3,4}\b/],
+  ['an IP address', /\b\d{1,3}(?:\.\d{1,3}){3}\b/],
+  ['a GUID', /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i],
+  [
+    'a command or cmdlet',
+    /\b(?:Get|Set|New|Remove|Add|Enable|Disable|Connect|Invoke|Test|Start|Stop|Restart)-[A-Z][A-Za-z]+\b/,
+  ],
+  ['a command', /\b(?:ipconfig|powershell|cmd\.exe|gpupdate|regedit|manage-bde|dism)\b/i],
+  ['a version or build number', /\b(?:version|build)\s+\d[\d.]*/i],
+  ['a menu path', /\s(?:>|→|›)\s/],
+];
+
+// Every piece of text in a scenario, with where it is. Ids and the made-up case number are skipped.
+function allText(value: unknown, path = ''): [string, string][] {
+  if (typeof value === 'string') return [[path, value]];
+  if (Array.isArray(value)) return value.flatMap((v, i) => allText(v, `${path}[${i}]`));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([k, v]) =>
+      k === 'id' || k === 'caseReference' || k === 'intents' || k === 'partialIntents'
+        ? []
+        : allText(v, path ? `${path}.${k}` : k),
+    );
+  }
+  return [];
+}
+
+const STOPWORDS = new Set(
+  "a an the i we you it its it's is are was were be been to of in on at for with and or but so that this they them he she my our your their not no do does did have has had can could would will just if as by from up out about i'm we're don't i'd i've there here what when which who how than then also still very really some any all one add new make made get got going need want see say said let take like use used".split(
+    ' ',
+  ),
+);
+
+const wordsOf = (text: string): string[] =>
+  text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s']/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+/**
+ * Wording that two texts share, or null. A run of four words counts when it holds at least three
+ * content words ("only external meetings are affected"); a run of six counts when it holds at
+ * least two. Runs of small words ("i think it was") and short common phrases are ignored.
+ */
+export function sharedPhrase(source: string, other: string): string | null {
+  const a = wordsOf(source);
+  const haystack = ` ${wordsOf(other).join(' ')} `;
+  for (const [length, content] of [
+    [4, 3],
+    [6, 2],
+  ] as const) {
+    for (let i = 0; i + length <= a.length; i++) {
+      const run = a.slice(i, i + length);
+      if (run.filter((w) => !STOPWORDS.has(w)).length < content) continue;
+      if (haystack.includes(` ${run.join(' ')} `)) return run.join(' ');
+    }
+  }
+  return null;
+}
+
 export function semanticIssues(s: ScenarioDefinition): string[] {
   const issues: string[] = [];
+  // The public brief is the same at every call stage, so a scenario written for a first contact has
+  // no earlier contact to state: it would be shown, and be wrong, if the call were set to a call-back.
+  if (s.callStage === 'first-contact' && s.publicBrief.previousContact) {
+    issues.push(
+      'publicBrief.previousContact: a first-contact scenario has no earlier contact to state (the brief is shown at every call stage)',
+    );
+  }
+  // Everything the customer or the trainee can read before a hidden fact is discovered. A hidden
+  // fact has to come out through discovery, so none of its distinctive tokens may appear here.
   const earlyText: [string, string][] = [
+    ['title', s.title],
+    ['listSummary', s.listSummary],
+    ['summary', s.summary],
     ['openingCore', s.openingCore],
-    ...s.knownFacts.map((f, i): [string, string] => [`knownFacts[${i}]`, f.text]),
-    ...(['low', 'medium', 'high'] as const).map((k): [string, string] => [
-      `impactVariants.${k}.summary`,
-      s.impactVariants[k].summary,
+    ['brief.situation', s.brief.situation],
+    ['brief.goal', s.brief.goal],
+    ['publicBrief.issue', s.publicBrief.issue],
+    ['publicBrief.objective', s.publicBrief.objective],
+    ...(['knownContext', 'previousContact', 'environment'] as const).flatMap(
+      (k): [string, string][] => {
+        const value = s.publicBrief[k];
+        return value ? [[`publicBrief.${k}`, value]] : [];
+      },
+    ),
+    ...(['low', 'medium', 'high'] as const).flatMap((k): [string, string][] => [
+      [`publicBrief.impact.${k}`, s.publicBrief.impact[k]],
+      [`impactVariants.${k}.summary`, s.impactVariants[k].summary],
     ]),
-    ...Object.entries(s.stageFrames).map(([k, v]): [string, string] => [
-      `stageFrames.${k}.opening`,
-      v.opening,
+    ...s.knownFacts.flatMap((f, i): [string, string][] => [
+      [`knownFacts[${i}]`, f.text],
+      ...(f.elaboration
+        ? [[`knownFacts[${i}].elaboration`, f.elaboration] as [string, string]]
+        : []),
+      ...(f.simple ? [[`knownFacts[${i}].simple`, f.simple] as [string, string]] : []),
     ]),
+    ...s.vagueFacts.flatMap((f, i): [string, string][] => [
+      [`vagueFacts[${i}]`, f.text],
+      ...(f.confirmedText
+        ? [[`vagueFacts[${i}].confirmedText`, f.confirmedText] as [string, string]]
+        : []),
+    ]),
+    ...s.checkableFacts.flatMap((f, i): [string, string][] => [
+      [`checkableFacts[${i}].checking`, f.checking],
+      [`checkableFacts[${i}]`, f.text],
+    ]),
+    ...s.unknownFacts.map((f, i): [string, string] => [`unknownFacts[${i}]`, f.text]),
+    ...s.irrelevantFacts.map((f, i): [string, string] => [`irrelevantFacts[${i}]`, f.text]),
+    ...Object.entries(s.stageFrames).flatMap(([k, v]): [string, string][] =>
+      v
+        ? [
+            [`stageFrames.${k}.opening`, v.opening],
+            [`stageFrames.${k}.brief`, v.brief],
+          ]
+        : [],
+    ),
+    ...s.expectedDiscoveryAreas.map((a, i): [string, string] => [
+      `expectedDiscoveryAreas[${i}]`,
+      a,
+    ]),
+    // Trainee-visible case history, and what the customer volunteers or says when asked about impact.
+    // (`previousTroubleshooting` and `recentChanges` are the case record: they may hold the truth,
+    // including what a hidden fact reveals. The engine withholds any note that restates a hidden
+    // fact until that fact has been earned, so they are not checked here.)
+    ...s.priorHistory.map((h, i): [string, string] => [`priorHistory[${i}]`, h.summary]),
+    ...s.incorrectAssumptions.map((a, i): [string, string] => [
+      `incorrectAssumptions[${i}]`,
+      a.statement,
+    ]),
+    ...(['low', 'medium', 'high'] as const).flatMap((k): [string, string][] => {
+      const { detail, deadline } = s.impactVariants[k];
+      return [
+        [`impactVariants.${k}.detail`, detail],
+        ...(deadline ? [[`impactVariants.${k}.deadline`, deadline] as [string, string]] : []),
+      ];
+    }),
   ];
+  // Every wording a hidden fact can have, including the versions for other impact levels.
+  const statementsOf = (fact: ScenarioDefinition['hiddenFacts'][number]) => {
+    const versions = [
+      ['', fact],
+      ...(['low', 'medium', 'high'] as const).flatMap((k) =>
+        fact.byImpact?.[k] ? [[`byImpact.${k}.`, fact.byImpact[k]] as const] : [],
+      ),
+    ] as const;
+    return versions.flatMap(([prefix, v]) =>
+      (['statement', 'partialStatement', 'statementTerse', 'statementSimple'] as const).flatMap(
+        (key): [string, string][] => {
+          const value = (v as Record<string, string | undefined>)[key];
+          return value ? [[`${prefix}${key}`, value]] : [];
+        },
+      ),
+    );
+  };
   for (const fact of s.hiddenFacts) {
-    for (const token of distinctiveTokens(fact.statement)) {
+    for (const [source, statement] of statementsOf(fact)) {
+      for (const token of distinctiveTokens(statement)) {
+        for (const [where, text] of earlyText) {
+          if (text.toLowerCase().includes(token)) {
+            issues.push(
+              `${s.id}: hidden fact "${fact.id}" ${source} token "${token}" leaks in ${where}`,
+            );
+          }
+        }
+      }
+      // Wording copied from a hidden fact into anything said or shown earlier gives it away even
+      // when it holds no number or code.
       for (const [where, text] of earlyText) {
-        if (text.toLowerCase().includes(token)) {
-          issues.push(`${s.id}: hidden fact "${fact.id}" token "${token}" leaks in ${where}`);
+        // Discovery areas are short topic labels ("Recent changes"), so only numbers and codes
+        // matter there.
+        if (where.startsWith('expectedDiscoveryAreas')) continue;
+        const shared = sharedPhrase(statement, text);
+        if (shared) {
+          issues.push(
+            `${s.id}: hidden fact "${fact.id}" ${source} is repeated ("${shared}") in ${where}`,
+          );
+        }
+      }
+    }
+    // A hint points at its own fact, but must not give away another one.
+    if (fact.hint) {
+      for (const other of s.hiddenFacts) {
+        if (other.id === fact.id) continue;
+        for (const [source, statement] of statementsOf(other)) {
+          const shared = sharedPhrase(statement, fact.hint);
+          const tokens = distinctiveTokens(statement).filter((t) =>
+            (fact.hint as string).toLowerCase().includes(t),
+          );
+          if (shared || tokens.length > 0) {
+            issues.push(
+              `${s.id}: the hint of "${fact.id}" gives away hidden fact "${other.id}" (${source})`,
+            );
+          }
         }
       }
     }
@@ -115,19 +311,46 @@ export function semanticIssues(s: ScenarioDefinition): string[] {
     }
   }
 
+  // Customers report symptoms in everyday words. A scenario never states product behaviour that
+  // has not been validated, so it carries no versions, KB numbers, error codes, commands, links
+  // or contact details.
+  for (const [label, pattern] of PRODUCT_CLAIM_PATTERNS) {
+    for (const [where, value] of allText(s)) {
+      if (pattern.test(value)) issues.push(`${s.id}: ${label} in ${where}`);
+    }
+  }
+
   // Every difficulty must leave a workable scenario.
+  const authoredTypes = new Set(s.curveballs.map((c) => c.type));
+  for (const type of s.allowedCurveballs) {
+    if (!authoredTypes.has(type) && !GENERIC_CURVEBALLS[type]) {
+      issues.push(`${s.id}: allowed curveball "${type}" needs an authored definition`);
+    }
+  }
+  if (!s.caseReference) {
+    issues.push(
+      `${s.id}: caseReference is needed, because the call stage can be changed to a follow-up, escalated or closure call`,
+    );
+  }
+
+  // Every difficulty must leave a workable scenario (at the scenario's own call stage).
   for (const difficulty of ['starter', 'standard', 'challenge'] as Difficulty[]) {
     const facts = s.hiddenFacts.filter(
-      (f) => DIFFICULTY_RANK[f.minDifficulty] <= DIFFICULTY_RANK[difficulty],
+      (f) =>
+        DIFFICULTY_RANK[f.minDifficulty] <= DIFFICULTY_RANK[difficulty] &&
+        (!f.stages || f.stages.includes(s.callStage)),
     );
     if (!facts.some((f) => f.importance !== 'helpful')) {
       issues.push(`${s.id}: no critical or important hidden fact at ${difficulty} difficulty`);
     }
   }
 
-  const aliveIntents = new Set(s.knownFacts.flatMap((f) => f.intents));
-  if (!aliveIntents.has('problem_description')) {
-    issues.push(`${s.id}: no known fact answers problem_description`);
+  // Whatever stage the call is configured for, the customer can still say what the problem is.
+  for (const stage of CALL_STAGES) {
+    const known = s.knownFacts.filter((f) => !f.stages || f.stages.includes(stage));
+    if (!known.some((f) => f.intents.includes('problem_description'))) {
+      issues.push(`${s.id}: no known fact answers problem_description at the ${stage} stage`);
+    }
   }
   if (s.coachingFocus.length === 0) issues.push(`${s.id}: coachingFocus is empty`);
   return issues;

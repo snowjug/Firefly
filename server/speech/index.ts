@@ -25,8 +25,11 @@ export function createNoneSpeechProvider(notice: string | null = null): SpeechPr
       synthesize: false,
       expressiveStyles: false,
       notice,
+      voices: [],
       limits: SPEECH_LIMITS,
     }),
+    // Nothing speaks, so there is no voice to choose between.
+    listVoices: () => [],
     transcribe: () =>
       Promise.reject(new SpeechError('speech_unavailable', SPEECH_OFF_MESSAGES.transcribe, false)),
     synthesize: () =>

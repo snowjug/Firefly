@@ -3,14 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
 import { api } from '../../lib/api.ts';
 import type * as ApiModule from '../../lib/api.ts';
-import { groupByIssue } from './catalogue.ts';
+import { sortScenarios } from './catalogue.ts';
 import type * as ListModule from './ScenarioList.tsx';
 import { publicScenarios } from './testing/fixtures.ts';
 import { mockApi, renderApp, stubViewport } from './testing/harness.tsx';
 
 // The workspace tidies its address once the scenarios have arrived (it adds the scenario it
 // selected). That tidying was worked out in the render that showed the list and ran a moment later,
-// in an effect. A choice made in between (a filter, a search, a scenario) was then overwritten by the
+// in an effect. A choice made in between (a filter or a scenario) was then overwritten by the
 // tidying of a screen the person had already moved on from, and silently lost.
 //
 // These tests make the choice at the one moment that is hard to hit by hand: while the list is being
@@ -20,13 +20,7 @@ vi.mock('../../lib/api.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
   return {
     ...actual,
-    api: {
-      config: vi.fn(),
-      scenarios: vi.fn(),
-      scenario: vi.fn(),
-      createSession: vi.fn(),
-      listSessions: vi.fn(),
-    },
+    api: { config: vi.fn(), scenarios: vi.fn(), scenario: vi.fn(), createSession: vi.fn() },
   };
 });
 
@@ -48,8 +42,8 @@ vi.mock('./ScenarioList.tsx', async (importOriginal) => {
 });
 
 const scenarios = publicScenarios();
-const groups = groupByIssue(scenarios);
-const second = groups[0]?.scenarios[1] as PublicScenarioDTO;
+const sorted = sortScenarios(scenarios);
+const second = sorted[1] as PublicScenarioDTO;
 
 beforeEach(() => {
   mockApi();
@@ -78,38 +72,23 @@ async function arriveWhile(choice: () => void) {
 /** Lets anything left over from the tidying happen, then looks again. */
 const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 60)));
 
-const list = () => screen.getByRole('group', { name: 'Choose a scenario' });
+const list = () => screen.getByRole('group', { name: 'Scenarios' });
 
 describe('a choice made as the list arrives is kept', () => {
   it('a filter', async () => {
     const app = await arriveWhile(() => {
-      const issue = screen.getByRole('combobox', { name: 'Issue type' }) as HTMLSelectElement;
-      issue.value = 'how-to';
-      issue.dispatchEvent(new Event('change', { bubbles: true }));
+      const product = screen.getByRole('combobox', { name: 'Product' }) as HTMLSelectElement;
+      product.value = 'azure';
+      product.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    await waitFor(() => expect(app.query().get('f_issue')).toBe('how-to'));
+    await waitFor(() => expect(app.query().get('f_product')).toBe('azure'));
     await settle();
-    expect(app.query().get('f_issue')).toBe('how-to');
-    expect(screen.getByRole('combobox', { name: 'Issue type' })).toHaveValue('how-to');
+    expect(app.query().get('f_product')).toBe('azure');
+    expect(screen.getByRole('combobox', { name: 'Product' })).toHaveValue('azure');
     expect(within(list()).getAllByRole('radio')).toHaveLength(
-      scenarios.filter((scenario) => scenario.issueType === 'how-to').length,
+      scenarios.filter((scenario) => scenario.product.id === 'azure').length,
     );
-  });
-
-  it('a search', async () => {
-    const app = await arriveWhile(() => {
-      const search = screen.getByRole('searchbox', { name: 'Search scenarios' });
-      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-      setValue?.call(search, 'Lindqvist');
-      search.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
-    await waitFor(() => expect(app.query().get('q')).toBe('Lindqvist'));
-    await settle();
-    expect(app.query().get('q')).toBe('Lindqvist');
-    expect(screen.getByRole('searchbox', { name: 'Search scenarios' })).toHaveValue('Lindqvist');
-    expect(within(list()).getAllByRole('radio')).toHaveLength(1);
   });
 
   it('a scenario', async () => {
@@ -126,6 +105,6 @@ describe('a choice made as the list arrives is kept', () => {
 
   it('and the address is still tidied afterwards when nothing was chosen', async () => {
     const app = await arriveWhile(() => undefined);
-    await waitFor(() => expect(app.query().get('scenario')).toBe(groups[0]?.scenarios[0]?.id));
+    await waitFor(() => expect(app.query().get('scenario')).toBe(sorted[0]?.id));
   });
 });

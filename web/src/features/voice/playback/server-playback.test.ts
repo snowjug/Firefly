@@ -211,6 +211,32 @@ describe('server playback', () => {
     expect(env.urls.created).toBe(0);
   });
 
+  it('can be asked again after a voice could not be made: the same stored turn, spoken once', async () => {
+    let calls = 0;
+    const { playback, speakTurn } = setup({}, async () => {
+      if (++calls === 1) throw new Error('speech failed');
+      return turn();
+    });
+    const first = listener();
+    playback.play(request(3), first.handlers);
+    await settle();
+    expect(first.log).toEqual(['failure:generation']);
+
+    const again = listener();
+    playback.play(request(3), again.handlers);
+    await settle();
+    expect(again.log).toEqual(['details', 'start']);
+    // Both times it asked for the stored turn by its place in the call: the browser sends no words, so
+    // asking again cannot make a second turn.
+    expect(speakTurn.mock.calls.map((call) => call.slice(0, 3))).toEqual([
+      ['session-12345678', 3, 'en-GB'],
+      ['session-12345678', 3, 'en-GB'],
+    ]);
+    env.element.latest().finish();
+    expect(again.log).toEqual(['details', 'start', 'end']);
+    expect(env.urls.live()).toHaveLength(0);
+  });
+
   it('gives up on a voice that takes too long, and aborts the request', async () => {
     let seen: AbortSignal | undefined;
     const { playback } = setup({}, (_s, _t, _l, signal) => {
@@ -327,5 +353,222 @@ describe('server playback', () => {
     playback.play(request(), handlers);
     await settle();
     expect(log).toEqual(['failure:playback']);
+  });
+
+  describe('the chosen voice', () => {
+    it('asks for the voice the trainee chose, and only then sends one', async () => {
+      const { playback, speakTurn } = setup();
+      playback.play({ ...request(3), voice: 'voice-c' }, listener().handlers);
+      await settle();
+      expect(speakTurn).toHaveBeenLastCalledWith(
+        'session-12345678',
+        3,
+        'en-GB',
+        expect.any(AbortSignal),
+        { voice: 'voice-c' },
+      );
+      // No choice: the call is exactly what it was before voices could be chosen (four arguments).
+      playback.play(request(5), listener().handlers);
+      await settle();
+      expect(speakTurn.mock.lastCall).toHaveLength(4);
+    });
+
+    it('does not play kept audio made for a different voice', async () => {
+      const { playback, speakTurn } = setup();
+      env.element.policy = 'block';
+      playback.play({ ...request(4), voice: 'voice-a' }, listener().handlers);
+      await settle();
+      env.element.policy = 'allow';
+      const again = listener();
+      playback.play({ ...request(4), voice: 'voice-b' }, again.handlers);
+      await settle();
+      expect(speakTurn).toHaveBeenCalledTimes(2);
+      expect(again.log).toEqual(['details', 'start']);
+      // The same voice again does reuse what was kept.
+      env.element.policy = 'block';
+      playback.play({ ...request(6), voice: 'voice-b' }, listener().handlers);
+      await settle();
+      env.element.policy = 'allow';
+      playback.play({ ...request(6), voice: 'voice-b' }, listener().handlers);
+      await settle();
+      expect(speakTurn).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('stopping tells the call whether the customer was cut off', () => {
+    it('says so, and how much was heard, when the voice was audible', async () => {
+      const { playback } = setup();
+      const { handlers } = listener();
+      const job = playback.play(request(), handlers);
+      await settle();
+      await vi.advanceTimersByTimeAsync(1200);
+      const stopped = job.stop();
+      expect(stopped.interrupted).toBe(true);
+      expect(stopped.playedMs).toBeGreaterThanOrEqual(1100);
+      expect(stopped.playedMs).toBeLessThanOrEqual(1300);
+      // The same answer again, and nothing more is reported.
+      expect(job.stop()).toEqual(stopped);
+    });
+
+    it('prefers what the audio element says it has played', async () => {
+      const { playback } = setup();
+      const job = playback.play(request(), listener().handlers);
+      await settle();
+      env.element.latest().currentTime = 2.5;
+      expect(job.stop()).toEqual({ interrupted: true, playedMs: 2500 });
+    });
+
+    it('says the customer was not cut off when the voice had not started, or had finished', async () => {
+      const { playback } = setup();
+      let release: (value: SpokenTurn) => void = () => undefined;
+      const slow = createServerPlayback({
+        speakTurn: () => new Promise<SpokenTurn>((resolve) => (release = resolve)),
+      });
+      const early = slow.play(request(), listener().handlers);
+      expect(early.stop()).toEqual({ interrupted: false, playedMs: 0 });
+      release(turn());
+      await settle();
+      slow.dispose();
+
+      const finished = playback.play(request(), listener().handlers);
+      await settle();
+      await vi.advanceTimersByTimeAsync(800);
+      env.element.latest().finish();
+      const result = finished.stop();
+      expect(result.interrupted).toBe(false);
+      expect(result.playedMs).toBeGreaterThan(0);
+    });
+
+    it('stops the voice it replaces, and that stop says the customer was cut off', async () => {
+      const { playback } = setup();
+      const first = listener();
+      playback.play(request(2), first.handlers);
+      await settle();
+      const second = playback.play(request(4), listener().handlers);
+      await settle();
+      expect(first.log).toEqual(['details', 'start']);
+      expect(second.stop().interrupted).toBe(true);
+    });
+  });
+
+  // Regression: "Test voice" primes the playback and asks for a reply in the same breath. The silent
+  // clip that unlocks the element is 100 ms long and a real element ends it by itself (the fake does
+  // too), which used to finish the reply that had only just been asked for, swallow its failure and
+  // let its audio play while the page looked idle.
+  describe('the unlock clip belongs to no reply', () => {
+    const CLIP_MS = 100;
+    const pending = () => new Promise<SpokenTurn>(() => undefined);
+
+    it('does not let the clip end, time or fail a reply that is still being fetched, then plays it as itself', async () => {
+      let answer: (spoken: SpokenTurn) => void = () => undefined;
+      const { playback } = setup(
+        {},
+        () => new Promise<SpokenTurn>((resolve) => (answer = resolve)),
+      );
+      const { log, durations, handlers } = listener();
+      playback.prime();
+      playback.play(request(), handlers);
+      // Well past the clip's end, with the reply still on its way.
+      await vi.advanceTimersByTimeAsync(CLIP_MS * 3);
+      expect(log).toEqual([]);
+      expect(durations).toEqual([]);
+
+      answer(turn());
+      await settle();
+      expect(log).toEqual(['details', 'start']);
+      expect(durations).toEqual([]);
+      // It ends when its own audio does, and not before.
+      await vi.advanceTimersByTimeAsync(CLIP_MS * 3);
+      expect(log).toEqual(['details', 'start']);
+      env.element.latest().finish();
+      expect(log).toEqual(['details', 'start', 'end']);
+      expect(env.urls.live()).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('still reports a reply that could not be made, when the failure arrives after the clip has ended', async () => {
+      let refuse: (error: unknown) => void = () => undefined;
+      const { playback } = setup(
+        {},
+        () => new Promise<SpokenTurn>((_resolve, reject) => (refuse = reject)),
+      );
+      const { log, handlers } = listener();
+      playback.prime();
+      playback.play(request(), handlers);
+      await vi.advanceTimersByTimeAsync(441);
+      expect(log).toEqual([]);
+      refuse(new Error('speech failed'));
+      await settle();
+      expect(log).toEqual(['failure:generation']);
+      expect(env.urls.live()).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('lets go of the clip as soon as it has started, even while a reply is being fetched', async () => {
+      const { playback } = setup({}, pending);
+      playback.prime();
+      playback.play(request(), listener().handlers);
+      await settle();
+      // The clip's own URL is revoked and the element is back at rest, so nothing is left to end.
+      expect(env.urls.live()).toHaveLength(0);
+      expect(env.element.latest().src).toBe('');
+      expect(env.element.latest().paused).toBe(true);
+      playback.dispose();
+    });
+
+    it('ignores whatever the element reports while a reply is only being fetched', async () => {
+      const { playback } = setup({}, pending);
+      const { log, durations, handlers } = listener();
+      playback.prime();
+      playback.play(request(), handlers);
+      await settle();
+      const element = env.element.latest();
+      element.setDuration(CLIP_MS / 1000);
+      element.breakDown();
+      element.finish();
+      expect(log).toEqual([]);
+      expect(durations).toEqual([]);
+      playback.dispose();
+    });
+
+    it('does not cut a reply that took the element over before the clip reported that it had started', async () => {
+      const { playback } = setup();
+      // The clip's play() is left pending, so the reply arrives while it still has not started.
+      env.element.policy = 'hang';
+      playback.prime();
+      env.element.policy = 'allow';
+      const { log, handlers } = listener();
+      playback.play(request(), handlers);
+      await settle();
+      expect(log).toEqual(['details', 'start']);
+
+      env.element.latest().begin();
+      await settle();
+      expect(log).toEqual(['details', 'start']);
+      expect(env.element.latest().paused).toBe(false);
+      expect(env.element.latest().src).toMatch(/^blob:fake\//);
+      env.element.latest().finish();
+      expect(log).toEqual(['details', 'start', 'end']);
+    });
+
+    it('is the same on a warm page: an element primed long ago, then a click that primes again and asks at once', async () => {
+      let answer: (spoken: SpokenTurn) => void = () => undefined;
+      const { playback } = setup(
+        {},
+        () => new Promise<SpokenTurn>((resolve) => (answer = resolve)),
+      );
+      playback.prime();
+      await vi.advanceTimersByTimeAsync(1000);
+      playback.prime();
+      const { log, handlers } = listener();
+      playback.play(request(), handlers);
+      await vi.advanceTimersByTimeAsync(CLIP_MS * 2);
+      expect(log).toEqual([]);
+      answer(turn());
+      await settle();
+      expect(log).toEqual(['details', 'start']);
+      env.element.latest().finish();
+      expect(log).toEqual(['details', 'start', 'end']);
+    });
   });
 });

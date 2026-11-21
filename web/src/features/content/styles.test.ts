@@ -28,8 +28,7 @@ describe('the public pages stylesheets', () => {
       expect.arrayContaining([
         'web/src/features/landing/landing.css',
         'web/src/features/landing/hero.css',
-        'web/src/features/landing/product-preview.css',
-        'web/src/features/landing/coaching-preview.css',
+        'web/src/features/landing/call-preview.css',
         'web/src/features/content/content.css',
       ]),
     );

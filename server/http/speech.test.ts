@@ -1,12 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import net from 'node:net';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { ScenarioDefinitionSchema } from '#shared/domain/scenario.ts';
-import { SPEECH_RESPONSE_HEADERS, type SpeechLanguage } from '#shared/domain/speech.ts';
+import { SPEECH_LANGUAGES, type SpeechLanguage } from '#shared/domain/speech.ts';
+import { VOICE_IDS, VOICE_PREVIEW_TEXT } from '#shared/domain/voices.ts';
+import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 import { createLogger } from '../log.ts';
-import exemplar from '../scenarios/library/locked-out-after-password-reset.ts';
 import { createAzureSpeechProvider, SPEECH_MESSAGES } from '../speech/azure.ts';
-import { speakerFor } from '../speech/direction.ts';
 import {
   FAKE_PROVIDER_ERROR_TEXT,
   FAKE_RECOGNISED_TEXT,
@@ -16,24 +14,33 @@ import {
   type Step,
 } from '../speech/fake-azure-speech-server.ts';
 import { createNoneSpeechProvider, createSpeechProvider } from '../speech/index.ts';
-import { createMockSpeechProvider, MOCK_UTTERANCES } from '../speech/mock.ts';
+import { createMockSpeechProvider, MOCK_UTTERANCES, mockVoiceOptions } from '../speech/mock.ts';
 import {
-  loadSpeechConfig,
-  SpeechError,
-  type SpeechErrorCode,
-  type SpeechProvider,
-  type SynthesizeRequest,
-  type TranscribeRequest,
-} from '../speech/types.ts';
-import { cleanText, escapeXml } from '../speech/voices.ts';
+  createSpeechTestApp,
+  type FakeTurn,
+  type NewFakeCall,
+  type SpeechTestApp,
+  type SpeechTestClient,
+} from '../speech/testing/app-harness.ts';
+import { failingSpeech, flakySpeech, recordingSpeech } from '../speech/testing/fakes.ts';
+import { loadSpeechConfig, SpeechError, type SpeechErrorCode } from '../speech/types.ts';
+import {
+  cleanText,
+  describeVoices,
+  escapeXml,
+  voiceOptions,
+  VOICE_CATALOGUE,
+} from '../speech/voices.ts';
 import { encodeWav, validateWav } from '../speech/wav.ts';
-import { createTestApp, type TestApp, type TestClient } from './harness.ts';
 
-// The two speech endpoints, end to end: the real HTTP app with the real services, with the scripted
-// demo provider, with speech switched off, and with the real Azure client talking to a local fake.
+// The speech endpoints, end to end: the real HTTP app with the speech provider in front of an
+// in-memory stand-in for the one thing they ask of the session service (a customer turn's stored
+// words). So these tests hold no scenario and do not depend on the scenario library or its schema.
+// The scripted demo provider, speech switched off, and the real Azure client talking to a local
+// fake of Azure's REST endpoints all stand in for the speech service: none of this is real
+// speech recognition, a real voice, or a call to the live service.
 
-const SCENARIO = 'locked-out-after-password-reset';
-const SPEECH_KEYS = ['provider', 'voice', 'style'] as const;
+const SPEECH_KEYS = ['provider', 'voice', 'style', 'voice-id'] as const;
 /** A key the fake service does not accept. */
 const WRONG_KEY = 'a-wrong-key-for-tests';
 
@@ -41,38 +48,11 @@ const bytes = (buffer: Buffer) =>
   new Uint8Array(buffer.buffer as ArrayBuffer, buffer.byteOffset, buffer.byteLength);
 const recording = (seconds: number) => encodeWav(Buffer.alloc(Math.round(seconds * 32000), 1));
 
-/** Wraps a provider and remembers what the server asked of it. */
-function spy(inner: SpeechProvider) {
-  const spoken: SynthesizeRequest[] = [];
-  const heard: TranscribeRequest[] = [];
-  const provider: SpeechProvider = {
-    ...inner,
-    transcribe: (request, signal) => {
-      heard.push(request);
-      return inner.transcribe(request, signal);
-    },
-    synthesize: (request, signal) => {
-      spoken.push(request);
-      return inner.synthesize(request, signal);
-    },
-  };
-  return { provider, spoken, heard };
-}
-
-/** A provider whose every call fails in the given way. */
-const failing = (code: SpeechErrorCode, retryable: boolean): SpeechProvider => {
-  const fail = () =>
-    Promise.reject(
-      new SpeechError(code, `Message for ${code}.`, retryable, new Error('inner detail')),
-    );
-  return { ...createMockSpeechProvider(), transcribe: fail, synthesize: fail };
-};
-
 async function withApp<T>(
-  options: Parameters<typeof createTestApp>[0],
-  run: (app: TestApp) => Promise<T>,
+  options: Parameters<typeof createSpeechTestApp>[0],
+  run: (app: SpeechTestApp) => Promise<T>,
 ): Promise<T> {
-  const app = await createTestApp(options);
+  const app = await createSpeechTestApp(options);
   try {
     return await run(app);
   } finally {
@@ -80,16 +60,15 @@ async function withApp<T>(
   }
 }
 
-async function startCall(client: TestClient, overrides: Record<string, unknown> = {}) {
-  const res = await client.post('/api/sessions', { scenarioId: SCENARIO, overrides });
-  expect(res.status).toBe(201);
-  return { id: res.body.session.id as string, opening: res.body.session.turns[0].text as string };
-}
+const startCall = (app: SpeechTestApp, client: SpeechTestClient, options?: NewFakeCall) =>
+  app.startCall(client, options);
 
-const say = (client: TestClient, id: string, text: string, inputMode = 'text') =>
-  client.post(`/api/sessions/${id}/messages`, { text, clientMessageId: randomUUID(), inputMode });
-
-const transcribe = (client: TestClient, body: Buffer | string, query = '', type = 'audio/wav') =>
+const transcribe = (
+  client: SpeechTestClient,
+  body: Buffer | string,
+  query = '',
+  type = 'audio/wav',
+) =>
   client.raw(`/api/speech/transcribe${query}`, {
     method: 'POST',
     headers: type ? { 'content-type': type } : {},
@@ -97,13 +76,20 @@ const transcribe = (client: TestClient, body: Buffer | string, query = '', type 
   });
 
 const speakTurn = (
-  client: TestClient,
+  client: SpeechTestClient,
   id: string,
   index: number | string,
   query = '',
   body = '{}',
 ) =>
   client.raw(`/api/sessions/${id}/turns/${index}/speech${query}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body,
+  });
+
+const preview = (client: SpeechTestClient, query = '', body = '{}') =>
+  client.raw(`/api/speech/preview${query}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body,
@@ -116,6 +102,18 @@ async function errorOf(res: Response) {
   expect(Object.keys(body)).toEqual(['error']);
   return body.error;
 }
+
+const customer = (index: number, text: string, mood: TemperatureBandId = 'calm'): FakeTurn => ({
+  index,
+  role: 'customer',
+  text,
+  mood,
+});
+const trainee = (index: number, text = 'Trainee words.'): FakeTurn => ({
+  index,
+  role: 'trainee',
+  text,
+});
 
 // ---------------------------------------------------------------------------------------
 
@@ -137,7 +135,7 @@ describe('what /api/config and /api/health say about speech', () => {
       timeoutMs: 1000,
     });
 
-  it('says speech is not configured unless it is switched on', async () => {
+  it('says speech is not configured unless it is switched on, and offers no voices', async () => {
     await withApp({}, async (app) => {
       const client = app.client();
       expect((await client.get('/api/config')).body.speech).toEqual({
@@ -148,16 +146,18 @@ describe('what /api/config and /api/health say about speech', () => {
         synthesize: false,
         expressiveStyles: false,
         notice: null,
+        voices: [],
         limits,
       });
       expect((await client.get('/api/health')).body.speech).toEqual({ kind: 'none' });
     });
   });
 
-  it('labels the scripted provider as a demonstration', async () => {
+  it('labels the scripted provider as a demonstration, and its four voices as one placeholder sound', async () => {
     await withApp({ speech: createMockSpeechProvider() }, async (app) => {
       const client = app.client();
-      expect((await client.get('/api/config')).body.speech).toEqual({
+      const { speech } = (await client.get('/api/config')).body;
+      expect(speech).toEqual({
         provider: 'mock',
         label: 'Demo speech (scripted)',
         demo: true,
@@ -165,13 +165,16 @@ describe('what /api/config and /api/health say about speech', () => {
         synthesize: true,
         expressiveStyles: false,
         notice: null,
+        voices: describeVoices(mockVoiceOptions),
         limits,
       });
+      expect(speech.voices.map((voice: { id: string }) => voice.id)).toEqual([...VOICE_IDS]);
+      expect(speech.voices[1].languages['en-GB']).toEqual({ voice: 'shared', styles: false });
       expect((await client.get('/api/health')).body.speech).toEqual({ kind: 'mock' });
     });
   });
 
-  it('reports Azure AI Speech without a trace of the key or where it lives', async () => {
+  it('reports Azure AI Speech with its four neutral voices, and without a trace of the key, where it lives or any voice name', async () => {
     await withApp({ speech: azure() }, async (app) => {
       const client = app.client();
       const config = await client.get('/api/config');
@@ -183,8 +186,19 @@ describe('what /api/config and /api/health say about speech', () => {
         synthesize: true,
         expressiveStyles: false,
         notice: null,
+        voices: describeVoices(voiceOptions),
         limits,
       });
+      const { voices } = config.body.speech;
+      expect(voices.map((voice: { label: string }) => voice.label)).toEqual([
+        'Voice A - Warm',
+        'Voice B - Direct',
+        'Voice C - Measured',
+        'Voice D - Concise',
+      ]);
+      // Ireland has two standard voices: the third and fourth choices share them.
+      expect(voices[2].languages['en-IE']).toEqual({ voice: 'shared', styles: false });
+      expect(voices[2].languages['en-US']).toEqual({ voice: 'own', styles: true });
       const health = await client.get('/api/health');
       expect(health.body.speech).toEqual({ kind: 'azure-speech' });
       for (const res of [config, health]) {
@@ -192,8 +206,10 @@ describe('what /api/config and /api/health say about speech', () => {
         expect(text).not.toContain(fake.key);
         expect(text).not.toContain(fake.origin);
         expect(text).not.toContain('127.0.0.1');
+        expect(text).not.toMatch(/[A-Z][a-z]+Neural/);
         expect(JSON.stringify([...res.headers])).not.toContain(fake.key);
       }
+      expect(JSON.stringify(voices)).not.toMatch(/female|male|speaker/i);
     });
   });
 
@@ -249,7 +265,7 @@ describe('POST /api/speech/transcribe', () => {
   });
 
   it('reads the language from the query, defaulting to British English', async () => {
-    const { provider, heard } = spy(createMockSpeechProvider());
+    const { provider, heard } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const client = app.client();
       await transcribe(client, recording(1));
@@ -270,7 +286,7 @@ describe('POST /api/speech/transcribe', () => {
   });
 
   it('refuses a language that is not offered, without calling the provider', async () => {
-    const { provider, heard } = spy(createMockSpeechProvider());
+    const { provider, heard } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       for (const lang of ['fr-FR', 'en', 'EN-GB', 'en-GB%20', '']) {
         const res = await transcribe(app.client(), recording(1), `?lang=${lang}`);
@@ -302,7 +318,7 @@ describe('POST /api/speech/transcribe', () => {
   });
 
   it('refuses any other type with 415, and never reads or forwards the body', async () => {
-    const { provider, heard } = spy(createMockSpeechProvider());
+    const { provider, heard } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       for (const type of [
         'application/json',
@@ -325,7 +341,7 @@ describe('POST /api/speech/transcribe', () => {
   });
 
   it('refuses an upload over 1.5 MB with 413', async () => {
-    const { provider, heard } = spy(createMockSpeechProvider());
+    const { provider, heard } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const client = app.client();
       const res = await transcribe(client, Buffer.alloc(1_500_001));
@@ -375,7 +391,7 @@ describe('POST /api/speech/transcribe', () => {
       ['a cut-off file', recording(2).subarray(0, 20_000), 'The recording looks incomplete.'],
       ['a header with no audio', recording(2).subarray(0, 44), 'The recording looks incomplete.'],
     ];
-    const { provider, heard } = spy(createMockSpeechProvider());
+    const { provider, heard } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       for (const [label, body, message] of cases) {
         const res = await transcribe(app.client(), body);
@@ -432,7 +448,7 @@ describe('POST /api/speech/transcribe', () => {
       ['speech_rate_limited', 429, true],
     ];
     for (const [code, status, retryable] of cases) {
-      await withApp({ speech: failing(code, retryable) }, async (app) => {
+      await withApp({ speech: failingSpeech(code, retryable) }, async (app) => {
         const res = await transcribe(app.client(), recording(1));
         expect(res.status, code).toBe(status);
         const body = await res.json();
@@ -443,13 +459,72 @@ describe('POST /api/speech/transcribe', () => {
   });
 });
 
+describe('the recording is released as soon as the provider has finished with it', () => {
+  it('zeroes the bytes it handed to the provider, so no audio lingers in the server’s memory', async () => {
+    const { provider, heard, handed } = recordingSpeech();
+    await withApp({ speech: provider }, async (app) => {
+      expect((await transcribe(app.client(), recording(1))).status).toBe(200);
+      // The provider received real audio...
+      expect(heard[0]?.audio.subarray(0, 4).toString('latin1')).toBe('RIFF');
+      expect(heard[0]?.audio.some((byte) => byte !== 0)).toBe(true);
+      // ...and once it had finished with it, the very same bytes were zeroed.
+      const kept = handed[0] as Buffer;
+      expect(kept.length).toBeGreaterThan(32000);
+      expect(kept.every((byte) => byte === 0)).toBe(true);
+    });
+  });
+
+  it('does the same when the provider fails, and when the caller gives up', async () => {
+    const seen: Buffer[] = [];
+    const failing = {
+      ...createMockSpeechProvider(),
+      transcribe: (request: { audio: Buffer }) => {
+        seen.push(request.audio);
+        return Promise.reject(new SpeechError('speech_failed', 'Nope.', true));
+      },
+    };
+    await withApp({ speech: failing }, async (app) => {
+      expect((await transcribe(app.client(), recording(1))).status).toBe(502);
+    });
+    const gone = {
+      ...createMockSpeechProvider(),
+      transcribe: (request: { audio: Buffer }, signal?: AbortSignal) => {
+        seen.push(request.audio);
+        return new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener('abort', () =>
+            reject(new DOMException('Cancelled', 'AbortError')),
+          );
+        });
+      },
+    };
+    await withApp({ speech: gone }, async (app) => {
+      const controller = new AbortController();
+      const pending = app
+        .client()
+        .raw('/api/speech/transcribe', {
+          method: 'POST',
+          headers: { 'content-type': 'audio/wav' },
+          body: bytes(recording(1)),
+          signal: controller.signal,
+        })
+        .catch(() => null);
+      while (seen.length < 2) await new Promise((resolve) => setTimeout(resolve, 10));
+      controller.abort();
+      await pending;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    expect(seen).toHaveLength(2);
+    for (const audio of seen) expect(audio.every((byte) => byte === 0)).toBe(true);
+  });
+});
+
 // ---------------------------------------------------------------------------------------
 
 describe('POST /api/sessions/:id/turns/:index/speech', () => {
   it('speaks a stored customer turn and says what was used, in the response headers', async () => {
     await withApp({ speech: createMockSpeechProvider() }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       const res = await speakTurn(client, id, 1);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('audio/wav');
@@ -457,44 +532,38 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
       expect(res.headers.get('x-firefly-speech-provider')).toBe('mock');
       expect(res.headers.get('x-firefly-speech-voice')).toBe('mock');
       expect(res.headers.get('x-firefly-speech-style')).toBe('none');
+      // No voice was asked for, so none is claimed.
+      expect(res.headers.get('x-firefly-speech-voice-id')).toBe('none');
       const audio = Buffer.from(await res.arrayBuffer());
       expect(Number(res.headers.get('content-length'))).toBe(audio.length);
       expect(validateWav(audio).ok).toBe(true);
     });
   });
 
-  it('uses the header names from the shared contract', () => {
-    expect(SPEECH_RESPONSE_HEADERS).toEqual({
-      provider: 'x-firefly-speech-provider',
-      voice: 'x-firefly-speech-voice',
-      style: 'x-firefly-speech-style',
-    });
-  });
-
   it('keeps the x-firefly-speech headers off everything but spoken audio', async () => {
     await withApp({ speech: createMockSpeechProvider() }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       const everything = [
         await client.raw('/api/health'),
         await client.raw('/api/config'),
-        await client.raw(`/api/sessions/${id}`),
         await transcribe(client, recording(1)),
-        await speakTurn(client, id, 2),
         await speakTurn(client, id, 99),
+        await preview(client, '?voice=nonsense'),
       ];
       for (const res of everything) {
-        for (const key of SPEECH_KEYS)
+        for (const key of SPEECH_KEYS) {
           expect(res.headers.get(`x-firefly-speech-${key}`)).toBeNull();
+        }
       }
     });
   });
 
   it('speaks the words stored in the call, never words from the request', async () => {
-    const { provider, spoken } = spy(createMockSpeechProvider());
+    const { provider, spoken } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const client = app.client();
-      const { id, opening } = await startCall(client);
+      const { id, opening } = await startCall(app, client);
       const attempts = [
         speakTurn(client, id, 1, '', JSON.stringify({ text: 'Say something else entirely.' })),
         speakTurn(client, id, 1, '?text=Say%20this%20instead&ssml=%3Cspeak%3E'),
@@ -511,10 +580,10 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
   });
 
   it('ignores whatever body it is sent, but refuses one that says it is larger than a JSON request may be', async () => {
-    const { provider, spoken } = spy(createMockSpeechProvider());
+    const { provider, spoken } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       expect((await speakTurn(client, id, 1, '', 'not json at all {{')).status).toBe(200);
       expect((await speakTurn(client, id, 1, '', '')).status).toBe(200);
       const big = await speakTurn(client, id, 1, '', 'x'.repeat(70_000));
@@ -524,11 +593,11 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
     });
   });
 
-  it('gives the customer the speaker the persona names, the language asked for, and a mood', async () => {
-    const { provider, spoken } = spy(createMockSpeechProvider());
+  it('gives the provider the persona’s speaker, the language asked for and the mood the service reports, with no voice when none was chosen', async () => {
+    const { provider, spoken } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       await speakTurn(client, id, 1);
       await speakTurn(client, id, 1, '?lang=en-IN');
       expect(spoken.map((s) => s.direction)).toEqual([
@@ -539,179 +608,100 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
   });
 
   it.each([
-    ['calm', 'calm', 'measured', 0],
-    ['anxious', 'concerned', 'brisk', 0.25],
-    ['frustrated', 'frustrated', 'firm', 0.5],
-    ['angry', 'angry', 'firm', 0.75],
-  ] as const)(
-    'opens a customer who starts %s in the %s mood',
-    async (startingTemperature, mood, pace, intensity) => {
-      const { provider, spoken } = spy(createMockSpeechProvider());
-      await withApp({ speech: provider }, async (app) => {
-        const client = app.client();
-        const { id } = await startCall(client, { startingTemperature });
-        expect((await speakTurn(client, id, 1)).status).toBe(200);
-        expect(spoken[0]?.direction).toMatchObject({ mood, pace, intensity });
-      });
-    },
-  );
-
-  it('follows the customer as the call heats up and cools down', async () => {
-    const { provider, spoken } = spy(createMockSpeechProvider());
+    ['calm', 'measured', 0],
+    ['concerned', 'brisk', 0.25],
+    ['frustrated', 'firm', 0.5],
+    ['angry', 'firm', 0.75],
+    ['escalating', 'firm', 1],
+  ] as const)('speaks a customer in the %s mood at a %s pace', async (mood, pace, intensity) => {
+    const { provider, spoken } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client, { startingTemperature: 'angry' });
-      // No messages are sent here: the turns and the changes are written directly, for an exact story.
-      const trainee = (idx: number) =>
-        app.repo.insertTurn(id, {
-          idx,
-          role: 'trainee',
-          text: 'Trainee words.',
-          source: 'trainee',
-          inputMode: 'text',
-          clientMessageId: `trainee-${idx}`,
-          classification: null,
-        });
-      const customer = (idx: number) =>
-        app.repo.insertTurn(id, {
-          idx,
-          role: 'customer',
-          text: `Customer words ${idx}.`,
-          source: 'demo',
-          inputMode: 'text',
-          clientMessageId: null,
-          classification: null,
-        });
-      const heat = (turnIndex: number, previous: number, next: number) =>
-        app.repo.insertStateEvents(id, [
-          {
-            turnIndex,
-            key: 'temperature',
-            previous,
-            next,
-            delta: next - previous,
-            category: 'empathy',
-            reason: 'A reason.',
-          },
-          {
-            turnIndex,
-            key: 'trust',
-            previous: 40,
-            next: 20,
-            delta: -20,
-            category: 'dismissal',
-            reason: 'Another.',
-          },
-        ]);
-      trainee(2);
-      heat(2, 72, 55);
-      customer(3);
-      trainee(4);
-      heat(4, 55, 40);
-      customer(5);
-      trainee(6);
-      heat(6, 40, 85);
-      customer(7);
-      trainee(8);
-      customer(9);
+      const { id } = await startCall(app, client, { mood });
+      expect((await speakTurn(client, id, 1)).status).toBe(200);
+      expect(spoken[0]?.direction).toMatchObject({ mood, pace, intensity });
+    });
+  });
 
-      for (const index of [1, 3, 5, 7, 9])
-        expect((await speakTurn(client, id, index)).status).toBe(200);
-      expect(spoken.map((s) => s.direction.mood)).toEqual([
-        'angry', // the opening, at the starting 72
-        'frustrated', // after 72 -> 55
-        'concerned', // after 55 -> 40
-        'escalating', // after 40 -> 85
-        'escalating', // a turn that changed nothing keeps the temperature
+  it('follows the mood the service reports for each turn, as the call heats up and cools down', async () => {
+    const { provider, spoken } = recordingSpeech();
+    await withApp({ speech: provider }, async (app) => {
+      const client = app.client();
+      const moods: TemperatureBandId[] = ['angry', 'frustrated', 'concerned', 'escalating'];
+      const turns = moods.flatMap((mood, i): FakeTurn[] => [
+        customer(i * 2 + 1, `Customer words ${i * 2 + 1}.`, mood),
+        trainee(i * 2 + 2),
       ]);
+      const { id } = await startCall(app, client, { turns });
+      for (const index of [1, 3, 5, 7])
+        expect((await speakTurn(client, id, index)).status).toBe(200);
+      expect(spoken.map((s) => s.direction.mood)).toEqual(moods);
       expect(spoken.map((s) => s.text)).toEqual([
-        expect.any(String),
+        'Customer words 1.',
         'Customer words 3.',
         'Customer words 5.',
         'Customer words 7.',
-        'Customer words 9.',
       ]);
     });
   });
 
-  it('agrees with the call screen: the mood spoken is the band the trainee is shown', async () => {
-    const { provider, spoken } = spy(createMockSpeechProvider());
+  it('passes on that the customer is cooling down, only when the service says so', async () => {
+    const { provider, spoken } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client, {
-        startingTemperature: 'angry',
-        difficulty: 'standard',
+      const { id } = await startCall(app, client, {
+        turns: [
+          { ...customer(1, 'First.', 'angry') },
+          trainee(2),
+          { ...customer(3, 'Second.', 'frustrated'), recovering: true },
+        ],
       });
-      const lines = [
-        "Hello, I'm Sam. I'm sorry you're dealing with this, that sounds really frustrating. What is happening?",
-        "I understand, that must be stressful. I'll stay with you on this until it is sorted out.",
-        'Just reset it yourself, that is not something we can look at.',
-        'Could you tell me when it started, and who else is affected?',
-        "Thank you for your patience. I'll call you back by three o'clock with an update.",
-      ];
-      for (const line of lines) {
-        const res = await say(client, id, line);
-        expect(res.status).toBe(200);
-        const turn = res.body.customerTurn.index as number;
-        expect((await speakTurn(client, id, turn)).status).toBe(200);
-        expect(spoken.at(-1)?.direction.mood, `turn ${turn}`).toBe(res.body.state.band.id);
-      }
-    });
-  });
-
-  it('keeps one voice for a whole call, and chooses one by name for calls stored before speakers existed', async () => {
-    const { speaker: _speaker, ...persona } = ScenarioDefinitionSchema.parse(exemplar).persona;
-    const older = ScenarioDefinitionSchema.parse({ ...exemplar, persona });
-    const { provider, spoken } = spy(createMockSpeechProvider());
-    await withApp({ speech: provider, library: [older] }, async (app) => {
-      const client = app.client();
-      const { id } = await startCall(client);
-      const reply = await say(client, id, 'Hello, I am Sam. What is happening?');
-      await say(client, id, 'When did it start?');
-      for (const index of [1, reply.body.customerTurn.index, 5]) await speakTurn(client, id, index);
-      const speakers = spoken.map((s) => s.direction.speaker);
-      expect(new Set(speakers).size).toBe(1);
-      expect(speakers[0]).toBe(speakerFor({ name: 'Maya Okafor' }));
-    });
-  });
-
-  it('uses a male voice for a persona whose speaker is male', async () => {
-    const male = ScenarioDefinitionSchema.parse({
-      ...exemplar,
-      persona: { ...exemplar.persona, speaker: 'male' },
-    });
-    const { provider, spoken } = spy(createMockSpeechProvider());
-    await withApp({ speech: provider, library: [male] }, async (app) => {
-      const client = app.client();
-      const { id } = await startCall(client);
       await speakTurn(client, id, 1);
-      expect(spoken[0]?.direction.speaker).toBe('male');
+      await speakTurn(client, id, 3);
+      expect(spoken[0]?.direction).not.toHaveProperty('recovering');
+      expect(spoken[1]?.direction).toMatchObject({ mood: 'frustrated', recovering: true });
+    });
+  });
+
+  it('keeps the persona’s speaker for a whole call when no voice is chosen, so calls saved before voices were chosen sound as they did', async () => {
+    const { provider, spoken } = recordingSpeech();
+    await withApp({ speech: provider }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(app, client, {
+        speaker: 'male',
+        turns: [
+          customer(1, 'One.'),
+          trainee(2),
+          customer(3, 'Three.'),
+          trainee(4),
+          customer(5, 'Five.'),
+        ],
+      });
+      for (const index of [1, 3, 5]) await speakTurn(client, id, index);
+      expect(new Set(spoken.map((s) => s.direction.speaker))).toEqual(new Set(['male']));
     });
   });
 
   it('never tells the browser which speaker was chosen', async () => {
     await withApp({ speech: createMockSpeechProvider() }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
-      await say(client, id, 'Hello, I am Sam.');
-      const everything = [
-        await client.get('/api/scenarios'),
-        await client.get(`/api/scenarios/${SCENARIO}`),
-        await client.get(`/api/sessions/${id}`),
-        await client.get(`/api/sessions/${id}/transcript`),
-        await client.get('/api/sessions'),
-      ];
-      for (const res of everything)
-        expect(JSON.stringify(res.body)).not.toMatch(/speaker|female|male/i);
+      const { id } = await startCall(app, client, { speaker: 'male' });
+      const res = await speakTurn(client, id, 1);
+      expect(JSON.stringify([...res.headers])).not.toMatch(/speaker|female|male/i);
+      expect((await client.get('/api/config')).body.speech.voices).toBeDefined();
+      expect(JSON.stringify((await client.get('/api/config')).body)).not.toMatch(
+        /speaker|female|male/i,
+      );
     });
   });
 
   it("refuses a turn that is the trainee's, so it cannot be used to speak the trainee's words", async () => {
-    const { provider, spoken } = spy(createMockSpeechProvider());
+    const { provider, spoken } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
-      await say(client, id, 'Hello, I am Sam. What is happening?', 'voice');
+      const { id } = await startCall(app, client, {
+        turns: [customer(1, 'Hello.'), trainee(2, 'Hello, I am Sam. What is happening?')],
+      });
       const res = await speakTurn(client, id, 2);
       expect(res.status).toBe(400);
       expect(await errorOf(res)).toEqual({
@@ -726,7 +716,7 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
   it('finds no turn for an index that is not a turn of the call', async () => {
     await withApp({ speech: createMockSpeechProvider() }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       for (const index of [2, 99, 0, -1, '1.5', '1e3', 'abc', '%20', '999999', '1;2']) {
         const res = await speakTurn(client, id, index);
         expect(res.status, String(index)).toBe(404);
@@ -736,14 +726,14 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
   });
 
   it('is not available to another browser profile, or for a session that does not exist', async () => {
-    const { provider, spoken } = spy(createMockSpeechProvider());
+    const { provider, spoken } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const owner = app.client();
-      const { id } = await startCall(owner);
+      const { id } = await startCall(app, owner);
       const stranger = app.client();
       for (const res of [
         await speakTurn(stranger, id, 1),
-        await speakTurn(stranger, randomUUID(), 1),
+        await speakTurn(stranger, 'call-99999999', 1),
         await speakTurn(stranger, 'nonsense', 1),
       ]) {
         expect(res.status).toBe(404);
@@ -757,22 +747,11 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
     });
   });
 
-  it('works on a call that has ended, so the transcript can be listened to', async () => {
-    await withApp({ speech: createMockSpeechProvider() }, async (app) => {
-      const client = app.client();
-      const { id } = await startCall(client);
-      await say(client, id, 'Hello, I am Sam. What is happening?');
-      await client.post(`/api/sessions/${id}/end`, {});
-      await app.service.settle(id);
-      expect((await speakTurn(client, id, 3)).status).toBe(200);
-    });
-  });
-
   it('refuses a language that is not offered', async () => {
-    const { provider, spoken } = spy(createMockSpeechProvider());
+    const { provider, spoken } = recordingSpeech();
     await withApp({ speech: provider }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       for (const lang of ['fr-FR', 'xx', 'en-gb']) {
         const res = await speakTurn(client, id, 1, `?lang=${lang}`);
         expect(res.status, lang).toBe(400);
@@ -785,7 +764,7 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
   it('says so, with 503, when speech is not turned on', async () => {
     await withApp({ speech: createNoneSpeechProvider() }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       const res = await speakTurn(client, id, 1);
       expect(res.status).toBe(503);
       expect(await errorOf(res)).toEqual({
@@ -800,7 +779,7 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
   it('is only a POST: it does not exist as a GET', async () => {
     await withApp({ speech: createMockSpeechProvider() }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       for (const method of ['GET', 'PUT', 'DELETE']) {
         const res = await client.raw(`/api/sessions/${id}/turns/1/speech`, { method });
         expect(res.status, method).toBe(405);
@@ -816,9 +795,9 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
       ['speech_rate_limited', 429, true],
     ];
     for (const [code, status, retryable] of cases) {
-      await withApp({ speech: failing(code, retryable) }, async (app) => {
+      await withApp({ speech: failingSpeech(code, retryable) }, async (app) => {
         const client = app.client();
-        const { id } = await startCall(client);
+        const { id } = await startCall(app, client);
         const res = await speakTurn(client, id, 1);
         expect(res.status, code).toBe(status);
         expect(await res.json()).toEqual({
@@ -826,6 +805,427 @@ describe('POST /api/sessions/:id/turns/:index/speech', () => {
         });
       });
     }
+  });
+
+  it('refuses a line with nothing in it to speak, the same way whichever provider is behind it', async () => {
+    await withApp({ speech: createMockSpeechProvider() }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(app, client, {
+        turns: [customer(1, '*sighs*'), customer(3, '{"mood":"angry"}')],
+      });
+      for (const index of [1, 3]) {
+        const res = await speakTurn(client, id, index);
+        expect(res.status).toBe(502);
+        expect(await errorOf(res)).toEqual({
+          code: 'speech_failed',
+          message: 'There is nothing to speak in that line.',
+          retryable: false,
+        });
+      }
+    });
+  });
+});
+
+describe('the voice a trainee chooses', () => {
+  it('reaches the provider as one of the four ids, on a customer turn, with the old pairing left for the rest', async () => {
+    const { provider, spoken } = recordingSpeech();
+    await withApp({ speech: provider }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(app, client);
+      for (const voice of VOICE_IDS) {
+        const res = await speakTurn(client, id, 1, `?voice=${voice}`);
+        expect(res.status, voice).toBe(200);
+        expect(res.headers.get('x-firefly-speech-voice-id'), voice).toBe(voice);
+      }
+      expect(spoken.map((s) => s.direction.voice)).toEqual([...VOICE_IDS]);
+      // The pairing is still sent, as a hint for providers that need one, and is never shown.
+      expect(spoken[0]?.direction.speaker).toBe('female');
+    });
+  });
+
+  it('is checked against the catalogue before anything is spoken, so an unknown id is refused', async () => {
+    const { provider, spoken } = recordingSpeech();
+    await withApp({ speech: provider }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(app, client);
+      for (const voice of [
+        'voice-e',
+        'Voice-A',
+        'voice-a%20',
+        'voice-0',
+        'female',
+        'male',
+        '',
+        'en-GB-SoniaNeural',
+      ]) {
+        const res = await speakTurn(client, id, 1, `?voice=${voice}`);
+        expect(res.status, voice).toBe(400);
+        expect((await errorOf(res)).code).toBe('validation_failed');
+      }
+      expect(spoken).toHaveLength(0);
+    });
+  });
+
+  it('speaks with the voice for the language asked for, through Azure, and leaves the old pairing alone when none is chosen', async () => {
+    const fake = await startFakeAzureSpeech();
+    try {
+      const azure = createAzureSpeechProvider(
+        {
+          kind: 'azure-speech',
+          apiKey: fake.key,
+          sttUrl: fake.sttUrl,
+          ttsUrl: fake.ttsUrl,
+          voices: { female: null, male: null },
+          timeoutMs: 1000,
+        },
+        { sleep: () => Promise.resolve() },
+      );
+      await withApp({ speech: azure }, async (app) => {
+        const client = app.client();
+        const { id } = await startCall(app, client);
+        for (const language of SPEECH_LANGUAGES) {
+          for (const voice of VOICE_IDS) {
+            const res = await speakTurn(client, id, 1, `?lang=${language}&voice=${voice}`);
+            expect(res.headers.get('x-firefly-speech-voice'), `${language} ${voice}`).toBe(
+              VOICE_CATALOGUE[language][voice],
+            );
+            expect(res.headers.get('x-firefly-speech-voice-id')).toBe(voice);
+            expect(fake.requests.at(-1)?.text).toContain(`xml:lang="${language}"`);
+          }
+        }
+        // No id: the persona's pairing, exactly as before.
+        const old = await speakTurn(client, id, 1);
+        expect(old.headers.get('x-firefly-speech-voice')).toBe('en-GB-SoniaNeural');
+        expect(old.headers.get('x-firefly-speech-voice-id')).toBe('none');
+      });
+    } finally {
+      await fake.close();
+    }
+  });
+});
+
+describe('POST /api/speech/preview ("Test voice")', () => {
+  it('speaks one short, fixed sentence in the chosen voice, calmly, in one request to the provider', async () => {
+    const { provider, spoken } = recordingSpeech();
+    await withApp({ speech: provider }, async (app) => {
+      const res = await preview(app.client(), '?voice=voice-b');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('audio/wav');
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      expect(res.headers.get('x-firefly-speech-provider')).toBe('mock');
+      expect(res.headers.get('x-firefly-speech-voice-id')).toBe('voice-b');
+      expect(validateWav(Buffer.from(await res.arrayBuffer())).ok).toBe(true);
+      expect(spoken).toHaveLength(1);
+      expect(spoken[0]?.text).toBe(VOICE_PREVIEW_TEXT);
+      expect(spoken[0]?.direction).toMatchObject({
+        language: 'en-GB',
+        mood: 'calm',
+        pace: 'measured',
+        intensity: 0,
+        voice: 'voice-b',
+      });
+    });
+  });
+
+  it('needs no call, and works for a browser that has never had one', async () => {
+    await withApp({ speech: createMockSpeechProvider() }, async (app) => {
+      for (const voice of VOICE_IDS) {
+        const res = await preview(app.client(), `?voice=${voice}&lang=en-US`);
+        expect(res.status, voice).toBe(200);
+        expect(res.headers.get('x-firefly-speech-voice-id')).toBe(voice);
+      }
+    });
+  });
+
+  it('says the same sentence whatever the request carries: the words are fixed on the server', async () => {
+    const { provider, spoken } = recordingSpeech();
+    await withApp({ speech: provider }, async (app) => {
+      const client = app.client();
+      const attempts = [
+        preview(
+          client,
+          '?voice=voice-a&text=Say%20something%20else',
+          JSON.stringify({ text: 'Say it.' }),
+        ),
+        preview(client, '?voice=voice-a&ssml=%3Cspeak%3E'),
+        client.raw('/api/speech/preview?voice=voice-a', {
+          method: 'POST',
+          headers: { 'content-type': 'text/plain', 'x-text': 'Say it' },
+          body: 'Plain words to say',
+        }),
+      ];
+      for (const res of await Promise.all(attempts)) expect(res.status).toBe(200);
+      expect(spoken.map((s) => s.text)).toEqual([
+        VOICE_PREVIEW_TEXT,
+        VOICE_PREVIEW_TEXT,
+        VOICE_PREVIEW_TEXT,
+      ]);
+    });
+  });
+
+  it('needs a voice, one of the four, and a language that is offered, and asks nothing of the provider otherwise', async () => {
+    const { provider, spoken } = recordingSpeech();
+    await withApp({ speech: provider }, async (app) => {
+      const client = app.client();
+      for (const query of [
+        '',
+        '?lang=en-GB',
+        '?voice=',
+        '?voice=voice-e',
+        '?voice=Voice-A',
+        '?voice=female',
+        '?voice=en-GB-SoniaNeural',
+        '?voice=voice-a&lang=fr-FR',
+        '?voice=voice-a&lang=',
+      ]) {
+        const res = await preview(client, query);
+        expect(res.status, query).toBe(400);
+        expect((await errorOf(res)).code, query).toBe('validation_failed');
+      }
+      expect(spoken).toHaveLength(0);
+    });
+  });
+
+  it('refuses a body that says it is larger than a JSON request may be, without reading it', async () => {
+    const { provider, spoken } = recordingSpeech();
+    await withApp({ speech: provider }, async (app) => {
+      const res = await preview(app.client(), '?voice=voice-a', 'x'.repeat(70_000));
+      expect(res.status).toBe(413);
+      expect(spoken).toHaveLength(0);
+    });
+  });
+
+  it('says so, with 503, when speech is not turned on, without calling any provider', async () => {
+    await withApp({ speech: createNoneSpeechProvider() }, async (app) => {
+      const res = await preview(app.client(), '?voice=voice-a');
+      expect(res.status).toBe(503);
+      expect(await errorOf(res)).toEqual({
+        code: 'speech_unavailable',
+        message:
+          "The customer's voice is not turned on for this server, so read their reply instead.",
+        retryable: false,
+      });
+    });
+  });
+
+  it('is only a POST, and refuses a cross-site request', async () => {
+    await withApp({ speech: createMockSpeechProvider() }, async (app) => {
+      const client = app.client();
+      for (const method of ['GET', 'PUT', 'DELETE']) {
+        expect(
+          (await client.raw('/api/speech/preview?voice=voice-a', { method })).status,
+          method,
+        ).toBe(405);
+      }
+      const cross = await client.raw('/api/speech/preview?voice=voice-a', {
+        method: 'POST',
+        headers: { origin: 'https://evil.example' },
+      });
+      expect(cross.status).toBe(403);
+    });
+  });
+
+  it('maps every way the provider can fail to its own status and code, like every other speech request', async () => {
+    const cases: [SpeechErrorCode, number, boolean][] = [
+      ['speech_unavailable', 503, false],
+      ['speech_failed', 502, true],
+      ['speech_timeout', 504, true],
+      ['speech_rate_limited', 429, true],
+    ];
+    for (const [code, status, retryable] of cases) {
+      await withApp({ speech: failingSpeech(code, retryable) }, async (app) => {
+        const res = await preview(app.client(), '?voice=voice-c');
+        expect(res.status, code).toBe(status);
+        const body = await res.json();
+        expect(body).toEqual({ error: { code, message: `Message for ${code}.`, retryable } });
+        expect(JSON.stringify(body)).not.toContain('inner detail');
+      });
+    }
+  });
+
+  it('does not use up a failure that was queued for a customer turn', async () => {
+    await withApp({ speech: createMockSpeechProvider(), testHooks: true }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(app, client);
+      await client.post('/api/test/fail-next', { target: 'synthesize' });
+      expect((await preview(client, '?voice=voice-a')).status).toBe(200);
+      expect((await speakTurn(client, id, 1)).status).toBe(502);
+      expect((await speakTurn(client, id, 1)).status).toBe(200);
+    });
+  });
+
+  it('counts against the same speech limits as every other speech request, per browser and for the whole server', async () => {
+    await withApp({ speech: createMockSpeechProvider() }, async (app) => {
+      const client = app.client();
+      const statuses: number[] = [];
+      let limited: Response | null = null;
+      for (let i = 0; i < 100 && !limited; i++) {
+        const res = await preview(client, '?voice=voice-a');
+        if (res.status === 429) limited = res;
+        else statuses.push(res.status);
+      }
+      expect(limited).not.toBeNull();
+      // 60 at once, plus at most a few refilled (one a second) while the loop ran.
+      expect(statuses.length).toBeGreaterThanOrEqual(60);
+      expect(statuses.length).toBeLessThanOrEqual(66);
+      expect(await errorOf(limited as Response)).toMatchObject({
+        code: 'rate_limited',
+        retryable: true,
+      });
+      // The same allowance is used up for a recording, and another browser has its own.
+      expect((await transcribe(client, recording(1))).status).toBe(429);
+      expect((await preview(app.client(), '?voice=voice-a')).status).toBe(200);
+    });
+  });
+
+  describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
+    let fake: FakeAzureSpeech;
+    beforeAll(async () => {
+      fake = await startFakeAzureSpeech();
+    });
+    afterEach(() => fake.reset());
+    afterAll(() => fake.close());
+
+    const azure = () =>
+      createAzureSpeechProvider(
+        {
+          kind: 'azure-speech',
+          apiKey: fake.key,
+          sttUrl: fake.sttUrl,
+          ttsUrl: fake.ttsUrl,
+          voices: { female: null, male: null },
+          timeoutMs: 1000,
+        },
+        { sleep: () => Promise.resolve() },
+      );
+
+    it('sends Azure the fixed sentence in the voice for the language and the choice, one request each, and nothing else', async () => {
+      await withApp({ speech: azure() }, async (app) => {
+        const client = app.client();
+        for (const language of SPEECH_LANGUAGES) {
+          for (const voice of VOICE_IDS) {
+            fake.reset();
+            const res = await preview(client, `?voice=${voice}&lang=${language}`);
+            expect(res.status, `${language} ${voice}`).toBe(200);
+            expect(fake.requests).toHaveLength(1);
+            const sent = fake.requests[0];
+            expect(sent?.service).toBe('tts');
+            expect(sent?.headers['ocp-apim-subscription-key']).toBe(fake.key);
+            expect(sent?.text).toContain(`<voice name="${VOICE_CATALOGUE[language][voice]}">`);
+            expect(sent?.text).toContain(`xml:lang="${language}"`);
+            expect(sent?.text).toContain(escapeXml(cleanText(VOICE_PREVIEW_TEXT)));
+            expect(res.headers.get('x-firefly-speech-voice')).toBe(
+              VOICE_CATALOGUE[language][voice],
+            );
+            expect(res.headers.get('x-firefly-speech-style')).toBe('none');
+            expect(res.headers.get('content-type')).toBe('audio/mpeg');
+            expect(Buffer.from(await res.arrayBuffer()).equals(fakeMp3())).toBe(true);
+          }
+        }
+      });
+    });
+
+    it('is told apart by pace between the four choices, and stays calm: no style, no pitch change', async () => {
+      await withApp({ speech: azure() }, async (app) => {
+        const client = app.client();
+        const rates: Record<string, string> = {};
+        for (const voice of VOICE_IDS) {
+          fake.reset();
+          await preview(client, `?voice=${voice}&lang=en-US`);
+          const ssml = fake.requests[0]?.text ?? '';
+          expect(ssml).not.toContain('express-as');
+          expect(ssml).not.toContain('pitch=');
+          rates[voice] = /rate="([+-]\d+%)"/.exec(ssml)?.[1] ?? '';
+        }
+        expect(rates).toEqual({
+          'voice-a': '-6%',
+          'voice-b': '+0%',
+          'voice-c': '-10%',
+          'voice-d': '-2%',
+        });
+      });
+    });
+
+    it('reports a service that is down as a failure the trainee can retry, and never passes on what Azure said', async () => {
+      await withApp({ speech: azure() }, async (app) => {
+        fake.enqueue(
+          { status: 500, text: FAKE_PROVIDER_ERROR_TEXT },
+          { status: 500, text: FAKE_PROVIDER_ERROR_TEXT },
+        );
+        const res = await preview(app.client(), '?voice=voice-a');
+        expect(res.status).toBe(502);
+        expect(await errorOf(res)).toEqual({
+          code: 'speech_failed',
+          message: SPEECH_MESSAGES.failed,
+          retryable: true,
+        });
+      });
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+
+describe('trying again after a failure never makes anything twice', () => {
+  const snapshot = (app: SpeechTestApp, id: string) => JSON.stringify(app.calls.get(id).turns);
+
+  it('a recording that failed to transcribe is transcribed on the retry, and no turn is created by either request', async () => {
+    const { provider, calls } = flakySpeech({ transcribe: 1 });
+    await withApp({ speech: provider }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(app, client);
+      const before = snapshot(app, id);
+      const upload = recording(1.2);
+
+      const failed = await transcribe(client, upload);
+      expect(failed.status).toBe(502);
+      expect(await errorOf(failed)).toMatchObject({ code: 'speech_failed', retryable: true });
+      const retried = await transcribe(client, upload);
+      expect(retried.status).toBe(200);
+      expect(await retried.json()).toEqual({
+        status: 'recognised',
+        text: MOCK_UTTERANCES[0],
+        durationMs: 1200,
+      });
+      // The failed attempt did not use up a recognised line, and the call is exactly as it was.
+      expect(calls.transcribe).toBe(2);
+      expect(snapshot(app, id)).toBe(before);
+    });
+  });
+
+  it('a customer line that failed to speak is spoken on the retry, once, and the call is exactly as it was', async () => {
+    const { provider, calls } = flakySpeech({ synthesize: 1 });
+    await withApp({ speech: provider }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(app, client);
+      const before = snapshot(app, id);
+
+      const failed = await speakTurn(client, id, 1, '?voice=voice-b');
+      expect(failed.status).toBe(502);
+      expect(failed.headers.get('x-firefly-speech-provider')).toBeNull();
+      expect(await errorOf(failed)).toMatchObject({ code: 'speech_failed', retryable: true });
+      const retried = await speakTurn(client, id, 1, '?voice=voice-b');
+      expect(retried.status).toBe(200);
+      expect(retried.headers.get('x-firefly-speech-voice-id')).toBe('voice-b');
+      const again = await speakTurn(client, id, 1, '?voice=voice-b');
+      expect(
+        Buffer.from(await again.arrayBuffer()).equals(Buffer.from(await retried.arrayBuffer())),
+      ).toBe(true);
+      expect(calls.synthesize).toBe(3);
+      expect(snapshot(app, id)).toBe(before);
+    });
+  });
+
+  it('a voice preview that failed is tried again without touching any call', async () => {
+    const { provider } = flakySpeech({ synthesize: 1 });
+    await withApp({ speech: provider }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(app, client);
+      const before = snapshot(app, id);
+      expect((await preview(client, '?voice=voice-d')).status).toBe(502);
+      expect((await preview(client, '?voice=voice-d')).status).toBe(200);
+      expect(snapshot(app, id)).toBe(before);
+    });
   });
 });
 
@@ -835,15 +1235,18 @@ describe('both endpoints share one rate limit per browser profile', () => {
   it('allows 60 requests and then answers 429, whichever endpoint is used', async () => {
     await withApp({ speech: createMockSpeechProvider() }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
-      // Cheap requests that still count: a wrong media type, and a turn that does not exist.
+      const { id } = await startCall(app, client);
+      // Cheap requests that still count: a wrong media type, a turn that does not exist, a preview
+      // that names no voice.
       const statuses: number[] = [];
       let limited: Response | null = null;
       for (let i = 0; i < 100 && !limited; i++) {
         const res =
-          i % 2 === 0
+          i % 3 === 0
             ? await transcribe(client, 'x', '', 'text/plain')
-            : await speakTurn(client, id, 99);
+            : i % 3 === 1
+              ? await speakTurn(client, id, 99)
+              : await preview(client);
         if (res.status === 429) limited = res;
         else statuses.push(res.status);
       }
@@ -851,14 +1254,15 @@ describe('both endpoints share one rate limit per browser profile', () => {
       // 60 at once, plus at most a few refilled (one a second) while the loop ran.
       expect(statuses.length).toBeGreaterThanOrEqual(60);
       expect(statuses.length).toBeLessThanOrEqual(66);
-      expect(new Set(statuses)).toEqual(new Set([415, 404]));
+      expect(new Set(statuses)).toEqual(new Set([415, 404, 400]));
       expect(await errorOf(limited as Response)).toMatchObject({
         code: 'rate_limited',
         retryable: true,
       });
-      // The next request of either kind is limited too, and another profile has its own allowance.
+      // The next request of any kind is limited too, and another profile has its own allowance.
       expect((await transcribe(client, recording(1))).status).toBe(429);
       expect((await speakTurn(client, id, 1)).status).toBe(429);
+      expect((await preview(client, '?voice=voice-a')).status).toBe(429);
       expect((await transcribe(app.client(), recording(1))).status).toBe(200);
     });
   });
@@ -888,7 +1292,7 @@ describe('requests that never reach a route or that are given up on', () => {
     let sessionId = '';
     await withApp({ speech: createMockSpeechProvider(), log }, async (app) => {
       const client = app.client();
-      sessionId = (await startCall(client)).id;
+      sessionId = (await startCall(app, client)).id;
       // The speech route only exists for POST: a GET fails before any route matches.
       expect((await client.raw(`/api/sessions/${sessionId}/turns/1/speech`)).status).toBe(405);
     });
@@ -904,7 +1308,7 @@ describe('requests that never reach a route or that are given up on', () => {
     const log = createLogger((line) => lines.push(line));
     await withApp({ speech: createMockSpeechProvider(), log }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       const res = await speakTurn(client, id, '%');
       expect(res.status).toBe(404);
       expect(await errorOf(res)).toMatchObject({ code: 'not_found', retryable: false });
@@ -981,26 +1385,12 @@ describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
     });
   });
 
-  it('keeps what the trainee said, profanity included, all the way into the stored transcript', async () => {
+  it('keeps what the trainee said, profanity included, in the answer', async () => {
     await withApp({ speech: azure() }, async (app) => {
-      const client = app.client();
       const said = 'Honestly, this is crap, and I want it fixed.';
       fake.enqueue({ recognition: 'Success', text: said });
-      const heard = await transcribe(client, recording(1));
+      const heard = await transcribe(app.client(), recording(1));
       expect(await heard.json()).toEqual({ status: 'recognised', text: said, durationMs: 1000 });
-
-      // The words are sent on as the trainee's turn exactly as recognised, not masked or removed.
-      const { id } = await startCall(client);
-      expect((await say(client, id, said, 'voice')).body.traineeTurn.text).toBe(said);
-      const stored = await client.get(`/api/sessions/${id}`);
-      expect(stored.body.session.turns[1]).toMatchObject({
-        role: 'trainee',
-        text: said,
-        inputMode: 'voice',
-      });
-      expect(
-        (await client.get(`/api/sessions/${id}/transcript`)).body.transcript.turns[1].text,
-      ).toBe(said);
     });
   });
 
@@ -1030,35 +1420,19 @@ describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
     },
   );
 
-  it('sends Azure nothing about the profile, the session or the scenario beyond the customer line itself', async () => {
+  it('sends Azure nothing about the profile or the session beyond the customer line itself', async () => {
     await withApp({ speech: azure() }, async (app) => {
       const client = app.client();
-      const cookie = (await client.raw('/api/health')).headers.get('set-cookie') ?? '';
-      const profileId = /firefly_profile=([a-f0-9]{32})/.exec(cookie)?.[1] ?? '';
+      const profileId = await client.profileId();
       expect(profileId).toHaveLength(32);
-      const { id, opening } = await startCall(client);
+      const { id, opening } = await startCall(app, client);
       await transcribe(client, recording(1), '?lang=en-US');
       await speakTurn(client, id, 1);
-      expect(fake.requests.map((r) => r.service)).toEqual(['stt', 'tts']);
+      await preview(client, '?voice=voice-a');
+      expect(fake.requests.map((r) => r.service)).toEqual(['stt', 'tts', 'tts']);
 
-      const scenario = ScenarioDefinitionSchema.parse(exemplar);
-      const held = [
-        profileId,
-        id,
-        scenario.id,
-        scenario.title,
-        scenario.persona.name,
-        scenario.persona.role,
-        scenario.persona.organisation,
-        scenario.persona.background,
-        scenario.persona.voice,
-        scenario.evaluatorNotes,
-        scenario.customerObjective,
-        ...scenario.hiddenFacts.map((fact) => fact.statement),
-        ...scenario.successCriteria,
-      ];
       for (const request of fake.requests) {
-        // The line being spoken is the one thing that may carry scenario words, so it is taken out first.
+        // The line being spoken is the one thing that may carry words of the call, so it is taken out first.
         const line = escapeXml(cleanText(opening));
         const seen = [
           request.path,
@@ -1066,7 +1440,7 @@ describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
           JSON.stringify(request.headers),
           request.service === 'tts' ? request.text.replace(line, '') : '',
         ].join('\n');
-        for (const text of held) expect(seen, text).not.toContain(text);
+        for (const text of [profileId, id]) expect(seen, text).not.toContain(text);
       }
       expect(fake.requests[1]?.text).toContain(escapeXml(cleanText(opening)));
     });
@@ -1075,7 +1449,7 @@ describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
   it('speaks a calm customer with a voice that has no styles, using pace alone', async () => {
     await withApp({ speech: azure() }, async (app) => {
       const client = app.client();
-      const { id, opening } = await startCall(client);
+      const { id, opening } = await startCall(app, client);
       const res = await speakTurn(client, id, 1);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('audio/mpeg');
@@ -1098,7 +1472,7 @@ describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
   it('shows an angry customer by pace and pitch on a British voice, and says no style was applied', async () => {
     await withApp({ speech: azure() }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client, { startingTemperature: 'angry' });
+      const { id } = await startCall(app, client, { mood: 'angry' });
       const res = await speakTurn(client, id, 1);
       expect(res.headers.get('x-firefly-speech-voice')).toBe('en-GB-SoniaNeural');
       expect(res.headers.get('x-firefly-speech-style')).toBe('none');
@@ -1112,10 +1486,10 @@ describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
     ['angry', 'angry', '0.73', '+11%'],
   ] as const)(
     "applies the %s customer's style, at a reduced degree, on a US voice that lists it",
-    async (startingTemperature, style, degree, rate) => {
+    async (mood, style, degree, rate) => {
       await withApp({ speech: azure() }, async (app) => {
         const client = app.client();
-        const { id } = await startCall(client, { startingTemperature });
+        const { id } = await startCall(app, client, { mood });
         const res = await speakTurn(client, id, 1, '?lang=en-US');
         expect(res.status).toBe(200);
         expect(res.headers.get('x-firefly-speech-voice')).toBe('en-US-AriaNeural');
@@ -1129,11 +1503,23 @@ describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
     },
   );
 
-  it('uses the voice for each language, and a male voice for a male persona', async () => {
-    const male = ScenarioDefinitionSchema.parse({
-      ...exemplar,
-      persona: { ...exemplar.persona, speaker: 'male' },
+  it('speaks a customer who is cooling down more slowly, and without a style, even in an angry band', async () => {
+    await withApp({ speech: azure() }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(app, client, {
+        turns: [{ ...customer(1, 'Thank you, that helps.', 'angry'), recovering: true }],
+      });
+      const res = await speakTurn(client, id, 1, '?lang=en-US&voice=voice-b');
+      expect(res.headers.get('x-firefly-speech-style')).toBe('none');
+      const ssml = fake.requests[0]?.text ?? '';
+      expect(ssml).not.toContain('express-as');
+      // Angry is +11% and -3% pitch. Cooling down halves them (5.5, -1.5) and slows the pace by 3
+      // (2.5), and Voice B adds its own 4 to the pace (6.5): so +7% and, rounded, -1%.
+      expect(ssml).toContain('<prosody rate="+7%" pitch="-1%">');
     });
+  });
+
+  it('uses the voice for each language, and a male voice for a male persona, when no voice is chosen', async () => {
     const expected: [SpeechLanguage, string, string][] = [
       ['en-GB', 'en-GB-SoniaNeural', 'en-GB-RyanNeural'],
       ['en-US', 'en-US-AriaNeural', 'en-US-GuyNeural'],
@@ -1141,35 +1527,34 @@ describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
       ['en-AU', 'en-AU-NatashaNeural', 'en-AU-WilliamNeural'],
       ['en-IN', 'en-IN-NeerjaNeural', 'en-IN-PrabhatNeural'],
     ];
-    for (const [library, index] of [
-      [undefined, 1],
-      [[male], 2],
+    for (const [speaker, index] of [
+      ['female', 1],
+      ['male', 2],
     ] as const) {
-      await withApp(
-        { speech: azure(), ...(library ? { library: [...library] } : {}) },
-        async (app) => {
-          const client = app.client();
-          const { id } = await startCall(client);
-          for (const row of expected) {
-            const res = await speakTurn(client, id, 1, `?lang=${row[0]}`);
-            expect(res.headers.get('x-firefly-speech-voice'), row[0]).toBe(row[index]);
-            expect(fake.requests.at(-1)?.text).toContain(`xml:lang="${row[0]}"`);
-          }
-        },
-      );
+      await withApp({ speech: azure() }, async (app) => {
+        const client = app.client();
+        const { id } = await startCall(app, client, { speaker });
+        for (const row of expected) {
+          const res = await speakTurn(client, id, 1, `?lang=${row[0]}`);
+          expect(res.headers.get('x-firefly-speech-voice'), row[0]).toBe(row[index]);
+          expect(fake.requests.at(-1)?.text).toContain(`xml:lang="${row[0]}"`);
+        }
+      });
     }
   });
 
-  it("uses an administrator's own voice, and applies a style to it only if its documentation lists one", async () => {
+  it("uses an administrator's own voice for the old pairing, and applies a style to it only if its documentation lists one, but never replaces a chosen voice", async () => {
     await withApp(
       { speech: azure({ voices: { female: 'en-GB-LibbyNeural', male: null } }) },
       async (app) => {
         const client = app.client();
-        const { id } = await startCall(client, { startingTemperature: 'angry' });
+        const { id } = await startCall(app, client, { mood: 'angry' });
         const res = await speakTurn(client, id, 1, '?lang=en-US');
         expect(res.headers.get('x-firefly-speech-voice')).toBe('en-GB-LibbyNeural');
         expect(res.headers.get('x-firefly-speech-style')).toBe('none');
         expect(fake.requests[0]?.text).toContain('xml:lang="en-GB"');
+        const chosen = await speakTurn(client, id, 1, '?lang=en-US&voice=voice-b');
+        expect(chosen.headers.get('x-firefly-speech-voice')).toBe('en-US-AriaNeural');
       },
     );
   });
@@ -1178,10 +1563,10 @@ describe('with Azure AI Speech (a local fake of its REST endpoints)', () => {
     ['speech to text', 'transcribe'],
     ['text to speech', 'speak'],
   ] as const)('%s failures', (_label, endpoint) => {
-    const call = async (app: TestApp) => {
+    const call = async (app: SpeechTestApp) => {
       const client = app.client();
       if (endpoint === 'transcribe') return transcribe(client, recording(1));
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       return speakTurn(client, id, 1);
     };
 
@@ -1319,37 +1704,30 @@ describe('what the server logs about speech', () => {
   it('records identifiers, sizes and timings only: no audio, no words, no key, nothing the provider said', async () => {
     const lines: string[] = [];
     const log = createLogger((line) => lines.push(line));
-    const provider = createAzureSpeechProvider(
-      {
-        kind: 'azure-speech',
-        apiKey: fake.key,
-        sttUrl: fake.sttUrl,
-        ttsUrl: fake.ttsUrl,
-        voices: { female: null, male: null },
-        timeoutMs: 400,
-      },
-      { sleep: () => Promise.resolve() },
-    );
-    const wrongKey = createAzureSpeechProvider(
-      {
-        kind: 'azure-speech',
-        apiKey: WRONG_KEY,
-        sttUrl: fake.sttUrl,
-        ttsUrl: fake.ttsUrl,
-        voices: { female: null, male: null },
-        timeoutMs: 400,
-      },
-      { sleep: () => Promise.resolve() },
-    );
+    const config = (apiKey: string) => ({
+      kind: 'azure-speech' as const,
+      apiKey,
+      sttUrl: fake.sttUrl,
+      ttsUrl: fake.ttsUrl,
+      voices: { female: null, male: null },
+      timeoutMs: 400,
+    });
+    const provider = createAzureSpeechProvider(config(fake.key), {
+      sleep: () => Promise.resolve(),
+    });
+    const wrongKey = createAzureSpeechProvider(config(WRONG_KEY), {
+      sleep: () => Promise.resolve(),
+    });
 
     let opening = '';
     const upload = recording(1.25);
     await withApp({ speech: provider, log }, async (app) => {
       const client = app.client();
-      const started = await startCall(client);
+      const started = await startCall(app, client);
       opening = started.opening;
       await transcribe(client, upload, '?lang=en-US');
       await speakTurn(client, started.id, 1);
+      await preview(client, '?voice=voice-c');
       fake.enqueue(
         { status: 500, text: FAKE_PROVIDER_ERROR_TEXT },
         { status: 500, text: FAKE_PROVIDER_ERROR_TEXT },
@@ -1360,14 +1738,20 @@ describe('what the server logs about speech', () => {
     });
     await withApp({ speech: wrongKey, log }, async (app) => {
       const client = app.client();
-      const started = await startCall(client);
+      const started = await startCall(app, client);
       await transcribe(client, upload);
       await speakTurn(client, started.id, 1);
+      await preview(client, '?voice=voice-a');
     });
 
     const events = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
     expect(events.map((e) => e.event)).toEqual(
-      expect.arrayContaining(['speech.transcribed', 'speech.spoken', 'speech.failed']),
+      expect.arrayContaining([
+        'speech.transcribed',
+        'speech.spoken',
+        'speech.previewed',
+        'speech.failed',
+      ]),
     );
 
     const transcribed = events.find((e) => e.event === 'speech.transcribed');
@@ -1384,9 +1768,17 @@ describe('what the server logs about speech', () => {
       provider: 'azure-speech',
       bytes: fakeMp3().length,
     });
+    expect(events.find((e) => e.event === 'speech.previewed')).toMatchObject({
+      provider: 'azure-speech',
+      voice: 'voice-c',
+      bytes: fakeMp3().length,
+    });
     const failures = events.filter((e) => e.event === 'speech.failed');
     expect(failures.map((f) => f.code)).toEqual(
       expect.arrayContaining(['speech_failed', 'speech_unavailable']),
+    );
+    expect(failures.map((f) => f.op)).toEqual(
+      expect.arrayContaining(['transcribe', 'speak', 'preview']),
     );
 
     const everything = lines.join('\n');
@@ -1397,6 +1789,7 @@ describe('what the server logs about speech', () => {
       FAKE_RECOGNISED_TEXT,
       opening,
       opening.slice(0, 30),
+      'Hello, this is a test of the voice',
       upload.toString('base64').slice(0, 40),
       upload.toString('latin1').slice(0, 44),
       '127.0.0.1',
@@ -1412,7 +1805,7 @@ describe('what the server logs about speech', () => {
 // hooks to prove that a failed recording or a failed voice leaves the call usable.
 
 describe('failure hooks for speech, with the test hooks switched on', () => {
-  const failNext = (app: TestApp, target: string, count?: number) =>
+  const failNext = (app: SpeechTestApp, target: string, count?: number) =>
     app.client().post('/api/test/fail-next', count === undefined ? { target } : { target, count });
   const SIMULATED = {
     code: 'speech_failed',
@@ -1421,7 +1814,7 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
   };
 
   it('fails the next transcription as a retryable speech failure, and the retry goes through', async () => {
-    const { provider, heard } = spy(createMockSpeechProvider());
+    const { provider, heard } = recordingSpeech();
     await withApp({ speech: provider, testHooks: true }, async (app) => {
       const client = app.client();
       expect((await failNext(app, 'transcribe')).body).toEqual({ queued: 1 });
@@ -1446,10 +1839,10 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
   });
 
   it('fails the next spoken reply as a retryable speech failure, and the retry goes through', async () => {
-    const { provider, spoken } = spy(createMockSpeechProvider());
+    const { provider, spoken } = recordingSpeech();
     await withApp({ speech: provider, testHooks: true }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       expect((await failNext(app, 'synthesize')).body).toEqual({ queued: 1 });
 
       const failed = await speakTurn(client, id, 1);
@@ -1467,26 +1860,10 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
     });
   });
 
-  it('leaves the call itself alone: the transcript is intact and typing still works', async () => {
-    await withApp({ speech: createMockSpeechProvider(), testHooks: true }, async (app) => {
-      const client = app.client();
-      const { id } = await startCall(client);
-      await failNext(app, 'synthesize');
-      await failNext(app, 'transcribe');
-      expect((await speakTurn(client, id, 1)).status).toBe(502);
-      expect((await transcribe(client, recording(1))).status).toBe(502);
-      const typed = await say(client, id, 'Hello, I am Sam. What is happening?');
-      expect(typed.status).toBe(200);
-      const call = await client.get(`/api/sessions/${id}`);
-      expect(call.body.session.turns).toHaveLength(3);
-      expect(call.body.session.status).toBe('active');
-    });
-  });
-
   it('keeps a separate queue for each kind of call', async () => {
     await withApp({ speech: createMockSpeechProvider(), testHooks: true }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
 
       await failNext(app, 'transcribe');
       expect((await speakTurn(client, id, 1)).status).toBe(200);
@@ -1500,7 +1877,6 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
       await failNext(app, 'customer');
       expect((await transcribe(client, recording(1))).status).toBe(200);
       expect((await speakTurn(client, id, 1)).status).toBe(200);
-      expect((await say(client, id, 'Hello, I am Sam.')).status).toBe(502);
     });
   });
 
@@ -1519,11 +1895,12 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
   });
 
   it('is not used up by a request that never reaches the provider', async () => {
-    const { provider, heard, spoken } = spy(createMockSpeechProvider());
+    const { provider, heard, spoken } = recordingSpeech();
     await withApp({ speech: provider, testHooks: true }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
-      await say(client, id, 'Hello, I am Sam. What is happening?');
+      const { id } = await startCall(app, client, {
+        turns: [customer(1, 'Hello.'), trainee(2, 'Hello, I am Sam. What is happening?')],
+      });
       await failNext(app, 'transcribe');
       await failNext(app, 'synthesize');
 
@@ -1535,6 +1912,8 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
       expect((await speakTurn(client, id, 99)).status).toBe(404);
       expect((await speakTurn(app.client(), id, 1)).status).toBe(404); // another browser profile
       expect((await speakTurn(client, id, 1, '?lang=fr-FR')).status).toBe(400);
+      expect((await speakTurn(client, id, 1, '?voice=voice-z')).status).toBe(400);
+      expect((await preview(client, '?voice=voice-z')).status).toBe(400);
 
       // The queued failures are still there for the next real requests.
       expect((await transcribe(client, recording(1))).status).toBe(502);
@@ -1549,7 +1928,7 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
   it('is not used up when speech is switched off, which is its own answer', async () => {
     await withApp({ testHooks: true }, async (app) => {
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       await failNext(app, 'transcribe');
       await failNext(app, 'synthesize');
 
@@ -1557,6 +1936,7 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
       expect(off.status).toBe(503);
       expect((await errorOf(off)).code).toBe('speech_unavailable');
       expect((await speakTurn(client, id, 1)).status).toBe(503);
+      expect((await preview(client, '?voice=voice-a')).status).toBe(503);
 
       // Both failures are still queued: neither request got as far as the speech call.
       expect(() => app.hooks.maybeFail('transcribe')).toThrowError(SpeechError);
@@ -1569,7 +1949,7 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
     const log = createLogger((line) => lines.push(line));
     await withApp({ speech: createMockSpeechProvider(), testHooks: true, log }, async (app) => {
       const client = app.client();
-      const { id, opening } = await startCall(client);
+      const { id, opening } = await startCall(app, client);
       await failNext(app, 'transcribe');
       await failNext(app, 'synthesize');
       await transcribe(client, recording(1));
@@ -1644,7 +2024,7 @@ describe('failure hooks for speech, with the test hooks switched on', () => {
 
 describe('failure hooks for speech, with the test hooks switched off', () => {
   it('are not there: the route is a 404 for every target, and speech is never made to fail', async () => {
-    const { provider, heard, spoken } = spy(createMockSpeechProvider());
+    const { provider, heard, spoken } = recordingSpeech();
     await withApp({ speech: provider, testHooks: false }, async (app) => {
       const client = app.client();
       for (const target of ['transcribe', 'synthesize', 'customer', 'classifier', 'evaluator']) {
@@ -1659,7 +2039,7 @@ describe('failure hooks for speech, with the test hooks switched off', () => {
       }
       expect((await client.get('/api/config')).body.features.testHooks).toBe(false);
 
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       expect((await transcribe(client, recording(1))).status).toBe(200);
       expect((await speakTurn(client, id, 1)).status).toBe(200);
       expect(heard).toHaveLength(1);
@@ -1672,7 +2052,7 @@ describe('failure hooks for speech, with the test hooks switched off', () => {
       app.hooks.setNext('transcribe', 5);
       app.hooks.setNext('synthesize', 5);
       const client = app.client();
-      const { id } = await startCall(client);
+      const { id } = await startCall(app, client);
       expect((await transcribe(client, recording(1))).status).toBe(200);
       expect((await speakTurn(client, id, 1)).status).toBe(200);
     });

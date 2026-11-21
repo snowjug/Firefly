@@ -338,6 +338,47 @@ describe('recognition capture', () => {
     expect(env.recognition.instances).toHaveLength(2);
   });
 
+  describe('says when it is listening', () => {
+    it('reports it once, when the browser starts to capture audio and not before', () => {
+      const { capture } = setup();
+      const { log, handlers } = recorder();
+      capture.listen({ ...handlers, onListening: () => log.push('listening') });
+      expect(log).toEqual([]);
+      env.recognition.latest().open();
+      env.recognition.latest().open();
+      expect(log).toEqual(['listening']);
+      env.recognition.latest().speechStart();
+      expect(log).toEqual(['listening', 'start']);
+    });
+
+    it('reports it before the first words when the browser never says it started', () => {
+      const { capture } = setup();
+      const { log, handlers } = recorder();
+      capture.listen({ ...handlers, onListening: () => log.push('listening') });
+      env.recognition.latest().say('hello there', false);
+      expect(log.slice(0, 2)).toEqual(['listening', 'start']);
+    });
+
+    it('does not report it for a pass that was cancelled, or after the pass ended', () => {
+      const { capture } = setup();
+      const { log, handlers } = recorder();
+      const pass = capture.listen({ ...handlers, onListening: () => log.push('listening') });
+      const rec = env.recognition.latest();
+      pass.cancel();
+      rec.open();
+      expect(log).toEqual([]);
+    });
+
+    it('is optional: a caller that predates it still works', () => {
+      const { capture } = setup();
+      const { log, handlers } = recorder();
+      capture.listen(handlers);
+      env.recognition.latest().open();
+      env.recognition.latest().say('hello there', true);
+      expect(log).toContain('text:hello there');
+    });
+  });
+
   it('is unsupported without the browser feature', async () => {
     env = installFakes();
     const { handlers, log } = recorder();

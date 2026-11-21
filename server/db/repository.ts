@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { TurnClassification } from '#shared/domain/classification.ts';
-import type { EffectiveScenario } from '#shared/domain/config.ts';
+import { normaliseStoredScenario, type EffectiveScenario } from '#shared/domain/config.ts';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import type { StateEvent } from '#shared/domain/state.ts';
 import type {
@@ -12,6 +12,7 @@ import type {
 import type { ProviderKind } from '#shared/domain/api.ts';
 import type { InputMode } from '#shared/domain/speech.ts';
 import type { DiscoveryRecord, EngineRuntime } from '../engine/types.ts';
+import { normaliseRuntime } from '../engine/runtime.ts';
 import type { PromptVersions } from '../providers/types.ts';
 
 // Typed access to the tables. Every session query takes the owning profile id: a session that
@@ -54,15 +55,6 @@ export interface TurnRow {
   createdAt: string;
 }
 
-export interface SessionFilters {
-  status?: SessionStatus;
-  difficulty?: string;
-  scenarioId?: string;
-  includeSamples?: boolean;
-  limit?: number;
-  offset?: number;
-}
-
 type Row = Record<string, unknown>;
 const json = (v: unknown) => JSON.stringify(v);
 const parse = <T>(v: unknown): T => JSON.parse(String(v)) as T;
@@ -76,7 +68,7 @@ function sessionFromRow(r: Row): SessionRow {
     scenarioId: String(r.scenario_id),
     scenarioTitle: String(r.scenario_title),
     scenarioVersion: Number(r.scenario_version),
-    scenario: parse<EffectiveScenario>(r.scenario_snapshot),
+    scenario: normaliseStoredScenario(parse<EffectiveScenario>(r.scenario_snapshot)),
     mode: r.mode as PracticeMode,
     providerKind: r.provider_kind as ProviderKind,
     providerLabel: String(r.provider_label),
@@ -85,7 +77,7 @@ function sessionFromRow(r: Row): SessionRow {
     status: r.status as SessionStatus,
     evaluationPhase: (r.evaluation_phase as EvaluationPhase | null) ?? null,
     evaluationError: parseOrNull(r.evaluation_error),
-    runtime: parse<EngineRuntime>(r.runtime),
+    runtime: normaliseRuntime(parse<EngineRuntime>(r.runtime)),
     clientRequestId: (r.client_request_id as string | null) ?? null,
     startedAt: String(r.started_at),
     endedAt: (r.ended_at as string | null) ?? null,
@@ -166,36 +158,6 @@ export function createRepository(db: DatabaseSync) {
         .prepare('SELECT * FROM sessions WHERE profile_id = ? AND client_request_id = ?')
         .get(profileId, clientRequestId) as Row | undefined;
       return row ? sessionFromRow(row) : null;
-    },
-
-    listSessions(profileId: string, f: SessionFilters = {}): { rows: SessionRow[]; total: number } {
-      const where: string[] = ['profile_id = ?'];
-      const params: (string | number)[] = [profileId];
-      if (f.status) {
-        where.push('status = ?');
-        params.push(f.status);
-      }
-      if (f.scenarioId) {
-        where.push('scenario_id = ?');
-        params.push(f.scenarioId);
-      }
-      if (f.difficulty) {
-        where.push("json_extract(scenario_snapshot, '$.config.difficulty') = ?");
-        params.push(f.difficulty);
-      }
-      if (!f.includeSamples) where.push('is_sample = 0');
-      const clause = where.join(' AND ');
-      const total = Number(
-        (
-          db.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE ${clause}`).get(...params) as {
-            n: number;
-          }
-        ).n,
-      );
-      const rows = db
-        .prepare(`SELECT * FROM sessions WHERE ${clause} ORDER BY started_at DESC LIMIT ? OFFSET ?`)
-        .all(...params, Math.min(200, f.limit ?? 50), f.offset ?? 0) as Row[];
-      return { rows: rows.map(sessionFromRow), total };
     },
 
     updateRuntime(id: string, runtime: EngineRuntime): void {
@@ -384,19 +346,6 @@ export function createRepository(db: DatabaseSync) {
             rubricVersion: String(row.rubric_version),
           }
         : null;
-    },
-
-    traineeTurnCounts(sessionIds: string[]): Map<string, number> {
-      const map = new Map<string, number>();
-      if (sessionIds.length === 0) return map;
-      const placeholders = sessionIds.map(() => '?').join(',');
-      const rows = db
-        .prepare(
-          `SELECT session_id, COUNT(*) AS n FROM turns WHERE role = 'trainee' AND session_id IN (${placeholders}) GROUP BY session_id`,
-        )
-        .all(...sessionIds) as { session_id: string; n: number }[];
-      for (const r of rows) map.set(r.session_id, Number(r.n));
-      return map;
     },
   };
 }
