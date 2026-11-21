@@ -177,7 +177,9 @@ a first pass over the same build before the four fixes listed below it, made wit
 | Reflow                                                   | With the text made 200 percent larger from script, the scenario toolbar was 111 px wider than a 1440 px window         | 16 of 16 tests pass                                                                         |
 | The whole suite                                          |                                                                                                                        | 44 tests; three full runs in a row passed; the last took 5.3 minutes                        |
 
-Four defects were found and fixed:
+Ten defects were found and fixed: the first four by the specs on a Windows machine, the next four by
+the first run on the Linux CI runner, whose fallback font (DejaVu Sans) is wider than Segoe UI, and
+the last two by an independent code review of the screens:
 
 1. **The call's context column was not reachable by keyboard** (WCAG 2.1.1, serious). On wide screens
    it scrolls on its own and holds only text, so nothing in it could take focus. The scrolling area is
@@ -190,10 +192,39 @@ Four defects were found and fixed:
 4. **The scenario toolbar overflowed with large text** (WCAG 1.4.4). Its four minimum widths are in
    `rem` and added up to more than the row at 200 percent text. Each minimum is now capped at a share
    of the row, which changes nothing at normal sizes (`toolbar.css`).
+5. **The public header overflowed on a 320 px screen with a wide font** (WCAG 1.4.10). "Start
+   simulation" stuck out by 23 px, and at 200 percent text the links and the button no longer fitted
+   on one row at 1440 px. The bar now wraps instead of overflowing, the links wrap as whole links, and
+   on screens up to 22em wide the button reads "Start" (its name is still "Start simulation")
+   (`PublicHeader.tsx`, `header.css`).
+6. **The report's score table and facts block overflowed at 200 percent text** (WCAG 1.4.4). The table
+   stacked into one block per skill only below a window width, which larger text does not change. It
+   now stacks by the room it has, with a container query in `rem`, and the facts block fits as many
+   columns as there is room for (`Scores.tsx`, `report.css`).
+7. **A hidden table on the landing page made it 5 px wider than a 320 px screen** (WCAG 1.4.10). A
+   table ignores the clipping that hides other elements, so it now sits inside a clipped wrapper
+   (`CoachingPreview.tsx`).
+8. **The reply box pushed Send out of view at 200 percent text in a 1024 px window**. Send now wraps
+   below the box when there is no room beside it (`composer.css`).
+9. **Focus was dropped when the control under it disappeared** (WCAG 2.4.3). Declining the
+   microphone prompt on the pre-flight, hiding the reply box, acting on or dismissing a notice, and a
+   problem taking the place of the voice controls each left focus on nothing. The keyboard now goes
+   to the replacement, and focus that is somewhere real is never moved (`use-rescue-focus.ts`,
+   `Preflight.tsx`, `Composer.tsx`, `VoiceZone.tsx`, `CallWorkspace.tsx`).
+10. **A failed "End and review" was silent and left the keyboard on nothing** (WCAG 4.1.3, 2.4.3).
+    The notice inside the dialog now announces itself, the question's first button takes the keyboard
+    back, and being offline while ending is treated like any other failed attempt, so Continue call
+    lets the call carry on (it used to leave the call blocked until the page was reloaded)
+    (`EndCallDialog.tsx`, `problems.ts`).
 
 Each has a regression test: 1 to 3 in the unit tests (`CallWorkspace.test.tsx`,
-`ScenarioWorkspace.test.tsx`) and in the specs above; 4 in `responsive.spec.ts`, which measures layout
-and so needs a real browser.
+`ScenarioWorkspace.test.tsx`) and in the specs above; 4 to 7 in `responsive.spec.ts`, which measures
+layout and so needs a real browser, and which now sets every element to a deliberately wide font
+(Verdana, or DejaVu Sans where it is missing) so that its result does not depend on the machine's
+fonts; 9 and 10 in `use-rescue-focus.test.tsx`, `Preflight.test.tsx` and
+`CallWorkspace.flows.test.tsx`. Number 8 has no test of its own (see Known gaps). The same run showed
+that the forced-colours check read a button's colour while it was still easing from one colour to
+another, which failed on the fast runner; it now waits for the colour to settle.
 
 ### Manual review
 
@@ -248,15 +279,23 @@ Besides the specs, these were done by hand in the browser and recorded here:
 - **The report's "building" view does not set `aria-busy`.** Progress is announced step by step through
   the polite region, and the list of five steps shows each one's state in words.
 - **Text enlarged from script.** Making the text 200 percent larger by styling the root element does
-  not move the layout breakpoints, because media queries ignore it. The scenario toolbar overflowed by
-  about 110 px under that emulation and was fixed. Browser zoom, which narrows the viewport in CSS
-  pixels and so does move the breakpoints, was emulated at 200 and 400 percent (640 by 512 and 320 by
-  256 px). A change to the browser's default font size, which also moves em-based media queries, was
-  not tried.
+  not move the layout breakpoints, because media queries ignore it. The scenario toolbar, the public
+  header, the report's score table and facts block, and the reply box overflowed under that emulation
+  and were fixed; with it, and with a wide font, no page scrolls sideways in a 1440 px window. A 1024 px
+  window is not clean: the landing page's list of scenario kinds, the scenario summary's chips, the
+  report's "About this report" list and a speaker's name in the transcript still stick out of their
+  boxes. Those were found by a one-off scan, are not covered by a test and are not fixed. Browser
+  zoom, which narrows the viewport in CSS pixels and so does move the breakpoints, was emulated at 200
+  and 400 percent (640 by 512 and 320 by 256 px). A change to the browser's default font size, which
+  also moves em-based media queries, was not tried.
 - **`lang="en"`, not `en-GB`.** The text is British English, but the document is declared as English
   without a region.
 - **Voice interruption is by button.** Interrupting the customer by speaking over them is not built;
   the **Interrupt** button is the way, and it is reachable by keyboard.
+- **Focus can still be dropped when "Try again" is replaced by a loading state.** On the scenarios
+  page, in the Recent calls sheet and on the report's "could not be loaded" view, pressing Try again
+  swaps the button for a skeleton, and the keyboard is left on nothing until the content arrives. The
+  call screens were fixed (number 9 above); these were found by the same review and not fixed.
 - **Evidence links repeat their text.** Several "See turn 12 in the transcript" links can sit on one
   screen. They lead to the same place, so the repeated name is accurate, but it is a long list for a
   screen-reader user to hear.

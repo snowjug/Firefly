@@ -155,20 +155,20 @@ The voice is synthetic. Firefly adjusts pace and pitch and sometimes asks for a 
 
 Every problem says what happened, what was kept, what to do, what **Try again** does, and whether typing still works. The wording is in one file (`web/src/features/call/problems.ts`). None of it shows a provider's own text, a code or a stack trace.
 
-| Situation                                 | What the trainee is told                                                                                                 | Typing still works |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------ |
-| Microphone blocked                        | How to allow it in Edge, Chrome or another browser; nothing was recorded.                                                | Yes                |
-| No microphone / device busy               | Check the device or close the other app; try again.                                                                      | Yes                |
-| Browser cannot record here                | A spoken call needs Edge or Chrome on a secure connection.                                                               | Yes                |
-| Nothing heard / no words                  | A hint, not an error: say it again or type.                                                                              | Yes                |
-| Speech could not be turned to text        | Nothing was sent and the recording was not kept; say it again or type.                                                   | Yes                |
-| Speech service unavailable                | The service is not available; type, or try again later. (Also the answer when the operator's speech settings are wrong.) | Yes                |
-| Customer could not reply / timed out      | The message is kept and sending again will not duplicate it.                                                             | No (retry first)   |
-| Customer's voice could not be made        | The reply is in the transcript; read it or try again.                                                                    | Yes                |
-| Browser blocked the voice / voice stopped | Press Play, or read the reply.                                                                                           | Yes                |
-| Offline                                   | Check the connection; the transcript and any unsent message are kept.                                                    | No                 |
-| Too fast (rate limit)                     | Wait the stated number of seconds.                                                                                       | No                 |
-| Could not save / end the call             | Nothing is lost; retrying will not send twice.                                                                           | Varies             |
+| Situation                                 | What the trainee is told                                                                                                                                              | Typing still works |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| Microphone blocked                        | How to allow it in Edge, Chrome or another browser; nothing was recorded.                                                                                             | Yes                |
+| No microphone / device busy               | Check the device or close the other app; try again.                                                                                                                   | Yes                |
+| Browser cannot record here                | A spoken call needs Edge or Chrome on a secure connection.                                                                                                            | Yes                |
+| Nothing heard / no words                  | A hint, not an error: say it again or type.                                                                                                                           | Yes                |
+| Speech could not be turned to text        | Nothing was sent and the recording was not kept; say it again or type.                                                                                                | Yes                |
+| Speech service unavailable                | The service is not available; type, or try again later. (Also the answer when the operator's speech settings are wrong.)                                              | Yes                |
+| Customer could not reply / timed out      | The message is kept and sending again will not duplicate it.                                                                                                          | No (retry first)   |
+| Customer's voice could not be made        | The reply is in the transcript; read it or try again.                                                                                                                 | Yes                |
+| Browser blocked the voice / voice stopped | Press Play, or read the reply.                                                                                                                                        | Yes                |
+| Offline                                   | Check the connection; the transcript and any unsent message are kept. If it happened while ending the call, the call is still open and Continue call goes back to it. | No                 |
+| Too fast (rate limit)                     | Wait the stated number of seconds.                                                                                                                                    | No                 |
+| Could not save / end the call             | Nothing is lost; retrying will not send twice.                                                                                                                        | Varies             |
 
 ## Server speech layer
 

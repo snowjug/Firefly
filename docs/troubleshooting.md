@@ -88,6 +88,9 @@ The message is empty, over the length limit, or the customer is still replying. 
 **I left the call page.**
 The call stays open. Go to **Scenarios**: a banner offers **Resume** for the call in progress, and **Recent calls** lists the others.
 
+**Scenarios says "You have a call in progress" for a call I never started.**
+Starting a call creates it, and **Back to brief** on the step before the call leaves that empty call open. Choose **Resume** to carry on with it, or open it, start it and choose **End call**: a call with no message has nothing to report, so Firefly says so and offers **Leave without a report**. An empty call does no harm if you ignore it. Going back to the brief also brings back the settings you chose, except which complications you picked: it shows the scenario's default set (or none, if you had switched them off).
+
 **"We could not find this call."**
 The address points at a call that does not exist for this browser. It may have been deleted, or it belongs to a different browser profile (see below). Choose a scenario to start a new one.
 
