@@ -6,7 +6,6 @@ import type {
   SendMessageRequest,
   SendMessageResponse,
   SessionDTO,
-  SessionListDTO,
   TranscriptDTO,
   TurnDTO,
 } from '#shared/domain/api.ts';
@@ -151,16 +150,6 @@ export const api = {
 
   createSession: (req: CreateSessionRequest, signal?: AbortSignal) =>
     request<{ session: SessionDTO }>('POST', '/sessions', req, signal).then((r) => r.session),
-  listSessions: (
-    params: {
-      difficulty?: string;
-      scenarioId?: string;
-      status?: string;
-      limit?: number;
-      offset?: number;
-    } = {},
-    signal?: AbortSignal,
-  ) => request<SessionListDTO>('GET', `/sessions${query(params)}`, undefined, signal),
   getSession: (id: string, signal?: AbortSignal) =>
     request<{ session: SessionDTO }>('GET', `/sessions/${enc(id)}`, undefined, signal).then(
       (r) => r.session,
