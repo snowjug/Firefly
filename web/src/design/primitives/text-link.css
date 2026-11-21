@@ -1,0 +1,63 @@
+/* Links: the inline TextLink, the BackLink and the Breadcrumb. Base styles every <a>; these add
+   the external-link cue and sizes. */
+
+.ff-link__icon {
+  margin-inline-start: 0.25em;
+  vertical-align: -0.1em;
+}
+.ff-link--inherit {
+  color: inherit;
+}
+.ff-link--inherit:hover {
+  color: var(--fg-1);
+}
+
+.ff-backlink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-block-size: var(--target);
+  padding-inline-end: var(--sp-2);
+  color: var(--brand-fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  text-decoration: none;
+}
+.ff-backlink:hover {
+  text-decoration: underline;
+}
+
+.ff-breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.ff-breadcrumb__item {
+  display: inline-flex;
+  align-items: center;
+}
+.ff-breadcrumb__link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+}
+.ff-breadcrumb__current {
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+.ff-breadcrumb__separator {
+  margin-inline: var(--sp-1h);
+  color: var(--fg-3);
+}
+
+@media (forced-colors: active) {
+  .ff-backlink {
+    color: LinkText;
+  }
+}

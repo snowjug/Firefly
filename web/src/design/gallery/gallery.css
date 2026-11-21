@@ -1,0 +1,96 @@
+/* The gallery is a development tool. Its classes are prefixed gx- and never reach production. */
+
+.gx-page {
+  box-sizing: border-box;
+  max-inline-size: 90rem;
+  margin-inline: auto;
+  padding: var(--sp-6) var(--gutter) var(--sp-16);
+}
+.gx-intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-block-end: var(--sp-6);
+}
+.gx-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+  margin-block-end: var(--sp-6);
+  padding: 0;
+  list-style: none;
+}
+.gx-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-block: var(--sp-6);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.gx-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-1);
+}
+@media (min-width: 48em) {
+  .gx-row {
+    grid-template-columns: 11rem minmax(0, 1fr);
+    gap: var(--sp-4);
+    align-items: start;
+  }
+}
+.gx-row__label {
+  padding-block-start: var(--sp-2);
+}
+.gx-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+}
+.gx-cell--column {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+.gx-narrow {
+  max-inline-size: 22rem;
+}
+.gx-grey {
+  padding: var(--sp-4);
+  background: var(--bg-section);
+  border-radius: var(--r-xl);
+}
+.gx-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: var(--sp-2);
+}
+.gx-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-1);
+  border: var(--stroke-w) solid var(--stroke-3);
+  border-radius: var(--r-lg);
+  text-align: center;
+}
+.gx-icon__sizes {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.gx-icon__name {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.gx-swatch {
+  display: inline-block;
+  inline-size: 3rem;
+  block-size: 1.5rem;
+  border: var(--stroke-w) solid var(--stroke-1);
+  border-radius: var(--r-md);
+}

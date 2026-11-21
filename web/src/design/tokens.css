@@ -1,0 +1,247 @@
+/* ==========================================================================================
+   Firefly design tokens
+
+   Informed by the public Fluent 2 web light theme (values checked against Microsoft's open-source
+   Fluent UI tokens), as an original Firefly interface. Light theme only.
+
+   Rules: components use semantic tokens (--fg-*, --bg-*, --brand*, --state-*, --status-*) and never
+   raw colour values. Breakpoints cannot be custom properties, so they are written as media queries:
+   30em (480), 40em (640), 48em (768), 64em (1024), 80em (1280), 90em (1440), 120em (1920).
+   ========================================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---- Typeface ------------------------------------------------------------------------ */
+  --font-base:
+    'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system,
+    BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display:
+    'Segoe UI Variable Display', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system,
+    BlinkMacSystemFont, Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, 'Courier New', monospace;
+
+  /* ---- Type scale (size / line height) -------------------------------------------------- */
+  --fs-caption: 0.75rem; /* 12 */
+  --lh-caption: 1rem; /* 16 */
+  --fs-compact: 0.8125rem; /* 13: compact UI */
+  --lh-compact: 1.125rem; /* 18 */
+  --fs-body: 0.875rem; /* 14 */
+  --lh-body: 1.25rem; /* 20 */
+  --fs-reading: 1rem; /* 16: transcripts and report prose */
+  --lh-reading: 1.5rem; /* 24 */
+  --fs-subtitle2: 1rem; /* 16 */
+  --lh-subtitle2: 1.375rem; /* 22 */
+  --fs-subtitle1: 1.25rem; /* 20 */
+  --lh-subtitle1: 1.75rem; /* 28 */
+  --fs-title3: 1.5rem; /* 24 */
+  --lh-title3: 2rem; /* 32 */
+  --fs-title2: 1.75rem; /* 28 */
+  --lh-title2: 2.25rem; /* 36 */
+  --fs-title1: 2rem; /* 32 */
+  --lh-title1: 2.5rem; /* 40 */
+  --fs-display: clamp(1.875rem, 1.25rem + 2.2vw, 2.5rem); /* 30 to 40 */
+  --lh-display: 1.3;
+  --fw-regular: 400;
+  --fw-semibold: 600;
+
+  /* ---- Neutral surfaces ------------------------------------------------------------------ */
+  --bg-canvas: #ffffff;
+  --bg-quiet: #fafafa;
+  --bg-subtle: #f5f5f5;
+  --bg-section: #f0f0f0;
+  --bg-strong: #ebebeb;
+  --bg-hover: #f5f5f5;
+  --bg-pressed: #e0e0e0;
+  --bg-selected: #ebebeb;
+  --bg-scrim: rgb(0 0 0 / 0.4);
+
+  /* ---- Text ------------------------------------------------------------------------------ */
+  --fg-1: #242424;
+  --fg-2: #424242;
+  --fg-3: #616161; /* the lightest text Firefly uses */
+  --fg-disabled: #bdbdbd;
+  --fg-on-brand: #ffffff;
+
+  /* ---- Borders --------------------------------------------------------------------------- */
+  --stroke-1: #d1d1d1;
+  --stroke-2: #e0e0e0;
+  --stroke-3: #f0f0f0;
+  --stroke-accessible: #616161; /* 3:1 or better: the edge of a control that has no other cue */
+
+  /* ---- Brand (actions, selection and active state only) ---------------------------------- */
+  --brand: #0f6cbd;
+  --brand-hover: #115ea3;
+  --brand-pressed: #0c3b5e;
+  --brand-selected: #0f548c;
+  --brand-tint: #ebf3fc;
+  --brand-tint-hover: #cfe4fa;
+  --brand-tint-pressed: #96c6fa;
+  --brand-fg: #0f6cbd;
+  --brand-fg-2: #115ea3; /* links */
+  --brand-stroke: #0f6cbd;
+  --brand-stroke-2: #b4d6fa;
+
+  /* ---- Focus ----------------------------------------------------------------------------- */
+  --focus-inner: #ffffff;
+  --focus-outer: #000000;
+
+  /* ---- Status (foreground / background / border) ----------------------------------------- */
+  --status-success-fg: #0e700e;
+  --status-success-bg: #f1faf1;
+  --status-success-border: #9fd89f;
+  --status-warning-fg: #bc4b09;
+  --status-warning-bg: #fff9f5;
+  --status-warning-border: #fdcfb4;
+  --status-danger-fg: #b10e1c;
+  --status-danger-bg: #fdf3f4;
+  --status-danger-border: #eeacb2;
+  --status-info-fg: #0f6cbd;
+  --status-info-bg: #ebf3fc;
+  --status-info-border: #b4d6fa;
+  --status-neutral-fg: #424242;
+  --status-neutral-bg: #f5f5f5;
+  --status-neutral-border: #d1d1d1;
+
+  /* ---- Customer temperature (always paired with a label and a distinct icon) -------------- */
+  --state-calm-fg: #0e700e;
+  --state-calm-bg: #f1faf1;
+  --state-calm-border: #9fd89f;
+  --state-concerned-fg: #835b00; /* marigold foreground 2: Fluent's marigold foreground 1 fails 4.5:1 */
+  --state-concerned-bg: #fefbf4;
+  --state-concerned-border: #f9e2ae;
+  --state-frustrated-fg: #c43501;
+  --state-frustrated-bg: #fdf6f3;
+  --state-frustrated-border: #f4bfab;
+  --state-angry-fg: #b10e1c;
+  --state-angry-bg: #fdf3f4;
+  --state-angry-border: #eeacb2;
+  --state-escalating-fg: #750b1c;
+  --state-escalating-bg: #fbe9eb;
+  --state-escalating-border: #e3949b;
+  --state-recovering-fg: #0e700e;
+  --state-recovering-bg: #f1faf1;
+  --state-recovering-border: #9fd89f;
+
+  /* ---- Destructive actions (white text on these is 7:1 or better) ------------------------ */
+  --danger: #b10e1c;
+  --danger-hover: #960b18;
+  --danger-pressed: #6e0811;
+
+  /* ---- Accents --------------------------------------------------------------------------- */
+  --ai-fg: #4f52b2; /* analysis written by the coaching evaluator, used sparingly */
+  --ai-bg: #f1f2fb;
+  --ai-border: #c7c9ec;
+  --voice-trainee: #0f6cbd; /* waveform: the trainee */
+  --voice-customer: #0e7c86; /* waveform: the customer (restrained teal) */
+
+  /* ---- Spacing (4 px grid) ---------------------------------------------------------------- */
+  --sp-0h: 0.125rem; /* 2 */
+  --sp-1: 0.25rem; /* 4 */
+  --sp-1h: 0.375rem; /* 6 */
+  --sp-2: 0.5rem; /* 8 */
+  --sp-2h: 0.625rem; /* 10 */
+  --sp-3: 0.75rem; /* 12 */
+  --sp-4: 1rem; /* 16 */
+  --sp-5: 1.25rem; /* 20 */
+  --sp-6: 1.5rem; /* 24 */
+  --sp-8: 2rem; /* 32 */
+  --sp-10: 2.5rem; /* 40 */
+  --sp-12: 3rem; /* 48 */
+  --sp-16: 4rem; /* 64 */
+  --sp-20: 5rem; /* 80 */
+
+  /* ---- Shape ----------------------------------------------------------------------------- */
+  --r-sm: 2px;
+  --r-md: 4px; /* controls */
+  --r-lg: 6px;
+  --r-xl: 8px; /* cards and panels */
+  --r-2xl: 12px; /* dialogs and sheets */
+  --r-pill: 999px;
+  --stroke-w: 1px;
+  --stroke-w-thick: 2px;
+
+  /* ---- Depth ----------------------------------------------------------------------------- */
+  --shadow-2: 0 0 2px rgb(0 0 0 / 0.12), 0 1px 2px rgb(0 0 0 / 0.14);
+  --shadow-4: 0 0 2px rgb(0 0 0 / 0.12), 0 2px 4px rgb(0 0 0 / 0.14);
+  --shadow-8: 0 0 2px rgb(0 0 0 / 0.12), 0 4px 8px rgb(0 0 0 / 0.14);
+  --shadow-16: 0 0 2px rgb(0 0 0 / 0.12), 0 8px 16px rgb(0 0 0 / 0.14);
+  --shadow-28: 0 0 8px rgb(0 0 0 / 0.12), 0 14px 28px rgb(0 0 0 / 0.14);
+  --shadow-64: 0 0 8px rgb(0 0 0 / 0.12), 0 32px 64px rgb(0 0 0 / 0.14);
+
+  /* ---- Materials: acrylic only for the header, call controls, voice status and dialogs ---- */
+  --acrylic-bg: rgb(255 255 255 / 0.78);
+  --acrylic-solid: #ffffff; /* the fallback when blur is unavailable or reduced transparency is on */
+  --acrylic-filter: saturate(1.4) blur(20px);
+  --acrylic-border: rgb(0 0 0 / 0.08);
+
+  /* ---- Motion (Fluent 2 durations and curves) -------------------------------------------- */
+  --dur-instant: 50ms;
+  --dur-faster: 100ms;
+  --dur-fast: 150ms;
+  --dur-normal: 200ms;
+  --dur-gentle: 250ms;
+  --dur-slow: 300ms;
+  --dur-slower: 400ms;
+  --ease-decelerate: cubic-bezier(0.1, 0.9, 0.2, 1);
+  --ease-decelerate-mid: cubic-bezier(0, 0, 0, 1);
+  --ease-accelerate: cubic-bezier(0.9, 0.1, 1, 0.2);
+  --ease-accelerate-mid: cubic-bezier(1, 0, 1, 1);
+  --ease-easy: cubic-bezier(0.33, 0, 0.67, 1);
+  --ease-easy-max: cubic-bezier(0.8, 0, 0.2, 1);
+
+  /* ---- Layout ---------------------------------------------------------------------------- */
+  --page-max: 80rem; /* 1280 */
+  --page-max-wide: 90rem; /* 1440: the call workspace */
+  --read-max: 46rem; /* long-form reading width */
+  --gutter: clamp(1rem, 0.4rem + 2.4vw, 2rem);
+  --header-h: 3.5rem; /* 56 */
+  --target: 2.75rem; /* 44: the minimum size of a primary control */
+  --target-min: 1.5rem; /* 24: WCAG 2.2 AA floor */
+  --ctl-sm: 2rem; /* 32: dense toolbars and secondary controls, never the only way to do a task */
+  --ctl-md: var(--target); /* 44: the default control height */
+  --ctl-lg: 3rem; /* 48: the main action on a screen */
+  --z-sticky: 50;
+  --z-header: 100;
+  --z-dialog: 1000;
+}
+
+/* People who ask for less motion get none: durations collapse and animation is switched off by the
+   base stylesheet. Every state change stays instant and every word stays the same. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0.01ms;
+    --dur-faster: 0.01ms;
+    --dur-fast: 0.01ms;
+    --dur-normal: 0.01ms;
+    --dur-gentle: 0.01ms;
+    --dur-slow: 0.01ms;
+    --dur-slower: 0.01ms;
+  }
+}
+
+/* No blur where it is not available or not wanted: a solid surface with the same border. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --acrylic-bg: var(--acrylic-solid);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --acrylic-bg: var(--acrylic-solid);
+    --acrylic-filter: none;
+  }
+}
+
+/* A stronger edge, and plain text on plain grounds, for people who ask for more contrast. */
+@media (prefers-contrast: more) {
+  :root {
+    --stroke-1: #616161;
+    --stroke-2: #616161;
+    --stroke-3: #8a8a8a;
+    --fg-3: #424242;
+    --acrylic-bg: var(--acrylic-solid);
+    --acrylic-filter: none;
+  }
+}

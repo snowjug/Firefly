@@ -1,0 +1,214 @@
+/* SegmentedControl: a native radio group drawn as joined segments, or as cards when options
+   carry a description. The radio input covers the whole option, so the whole option is the target. */
+
+.ff-segmented {
+  --_h: var(--ctl-md);
+  min-inline-size: 0;
+}
+.ff-segmented--small {
+  --_h: var(--ctl-sm);
+}
+
+.ff-segmented__legend {
+  margin-block-end: var(--sp-2);
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+.ff-segmented__hint {
+  margin-block-end: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.ff-segmented__item {
+  position: relative;
+  display: flex;
+  min-inline-size: 0;
+  border-radius: var(--r-md);
+}
+.ff-segmented__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.ff-segmented__input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.ff-segmented__input:disabled {
+  cursor: not-allowed;
+}
+/* The ring is drawn around the whole option, above its neighbours. */
+.ff-segmented__item:has(.ff-segmented__input:focus-visible) {
+  z-index: 1;
+  outline: var(--stroke-w-thick) solid var(--focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-inner);
+}
+
+.ff-segmented__face {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+  color: var(--fg-1);
+  text-align: center;
+}
+.ff-segmented__line {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+}
+.ff-segmented__label {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  overflow-wrap: normal;
+  cursor: inherit;
+}
+.ff-segmented__description {
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+/* ---- Joined segments ------------------------------------------------------------------- */
+.ff-segmented--segments .ff-segmented__track {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--sp-0h);
+  max-inline-size: 100%;
+  padding: var(--sp-0h);
+  border: var(--stroke-w) solid var(--stroke-1);
+  border-radius: var(--r-lg);
+  background: var(--bg-subtle);
+}
+.ff-segmented--segments.ff-segmented--fill .ff-segmented__track {
+  display: flex;
+}
+.ff-segmented--segments.ff-segmented--fill .ff-segmented__item {
+  flex: 1 1 0;
+}
+.ff-segmented--segments .ff-segmented__item {
+  flex: 1 1 auto;
+  min-block-size: calc(var(--_h) - 0.5rem);
+}
+.ff-segmented--segments .ff-segmented__face {
+  padding-inline: var(--sp-3);
+  border-radius: var(--r-md);
+  transition:
+    background-color var(--dur-faster) var(--ease-easy),
+    box-shadow var(--dur-faster) var(--ease-easy);
+}
+.ff-segmented--segments .ff-segmented__item:hover .ff-segmented__face {
+  background: var(--bg-strong);
+}
+.ff-segmented--segments .ff-segmented__input:checked + .ff-segmented__face {
+  background: var(--brand-tint);
+  color: var(--brand-fg-2);
+  box-shadow: inset 0 0 0 2px var(--brand-stroke);
+}
+
+/* ---- Cards ----------------------------------------------------------------------------- */
+.ff-segmented--cards .ff-segmented__track {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: var(--sp-2);
+}
+.ff-segmented--cards .ff-segmented__item {
+  border-radius: var(--r-xl);
+}
+.ff-segmented--cards .ff-segmented__face {
+  align-items: flex-start;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  padding-inline-end: var(--sp-10);
+  border: var(--stroke-w) solid var(--stroke-1);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  text-align: start;
+  transition:
+    background-color var(--dur-faster) var(--ease-easy),
+    box-shadow var(--dur-faster) var(--ease-easy);
+}
+.ff-segmented--cards .ff-segmented__line {
+  justify-content: flex-start;
+}
+.ff-segmented--cards .ff-segmented__item:hover .ff-segmented__face {
+  background: var(--bg-hover);
+}
+.ff-segmented--cards .ff-segmented__input:checked + .ff-segmented__face {
+  background: var(--brand-tint);
+  border-color: var(--brand-stroke);
+  box-shadow: inset 0 0 0 1px var(--brand-stroke);
+}
+.ff-segmented--cards .ff-segmented__input:checked + .ff-segmented__face .ff-segmented__label {
+  color: var(--brand-fg-2);
+}
+.ff-segmented__check {
+  position: absolute;
+  inset-block-start: var(--sp-3);
+  inset-inline-end: var(--sp-3);
+  color: var(--brand);
+  opacity: 0;
+  pointer-events: none;
+}
+.ff-segmented__input:checked ~ .ff-segmented__check {
+  opacity: 1;
+}
+
+/* ---- Disabled -------------------------------------------------------------------------- */
+.ff-segmented__input:disabled + .ff-segmented__face {
+  color: var(--fg-disabled);
+}
+.ff-segmented__input:disabled + .ff-segmented__face .ff-segmented__description {
+  color: var(--fg-disabled);
+}
+.ff-segmented__input:disabled:checked + .ff-segmented__face {
+  background: var(--bg-section);
+  box-shadow: inset 0 0 0 2px var(--stroke-1);
+}
+
+/* ---- Forced colours -------------------------------------------------------------------- */
+@media (forced-colors: active) {
+  .ff-segmented--segments .ff-segmented__track,
+  .ff-segmented--cards .ff-segmented__face {
+    border-color: ButtonText;
+  }
+  .ff-segmented--segments .ff-segmented__input:checked + .ff-segmented__face,
+  .ff-segmented--cards .ff-segmented__input:checked + .ff-segmented__face {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+    box-shadow: none;
+  }
+  .ff-segmented--segments
+    .ff-segmented__input:checked
+    + .ff-segmented__face
+    .ff-segmented__description,
+  .ff-segmented--cards
+    .ff-segmented__input:checked
+    + .ff-segmented__face
+    .ff-segmented__description,
+  .ff-segmented--cards .ff-segmented__input:checked + .ff-segmented__face .ff-segmented__label {
+    color: HighlightText;
+  }
+  .ff-segmented__check {
+    color: HighlightText;
+  }
+  .ff-segmented__input:disabled + .ff-segmented__face {
+    color: GrayText;
+  }
+}

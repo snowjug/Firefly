@@ -1,0 +1,192 @@
+/* Buttons: Button, LinkButton, IconButton and ToggleButton share one look. */
+
+.ff-button {
+  --_h: var(--ctl-md);
+  --_px: var(--sp-4);
+  --_py: var(--sp-2);
+  --_fs: var(--fs-body);
+  --_lh: var(--lh-body);
+  --_bg: var(--bg-canvas);
+  --_fg: var(--fg-1);
+  --_bd: var(--stroke-1);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  box-sizing: border-box;
+  min-block-size: var(--_h);
+  padding: var(--_py) var(--_px);
+  border: var(--stroke-w) solid var(--_bd);
+  border-radius: var(--r-md);
+  background: var(--_bg);
+  color: var(--_fg);
+  font-family: inherit;
+  font-size: var(--_fs);
+  line-height: var(--_lh);
+  font-weight: var(--fw-semibold);
+  text-align: center;
+  text-decoration: none;
+  /* Labels wrap between words, never inside one. Base sets break-word on the page. */
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-faster) var(--ease-easy),
+    border-color var(--dur-faster) var(--ease-easy),
+    color var(--dur-faster) var(--ease-easy);
+}
+
+/* ---- Sizes ----------------------------------------------------------------------------- */
+.ff-button--small {
+  --_h: var(--ctl-sm);
+  --_px: var(--sp-3);
+  --_py: var(--sp-1);
+  --_fs: var(--fs-body);
+}
+.ff-button--large {
+  --_h: var(--ctl-lg);
+  --_px: var(--sp-6);
+  --_py: var(--sp-2h);
+  --_fs: var(--fs-subtitle2);
+  --_lh: var(--lh-subtitle2);
+}
+.ff-button--block {
+  display: flex;
+  inline-size: 100%;
+}
+.ff-button--icon {
+  inline-size: var(--_h);
+  min-inline-size: var(--_h);
+  padding: 0;
+}
+
+/* ---- Appearances: each one sets colours, the rules below apply them to every state ------- */
+.ff-button--primary {
+  --_bg: var(--brand);
+  --_fg: var(--fg-on-brand);
+  --_bd: var(--brand);
+  --_bg-hover: var(--brand-hover);
+  --_bd-hover: var(--brand-hover);
+  --_bg-active: var(--brand-pressed);
+  --_bd-active: var(--brand-pressed);
+}
+.ff-button--secondary {
+  --_bg: var(--bg-canvas);
+  --_fg: var(--fg-1);
+  --_bd: var(--stroke-1);
+  --_bg-hover: var(--bg-hover);
+  --_bg-active: var(--bg-pressed);
+}
+.ff-button--outline {
+  --_bg: transparent;
+  --_fg: var(--fg-1);
+  --_bd: var(--stroke-accessible);
+  --_bg-hover: var(--bg-hover);
+  --_bg-active: var(--bg-pressed);
+}
+.ff-button--subtle {
+  --_bg: transparent;
+  --_fg: var(--fg-2);
+  --_bd: transparent;
+  --_fg-hover: var(--fg-1);
+  --_bg-hover: var(--bg-hover);
+  --_bg-active: var(--bg-pressed);
+}
+.ff-button--danger {
+  --_bg: var(--danger);
+  --_fg: var(--fg-on-brand);
+  --_bd: var(--danger);
+  --_bg-hover: var(--danger-hover);
+  --_bd-hover: var(--danger-hover);
+  --_bg-active: var(--danger-pressed);
+  --_bd-active: var(--danger-pressed);
+}
+
+.ff-button:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--_bg-hover, var(--_bg));
+  border-color: var(--_bd-hover, var(--_bd));
+  color: var(--_fg-hover, var(--_fg));
+  text-decoration: none;
+}
+.ff-button:active:not(:disabled, [aria-disabled='true']) {
+  background: var(--_bg-active, var(--_bg));
+  border-color: var(--_bd-active, var(--_bd-hover, var(--_bd)));
+}
+/* A link used as a button keeps its colours from base's link rules. */
+a.ff-button:hover {
+  color: var(--_fg-hover, var(--_fg));
+}
+
+/* ---- Pressed (ToggleButton): a tint and a heavier edge, not colour alone --------------- */
+.ff-button[aria-pressed='true'] {
+  --_bg: var(--brand-tint);
+  --_fg: var(--brand-fg-2);
+  --_bd: var(--brand-stroke);
+  --_bg-hover: var(--brand-tint-hover);
+  --_bg-active: var(--brand-tint-pressed);
+  --_fg-hover: var(--brand-fg-2);
+  box-shadow: inset 0 0 0 1px var(--brand-stroke);
+}
+.ff-button[aria-pressed='true']:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-inner);
+}
+
+/* ---- Disabled: looks inactive. Native `disabled` leaves the tab order, aria-disabled stays. - */
+.ff-button:disabled,
+.ff-button[aria-disabled='true']:not(.ff-button--loading) {
+  background: var(--bg-section);
+  border-color: var(--stroke-2);
+  color: var(--fg-disabled);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.ff-button--subtle:disabled,
+.ff-button--subtle[aria-disabled='true']:not(.ff-button--loading) {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* ---- Loading: same size, the icon (or the whole label) is replaced by a spinner ---------- */
+.ff-button--loading {
+  cursor: progress;
+}
+.ff-button__busy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ff-button--loading-centre .ff-button__label {
+  opacity: 0;
+}
+
+.ff-button__label {
+  min-inline-size: 0;
+}
+
+/* ---- Forced colours: system colours, and an edge on every button ------------------------ */
+@media (forced-colors: active) {
+  .ff-button {
+    border-color: ButtonText;
+    forced-color-adjust: auto;
+  }
+  .ff-button--primary,
+  .ff-button--danger,
+  .ff-button[aria-pressed='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
+  }
+  .ff-button:disabled,
+  .ff-button[aria-disabled='true']:not(.ff-button--loading) {
+    border-color: GrayText;
+    color: GrayText;
+  }
+}

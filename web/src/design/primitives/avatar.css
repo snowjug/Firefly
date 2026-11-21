@@ -1,0 +1,88 @@
+.ff-avatar {
+  --_size: 2.5rem;
+  --_fg: var(--fg-1);
+  --_bg: var(--bg-strong);
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  inline-size: var(--_size);
+  block-size: var(--_size);
+  border-radius: var(--r-pill);
+  background: var(--_bg);
+  color: var(--_fg);
+  font-weight: var(--fw-semibold);
+  font-size: calc(var(--_size) * 0.38);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  user-select: none;
+}
+.ff-avatar--xs {
+  --_size: 1.5rem;
+  font-size: 0.6875rem;
+}
+.ff-avatar--sm {
+  --_size: 2rem;
+  font-size: 0.8125rem;
+}
+.ff-avatar--md {
+  --_size: 2.5rem;
+}
+.ff-avatar--lg {
+  --_size: 3.5rem;
+}
+.ff-avatar--xl {
+  --_size: 4.5rem;
+}
+.ff-avatar--brand {
+  --_bg: var(--brand-tint);
+  --_fg: var(--brand-fg-2);
+}
+.ff-avatar--ai {
+  --_bg: var(--ai-bg);
+  --_fg: var(--ai-fg);
+}
+
+/* Speaking: a ring with a gap, so it reads on any background and without colour. */
+.ff-avatar {
+  --_ring: var(--brand);
+}
+.ff-avatar--customer {
+  --_ring: var(--voice-customer);
+}
+.ff-avatar--speaking {
+  box-shadow:
+    0 0 0 2px var(--bg-canvas),
+    0 0 0 4px var(--_ring);
+  animation: ff-avatar-speak 1.6s var(--ease-easy) infinite;
+}
+@keyframes ff-avatar-speak {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--bg-canvas),
+      0 0 0 4px var(--_ring);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px var(--bg-canvas),
+      0 0 0 6px color-mix(in srgb, var(--_ring) 35%, transparent);
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-avatar {
+    border: 1px solid ButtonText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .ff-avatar--speaking {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+    animation: none;
+  }
+}

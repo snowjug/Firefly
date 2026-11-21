@@ -1,0 +1,41 @@
+.ff-errorbar {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--header-h);
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+}
+.ff-errorbar .l-page {
+  display: flex;
+  align-items: center;
+}
+
+.ff-errorpage {
+  padding-block: var(--sp-12);
+}
+.ff-errorpage__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-6);
+}
+.ff-errorpage__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 3.5rem;
+  block-size: 3.5rem;
+  border: var(--stroke-w) solid var(--status-warning-border);
+  border-radius: var(--r-pill);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+}
+.ff-errorpage__text {
+  max-inline-size: 38rem;
+}
+
+@media (forced-colors: active) {
+  .ff-errorpage__icon {
+    border-color: ButtonText;
+    color: CanvasText;
+  }
+}

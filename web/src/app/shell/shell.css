@@ -1,0 +1,70 @@
+/* The shell: the main landmark, the offline notice and the loading screen. */
+
+.ff-main {
+  flex: 1 0 auto;
+  min-inline-size: 0;
+}
+/* Focus is moved here after navigation so a screen reader starts at the top: not a control, so no ring. */
+.ff-main:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.ff-main--centred {
+  display: grid;
+  place-items: center;
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
+}
+
+/* A section reached by a link in the page, focused so the next thing read is its heading. */
+[data-route-target]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.ff-offline {
+  padding-block: var(--sp-3) 0;
+}
+
+@media print {
+  .ff-offline {
+    display: none;
+  }
+}
+
+.ff-progress-line {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline: 0;
+  z-index: calc(var(--z-header) + 1);
+  block-size: 0.1875rem;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ff-progress-line__bar {
+  block-size: 100%;
+  inline-size: 40%;
+  background: var(--brand);
+  animation: ff-progress-line 1.2s var(--ease-easy) infinite;
+}
+@keyframes ff-progress-line {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-progress-line__bar {
+    inline-size: 100%;
+    animation: none;
+    opacity: 0.6;
+  }
+}
+@media (forced-colors: active) {
+  .ff-progress-line__bar {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}

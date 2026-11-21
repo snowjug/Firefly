@@ -1,0 +1,123 @@
+.ff-tabs {
+  min-inline-size: 0;
+}
+.ff-tabs--vertical {
+  display: flex;
+  gap: var(--sp-4);
+}
+
+.ff-tablist {
+  display: flex;
+  gap: var(--sp-1);
+  overflow-x: auto;
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+  scrollbar-width: thin;
+}
+.ff-tabs--vertical .ff-tablist {
+  flex-direction: column;
+  flex: none;
+  overflow: visible;
+  border-block-end: 0;
+  border-inline-end: var(--stroke-w) solid var(--stroke-2);
+}
+
+.ff-tab {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  box-sizing: border-box;
+  min-block-size: var(--target);
+  padding: var(--sp-2) var(--sp-4);
+  border: 0;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  background: transparent;
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-regular);
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-faster) var(--ease-easy),
+    color var(--dur-faster) var(--ease-easy);
+}
+.ff-tabs--vertical .ff-tab {
+  justify-content: flex-start;
+  border-radius: var(--r-md) 0 0 var(--r-md);
+}
+.ff-tab__label {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* A hidden, bold copy of the label holds the width of the selected state in every tab. */
+.ff-tab__label[data-text]::after {
+  content: attr(data-text);
+  block-size: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: var(--fw-semibold);
+  pointer-events: none;
+  user-select: none;
+}
+.ff-tab:hover:not(:disabled, .ff-tab--selected) {
+  background: var(--bg-hover);
+  color: var(--fg-1);
+}
+.ff-tab:active:not(:disabled) {
+  background: var(--bg-pressed);
+}
+.ff-tab--selected {
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+/* The selected tab carries a line, so selection is a shape and not only a colour. */
+.ff-tab--selected::before {
+  content: '';
+  position: absolute;
+  inset-inline: var(--sp-2);
+  inset-block-end: 0;
+  block-size: 0.1875rem;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+}
+.ff-tabs--vertical .ff-tab--selected::before {
+  inset-inline: auto;
+  inset-inline-end: 0;
+  inset-block: var(--sp-2);
+  inline-size: 0.1875rem;
+  block-size: auto;
+}
+.ff-tab:disabled {
+  color: var(--fg-disabled);
+  cursor: not-allowed;
+}
+/* Inside the tab, so the scrolling list never clips the ring. */
+.ff-tab:focus-visible {
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 2px var(--focus-inner);
+}
+
+.ff-tabpanel {
+  padding-block-start: var(--sp-4);
+  min-inline-size: 0;
+}
+.ff-tabs--vertical .ff-tabpanel {
+  flex: 1 1 auto;
+  padding-block-start: 0;
+}
+
+@media (forced-colors: active) {
+  .ff-tablist {
+    border-color: GrayText;
+  }
+  .ff-tab--selected::before {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .ff-tab:disabled {
+    color: GrayText;
+  }
+}

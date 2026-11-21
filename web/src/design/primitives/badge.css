@@ -1,0 +1,156 @@
+/* Badge (status, customer state) and Tag (a chosen value). */
+
+.ff-badge {
+  --_fg: var(--status-neutral-fg);
+  --_bg: var(--status-neutral-bg);
+  --_bd: var(--status-neutral-border);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1h);
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  border: var(--stroke-w) solid var(--_bd);
+  border-radius: var(--r-pill);
+  background: var(--_bg);
+  color: var(--_fg);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.ff-badge--medium {
+  min-block-size: 1.625rem;
+  padding-inline: var(--sp-2h);
+}
+.ff-badge--small {
+  min-block-size: 1.375rem;
+  padding-inline: var(--sp-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.ff-badge__text {
+  min-inline-size: 0;
+}
+.ff-badge--outline {
+  background: transparent;
+}
+
+.ff-badge--neutral {
+  --_fg: var(--status-neutral-fg);
+  --_bg: var(--status-neutral-bg);
+  --_bd: var(--status-neutral-border);
+}
+.ff-badge--info {
+  --_fg: var(--status-info-fg);
+  --_bg: var(--status-info-bg);
+  --_bd: var(--status-info-border);
+}
+.ff-badge--success {
+  --_fg: var(--status-success-fg);
+  --_bg: var(--status-success-bg);
+  --_bd: var(--status-success-border);
+}
+.ff-badge--warning {
+  --_fg: var(--status-warning-fg);
+  --_bg: var(--status-warning-bg);
+  --_bd: var(--status-warning-border);
+}
+.ff-badge--danger {
+  --_fg: var(--status-danger-fg);
+  --_bg: var(--status-danger-bg);
+  --_bd: var(--status-danger-border);
+}
+.ff-badge--ai {
+  --_fg: var(--ai-fg);
+  --_bg: var(--ai-bg);
+  --_bd: var(--ai-border);
+}
+.ff-badge--calm {
+  --_fg: var(--state-calm-fg);
+  --_bg: var(--state-calm-bg);
+  --_bd: var(--state-calm-border);
+}
+.ff-badge--concerned {
+  --_fg: var(--state-concerned-fg);
+  --_bg: var(--state-concerned-bg);
+  --_bd: var(--state-concerned-border);
+}
+.ff-badge--frustrated {
+  --_fg: var(--state-frustrated-fg);
+  --_bg: var(--state-frustrated-bg);
+  --_bd: var(--state-frustrated-border);
+}
+.ff-badge--angry {
+  --_fg: var(--state-angry-fg);
+  --_bg: var(--state-angry-bg);
+  --_bd: var(--state-angry-border);
+}
+.ff-badge--escalating {
+  --_fg: var(--state-escalating-fg);
+  --_bg: var(--state-escalating-bg);
+  --_bd: var(--state-escalating-border);
+}
+.ff-badge--recovering {
+  --_fg: var(--state-recovering-fg);
+  --_bg: var(--state-recovering-bg);
+  --_bd: var(--state-recovering-border);
+}
+
+/* ---- Tag ------------------------------------------------------------------------------- */
+.ff-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1h);
+  box-sizing: border-box;
+  max-inline-size: 100%;
+  border: var(--stroke-w) solid var(--stroke-1);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+  color: var(--fg-1);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  vertical-align: middle;
+}
+.ff-tag--medium {
+  min-block-size: 1.75rem;
+  padding-inline: var(--sp-2);
+}
+.ff-tag--small {
+  min-block-size: 1.5rem;
+  padding-inline: var(--sp-1h);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.ff-tag--removable {
+  padding-inline-end: var(--sp-0h);
+}
+.ff-tag__text {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.ff-tag__remove {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--target-min);
+  block-size: var(--target-min);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg-2);
+}
+.ff-tag__remove:hover {
+  background: var(--bg-pressed);
+  color: var(--fg-1);
+}
+
+@media (forced-colors: active) {
+  .ff-badge,
+  .ff-tag {
+    border-color: ButtonText;
+    color: CanvasText;
+  }
+}
