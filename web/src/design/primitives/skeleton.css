@@ -1,13 +1,18 @@
 .ff-skeleton {
+  position: relative;
   display: block;
-  background: linear-gradient(
-    90deg,
-    var(--bg-section) 0%,
-    var(--bg-strong) 50%,
-    var(--bg-section) 100%
-  );
-  background-size: 200% 100%;
-  animation: ff-shimmer 1.6s var(--ease-easy) infinite;
+  overflow: hidden;
+  background: var(--bg-section);
+}
+/* The shimmer is a soft band that slides across: transform only, and none at all when motion is
+   reduced (a still, flat grey). */
+.ff-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, var(--bg-strong) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: ff-skeleton-sweep var(--dur-shimmer) var(--ease-easy) infinite;
 }
 .ff-skeleton--text {
   block-size: 0.875rem;
@@ -28,20 +33,15 @@
   gap: var(--sp-2);
 }
 
-@keyframes ff-shimmer {
-  from {
-    background-position: 200% 0;
-  }
+@keyframes ff-skeleton-sweep {
   to {
-    background-position: -200% 0;
+    transform: translateX(100%);
   }
 }
 
-/* No shimmer: a still, flat grey. */
 @media (prefers-reduced-motion: reduce) {
-  .ff-skeleton {
-    background: var(--bg-section);
-    animation: none;
+  .ff-skeleton::after {
+    display: none;
   }
 }
 
@@ -49,5 +49,8 @@
   .ff-skeleton {
     border: 1px solid GrayText;
     background: Canvas;
+  }
+  .ff-skeleton::after {
+    display: none;
   }
 }

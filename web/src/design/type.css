@@ -8,6 +8,13 @@
   letter-spacing: -0.01em;
   text-wrap: balance;
 }
+/* The one supporting line under a page title: short, calm, never a paragraph. */
+.t-lead {
+  font-size: var(--fs-lead);
+  line-height: var(--lh-lead);
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
 .t-title1 {
   font-family: var(--font-display);
   font-size: var(--fs-title1);
@@ -27,34 +34,41 @@
   font-size: var(--fs-title3);
   line-height: var(--lh-title3);
   font-weight: var(--fw-semibold);
+  text-wrap: balance;
 }
 .t-subtitle1 {
   font-size: var(--fs-subtitle1);
   line-height: var(--lh-subtitle1);
   font-weight: var(--fw-semibold);
+  text-wrap: balance;
 }
 .t-subtitle2 {
   font-size: var(--fs-subtitle2);
   line-height: var(--lh-subtitle2);
   font-weight: var(--fw-semibold);
+  text-wrap: balance;
 }
 .t-body {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
+  text-wrap: pretty;
 }
 .t-body-strong {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   font-weight: var(--fw-semibold);
+  text-wrap: pretty;
 }
 /* Reading text: transcripts, report prose and anything a person reads for more than a line. */
 .t-reading {
   font-size: var(--fs-reading);
   line-height: var(--lh-reading);
+  text-wrap: pretty;
 }
 .t-caption {
   font-size: var(--fs-caption);
   line-height: var(--lh-caption);
+  text-wrap: pretty;
 }
 /* A small label above a value or a group. Sentence case, never lighter than --fg-3. */
 .t-label {

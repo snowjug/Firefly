@@ -45,7 +45,7 @@
   block-size: 100%;
   inline-size: 40%;
   background: var(--brand);
-  animation: ff-progress-line 1.2s var(--ease-easy) infinite;
+  animation: ff-progress-line var(--dur-slide) var(--ease-easy) infinite;
 }
 @keyframes ff-progress-line {
   from {

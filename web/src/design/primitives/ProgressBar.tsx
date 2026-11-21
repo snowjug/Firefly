@@ -71,7 +71,7 @@ export function ProgressBar({
       >
         <div
           className="ff-progress__fill"
-          style={determinate ? { inlineSize: `${percent}%` } : undefined}
+          style={determinate ? { transform: `translateX(${percent - 100}%)` } : undefined}
         />
       </div>
     </div>

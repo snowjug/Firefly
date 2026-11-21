@@ -57,16 +57,23 @@ export { MessageBar, type MessageBarProps, type MessageIntent } from './primitiv
 
 export { Spinner, type SpinnerProps, type SpinnerSize } from './primitives/Spinner.tsx';
 export { ProgressBar, type ProgressBarProps } from './primitives/ProgressBar.tsx';
+export { ProgressShimmer, type ProgressShimmerProps } from './primitives/ProgressShimmer.tsx';
 export { Skeleton, type SkeletonProps } from './primitives/Skeleton.tsx';
 export { Avatar, initials, type AvatarProps, type AvatarSize } from './primitives/Avatar.tsx';
 export { Card, Surface, type SurfaceProps, type SurfaceTag } from './primitives/Surface.tsx';
 export { Divider, type DividerProps } from './primitives/Divider.tsx';
 export { ScoreBar, type ScoreBarProps } from './primitives/ScoreBar.tsx';
+export { ScoreRow, type ScoreRowProps } from './primitives/ScoreRow.tsx';
+export { StatusBadge, type StatusBadgeProps } from './primitives/StatusBadge.tsx';
+export { ProductIcon, type ProductIconProps } from './primitives/ProductIcon.tsx';
 
+export { Disclosure, type DisclosureProps } from './primitives/Disclosure.tsx';
+export { SplitView, type SplitViewProps } from './primitives/SplitView.tsx';
 export {
   Tab,
   TabList,
   TabPanel,
+  TabPanels,
   Tabs,
   type TabListProps,
   type TabPanelProps,

@@ -162,3 +162,46 @@ describe('tokens: sizes', () => {
     expect(px('target-min')).toBeGreaterThanOrEqual(24);
   });
 });
+
+/** The declarations of the `prefers-reduced-motion: reduce` block's :root rule. */
+function reducedMotionTokens(): Map<string, string> {
+  const start = css.indexOf('@media (prefers-reduced-motion: reduce)');
+  if (start < 0) throw new Error('tokens.css has no reduced-motion block');
+  let depth = 0;
+  let end = css.length;
+  for (let i = css.indexOf('{', start); i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1;
+    if (css[i] === '}') depth -= 1;
+    if (depth === 0) {
+      end = i;
+      break;
+    }
+  }
+  const tokens = new Map<string, string>();
+  for (const [, name, value] of css.slice(start, end).matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)) {
+    tokens.set(name as string, (value as string).trim());
+  }
+  return tokens;
+}
+
+describe('tokens: motion', () => {
+  const motion = [...declared.keys()].filter((name) => /^(dur|move|press)-/.test(name));
+  const reduced = reducedMotionTokens();
+
+  it('has a duration, a travel and a press token for every kind of movement', () => {
+    expect(motion.filter((name) => name.startsWith('dur-')).length).toBeGreaterThanOrEqual(12);
+    expect(motion).toEqual(expect.arrayContaining(['move-xs', 'move-sm', 'press-shift']));
+  });
+
+  it.each(motion)('--%s has a still equivalent when the person asks for less motion', (name) => {
+    const value = reduced.get(name);
+    expect(value, `--${name} is not set in the prefers-reduced-motion block`).toBeDefined();
+    // Durations collapse to an instant and distances to nothing: a state change, not a movement.
+    expect(value).toMatch(name.startsWith('dur-') ? /^0\.01ms$/ : /^0(px)?$/);
+  });
+
+  it('keeps no motion token in the reduced-motion block that the light theme does not declare', () => {
+    const strays = [...reduced.keys()].filter((name) => !declared.has(name));
+    expect(strays).toEqual([]);
+  });
+});

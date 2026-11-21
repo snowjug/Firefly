@@ -31,10 +31,11 @@
 }
 .ff-badge__text {
   min-inline-size: 0;
-  /* The pill is as wide as its text. Only when there is less room than that does the text wrap,
-     rather than spill out of the pill. */
+  /* The pill is as wide as its longest word. Only when there is less room than that does a word
+     break, rather than spill out of the pill: `break-word` (unlike `anywhere`) leaves the minimum
+     width alone, so a narrow flex row cannot squeeze "Found" into "Foun" and "d". */
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .ff-badge--outline {
   background: transparent;

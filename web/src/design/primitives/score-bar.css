@@ -30,10 +30,37 @@
   background: var(--bg-strong);
   box-shadow: inset 0 0 0 1px var(--stroke-1);
 }
+/* A fill is as wide as its segment and slides in from the left, so a fraction of a point shows as a
+   partly filled segment and only transform ever moves. */
 .ff-scorebar__fill {
   display: block;
+  inline-size: 100%;
   block-size: 100%;
   background: var(--brand);
+}
+
+/* Filling once from empty, one segment after another. Only when motion is allowed. */
+@media (prefers-reduced-motion: no-preference) {
+  .ff-scorebar--animate .ff-scorebar__fill {
+    animation: ff-scorebar-fill var(--dur-slower) var(--ease-decelerate) both;
+  }
+  .ff-scorebar--animate .ff-scorebar__segment:nth-child(2) .ff-scorebar__fill {
+    animation-delay: var(--dur-instant);
+  }
+  .ff-scorebar--animate .ff-scorebar__segment:nth-child(3) .ff-scorebar__fill {
+    animation-delay: calc(var(--dur-instant) * 2);
+  }
+  .ff-scorebar--animate .ff-scorebar__segment:nth-child(4) .ff-scorebar__fill {
+    animation-delay: calc(var(--dur-instant) * 3);
+  }
+  .ff-scorebar--animate .ff-scorebar__segment:nth-child(5) .ff-scorebar__fill {
+    animation-delay: calc(var(--dur-instant) * 4);
+  }
+}
+@keyframes ff-scorebar-fill {
+  from {
+    transform: translateX(-100%);
+  }
 }
 
 .ff-scorebar__text {

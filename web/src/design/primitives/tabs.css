@@ -109,6 +109,32 @@
   padding-block-start: 0;
 }
 
+/* ---- Stacked panels: one cell, crossfading ------------------------------------------------- */
+.ff-tabpanels {
+  display: grid;
+  min-inline-size: 0;
+}
+.ff-tabpanel--stacked {
+  grid-area: 1 / 1;
+  /* The space under a tab list belongs to the owner of a stacked group, not to each panel. */
+  padding-block-start: 0;
+  opacity: 0;
+  visibility: hidden;
+  /* The panel that is leaving fades out quickly... */
+  transition:
+    opacity var(--dur-faster) var(--ease-easy),
+    visibility 0s linear var(--dur-faster);
+}
+.ff-tabpanel--stacked[data-selected] {
+  opacity: 1;
+  visibility: visible;
+  /* ...and the one arriving starts just after it begins to go, so the two never sit on top of each
+     other at half strength. Under reduced motion every time here collapses to an instant. */
+  transition:
+    opacity var(--dur-normal) var(--ease-easy) var(--dur-instant),
+    visibility 0s;
+}
+
 @media (forced-colors: active) {
   .ff-tablist {
     border-color: GrayText;

@@ -19,12 +19,18 @@ export interface ButtonLook {
   iconPosition?: 'start' | 'end';
   /** Stretch to the width of the container. */
   fullWidth?: boolean;
+  /**
+   * For a main action with an arrow (`icon="arrow-right"`, `iconPosition="end"`): the arrow moves a
+   * little on hover and focus and a little more while pressed. Transform only, and still under
+   * reduced motion.
+   */
+  nudge?: boolean;
 }
 
 const ICON_PX: Record<ButtonSize, number> = { small: 16, medium: 20, large: 20 };
 
 function lookClass(
-  { appearance = 'secondary', size = 'medium', fullWidth }: ButtonLook,
+  { appearance = 'secondary', size = 'medium', fullWidth, nudge }: ButtonLook,
   extra: { iconOnly?: boolean; loading?: boolean; centred?: boolean },
   className?: string,
 ) {
@@ -33,6 +39,7 @@ function lookClass(
     `ff-button--${appearance}`,
     `ff-button--${size}`,
     fullWidth && 'ff-button--block',
+    nudge && 'ff-button--nudge',
     extra.iconOnly && 'ff-button--icon',
     extra.loading && 'ff-button--loading',
     extra.centred && 'ff-button--loading-centre',
@@ -111,6 +118,7 @@ function ButtonCore({
   icon,
   iconPosition = 'start',
   fullWidth,
+  nudge,
   loading,
   loadingLabel = 'Working',
   disabledFocusable,
@@ -133,7 +141,7 @@ function ButtonCore({
       aria-busy={loading ? true : undefined}
       onClick={blocked ? blockPress : onClick}
       className={lookClass(
-        { appearance, size, fullWidth },
+        { appearance, size, fullWidth, nudge },
         { iconOnly, loading, centred: Boolean(loading && !icon) },
         className,
       )}
@@ -241,6 +249,7 @@ export function LinkButton(props: LinkButtonProps) {
     icon,
     iconPosition = 'start',
     fullWidth,
+    nudge,
     className,
     children,
     to,
@@ -250,7 +259,7 @@ export function LinkButton(props: LinkButtonProps) {
     state,
     ...rest
   } = props as LinkButtonProps & { replace?: boolean; state?: unknown; external?: boolean };
-  const classes = lookClass({ appearance, size, fullWidth }, {}, className);
+  const classes = lookClass({ appearance, size, fullWidth, nudge }, {}, className);
   const cue = external ? (
     <>
       <Icon name="external-link" size={ICON_PX[size]} />

@@ -1,0 +1,67 @@
+/* ScoreRow: a score on one line, opening its evidence in place. Built on Disclosure and ScoreBar. */
+
+.ff-scorerow {
+  --_label: 12rem;
+}
+
+.ff-scorerow__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-4);
+  min-inline-size: 0;
+}
+.ff-scorerow__label {
+  flex: 0 1 var(--_label);
+  min-inline-size: 0;
+  color: var(--fg-1);
+}
+.ff-scorerow__meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-0h) var(--sp-3);
+}
+.ff-scorerow__evidence {
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.ff-scorerow__toggle {
+  color: var(--brand-fg-2);
+  white-space: nowrap;
+}
+
+/* A row with nothing to open is the same line without the button. */
+.ff-scorerow--static {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-4);
+  min-block-size: var(--target);
+  padding: var(--sp-2);
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+
+/* Narrow: the label has the line to itself, the bar and the count follow. */
+@media (max-width: 40em) {
+  .ff-scorerow {
+    --_label: 100%;
+  }
+  .ff-scorerow .ff-disclosure__button {
+    flex-wrap: wrap;
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-scorerow--static {
+    border-color: GrayText;
+  }
+  .ff-scorerow__toggle {
+    color: LinkText;
+  }
+}

@@ -1,0 +1,63 @@
+/* StatusBadge: a Badge for a state that changes. The word fades in place; a live dot has a still ring
+   and, while motion is allowed, a soft pulse. Only transform and opacity move. */
+
+.ff-status {
+  display: inline-flex;
+  max-inline-size: 100%;
+}
+
+.ff-status__dot {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  margin-inline-end: var(--sp-1h);
+  border-radius: var(--r-pill);
+  background: currentColor;
+  vertical-align: 0.05em;
+}
+.ff-status--live .ff-status__dot {
+  box-shadow:
+    0 0 0 2px var(--_bg),
+    0 0 0 3.5px currentColor;
+}
+.ff-status--live .ff-status__dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  animation: ff-status-pulse var(--dur-pulse) var(--ease-decelerate) infinite;
+}
+@keyframes ff-status-pulse {
+  from {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(3);
+  }
+}
+
+.ff-status__label {
+  display: inline-block;
+  animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+}
+
+@media (forced-colors: active) {
+  .ff-status__dot {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  .ff-status--live .ff-status__dot {
+    box-shadow: none;
+    outline: 2px solid CanvasText;
+    outline-offset: 1.5px;
+  }
+  .ff-status--live .ff-status__dot::after {
+    display: none;
+  }
+}

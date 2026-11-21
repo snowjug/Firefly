@@ -128,8 +128,9 @@
   border-radius: var(--r-pill);
   background: var(--fg-2);
   color: transparent;
+  /* The thumb slides by transform, so no layout is touched while the switch moves. */
   transition:
-    inset-inline-start var(--dur-fast) var(--ease-decelerate),
+    transform var(--dur-fast) var(--ease-decelerate),
     background-color var(--dur-faster) var(--ease-easy);
 }
 .ff-choice:hover .ff-choice__input:not(:disabled) + .ff-choice__track {
@@ -140,7 +141,8 @@
   background: var(--brand);
 }
 .ff-choice__input:checked + .ff-choice__track .ff-choice__thumb {
-  inset-inline-start: calc(100% - 1rem - 0.1875rem);
+  /* From the left stop to the right one: the track's inner width less the thumb and its two gaps. */
+  transform: translateX(calc(1.125rem - 2 * var(--stroke-w)));
   background: var(--bg-canvas);
   color: var(--brand);
 }

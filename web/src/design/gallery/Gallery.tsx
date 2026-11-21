@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { PRODUCT_IDS, PRODUCT_INFO } from '#shared/domain/vocab.ts';
 import {
   Avatar,
   Badge,
@@ -9,6 +10,7 @@ import {
   Checkbox,
   CUSTOMER_STATES,
   Dialog,
+  Disclosure,
   Divider,
   Field,
   Icon,
@@ -16,18 +18,24 @@ import {
   IconButton,
   LinkButton,
   MessageBar,
+  ProductIcon,
   ProgressBar,
+  ProgressShimmer,
   ScoreBar,
+  ScoreRow,
   SearchBox,
   SegmentedControl,
   Select,
   Skeleton,
   Spinner,
+  SplitView,
   StateBadge,
+  StatusBadge,
   Switch,
   Tab,
   TabList,
   TabPanel,
+  TabPanels,
   Tabs,
   Tag,
   TextArea,
@@ -72,16 +80,196 @@ const TONES: BadgeTone[] = ['neutral', 'info', 'success', 'warning', 'danger', '
 
 const SECTIONS = [
   ['icons', 'Icons'],
+  ['products', 'Product marks'],
   ['buttons', 'Buttons'],
   ['choose', 'Choosing'],
   ['fields', 'Fields'],
   ['status', 'Status'],
   ['feedback', 'Feedback'],
+  ['motion', 'Motion'],
   ['people', 'People and scores'],
+  ['disclosure', 'Disclosure and split view'],
   ['surfaces', 'Surfaces and tabs'],
   ['dialogs', 'Dialogs'],
   ['announcer', 'Announcements'],
 ] as const;
+
+const CALL_STATES = [
+  { label: 'Ready', tone: 'neutral', live: false },
+  { label: 'Listening', tone: 'info', live: true },
+  { label: 'Transcribing', tone: 'info', live: false },
+  { label: 'Customer speaking', tone: 'ai', live: true },
+  { label: 'Paused', tone: 'warning', live: false },
+  { label: 'Reconnecting', tone: 'warning', live: true },
+] as const;
+
+/** Things that move, with a way to replay each one. Under reduced motion every one stands still. */
+function MotionDemo() {
+  const [step, setStep] = useState(0);
+  const [round, setRound] = useState(0);
+  const state = CALL_STATES[step % CALL_STATES.length] ?? CALL_STATES[0];
+  return (
+    <>
+      <Row label="Call status">
+        <StatusBadge label={state.label} tone={state.tone} live={state.live} />
+        <Button size="small" onClick={() => setStep((current) => current + 1)}>
+          Next state
+        </Button>
+        <span className="t-meta">The word fades in place; nothing around it moves.</span>
+      </Row>
+      <Row label="All states">
+        {CALL_STATES.map((each) => (
+          <StatusBadge key={each.label} label={each.label} tone={each.tone} live={each.live} />
+        ))}
+      </Row>
+      <Row label="Transcribing" column>
+        <div className="gx-narrow l-stack l-gap-3">
+          <ProgressShimmer label="Transcribing your reply" />
+          <ProgressShimmer label="Small" size="small" width="60%" />
+        </div>
+      </Row>
+      <Row label="Press and nudge">
+        <Button appearance="primary" size="large" icon="arrow-right" iconPosition="end" nudge>
+          Start call
+        </Button>
+        <Button appearance="secondary" icon="arrow-right" iconPosition="end" nudge>
+          View scenarios
+        </Button>
+        <span className="t-meta">
+          Press: 1 to 2 px down. Hover or focus: the arrow leans forward.
+        </span>
+      </Row>
+      <Row label="Speaking">
+        <Avatar name="Maya Okafor" size="lg" speaking voice="customer" label="Maya is speaking" />
+        <Avatar name="Maya Okafor" size="lg" speaking label="You are speaking" />
+      </Row>
+      <Row label="Fill once" column>
+        <div className="gx-narrow l-stack l-gap-3" key={round}>
+          <ScoreBar score={4} animate />
+          <ScoreBar score={2.5} animate />
+          <Button size="small" onClick={() => setRound((current) => current + 1)}>
+            Replay
+          </Button>
+        </div>
+      </Row>
+    </>
+  );
+}
+
+const SCENARIOS = [
+  {
+    id: 'a',
+    title: 'Nobody can sign in',
+    product: 'entra-id',
+    detail: 'High impact. First contact.',
+  },
+  {
+    id: 'b',
+    title: 'Meetings will not start',
+    product: 'teams',
+    detail: 'Medium impact. Follow-up.',
+  },
+  { id: 'c', title: 'Mailbox is full', product: 'outlook', detail: 'Low impact. Starter.' },
+] as const;
+
+function DisclosureDemo() {
+  const [selected, setSelected] = useState<string | null>(null);
+  const current = SCENARIOS.find((scenario) => scenario.id === selected) ?? null;
+  return (
+    <>
+      <Row label="Rows" column>
+        <div className="gx-narrow">
+          <Disclosure summary="Known context">The customer first noticed it on Monday.</Disclosure>
+          <Disclosure summary="Previous contact" meta="2 cases" icon="clock">
+            Two earlier cases were closed without a fix.
+          </Disclosure>
+          <Disclosure summary="Environment" defaultOpen headingLevel={3}>
+            A small team, a shared mailbox and conditional access.
+          </Disclosure>
+        </div>
+      </Row>
+      <Row label="Inline">
+        <Disclosure summary="More about speech" appearance="inline">
+          Where speech is processed depends on the set-up shown before the call.
+        </Disclosure>
+      </Row>
+      <Row label="Score rows" column>
+        <div className="gx-narrow">
+          <ScoreRow label="Opening & Rapport" score={4} evidenceCount={2}>
+            <p className="t-body">A clear greeting and a confirmed reason for the call.</p>
+          </ScoreRow>
+          <ScoreRow label="Scoping & Discovery" score={5} evidenceCount={3} defaultOpen>
+            <p className="t-body">Open questions about timing, scope and recent changes.</p>
+          </ScoreRow>
+          <ScoreRow label="Empathy & De-escalation" score={3} evidenceCount={1}>
+            <p className="t-body">Acknowledged the impact once, early in the call.</p>
+          </ScoreRow>
+          <ScoreRow label="Closing" score={null} />
+        </div>
+      </Row>
+      <Row label="Split view" column>
+        <SplitView
+          listLabel="Scenarios"
+          detailLabel="Scenario details"
+          detailOpen={current !== null}
+          onBack={() => setSelected(null)}
+          backLabel="Back to scenarios"
+          detailKey={current?.id}
+          listSize="sm"
+          list={
+            <ul className="l-stack l-gap-2" role="list">
+              {SCENARIOS.map((scenario) => (
+                <li key={scenario.id}>
+                  <Button
+                    appearance="outline"
+                    fullWidth
+                    aria-pressed={selected === scenario.id}
+                    onClick={() => setSelected(scenario.id)}
+                  >
+                    {scenario.title}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          }
+          detail={
+            current ? (
+              <Card appearance="outlined" padding="lg">
+                <div className="l-stack l-gap-2">
+                  <p className="t-label">
+                    <ProductIcon product={current.product} size={16} />{' '}
+                    {PRODUCT_INFO[current.product].name}
+                  </p>
+                  <h3 className="t-subtitle1">{current.title}</h3>
+                  <p className="t-body t-muted">{current.detail}</p>
+                </div>
+              </Card>
+            ) : (
+              <p className="t-body t-muted">Choose a scenario.</p>
+            )
+          }
+        />
+      </Row>
+    </>
+  );
+}
+
+function ProductMarks() {
+  return (
+    <div className="gx-icons">
+      {PRODUCT_IDS.map((product) => (
+        <div className="gx-icon" key={product}>
+          <div className="gx-icon__sizes">
+            <ProductIcon product={product} size={16} />
+            <ProductIcon product={product} size={24} />
+            <ProductIcon product={product} size={32} />
+          </div>
+          <span className="gx-icon__name">{product}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type DialogKind = 'sm' | 'md' | 'lg' | 'sheet' | 'fullscreen' | 'confirm' | null;
 
@@ -292,6 +480,10 @@ export function Gallery() {
         </div>
       </Section>
 
+      <Section id="products" title="Product marks">
+        <ProductMarks />
+      </Section>
+
       <Section id="buttons" title="Buttons">
         {APPEARANCES.map((appearance) => (
           <Row key={appearance} label={appearance}>
@@ -381,7 +573,7 @@ export function Gallery() {
         </Row>
         <Row label="Links">
           <LinkButton to="/scenarios" appearance="primary">
-            Start simulation
+            Start call
           </LinkButton>
           <LinkButton to="/about" appearance="outline" icon="document">
             Read more
@@ -690,6 +882,10 @@ export function Gallery() {
         </Row>
       </Section>
 
+      <Section id="motion" title="Motion">
+        <MotionDemo />
+      </Section>
+
       <Section id="people" title="People and scores">
         <Row label="Avatars">
           {(['xs', 'sm', 'md', 'lg', 'xl'] as const).map((size) => (
@@ -711,6 +907,10 @@ export function Gallery() {
           <ScoreBar score={4} size="large" />
           <ScoreBar score={2} showText={false} label="Developing" />
         </Row>
+      </Section>
+
+      <Section id="disclosure" title="Disclosure and split view">
+        <DisclosureDemo />
       </Section>
 
       <Section id="surfaces" title="Surfaces and tabs">
@@ -763,6 +963,35 @@ export function Gallery() {
               <p>The transcript panel.</p>
             </TabPanel>
           </Tabs>
+        </Row>
+        <Row label="Stacked tabs" column>
+          <Tabs defaultValue="teams">
+            <TabList label="Products">
+              <Tab value="teams">Teams</Tab>
+              <Tab value="outlook">Outlook</Tab>
+              <Tab value="entra">Entra ID</Tab>
+            </TabList>
+            <TabPanels>
+              <TabPanel value="teams" stacked>
+                <p>
+                  Panels share one cell and crossfade, so the group is as tall as the tallest panel
+                  and choosing a tab never moves what is below it. This one is short.
+                </p>
+              </TabPanel>
+              <TabPanel value="outlook" stacked>
+                <p>
+                  Outlook. This one is a good deal longer than the others, on purpose: it sets the
+                  height of the whole group, so the content under the tabs stays where it is when
+                  you switch between them, whichever tab is showing, and whatever the width of the
+                  window is.
+                </p>
+              </TabPanel>
+              <TabPanel value="entra" stacked>
+                <p>Entra ID. Also short.</p>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
+          <p className="t-meta">This line does not move.</p>
         </Row>
       </Section>
 
