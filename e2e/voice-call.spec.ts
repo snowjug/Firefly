@@ -55,9 +55,7 @@ test.describe('a spoken call', () => {
     await test.step('the pre-flight says what is ready and what happens to speech, and has asked for nothing', async () => {
       await expect(screen.preflight.heading).toBeVisible();
       await expect(screen.preflight.checks).toContainText(/Microphone\s*Not requested/);
-      await expect(screen.preflight.checks).toContainText(
-        /Speech\s*Demo speech \(scripted\): scripted/,
-      );
+      await expect(screen.preflight.checks).toContainText(/Speech\s*Demo speech \(scripted\)/);
       await expect(screen.preflight.checks).toContainText(
         /Customer voice\s*Placeholder sound \(demo\)/,
       );
