@@ -180,6 +180,9 @@ describe('describeProblem', () => {
     expect(describeProblem('offline', { during: 'end' })).toMatchObject({ retry: 'end' });
     expect(describeProblem('offline', { during: 'speak' })).toMatchObject({ retry: 'speak' });
     expect(describeProblem('offline')).toMatchObject({ retry: 'send' });
+    // A call that could not be ended is still open, so being offline there does not block it.
+    expect(describeProblem('offline', { during: 'end' }).severity).toBe('degraded');
+    expect(describeProblem('offline', { during: 'send' }).severity).toBe('blocking');
 
     expect(describeProblem('transcription-failed', { timedOut: true }).title).toMatch(
       /took too long/,

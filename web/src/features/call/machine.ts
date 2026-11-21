@@ -323,7 +323,10 @@ const MIC_PROBLEM_CODE: Record<MicReason, CallProblemCode> = {
   unsupported: 'microphone-unsupported',
 };
 
-/** Clears the problem when it is one of `codes`. `offline` goes with whichever step it belonged to. */
+/**
+ * Clears the problem when it is one of `codes`. `offline` and `rate-limited` go with whichever step
+ * they belonged to: a notice from one step is not cleared by trying another.
+ */
 function withoutProblems(
   state: MachineState,
   codes: readonly CallProblemCode[],
@@ -333,7 +336,9 @@ function withoutProblems(
   if (!problem) return state;
   const matches =
     codes.includes(problem.code) ||
-    (during !== undefined && problem.code === 'offline' && problem.context.during === during);
+    (during !== undefined &&
+      (problem.code === 'offline' || problem.code === 'rate-limited') &&
+      problem.context.during === during);
   return matches ? { ...state, problem: null } : state;
 }
 
@@ -365,6 +370,8 @@ function startSpeech(state: MachineState, turnIndex: number, phase: CallPhase): 
     speechDetected: false,
     heard: false,
     finishing: false,
+    // A new request gets its own deadline, even when the one before it was still waiting.
+    timer: null,
   };
 }
 

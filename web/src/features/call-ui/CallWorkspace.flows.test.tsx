@@ -2,6 +2,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CallSnapshot, CallTurn } from '../call/contract.ts';
+import { describeProblem } from '../call/problems.ts';
 import { FIXTURES } from './call-fixtures.ts';
 import {
   clearViewport,
@@ -234,9 +235,10 @@ describe('the composer', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Type a reply instead' }));
     expect(textbox()).toHaveFocus();
     expect(textbox()).toHaveAccessibleDescription(/Enter to send, Shift\+Enter for a new line/);
-    // A spoken call can hide the box again.
+    // A spoken call can hide the box again, and the keyboard goes to the row that brings it back.
     await userEvent.click(screen.getByRole('button', { name: 'Hide the reply box' }));
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Type a reply instead' })).toHaveFocus();
   });
 
   it('is always open on a typed call, which cannot hide it', () => {
@@ -702,9 +704,42 @@ describe('ending the call', () => {
     expect(actions.endCall).toHaveBeenCalledTimes(2);
   });
 
+  it('says a failure aloud and puts the keyboard back on the question when ending did not work', async () => {
+    const base = snapshotOf('ready-for-next-turn');
+    const actions = fakeActions({ endCall: vi.fn(async () => null) });
+    const { update } = renderCall(base, { ...wide, actions });
+    await userEvent.click(endButton());
+    await userEvent.click(screen.getByRole('button', { name: 'End and review' }));
+    update({ ...base, phase: 'ending' });
+    expect(screen.getByRole('dialog', { name: 'Ending the call' })).toBeInTheDocument();
+
+    update({ ...base, problem: FIXTURES['end-failed'].snapshot.problem });
+    const dialog = screen.getByRole('dialog', { name: 'End the call?' });
+    // Inside a dialog the rest of the page is silent, so the notice speaks for itself.
+    const notice = within(dialog)
+      .getByText('We could not end the call.')
+      .closest('[role="status"]');
+    expect(notice).not.toBeNull();
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: 'Continue call' })).toHaveFocus(),
+    );
+  });
+
   it('clears a failed attempt when the person chooses to carry on', async () => {
     const { actions } = renderCall('end-failed', wide);
     await userEvent.click(screen.getByRole('button', { name: 'Continue call' }));
+    expect(actions.dismissProblem).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats being offline while ending the same way, so the call is not left blocked', async () => {
+    const base = snapshotOf('ready-for-next-turn');
+    const offline = { ...base, problem: describeProblem('offline', { during: 'end' }) };
+    const { actions } = renderCall(offline, wide);
+    await userEvent.click(endButton());
+    const dialog = screen.getByRole('dialog', { name: 'End the call?' });
+    expect(within(dialog).getByText('You appear to be offline.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue call' }));
     expect(actions.dismissProblem).toHaveBeenCalledTimes(1);
   });
 

@@ -238,6 +238,9 @@ export function describeProblem(code: CallProblemCode, context: ProblemContext =
       };
     case 'offline': {
       const step = context.during;
+      // A call that could not be ended is still open, so being offline there does not stop it: the
+      // notice can be dismissed, and the call carries on.
+      const stillOpen = step === 'end';
       return {
         code,
         title: 'You appear to be offline.',
@@ -245,7 +248,7 @@ export function describeProblem(code: CallProblemCode, context: ProblemContext =
         advice: `Check your connection. ${tryAgainDuring(step)}`,
         retry: STEP_RETRY[step ?? 'send'],
         textFallback: false,
-        severity: 'blocking',
+        severity: stillOpen ? 'degraded' : 'blocking',
       };
     }
     case 'session-unavailable':

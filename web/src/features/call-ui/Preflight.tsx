@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import {
   Avatar,
   Button,
@@ -141,6 +142,16 @@ export interface PreflightProps {
  * microphone or plays a sound: that only ever happens after one of the two buttons is pressed.
  */
 export function Preflight({ snapshot, actions, provider, preferText, briefTo }: PreflightProps) {
+  const notice = useRef<HTMLDivElement>(null);
+  const microphoneCode = snapshot.problem?.code.startsWith('microphone-')
+    ? snapshot.problem.code
+    : null;
+  // The button that was pressed is replaced by the notice about it (the browser's prompt was
+  // declined), so the keyboard goes to the notice's first action and not to the top of the page.
+  useEffect(() => {
+    if (microphoneCode) notice.current?.querySelector<HTMLElement>('button')?.focus();
+  }, [microphoneCode]);
+
   const session = snapshot.session;
   if (!session) return null;
 
@@ -258,18 +269,20 @@ export function Preflight({ snapshot, actions, provider, preferText, briefTo }: 
           ) : null}
 
           {problem ? (
-            <ProblemNotice
-              problem={problem}
-              variant="panel"
-              onRetry={() => actions.retry()}
-              extraActions={
-                microphoneProblem ? (
-                  <Button icon="keyboard" onClick={startText}>
-                    Start a text-only call
-                  </Button>
-                ) : null
-              }
-            />
+            <div ref={notice}>
+              <ProblemNotice
+                problem={problem}
+                variant="panel"
+                onRetry={() => actions.retry()}
+                extraActions={
+                  microphoneProblem ? (
+                    <Button icon="keyboard" onClick={startText}>
+                      Start a text-only call
+                    </Button>
+                  ) : null
+                }
+              />
+            </div>
           ) : null}
 
           {microphoneProblem ? null : (

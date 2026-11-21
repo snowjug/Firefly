@@ -16,6 +16,7 @@ import {
   type MachineState,
   type SendFailure,
 } from './machine.ts';
+import { describeProblem } from './problems.ts';
 
 // ---------------------------------------------------------------------------------------
 // Helpers
@@ -438,6 +439,26 @@ describe('the microphone', () => {
     expect(state.phase).toBe('ready-for-next-turn');
     expect(state.problem?.code).toBe('microphone-denied');
     expect(state.microphone).toBe('denied');
+  });
+
+  it('clears a rate-limit notice from transcribing when the trainee tries again, as it does for the other failures', () => {
+    for (const failure of [
+      { kind: 'rate-limited', retryAfterSeconds: 3 },
+      { kind: 'offline' },
+      { kind: 'failed' },
+    ] as const) {
+      const failed = reduce(atPhase('transcribing'), {
+        type: 'transcribe-failed',
+        id: 'u1',
+        failure,
+      });
+      expect(failed.problem, failure.kind).not.toBeNull();
+      expect(reduce(failed, { type: 'talk' }).problem, `${failure.kind}: talk`).toBeNull();
+      expect(
+        reduce(failed, { type: 'send-text', id: 't2', text: 'hi', createdAt: 'now' }).problem,
+        `${failure.kind}: typing instead`,
+      ).toBeNull();
+    }
   });
 });
 
@@ -935,6 +956,29 @@ describe("the customer's voice", () => {
     expect(reduce(again, { type: 'speak-start', token: 1, estimateMs: 10 })).toBe(again);
   });
 
+  it('gives a replayed voice its own deadline, even while the first one was still being made', () => {
+    const preparing = run(
+      connected({ canSpeak: true }),
+      { type: 'send-text', id: 't1', text: 'hi', createdAt: 'now' },
+      {
+        type: 'send-done',
+        id: 't1',
+        attempt: 1,
+        customerIndex: 3,
+        turnsRemaining: 5,
+        redactions: [],
+      },
+    );
+    expect(preparing.speech?.status).toBe('preparing');
+    expect(preparing.timer).toMatchObject({ kind: 'speak-prepare', ms: TIMINGS.speakPrepare });
+    const again = reduce(preparing, { type: 'replay' });
+    expect(again.speech?.token).toBe(2);
+    expect(again.timer).toMatchObject({ kind: 'speak-prepare', ms: TIMINGS.speakPrepare });
+    // A new timer, so the old one's countdown cannot cut the new request short.
+    expect(again.timer?.id).not.toBe(preparing.timer?.id);
+    expect(reduce(again, { type: 'timeout', id: preparing.timer!.id })).toBe(again);
+  });
+
   it('updates the watchdog when the real length of the audio is known', () => {
     const state = reduce(atPhase('customer-speaking'), {
       type: 'speak-duration',
@@ -1042,6 +1086,22 @@ describe('ending the call', () => {
       reduce(closing, { type: 'end-failed', failure: { kind: 'nothing-to-review' } }).problem
         ?.context,
     ).toEqual({ nothingToReview: true });
+  });
+
+  it('lets the trainee carry on after ending failed, offline or not', () => {
+    const closing = reduce(atPhase('listening'), { type: 'end-requested' });
+    for (const failure of [{ kind: 'failed' }, { kind: 'offline' }] as const) {
+      const failed = reduce(closing, { type: 'end-failed', failure });
+      expect(describeProblem(failed.problem!.code, failed.problem!.context).severity).toBe(
+        'degraded',
+      );
+      const dismissed = reduce(failed, { type: 'dismiss-problem' });
+      expect(dismissed.problem).toBeNull();
+      // The call is paused, and resuming it works.
+      const resumed = reduce(dismissed, { type: 'toggle-pause' });
+      expect(resumed.paused).toBe(false);
+      expectValid(resumed);
+    }
   });
 
   it('gives up on an end request that never answers', () => {

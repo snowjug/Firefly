@@ -149,4 +149,36 @@ test.describe('landing', () => {
     await page.getByRole('main').getByRole('link', { name: 'Go to scenarios' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Choose a scenario' })).toBeVisible();
   });
+
+  test('the web app keeps nothing in the browser but each page’s scroll position', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('link', { name: 'Start a simulation' }).first().click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Choose a scenario' })).toBeVisible();
+    await page.getByRole('radio').first().click();
+    await page.getByRole('link', { name: 'Continue to call brief' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Call brief' })).toBeVisible();
+    // The router saves scroll positions as a page is hidden.
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
+
+    const stored = await page.evaluate(async () => ({
+      local: Object.keys(localStorage),
+      session: Object.fromEntries(Object.entries(sessionStorage)),
+      databases: (await indexedDB.databases()).length,
+      caches: (await caches.keys()).length,
+      workers: (await navigator.serviceWorker.getRegistrations()).length,
+    }));
+    expect(stored.local).toEqual([]);
+    expect(stored.databases).toBe(0);
+    expect(stored.caches).toBe(0);
+    expect(stored.workers).toBe(0);
+    // Only React Router's scroll offsets (page positions, as numbers), never text.
+    expect(Object.keys(stored.session)).toEqual(['react-router-scroll-positions']);
+    const positions = JSON.parse(stored.session['react-router-scroll-positions']!) as Record<
+      string,
+      unknown
+    >;
+    for (const value of Object.values(positions)) expect(typeof value).toBe('number');
+  });
 });

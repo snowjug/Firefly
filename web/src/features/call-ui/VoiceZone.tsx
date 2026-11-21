@@ -3,6 +3,7 @@ import { cx, Icon } from '../../design/index.ts';
 import type { CallProblem } from '../call/contract.ts';
 import type { CallStatus } from './call-model.ts';
 import { ProblemNotice } from './ProblemNotice.tsx';
+import { findControlsZone, useRescueFocus } from './use-rescue-focus.ts';
 import { VoiceControls, type VoiceControlsProps } from './VoiceControls.tsx';
 import { VoiceStatus } from './VoiceStatus.tsx';
 import './voice-zone.css';
@@ -43,6 +44,9 @@ export function VoiceZone({
   problemActions,
 }: VoiceZoneProps) {
   const dock = layout === 'dock';
+  // A problem takes the controls' place, or gives it back: if the keyboard was on a control that is
+  // gone, it goes to this area rather than to the top of the page.
+  useRescueFocus(blocking?.code ?? null, findControlsZone);
   return (
     <div
       className={cx('cw-zone', `cw-zone--${layout}`)}

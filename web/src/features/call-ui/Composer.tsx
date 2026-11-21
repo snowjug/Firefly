@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, cx, Field, IconButton, TextArea } from '../../design/index.ts';
 import type { CallActions } from '../call/contract.ts';
 import type { ComposerGate } from './call-model.ts';
+import { findControlsZone, useRescueFocus } from './use-rescue-focus.ts';
 import './composer.css';
 
 /** The counter appears once the message is this close to the limit. */
@@ -56,6 +57,7 @@ export function Composer({
   const [draft, setDraft] = useState(initialDraft);
   const form = useRef<HTMLFormElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const reopen = useRef<HTMLButtonElement>(null);
   const sending = useRef(false);
   const handled = useRef(0);
   const ids = useId();
@@ -70,6 +72,11 @@ export function Composer({
     handled.current = focusRequest;
     input.current?.focus();
   }, [focusRequest, open]);
+
+  // "Hide the reply box" removes the button that was pressed: the keyboard goes to the row that
+  // brings the box back (or, on a narrow screen, which has no such row, to the call's controls).
+  const findLanding = useCallback(() => reopen.current ?? findControlsZone(), []);
+  useRescueFocus(open, findLanding);
 
   // Browsers without `field-sizing` grow the box by hand, up to six lines.
   useEffect(() => {
@@ -115,6 +122,7 @@ export function Composer({
     return showRow ? (
       <div className="cw-composer cw-composer--closed" id={formId}>
         <Button
+          ref={reopen}
           icon="keyboard"
           appearance="outline"
           aria-expanded={false}

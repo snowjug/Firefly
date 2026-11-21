@@ -386,6 +386,8 @@ describe('who writes the replies, the language and the way back', () => {
     const path = briefPathFor(session);
     expect(path.startsWith('/scenarios/locked-out-after-password-reset/brief?')).toBe(true);
     const query = new URLSearchParams(path.split('?')[1]);
+    // The fixture was made with no complications, which the brief must not turn back on.
+    expect(session.scenario.config.curveballsEnabled).toBe(false);
     expect(Object.fromEntries(query)).toEqual({
       difficulty: 'starter',
       impact: 'low',
@@ -394,6 +396,16 @@ describe('who writes the replies, the language and the way back', () => {
       style: 'talkative',
       stage: 'first-contact',
       hints: 'off',
+      curveballs: 'none',
     });
+    const withCurveballs = {
+      ...session,
+      scenario: {
+        ...session.scenario,
+        config: { ...session.scenario.config, curveballsEnabled: true },
+      },
+    };
+    const again = new URLSearchParams(briefPathFor(withCurveballs).split('?')[1]);
+    expect(again.has('curveballs')).toBe(false);
   });
 });

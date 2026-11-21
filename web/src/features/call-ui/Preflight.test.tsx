@@ -196,6 +196,16 @@ describe('the pre-flight step', () => {
     expect(actions.begin).toHaveBeenCalledWith({ voice: false });
   });
 
+  it('moves the keyboard to the notice when the browser’s prompt is declined', () => {
+    const { update } = renderCall('requesting-microphone');
+    const waiting = screen.getByRole('button', { name: 'Waiting for the microphone' });
+    waiting.focus();
+    expect(waiting).toHaveFocus();
+    update(FIXTURES['microphone-denied'].snapshot);
+    // The pressed button is gone, and the first action of the notice about it takes the keyboard.
+    expect(screen.getByRole('button', { name: 'Try again' })).toHaveFocus();
+  });
+
   it('shows a blocked microphone with its advice and two ways on', async () => {
     const { actions } = renderCall('microphone-denied');
     expect(screen.getByText('The microphone is blocked for this site.')).toBeInTheDocument();

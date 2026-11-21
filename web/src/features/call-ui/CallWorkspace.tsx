@@ -8,6 +8,7 @@ import {
   describeConnection,
   describeCustomerState,
   describeStatus,
+  isEndFailure,
   latestCustomerTurn,
   stateChangeSentence,
   tracePoints,
@@ -26,6 +27,7 @@ import { Preflight } from './Preflight.tsx';
 import { ProblemNotice } from './ProblemNotice.tsx';
 import { StagePanel } from './StagePanel.tsx';
 import { Transcript } from './Transcript.tsx';
+import { findControlsZone, useRescueFocus } from './use-rescue-focus.ts';
 import { VoiceSettings } from './VoiceSettings.tsx';
 import { VoiceZone } from './VoiceZone.tsx';
 import { useLayoutMode, useReducedMotion, useVisualViewportHeight } from './use-layout.ts';
@@ -172,7 +174,7 @@ interface WorkspaceProps {
 /** A problem that is shown once the call can carry on through it, or when ending failed. */
 function inlineProblem(problem: CallProblem | null, endDialogOpen: boolean): CallProblem | null {
   if (!problem || problem.severity !== 'degraded') return null;
-  return problem.code === 'end-failed' && endDialogOpen ? null : problem;
+  return isEndFailure(problem) && endDialogOpen ? null : problem;
 }
 
 function Workspace({
@@ -249,6 +251,8 @@ function Workspace({
     snapshot.support.playback !== 'none' && latestCustomerTurn(snapshot.turns) !== undefined;
   const blocking = problem?.severity === 'blocking' ? problem : null;
   const inline = inlineProblem(problem, endOpen);
+  // A notice above the reply box goes away with the button that was pressed on it.
+  useRescueFocus(inline?.code ?? null, findControlsZone);
 
   const openComposer = useCallback(
     () => setComposer((current) => ({ open: true, focusRequest: current.focusRequest + 1 })),
@@ -276,7 +280,7 @@ function Workspace({
   const continueCall = () => {
     setEndOpen(false);
     // A failed attempt to end is not worth carrying about once the person has chosen to carry on.
-    if (problem?.code === 'end-failed') actions.dismissProblem();
+    if (isEndFailure(problem)) actions.dismissProblem();
   };
   const discardCall = async () => {
     setDiscarding(true);

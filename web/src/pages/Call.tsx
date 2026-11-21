@@ -57,8 +57,13 @@ function CallSession({ sessionId, config }: { sessionId: string; config: AppConf
 
   useDocumentTitle(session ? `Call with ${session.scenario.persona.name}` : 'Call');
 
-  // A call that is over (or never was open) belongs to the report, not to this page.
-  const over = (session !== null && session.status !== 'active') || snapshot.phase === 'completed';
+  // A call that is over (or never was open) belongs to the report, not to this page. That includes a
+  // call that turned out to have ended somewhere else, such as in another tab: the report says what
+  // became of it, whether it was finished or deleted.
+  const over =
+    (session !== null && session.status !== 'active') ||
+    snapshot.phase === 'completed' ||
+    snapshot.problem?.code === 'session-ended';
   useEffect(() => {
     if (over) navigate(reportPath(sessionId), { replace: true });
   }, [over, navigate, sessionId]);

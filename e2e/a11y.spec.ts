@@ -364,7 +364,8 @@ for (const viewport of VIEWPORTS) {
       ).toBeVisible();
       await expect(page.getByRole('list', { name: 'Report progress' })).toBeVisible();
       await check(page, testInfo, 'evaluating', PUBLIC);
-      await page.unroute(`**/api/sessions/${world.reportId}`);
+      // Wait for a request that is still being answered, or its handler fails once the route is gone.
+      await page.unrouteAll({ behavior: 'wait' });
 
       const failing = await createSession(page.request, SCENARIO_ID);
       await sendLines(page.request, failing, TRAINEE_LINES.slice(0, 3));

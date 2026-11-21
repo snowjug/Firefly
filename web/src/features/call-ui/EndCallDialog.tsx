@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Button, Dialog, MessageBar, Spinner } from '../../design/index.ts';
 import type { CallProblem } from '../call/contract.ts';
-import { clock, SHORT_CALL_TURNS, timesWord } from './call-model.ts';
+import { clock, isEndFailure, SHORT_CALL_TURNS, timesWord } from './call-model.ts';
 import { ProblemNotice } from './ProblemNotice.tsx';
 import './end-dialog.css';
 
@@ -17,7 +17,7 @@ export interface EndCallDialogProps {
   /** A spoken call has a microphone and customer audio to stop; a typed one does not. */
   voice: boolean;
   stateLabel: string | null;
-  /** The `end-failed` problem, when ending did not work. */
+  /** The problem an attempt to end the call left (ending failed, or the browser was offline), if any. */
   problem: CallProblem | null;
   /**
    * A way to leave a call that has nothing to report (no message was ever sent). Offered only when
@@ -53,11 +53,20 @@ export function EndCallDialog({
   onConfirm,
 }: EndCallDialogProps) {
   const heading = useRef<HTMLSpanElement>(null);
+  const keepGoing = useRef<HTMLButtonElement>(null);
+  const wasEnding = useRef(ending);
 
   // The dialog was already open and the call started closing: the heading takes the keyboard.
   useEffect(() => {
     if (ending) heading.current?.focus();
   }, [ending]);
+
+  // Ending did not work and the question is back: the heading that held the keyboard is gone, so it
+  // goes to the first button rather than being left on the page behind the dialog.
+  useEffect(() => {
+    if (wasEnding.current && !ending && open) keepGoing.current?.focus();
+    wasEnding.current = ending;
+  }, [ending, open]);
 
   if (ending) {
     return (
@@ -92,7 +101,7 @@ export function EndCallDialog({
         term: 'You have sent',
         value: `${traineeTurns} ${traineeTurns === 1 ? 'message' : 'messages'}`,
       };
-  const failure = problem?.code === 'end-failed' ? problem : null;
+  const failure = isEndFailure(problem) ? problem : null;
   // Ending failed because there was nothing to report: trying again cannot help.
   const nothingToReview = failure !== null && failure.retry === null;
 
@@ -107,7 +116,12 @@ export function EndCallDialog({
       actions={
         nothingToReview ? (
           <>
-            <Button onClick={onContinue} disabledFocusable={discarding} data-autofocus>
+            <Button
+              ref={keepGoing}
+              onClick={onContinue}
+              disabledFocusable={discarding}
+              data-autofocus
+            >
               Continue call
             </Button>
             {onDiscard ? (
@@ -123,7 +137,7 @@ export function EndCallDialog({
           </>
         ) : (
           <>
-            <Button onClick={onContinue} disabledFocusable={busy} data-autofocus>
+            <Button ref={keepGoing} onClick={onContinue} disabledFocusable={busy} data-autofocus>
               Continue call
             </Button>
             <Button
@@ -161,7 +175,7 @@ export function EndCallDialog({
           </MessageBar>
         ) : null}
         {failure ? (
-          <ProblemNotice problem={failure} variant="panel" onRetry={onConfirm} />
+          <ProblemNotice problem={failure} variant="panel" live onRetry={onConfirm} />
         ) : (
           <p className="cw-end__next">
             <strong>What happens next: </strong>

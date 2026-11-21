@@ -13,6 +13,7 @@ import {
   type FakeActions,
 } from '../features/call-ui/test-utils.tsx';
 import type { CallSnapshot } from '../features/call/contract.ts';
+import { describeProblem } from '../features/call/problems.ts';
 import { useCall } from '../features/call/useCall.ts';
 import type * as ApiModule from '../lib/api.ts';
 import { api } from '../lib/api.ts';
@@ -173,6 +174,15 @@ describe('a call that is over', () => {
     engine({ ...base, phase: 'completed' });
     const { router } = renderPage('/calls/ses_x');
     await waitFor(() => expect(router.state.location.pathname).toBe('/sessions/ses_x/report'));
+  });
+
+  it('opens the report when the server says the call has already ended, as it can in another tab', async () => {
+    const base = FIXTURES['ready-for-next-turn'].snapshot;
+    engine({ ...base, problem: describeProblem('session-ended') });
+    const { router } = renderPage('/calls/ses_elsewhere');
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/sessions/ses_elsewhere/report'),
+    );
   });
 });
 

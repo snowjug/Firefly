@@ -7,6 +7,11 @@ export interface ProblemNoticeProps {
   problem: CallProblem;
   /** Above the composer (a problem the call can carry on through) or in place of the controls. */
   variant: 'inline' | 'panel';
+  /**
+   * Announces the notice when it appears. Off by default, because the call's announcer says each
+   * problem once; on inside a dialog, where everything outside is silent.
+   */
+  live?: boolean;
   onRetry?: () => void;
   /** Focuses the composer, for a problem that leaves typing available. */
   onTypeInstead?: () => void;
@@ -23,11 +28,13 @@ export interface ProblemNoticeProps {
 /**
  * A problem, said the way every problem is said: what happened, what was kept, what to do, and the
  * actions that really apply. It never shows raw provider text; the call engine supplies the words.
- * The sentence is announced once by the call's announcer, so the bar itself stays quiet.
+ * The sentence is announced once by the call's announcer, so the bar itself stays quiet unless it
+ * is told to speak (`live`).
  */
 export function ProblemNotice({
   problem,
   variant,
+  live = false,
   onRetry,
   onTypeInstead,
   onDismiss,
@@ -73,7 +80,7 @@ export function ProblemNotice({
   return (
     <MessageBar
       intent={blocking ? 'error' : 'warning'}
-      live={false}
+      live={live}
       title={limit ? 'You have reached the limit for this call.' : problem.title}
       actions={hasActions ? actions : undefined}
       onDismiss={!blocking && onDismiss ? onDismiss : undefined}

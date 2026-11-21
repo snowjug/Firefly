@@ -476,7 +476,9 @@ export function preferredLanguage(tags: readonly string[]): SpeechLanguage | und
 /**
  * Where "Back to brief" goes: the brief for this scenario, with the choices the call was made with,
  * in the query keys the brief reads (`difficulty`, `impact`, `temperature`, `proficiency`, `style`,
- * `stage` and `hints`). A brief that does not know a key ignores it.
+ * `stage`, `hints` and, when complications were switched off, `curveballs=none`). A brief that does
+ * not know a key ignores it. Which complications were chosen is not part of the call as the browser
+ * sees it, so a chosen set comes back as the scenario's default.
  */
 export function briefPathFor(session: SessionDTO): string {
   const { config } = session.scenario;
@@ -489,6 +491,7 @@ export function briefPathFor(session: SessionDTO): string {
     stage: config.callStage,
     hints: config.mode === 'guided' ? 'on' : 'off',
   });
+  if (!config.curveballsEnabled) query.set('curveballs', 'none');
   return `/scenarios/${encodeURIComponent(session.scenarioId)}/brief?${query.toString()}`;
 }
 
@@ -572,6 +575,17 @@ const BLOCKED_BY_PROBLEM: Partial<Record<CallProblem['code'], string>> = {
   'session-ended': 'This call has ended, so it cannot take new messages.',
 };
 const RETRY_FIRST = 'Your last message has not been sent yet. Use Try again first.';
+
+/**
+ * Whether the problem is what an attempt to end the call left behind: ending failed, or ending
+ * failed because the browser was offline. The call is still open then, and carrying on clears it.
+ */
+export function isEndFailure(problem: CallProblem | null): problem is CallProblem {
+  return (
+    problem !== null &&
+    (problem.code === 'end-failed' || (problem.code === 'offline' && problem.retry === 'end'))
+  );
+}
 
 /** Sending waits while the customer replies, when the call is over, or when a problem needs handling first. */
 export function composerGate(input: {
