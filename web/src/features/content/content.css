@@ -1,0 +1,273 @@
+/* Content pages (Responsible AI, About): a readable column, an optional "On this page" list beside it,
+   and the plain text inside. Tokens only. Print shows the text and hides the list. */
+
+.ct-page {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  inline-size: 100%;
+  max-inline-size: calc(var(--read-max) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding: var(--sp-10) var(--gutter) var(--sp-16);
+}
+
+.ct-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.ct-lead {
+  margin: 0;
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  color: var(--fg-2);
+}
+
+.ct-body {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+/* ---- Sections --------------------------------------------------------------------------------- */
+.ct-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-block: var(--sp-8);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.ct-section:first-child {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+.ct-h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-title3);
+  line-height: var(--lh-title3);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+  text-wrap: balance;
+}
+.ct-h3 {
+  margin: var(--sp-2) 0 calc(var(--sp-1) * -1);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+}
+.ct-section p,
+.ct-section li {
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
+  color: var(--fg-1);
+}
+.ct-section p {
+  margin: 0;
+}
+.ct-section ul {
+  display: grid;
+  gap: var(--sp-2h);
+  margin: 0;
+  padding-inline-start: var(--sp-5);
+}
+.ct-section ul li::marker {
+  color: var(--fg-3);
+}
+.ct-section .ct-note {
+  color: var(--fg-2);
+}
+
+/* ---- On this page ------------------------------------------------------------------------------- */
+.ct-toc__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ct-toc__list a {
+  display: block;
+  padding: var(--sp-1h) var(--sp-3);
+  border-inline-start: var(--stroke-w-thick) solid transparent;
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  text-decoration: none;
+}
+.ct-toc__list a:hover {
+  border-inline-start-color: var(--stroke-accessible);
+  background: var(--bg-hover);
+  color: var(--fg-1);
+  text-decoration: none;
+}
+.ct-toc__label {
+  margin: 0 0 var(--sp-2);
+  padding-inline: var(--sp-3);
+}
+
+/* Narrow: a disclosure above the text. */
+.ct-toc__details {
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-quiet);
+}
+.ct-toc__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--target);
+  padding-inline: var(--sp-4);
+  font-weight: var(--fw-semibold);
+  list-style: none;
+  cursor: pointer;
+}
+.ct-toc__summary::-webkit-details-marker {
+  display: none;
+}
+.ct-toc__details[open] > .ct-toc__summary {
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+}
+.ct-toc__details[open] .ct-toc__chevron {
+  transform: rotate(180deg);
+}
+.ct-toc__details .ct-toc__list {
+  padding: var(--sp-2) var(--sp-2) var(--sp-3);
+}
+.ct-toc__details .ct-toc__list a {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--target);
+  border-radius: var(--r-md);
+}
+
+/* ---- Wide: the list stays beside the text while you read ---------------------------------------------- */
+@media (min-width: 64em) {
+  .ct-page--toc {
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 1fr);
+    column-gap: var(--sp-16);
+    align-items: start;
+    max-inline-size: calc(14rem + var(--sp-16) + var(--read-max) + 2 * var(--gutter));
+  }
+  .ct-page--toc > .ct-header {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .ct-page--toc > .ct-toc {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    position: sticky;
+    inset-block-start: calc(var(--header-h) + var(--sp-6));
+    max-block-size: calc(100vh - var(--header-h) - var(--sp-12));
+    overflow-y: auto;
+    /* Room for the focus ring, which the scrolling box would otherwise cut off. */
+    margin: calc(var(--sp-1) * -1);
+    padding: var(--sp-1);
+  }
+  .ct-page--toc > .ct-body {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .ct-page {
+    padding-block-start: var(--sp-16);
+  }
+}
+
+/* ---- Definition lists (About) -------------------------------------------------------------------------- */
+.ct-defs {
+  display: grid;
+  margin: 0;
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+}
+.ct-def {
+  display: grid;
+  gap: var(--sp-1h);
+  padding-block: var(--sp-4);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.ct-def dt {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+}
+.ct-def dd {
+  margin: 0;
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
+  color: var(--fg-1);
+}
+.ct-def__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-block-start: var(--sp-1);
+}
+@media (min-width: 40em) {
+  .ct-defs--status .ct-def {
+    grid-template-columns: 10rem minmax(0, 1fr);
+    column-gap: var(--sp-6);
+    align-items: baseline;
+  }
+}
+
+.ct-section .ct-links {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ct-links li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-3);
+}
+.ct-section .ct-links .ct-note {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+/* ---- Forced colours and print ---------------------------------------------------------------------------- */
+@media (forced-colors: active) {
+  .ct-section,
+  .ct-def,
+  .ct-defs,
+  .ct-toc__details,
+  .ct-toc__summary {
+    border-color: CanvasText;
+  }
+  .ct-toc__list a:hover {
+    border-inline-start-color: Highlight;
+  }
+}
+@media print {
+  .ct-page,
+  .ct-page--toc {
+    display: block;
+    max-inline-size: none;
+    padding: 0;
+  }
+  .ct-header {
+    margin-block-end: var(--sp-6);
+  }
+  .ct-section {
+    break-inside: avoid-page;
+    padding-block: var(--sp-4);
+  }
+  .ct-h2,
+  .ct-h3 {
+    break-after: avoid;
+  }
+  /* A printed page cannot be clicked, so a link to somewhere else shows its address. */
+  .ct-section a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+}

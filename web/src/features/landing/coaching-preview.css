@@ -1,0 +1,284 @@
+/* A miniature coaching report for the landing page: a bordered sheet with the six scores, one piece of
+   evidence, better wording, the facts found and missed, and the customer's mood. Tokens only. */
+
+.cr {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.cr__sheet {
+  padding: var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  box-shadow: var(--shadow-8);
+}
+@media (min-width: 64em) {
+  .cr__sheet {
+    padding: var(--sp-8);
+  }
+}
+
+.cr__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-block-end: var(--sp-6);
+  padding-block-end: var(--sp-4);
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+}
+.cr__title {
+  margin: 0;
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+}
+
+.cr__grid {
+  display: grid;
+  gap: var(--sp-8);
+}
+.cr__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-inline-size: 0;
+}
+.cr__block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2h);
+  min-inline-size: 0;
+}
+.cr__block > * {
+  margin: 0;
+}
+@media (min-width: 64em) {
+  .cr__grid {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    column-gap: var(--sp-10);
+  }
+  .cr__scores th {
+    white-space: nowrap;
+  }
+}
+
+/* ---- The six scores -------------------------------------------------------------------------- */
+.cr__scores {
+  inline-size: 100%;
+}
+.cr__scores caption {
+  padding-block-end: var(--sp-2);
+  text-align: start;
+}
+.cr__scores th,
+.cr__scores td {
+  padding-block: var(--sp-2h);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  text-align: start;
+  vertical-align: middle;
+}
+.cr__scores th {
+  min-inline-size: 7.5rem;
+  padding-inline-end: var(--sp-4);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-regular);
+  color: var(--fg-1);
+}
+.cr__scores tr:last-child th,
+.cr__scores tr:last-child td {
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+}
+
+/* ---- Evidence, better wording, facts ----------------------------------------------------------- */
+.cr__quote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-inline-start: var(--sp-4);
+  border-inline-start: 3px solid var(--fg-3);
+}
+.cr__quote--plain {
+  border-inline-start-color: var(--stroke-1);
+}
+.cr__body {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+.cr__suggest {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-quiet);
+}
+.cr__suggest-label {
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+}
+.cr__facts {
+  display: grid;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cr__fact {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  column-gap: var(--sp-3);
+  align-items: start;
+}
+.cr__fact-title {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+}
+.cr__fact-note {
+  margin: 0;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  color: var(--fg-2);
+}
+
+/* ---- The customer's mood: a drawn trace, with a table for assistive technology ----------------------- */
+.cr__plot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--sp-3);
+  inline-size: 100%;
+}
+.cr__axis {
+  display: grid;
+  grid-template-rows: repeat(5, 1.5rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cr__axis li {
+  display: flex;
+  align-items: center;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-3);
+}
+.cr__field {
+  position: relative;
+  block-size: 7.5rem;
+  margin-inline-end: var(--sp-2);
+  border-inline-start: var(--stroke-w) solid var(--stroke-1);
+  border-block: var(--stroke-w) solid var(--stroke-2);
+}
+.cr__field svg {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+.cr__rule {
+  stroke: var(--stroke-2);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.cr__line {
+  fill: none;
+  stroke: var(--fg-2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.cr__dot {
+  position: absolute;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--r-pill);
+  background: var(--fg-2);
+  transform: translate(-50%, -50%);
+}
+.cr__dot--end {
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+  border: var(--stroke-w-thick) solid var(--bg-canvas);
+  box-shadow: 0 0 0 1px var(--fg-2);
+}
+.cr__dot--calm {
+  background: var(--state-calm-fg);
+}
+.cr__dot--concerned {
+  background: var(--state-concerned-fg);
+}
+.cr__dot--frustrated {
+  background: var(--state-frustrated-fg);
+}
+.cr__dot--angry {
+  background: var(--state-angry-fg);
+}
+.cr__dot--escalating {
+  background: var(--state-escalating-fg);
+}
+.cr__peak {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 0.5rem));
+  padding-inline: var(--sp-1);
+  background: var(--bg-canvas);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.cr__ends {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  inline-size: 100%;
+}
+.cr__end {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  color: var(--fg-2);
+}
+
+.cr__caption {
+  margin-block-start: var(--sp-3);
+}
+
+/* ---- Forced colours: edges, system colours and drawn marks that survive ------------------------------- */
+@media (forced-colors: active) {
+  .cr__sheet,
+  .cr__suggest,
+  .cr__quote,
+  .cr__field {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .cr__line {
+    stroke: CanvasText;
+  }
+  .cr__rule {
+    stroke: GrayText;
+  }
+  .cr__dot {
+    forced-color-adjust: none;
+    background: CanvasText;
+    border-color: Canvas;
+    box-shadow: 0 0 0 1px CanvasText;
+  }
+}
