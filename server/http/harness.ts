@@ -12,7 +12,7 @@ import { createApp } from '../http/app.ts';
 import { silentLogger, type Logger } from '../log.ts';
 import { createMockProvider } from '../providers/mock.ts';
 import type { ModelProvider } from '../providers/types.ts';
-import exemplar from '../scenarios/library/locked-out-after-password-reset.ts';
+import exemplar from '../scenarios/library/outlook-shared-mailbox-missing.ts';
 import { SessionService, type EvaluatorFns } from '../services/sessions.ts';
 import { createNoneSpeechProvider } from '../speech/index.ts';
 import type { SpeechProvider } from '../speech/types.ts';

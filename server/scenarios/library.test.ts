@@ -1,103 +1,100 @@
 import { describe, expect, it } from 'vitest';
-import { applyConfig } from '#shared/domain/config.ts';
-import { PersonaSchema } from '#shared/domain/scenario.ts';
+import { applyConfig, availableCurveballTypes } from '#shared/domain/config.ts';
+import { ScenarioDefinitionSchema, wordCount } from '#shared/domain/scenario.ts';
+import type { ScenarioDefinition } from '#shared/domain/scenario.ts';
 import {
   CALL_STAGES,
   DIFFICULTIES,
   IMPACTS,
-  ISSUE_TYPES,
+  PRODUCT_FAMILIES,
+  PRODUCT_IDS,
+  PRODUCT_INFO,
   PROFICIENCIES,
   START_TEMPERATURES,
   STYLES,
-  type DiscoveryIntent,
 } from '#shared/domain/vocab.ts';
-import { openingMessage } from '../engine/session.ts';
-import { simulate } from '../engine/simulate.ts';
 import { toPublicScenario } from '../services/dto.ts';
-import { distinctiveTokens, getScenarioLibrary, loadScenarios } from './index.ts';
+import {
+  distinctiveTokens,
+  getScenarioLibrary,
+  loadScenarios,
+  semanticIssues,
+  sharedPhrase,
+} from './index.ts';
+
+// The library as a whole: what it covers, what a trainee can read before a call, and the checks
+// that keep authored text honest. How the customer behaves on these scenarios is tested in
+// server/engine/library.test.ts.
 
 const library = getScenarioLibrary();
+const first = library[0] as ScenarioDefinition;
 
-// A considerate opening that builds trust and acknowledges impact before any fact is asked for.
-const LEAD_IN = [
-  "Hello, thanks for calling. I'm sorry you're dealing with this, that sounds really frustrating. Can you tell me what is happening?",
-  'I can see how this is affecting you and your team, and I want to help get it sorted. How urgent is it for you?',
-  "I understand, that must be stressful. I'll stay with you on this until we have a plan.",
-];
+/** Every string in a value. */
+function strings(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(strings);
+  if (value && typeof value === 'object') return Object.values(value).flatMap(strings);
+  return [];
+}
 
-const CANONICAL_QUESTIONS: Record<DiscoveryIntent, string> = {
-  problem_description: 'Can you describe what is happening?',
-  error_message: 'What exactly does the error message say?',
-  timing_onset: 'When did this start, and when did it last work?',
-  recent_changes:
-    'Has anything changed recently, like an update, a setting or a new configuration?',
-  affected_scope: 'Who is affected, just you or other people as well?',
-  business_impact: 'How is this impacting your business or your work?',
-  workaround: 'Is there a workaround you are using at the moment?',
-  already_tried: 'What have you already tried to fix it?',
-  environment: 'Which browser, device and version are you using?',
-  reproducibility: 'Does it happen every time, and what are the steps to reproduce it?',
-  previous_contact: 'Have you contacted us about this before, and what were you told?',
-  urgency_deadline: 'Is there a deadline we need to work to?',
-  expected_outcome: 'What outcome are you hoping for?',
-  account_details: 'Which account or licence plan are you on?',
+/** Every wording a hidden fact can have, across impact levels. */
+function wordings(fact: ScenarioDefinition['hiddenFacts'][number]): string[] {
+  return [
+    ...strings({
+      a: fact.statement,
+      b: fact.partialStatement,
+      c: fact.statementTerse,
+      d: fact.statementSimple,
+    }),
+    ...strings(fact.byImpact ?? {}),
+  ];
+}
+
+const copy = (patch: (s: ScenarioDefinition) => void): ScenarioDefinition => {
+  const clone = structuredClone(first);
+  patch(clone);
+  return clone;
 };
 
-describe('scenario library', () => {
-  it('loads without any validation errors', () => {
+describe('the library', () => {
+  it('loads without any validation errors, with every scenario about a Microsoft product', () => {
     expect(loadScenarios().errors).toEqual([]);
     expect(library.length).toBeGreaterThanOrEqual(12);
+    for (const scenario of library) {
+      expect(PRODUCT_IDS, scenario.id).toContain(scenario.product.id);
+    }
   });
 
-  it('covers the range of situations the product promises', () => {
-    const used = <T>(pick: (s: (typeof library)[number]) => T) => new Set(library.map(pick));
+  it('covers every Microsoft product family and every product it promises', () => {
+    const families = new Set(library.map((s) => PRODUCT_INFO[s.product.id].family));
+    expect([...families].sort()).toEqual([...PRODUCT_FAMILIES].sort());
+    const products = new Set(library.map((s) => s.product.id));
+    expect([...products].sort()).toEqual([...PRODUCT_IDS].sort());
+  });
+
+  it('covers the range of calls the product promises', () => {
+    const used = <T>(pick: (s: ScenarioDefinition) => T) => new Set(library.map(pick));
     expect([...used((s) => s.difficulty)].sort()).toEqual([...DIFFICULTIES].sort());
     expect([...used((s) => s.startingTemperature)].sort()).toEqual([...START_TEMPERATURES].sort());
     expect([...used((s) => s.style)].sort()).toEqual([...STYLES].sort());
     expect([...used((s) => s.callStage)].sort()).toEqual([...CALL_STAGES].sort());
     expect([...used((s) => s.impact)].sort()).toEqual([...IMPACTS].sort());
     expect([...used((s) => s.proficiency)].sort()).toEqual([...PROFICIENCIES].sort());
-    expect(used((s) => s.issueType).size).toBeGreaterThanOrEqual(6);
-    expect(ISSUE_TYPES.length).toBeGreaterThanOrEqual(used((s) => s.issueType).size);
-    expect(library.filter((s) => s.enabled && s.spotlight)).toHaveLength(1);
-  });
-
-  it('names which synthetic voice speaks for every enabled customer, and keeps that choice private', () => {
-    const enabled = library.filter((s) => s.enabled);
-    for (const scenario of enabled) {
-      expect(scenario.persona.speaker, scenario.id).toMatch(/^(female|male)$/);
+    for (const difficulty of DIFFICULTIES) {
+      expect(library.filter((s) => s.difficulty === difficulty).length, difficulty).toBeGreaterThan(
+        2,
+      );
     }
-    // Chosen by the persona's fictional name.
-    expect(Object.fromEntries(library.map((s) => [s.persona.name, s.persona.speaker]))).toEqual({
-      'Carmen Fraser': 'female',
-      'Elias Lindqvist': 'male',
-      'Declan Hartley': 'male',
-      'Seun Adeyemi': 'male',
-      'Mateus Carvalho': 'male',
-      'Linh Tran': 'female',
-      'Nomvula Dlamini': 'female',
-      'Tomasz Nowak': 'male',
-      'Maya Okafor': 'female',
-      'Ingrid Solheim': 'female',
-      'Rhys Pritchard': 'male',
-      'Priya Raman': 'female',
-      'Daniel Osei': 'male',
-    });
-    // It is a voice choice for the server, never something the web app is told.
-    expect(JSON.stringify(library.map(toPublicScenario))).not.toMatch(/speaker/i);
+    expect(used((s) => s.issueType).size).toBeGreaterThanOrEqual(8);
   });
 
-  it('still reads a persona stored before speakers existed, and refuses a speaker that is not one', () => {
-    const first = library[0];
-    if (!first) throw new Error('The library is empty');
-    const { speaker: _speaker, ...older } = first.persona;
-    expect(PersonaSchema.safeParse(older).success).toBe(true);
-    expect(PersonaSchema.safeParse({ ...older, speaker: 'nonbinary' }).success).toBe(false);
-    expect(PersonaSchema.safeParse({ ...older, speaker: 'female' }).success).toBe(true);
-  });
-
-  it('contains no real-looking contact details or links', () => {
+  it('keeps people, organisations and case numbers fictional, distinct and well formed', () => {
+    const names = library.map((s) => s.persona.name);
+    expect(new Set(names).size).toBe(names.length);
+    const refs = library.map((s) => s.caseReference);
+    expect(new Set(refs).size).toBe(refs.length);
     for (const scenario of library) {
+      expect(scenario.caseReference, scenario.id).toMatch(/^SIM-\d{6}$/);
       const text = JSON.stringify(scenario);
       expect(text, scenario.id).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
       expect(text, scenario.id).not.toMatch(/https?:\/\/|www\./i);
@@ -105,141 +102,211 @@ describe('scenario library', () => {
     }
   });
 
-  it('never reveals a hidden fact in the opening, whatever the settings', () => {
-    for (const scenario of library) {
+  it('gives every scenario the fact classes, the expectations and the empty CBCF list it needs', () => {
+    for (const s of library) {
+      expect(s.unknownFacts.length, `${s.id} unknown`).toBeGreaterThan(0);
+      expect(
+        s.vagueFacts.length + s.checkableFacts.length,
+        `${s.id} vague/checkable`,
+      ).toBeGreaterThan(0);
+      expect(s.hiddenFacts.length, `${s.id} hidden`).toBeGreaterThanOrEqual(3);
+      for (const principle of [
+        'communicate',
+        'accountable',
+        'resourceful',
+        'empathetic',
+      ] as const) {
+        expect(s.careExpectations[principle].length, `${s.id} ${principle}`).toBeGreaterThan(0);
+      }
+      // No CBCF material exists, so nothing may be written as if it did.
+      expect(s.cbcfBehaviours, s.id).toEqual([]);
+      expect(JSON.stringify(s), s.id).not.toMatch(/\bCBCF\b/i);
+    }
+  });
+
+  it('gives every call stage a stand-alone opening that says what the call is about', () => {
+    for (const s of library) {
+      for (const stage of ['follow-up', 'escalated', 'closure'] as const) {
+        const { opening } = s.stageFrames[stage];
+        expect(wordCount(opening), `${s.id} ${stage}`).toBeLessThanOrEqual(60);
+        expect(opening.split(/(?<=[.!?])\s+/).length, `${s.id} ${stage}`).toBeLessThanOrEqual(3);
+      }
+    }
+  });
+});
+
+describe('what a trainee can read before a call', () => {
+  it('stays inside the word budgets of the screens that show it', () => {
+    for (const s of library) {
+      const dto = toPublicScenario(s);
+      expect(wordCount(dto.listSummary), `${s.id} listSummary`).toBeLessThanOrEqual(18);
+      expect(wordCount(dto.summary), `${s.id} summary`).toBeLessThanOrEqual(60);
+      expect(wordCount(dto.publicBrief.issue), `${s.id} issue`).toBeLessThanOrEqual(18);
+      expect(wordCount(dto.publicBrief.objective), `${s.id} objective`).toBeLessThanOrEqual(18);
+      for (const level of IMPACTS) {
+        expect(wordCount(dto.publicBrief.impact[level]), `${s.id} ${level}`).toBeLessThanOrEqual(
+          16,
+        );
+      }
+    }
+  });
+
+  it('never carries the words or numbers of a hidden fact, in any wording or impact level', () => {
+    for (const s of library) {
+      const shown = strings(toPublicScenario(s)).join(' \n ');
+      const lower = shown.toLowerCase();
+      for (const fact of s.hiddenFacts) {
+        for (const wording of wordings(fact)) {
+          for (const token of distinctiveTokens(wording)) {
+            expect(lower, `${s.id} ${fact.id} token ${token}`).not.toContain(token);
+          }
+          expect(sharedPhrase(wording, shown), `${s.id} ${fact.id}`).toBeNull();
+        }
+      }
+    }
+  });
+
+  it('names the product from one place, and never from free text', () => {
+    for (const s of library) {
+      const dto = toPublicScenario(s);
+      expect(dto.product.name, s.id).toBe(PRODUCT_INFO[s.product.id].name);
+      expect(applyConfig(s).environment.product, s.id).toBe(PRODUCT_INFO[s.product.id].name);
+    }
+  });
+});
+
+describe('configuring a call', () => {
+  it('follows the impact level and the call stage in what exists and what is said', () => {
+    for (const s of library) {
       for (const impact of IMPACTS) {
         for (const callStage of CALL_STAGES) {
-          for (const style of STYLES) {
-            for (const startingTemperature of START_TEMPERATURES) {
-              const effective = applyConfig(
-                scenario,
-                { impact, callStage, style, startingTemperature, difficulty: 'challenge' },
-                { seed: 3 },
-              );
-              const opening = openingMessage(effective).toLowerCase();
-              for (const fact of effective.hiddenFacts) {
-                const label = `${scenario.id} ${impact}/${callStage}/${style}/${startingTemperature} ${fact.id}`;
-                expect(opening, label).not.toContain(fact.statement.toLowerCase());
-                for (const token of distinctiveTokens(fact.statement)) {
-                  expect(opening, `${label} token ${token}`).not.toContain(token);
-                }
-              }
+          const effective = applyConfig(s, { impact, callStage }, { seed: 1 });
+          const label = `${s.id} ${impact}/${callStage}`;
+          expect(effective.affectedUsers, label).toEqual(s.affectedUsers[impact]);
+          expect(effective.impactVariant, label).toEqual(s.impactVariants[impact]);
+          for (const fact of effective.hiddenFacts) {
+            expect(fact.stages ?? [callStage], label).toContain(callStage);
+            const own = fact.byImpact?.[impact];
+            if (own) expect(fact.statement, `${label} ${fact.id}`).toBe(own.statement);
+          }
+          for (const group of [
+            effective.knownFacts,
+            effective.vagueFacts,
+            effective.checkableFacts,
+            effective.unknownFacts,
+            effective.irrelevantFacts,
+            effective.incorrectAssumptions,
+          ]) {
+            for (const item of group as { id: string; stages?: string[] }[]) {
+              expect(item.stages ?? [callStage], `${label} ${item.id}`).toContain(callStage);
             }
           }
-        }
-      }
-    }
-  });
-
-  it('lets a good conversation discover every hidden fact in play, at every difficulty', async () => {
-    for (const scenario of library) {
-      for (const difficulty of DIFFICULTIES) {
-        const effective = applyConfig(scenario, { difficulty, curveballs: [] }, { seed: 11 });
-        const questions = effective.hiddenFacts
-          .filter((f) => (f.cues?.length ?? 0) > 0)
-          .map((f) => `Could you tell me more about ${f.cues?.[0]}?`);
-        const result = await simulate(effective, [...LEAD_IN, ...questions]);
-        for (const fact of effective.hiddenFacts) {
-          if ((fact.cues?.length ?? 0) === 0) continue;
+          // Whatever the stage, the customer can still say what the problem is.
           expect(
-            result.runtime.discovery[fact.id]?.status,
-            `${scenario.id} (${difficulty}): ${fact.id} should be discoverable via "${fact.cues?.[0]}"`,
-          ).toBe('discovered');
+            effective.knownFacts.some((f) => f.intents.includes('problem_description')),
+            label,
+          ).toBe(true);
         }
       }
     }
   });
 
-  it('lets a good conversation discover facts that are found by topic rather than by cue', async () => {
-    for (const scenario of library) {
+  it('offers only the curveballs a scenario allows, and never fires another', () => {
+    for (const s of library) {
+      expect(availableCurveballTypes(s), s.id).toEqual(s.allowedCurveballs);
       for (const difficulty of DIFFICULTIES) {
-        const effective = applyConfig(scenario, { difficulty, curveballs: [] }, { seed: 13 });
-        const byTopic = effective.hiddenFacts.filter((f) => (f.cues?.length ?? 0) === 0);
-        const questions = [...new Set(byTopic.flatMap((f) => f.intents))].map(
-          (intent) => CANONICAL_QUESTIONS[intent],
-        );
-        const result = await simulate(effective, [...LEAD_IN, ...questions]);
-        for (const fact of byTopic) {
-          expect(
-            result.runtime.discovery[fact.id]?.status,
-            `${scenario.id} (${difficulty}): ${fact.id} should be discoverable by asking about ${fact.intents.join(' or ')}`,
-          ).toBe('discovered');
+        const effective = applyConfig(s, { difficulty }, { seed: 1 });
+        for (const type of effective.config.curveballTypes) {
+          expect(s.allowedCurveballs, `${s.id} ${difficulty}`).toContain(type);
         }
       }
+      const all = applyConfig(s, { curveballs: ['change-issue', 'ask-manager', 'deadline'] });
+      for (const type of all.config.curveballTypes) expect(s.allowedCurveballs).toContain(type);
     }
   });
+});
 
-  it('keeps hidden facts hidden through ordinary call housekeeping', async () => {
-    for (const scenario of library) {
-      for (const difficulty of DIFFICULTIES) {
-        const effective = applyConfig(scenario, { difficulty, curveballs: [] }, { seed: 5 });
-        const result = await simulate(effective, [
-          'Hello, thanks for calling, my name is Sam. How can I help you today?',
-          "Can I take your name, and what's the best phone number to reach you on?",
-          'Sorry, could you say that again?',
-          'Could you hold for a moment while I pull up your account?',
-          'Is it okay if I phone you back later?',
-          'Is there anything else I can help with today?',
-        ]);
-        expect(Object.keys(result.runtime.discovery), `${scenario.id} (${difficulty})`).toEqual([]);
-      }
-    }
+describe('the checks on authored text', () => {
+  it('accepts every scenario in the library', () => {
+    for (const s of library) expect(semanticIssues(s), s.id).toEqual([]);
   });
 
-  it('finds the checkout rollback fact however the trainee words the question', async () => {
-    const scenario = library.find((s) => s.id === 'checkout-outage-before-investor-event');
-    if (!scenario) throw new Error('The checkout scenario is missing');
-    for (const question of [
-      'Is it possible to roll that change back?',
-      'Could the change be reversed quickly?',
-      'Is there a way to put things back how they were before the change?',
-      'Can you turn that setting off again?',
-    ]) {
-      const effective = applyConfig(
-        scenario,
-        { difficulty: 'challenge', curveballs: [] },
-        { seed: 11 },
+  it('rejects a hidden fact that is repeated, by wording or by number, in anything shown earlier', () => {
+    const fact = first.hiddenFacts[0] as ScenarioDefinition['hiddenFacts'][number];
+    const repeated = copy((s) => {
+      s.listSummary = `The customer says: ${fact.statement}`.split(/\s+/).slice(0, 16).join(' ');
+    });
+    expect(semanticIssues(repeated).join('\n')).toMatch(/is repeated/);
+    const hinted = copy((s) => {
+      const other = s.hiddenFacts[1];
+      const own = s.hiddenFacts[0];
+      if (own && other) own.hint = other.statement;
+    });
+    expect(semanticIssues(hinted).join('\n')).toMatch(/gives away hidden fact/);
+  });
+
+  it('rejects product claims the scenario has no business making', () => {
+    const issuesFor = (text: string) =>
+      semanticIssues(copy((s) => void (s.knownFacts[0] && (s.knownFacts[0].text = text)))).join(
+        '\n',
       );
-      const result = await simulate(effective, [...LEAD_IN, question]);
-      expect(result.runtime.discovery['hf-rollback-fear']?.status, question).toBe('discovered');
-    }
+    expect(issuesFor('It started after KB5034441 was installed.')).toMatch(/KB article number/);
+    expect(issuesFor('It shows error 0x80070005 each time.')).toMatch(/hexadecimal error code/);
+    expect(issuesFor('It says AADSTS50076 when we try.')).toMatch(/error code/);
+    expect(issuesFor('Please open https://portal.example.com to see it.')).toMatch(/web address/);
+    expect(issuesFor('Run Get-Mailbox for the user and check.')).toMatch(/command or cmdlet/);
+    expect(issuesFor('It happens on version 22H2 of the app.')).toMatch(/version or build number/);
+    expect(issuesFor('Go to Settings > Accounts and look there.')).toMatch(/menu path/);
+    expect(issuesFor('Call me on 555-123-4567 about it.')).toMatch(/phone number/);
+    // Everyday words that merely look like a command are fine.
+    expect(issuesFor('We used a stop-gap, then a set-up that did not help.')).toBe('');
   });
 
-  it('does not accuse the trainee of repeating a question that was never asked', async () => {
-    const scenario = library.find((s) => s.id === 'checkout-outage-before-investor-event');
-    if (!scenario) throw new Error('The checkout scenario is missing');
-    // "Change history" is not earlier contact with support, and who else in the business knows is
-    // not the same question, so neither answer can make the next question a repeat.
-    const effective = applyConfig(scenario, { difficulty: 'challenge' }, { seed: 1 });
-    const result = await simulate(effective, [
-      "Hello Declan, it's Sam from support. I'm sorry checkout is down. I know the CEO is presenting at eleven, so every minute counts. What are your shoppers actually seeing when they hit pay?",
-      'Is it failing for every storefront and every region, or is anything still working?',
-      'Did anybody on your side release or alter anything before the failures began?',
-      'Is it possible to roll that change back?',
-      'Has anyone checked your change history or our status page so far?',
-      'Who else in the business knows about this, and what have they been told?',
-    ]);
-    const customer = result.transcript.filter((t) => t.role === 'customer').map((t) => t.text);
-    expect(customer.join(' ')).not.toMatch(
-      /\balready (?:answered|told you|said|mentioned)|mentioned that already|are you listening/i,
+  it('finds shared wording only when it is long enough, and made of more than small words', () => {
+    expect(
+      sharedPhrase('Only external meetings are affected.', 'only external meetings are affected'),
+    ).toBe('only external meetings are');
+    expect(sharedPhrase('I think it was fine.', 'I think it was fine')).toBeNull();
+    expect(
+      sharedPhrase('We had a new approval process built last year', 'a new approval process'),
+    ).toBeNull();
+    expect(
+      sharedPhrase(
+        'The policy was changed yesterday afternoon by an administrator',
+        'a policy was changed yesterday afternoon',
+      ),
+    ).not.toBeNull();
+  });
+
+  it('requires what the schema promises: a product, a stage opening for call-backs, an allowlist', () => {
+    const missing = (patch: (s: Record<string, unknown>) => void) => {
+      const raw = structuredClone(first) as unknown as Record<string, unknown>;
+      patch(raw);
+      return ScenarioDefinitionSchema.safeParse(raw).success;
+    };
+    expect(missing((s) => delete s.product)).toBe(false);
+    expect(missing((s) => delete s.allowedCurveballs)).toBe(false);
+    expect(missing((s) => delete (s.stageFrames as Record<string, unknown>).escalated)).toBe(false);
+    expect(missing((s) => (s.cbcfBehaviours = ['anything']))).toBe(false);
+    expect(missing((s) => (s.listSummary = 'word '.repeat(19).trim()))).toBe(false);
+    expect(missing(() => undefined)).toBe(true);
+  });
+
+  it('refuses a library that reuses a persona name, a curveball outside the allowlist or a missing case reference', () => {
+    const twin = copy((s) => {
+      s.id = 'a-second-scenario';
+      s.caseReference = 'SIM-999999';
+    });
+    expect(loadScenarios([first, twin]).errors.join('\n')).toMatch(/persona name/);
+    const outside = copy((s) => {
+      s.allowedCurveballs = ['go-silent'];
+    });
+    expect(ScenarioDefinitionSchema.safeParse(outside).success).toBe(
+      first.curveballs.every((c) => c.type === 'go-silent'),
     );
-  });
-
-  it('keeps hidden facts hidden when the trainee never asks about them', async () => {
-    for (const scenario of library) {
-      for (const difficulty of DIFFICULTIES) {
-        const effective = applyConfig(scenario, { difficulty, curveballs: [] }, { seed: 5 });
-        const result = await simulate(effective, [
-          'Okay.',
-          'Right, thanks for that.',
-          'I will note that down.',
-          'Let me think about it.',
-        ]);
-        const found = Object.values(result.runtime.discovery).filter(
-          (d) => d.status === 'discovered',
-        );
-        expect(found, `${scenario.id} (${difficulty})`).toEqual([]);
-      }
-    }
+    const noRef = copy((s) => {
+      delete (s as { caseReference?: string }).caseReference;
+    });
+    expect(semanticIssues(noRef).join('\n')).toMatch(/caseReference is needed/);
   });
 });
