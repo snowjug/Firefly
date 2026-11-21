@@ -119,7 +119,7 @@ describe('what is ready', () => {
     renderCall('preflight-demo-speech');
     expect(rows()).toMatchObject({
       'Customer voice': 'Placeholder sound (demo)',
-      Speech: 'Demo speech (scripted): scripted',
+      Speech: 'Demo speech (scripted)',
     });
   });
 

@@ -29,70 +29,79 @@ Windows is blocking PowerShell scripts. Run npm through the command shell instea
 ## AI provider (the customer and the coaching)
 
 **The app says "Demo mode" but I configured a model.**
-Look at the server's start-up output. If a required variable is missing or `FIREFLY_PROVIDER` is misspelt, Firefly prints a notice naming the problem (never the values) and runs in demo mode instead. The scenario brief, the pre-flight page and the report all show which mode is running. Fix `.env`, then restart the server: settings are read only at start-up.
+Look at the server's start-up output. If a required variable is missing or `FIREFLY_PROVIDER` is misspelt, Firefly prints a notice naming the problem (never the values) and runs in demo mode instead. The header, the pre-flight page, the call bar and the report show which mode is running, and the header carries the notice. Fix `.env`, then restart the server: settings are read only at start-up.
 
 **"This call was started with a different AI setting than the server is using now."**
 A call keeps the provider it was started with. If you change `FIREFLY_PROVIDER` while a call is open, start a new call.
 
 **"The AI provider rejected the credentials", "could not find the model", or timeouts.**
-These come from your provider settings. [ai-providers.md](ai-providers.md#failure-behaviour) lists each message and what it means. Only Gemini has been run against a real service; Azure OpenAI and other OpenAI-compatible services have been tested only against a local fake server, so use the manual smoke test in that document before relying on them.
+These come from your provider settings. [ai-providers.md](ai-providers.md#failure-behaviour) lists each message and what it means. Gemini had one limited smoke check; Azure OpenAI and the OpenAI-compatible endpoint have not been run live, and all three have otherwise been tested only against a local fake server. Use the manual smoke test in that document before relying on one ([status of each provider](ai-providers.md#status-of-each-provider)).
 
 **With Gemini: "The AI provider's rate limit was reached. Please try again in about N seconds."**
-A free-tier Gemini project allows a limited number of requests per minute for each model (15 for `gemini-3.5-flash-lite` when this was tested), and each message you send uses two. Wait the number of seconds shown, then choose **Try again**. Linking a billing account to the Google project raises the limits (see [ai-providers.md](ai-providers.md#gemini-google-ai-studio)), or set `GEMINI_MODEL` to another model.
+A free-tier Gemini project allows a limited number of requests per minute for each model, and each message you send uses two. Wait the number of seconds shown, then choose **Retry**. Google's rate limits depend on the project's usage tier (see [ai-providers.md](ai-providers.md#gemini-google-ai-studio)), or set `GEMINI_MODEL` to another model.
 
 **With Gemini: "The AI provider is not available right now."**
-Google answered with a server error. Larger models sometimes answer HTTP 503 ("high demand"). Try again in a moment, or set `GEMINI_MODEL` to another model (`gemini-3.5-flash-lite` is the default).
+Google answered with a server error, for example HTTP 503. Try again in a moment, or set `GEMINI_MODEL` to another model (`gemini-3.5-flash-lite` is the default).
 
 **My network needs a proxy to reach the provider.**
 Node's built-in `fetch` ignores proxy variables unless you start the server with `NODE_OPTIONS=--use-env-proxy`.
 
 ## Speech and the microphone
 
-The pre-flight page of every call says which speech set-up is in use before anything is requested, and a typed call always works. Start with **Start text-only call** if you need to carry on.
+The pre-flight page of every call says which speech set-up is in use before anything is requested, and a typed call always works. Choose **Start text call** if you need to carry on.
 
-**"The microphone is blocked for this site."**
-The browser remembered a "block", or you dismissed the prompt. In Edge, select the lock icon at the left of the address bar, open **Permissions for this site**, set **Microphone** to **Allow**, then choose **Try again**. In Chrome, select the icon at the left of the address bar and turn on **Microphone**. Nothing was recorded.
+**"The microphone is blocked, so Firefly cannot hear you."**
+The browser remembered a "block", or you dismissed the prompt. In Edge, select the lock icon at the left of the address bar, open **Permissions for this site**, set **Microphone** to **Allow**, then choose **Retry**. In Chrome, select the icon at the left of the address bar and turn on **Microphone**, then choose **Retry**. Nothing was recorded.
 
-**"No microphone was found" or "The microphone did not start".**
-Check that a microphone is connected and switched on, and close any other app that is using it (a meeting, a recorder). Then choose **Try again**.
+**"No microphone was found." or "The microphone is in use by something else or did not start."**
+Check that a microphone is connected and switched on, and close any other app that is using it (a meeting, a recorder). Then choose **Retry**, or **Use text**.
 
-**"This browser cannot record your voice here."**
-A spoken call needs Microsoft Edge or Google Chrome, a microphone, and a secure page (`https://`, or `http://localhost`). Other browsers can still hold a typed call.
+**"This browser cannot record from a microphone here."**
+A spoken call needs a browser that can record, a microphone, and a secure page (`https://`, or `http://localhost`). Firefly's tests run in Chromium, so use a current Edge or Chrome. Other browsers can still hold a typed call.
 
-**"Nothing was heard" or "no words could be made out".**
-The microphone opened but no speech was recognised. Say it again a little closer to the microphone, or type. If you are using the **browser's own speech recognition** (the pre-flight page says "Browser speech recognition"), be aware that in automated Edge and Chrome it returned no words for a clean test voice, so it may not work in your browser either: switch to typing, or ask whoever runs Firefly to configure a speech provider.
+**"No speech was detected." or "Firefly could not make out any words."**
+The microphone opened but nothing recognisable was heard, or the recogniser returned only filler sounds. Say it again a little closer to the microphone, or type. If you are using the **browser's own speech recognition** (the pre-flight page says "Browser speech recognition"), its quality and availability are the browser maker's, and Firefly has not verified it with real speech. If it keeps returning nothing, switch to typing, or ask whoever runs Firefly to configure a speech provider.
 
 **The recognised text is not what I said.**
 Speech recognition can mishear words, and the report says so for spoken calls. If a quote in the report is wrong, the transcript is the text that was scored: say it again or type it. With the **scripted demo speech** provider the "recognised" text is a fixed sentence, not your words: that is how the demo works.
 
-**"The speech service is not available right now."**
-The server has no working speech provider (none is configured, or its settings are wrong, or the service is down). Nothing was sent. Type your reply, or choose **Try again**. If you run Firefly, look at the start-up output: a notice names any wrong `AZURE_SPEECH_*` variable (never its value). [speech-providers.md](speech-providers.md) lists every setting.
+**"Spoken calls are not available on this server right now." or "Firefly could not reach the speech service."**
+The server has no working speech provider (none is configured, or its settings are wrong, or the service is down), or your connection dropped. Nothing was sent. Type your reply, or choose **Retry**. If you run Firefly, look at the start-up output: a notice names any wrong `AZURE_SPEECH_*` variable (never its value). [speech-providers.md](speech-providers.md) lists every setting.
 
 **I can't hear the customer.**
-Check the pre-flight page and **Voice settings**: it names the voice that is in use. With the **scripted demo speech** provider the customer's "voice" is a short placeholder sound, not speech, so read the transcript. With browser voices, the voices on the device decide what you hear; a Windows laptop may have no British English voice and will use another English voice. If your browser blocks sound until you interact with the page, press **Play** on the notice.
+Check the pre-flight page and **Voice settings** on the call: they name the voice that is in use. With the **scripted demo speech** provider the customer's "voice" is a short placeholder sound, not speech, so read the transcript. With browser voices, the voices on the device decide what you hear; a Windows laptop may have no British English voice and will use another English voice. If your browser blocks sound until you interact with the page, choose **Replay**. If the customer's voice cannot be made or played, choose **Continue without audio** and read the transcript: the customer's words are there before their voice plays.
+
+**The four voices sound the same.**
+A browser with one English voice cannot make four voices sound different, and some speech services have fewer than four voices in a language. The brief says so ("Some of these voices share one synthetic voice and differ only in pace.", or the browser's equivalent).
 
 **Hands-free stopped listening.**
-After three empty listening passes in a row, hands-free waits for you. Press **Talk**, or type.
+After an empty pass the microphone reopens by itself, up to three times in a row. After a fourth empty pass hands-free waits for you. Press **Talk**, or type.
+
+**I pressed Talk and nothing happened while the customer was speaking.**
+**Talk** stays disabled while the customer's voice is being prepared or played: Firefly does not support talking over the customer. Press **Stop customer audio**, then talk, or wait for the voice to end.
 
 **The microphone indicator is still on.**
-While a spoken call is live and not paused, the browser shows that the microphone is in use, even though Firefly only listens while it is your turn. **Pause** or **End call** releases it. If the indicator stays on after the call has ended, close the tab and tell the maintainers.
+While a spoken call is live and not paused, the browser shows that the microphone is in use, even though Firefly only listens while it is your turn. **Pause**, or **End and review** in the "End the call?" dialog, releases it. **End call** alone only opens that dialog. If the indicator stays on after the call has ended, close the tab and tell the maintainers.
+
+**The call paused when I switched to another tab or window.**
+A spoken call pauses by itself when the browser reports the page as hidden, so that the microphone is never open out of sight. The microphone is released and the customer's voice stops. Coming back does not open the microphone again: press **Resume**. A text call is not paused.
 
 ## During a call
 
-**A message has a Try again notice under it.**
-Your message was saved, but the customer could not reply (for example the provider was unavailable or slow). Choose **Try again**. The same message is resent without being duplicated. After a page reload the notice comes back.
+**A card says "The customer could not reply." or "The customer is taking too long."**
+Your message was saved or is kept. Choose **Retry**: it sends the same message once, never twice. After a page reload the card comes back. If another notice covers it (for example, a failed attempt to end the call), the card returns when that notice is put away: a message that did not send always keeps its Retry.
 
 **The Send button is disabled.**
-The message is empty, over the length limit, or the customer is still replying. At the message limit, end the call to get your report.
+The message is empty, over the length limit, or the customer is still replying. At the message limit ("This call reached its message limit."), end the call to get your report.
 
 **I left the call page.**
-The call stays open. Go to **Scenarios**: a banner offers **Resume** for the call in progress, and **Recent calls** lists the others.
-
-**Scenarios says "You have a call in progress" for a call I never started.**
-Starting a call creates it, and **Back to brief** on the step before the call leaves that empty call open. Choose **Resume** to carry on with it, or open it, start it and choose **End call**: a call with no message has nothing to report, so Firefly says so and offers **Leave without a report**. An empty call does no harm if you ignore it. Going back to the brief also brings back the settings you chose, except which complications you picked: it shows the scenario's default set (or none, if you had switched them off).
+The call stays open on the server and keeps its transcript. Open its address again (browser Back, or the address bar's history): the pre-flight page says **Resume call** and offers **Resume voice call** and **Resume with text**. Firefly has no screen that lists open calls.
 
 **"We could not find this call."**
 The address points at a call that does not exist for this browser. It may have been deleted, or it belongs to a different browser profile (see below). Choose a scenario to start a new one.
+
+**"There is nothing to review yet."**
+You ended a call in which no message was sent, so there is nothing to score. Choose **Leave without a report**, which deletes the empty call, or send a message first.
 
 **The coaching report did not finish.**
 Your transcript is saved. Choose **Retry evaluation** on the report page. If it keeps failing with a live model, check the provider configuration; the same call can be evaluated again at any time.
@@ -100,7 +109,7 @@ Your transcript is saved. Choose **Retry evaluation** on the report page. If it 
 ## Data
 
 **I want to delete a call.**
-Use **Delete this call** at the bottom of its report. To remove all data for everyone, stop the server and delete the database file (`data/firefly.db` by default).
+Use **Delete this call** in the actions on its report page, then confirm with **Delete call**. To remove all data for everyone, stop the server and delete the database file (`data/firefly.db` by default).
 
 **My calls disappeared.**
 Calls are tied to an anonymous cookie in your browser. A different browser, a private window, cleared cookies or a different server address starts a new, empty profile. Nothing is shared between profiles.

@@ -1,6 +1,6 @@
 # Plan: Firefly as a voice-first Microsoft support call simulator
 
-Status: in progress. Branch `feature/firefly-microsoft-voice-simulator`. Rollback point: `main` at `cc7ed0eb72d48683bd91e051fcc762267122c606`.
+Status: implemented on the branch `feature/firefly-microsoft-voice-simulator`; the verification and the merge are recorded in the pull request. Rollback point: `main` at `cc7ed0eb72d48683bd91e051fcc762267122c606`.
 
 This plan follows ECC's `blueprint` skill (research, design, draft, adversarial review, register). Each step is one commit sized for review, names the files it owns, and says how to verify it. The impact analysis from `change-impact` and the port map from `hexagonal-architecture` are folded in below.
 
@@ -150,3 +150,15 @@ README plus `docs/voice-architecture.md`, `docs/customer-realism.md`, `docs/care
 ## Finish gate (from `delivery-gate`, applied by hand)
 
 Before merging: the full check passes; a real-browser journey passes in Edge; the voice and text paths both work; screenshots at 320, 375, 430, 768, 1024, 1440 and 1920 px were looked at; the report renders; accessibility checks pass; a production build serves and passes a smoke test; CI is green on the exact commit; the secret scan is clean; the documentation matches what was built.
+
+## Outcome and deviations
+
+What differs from the plan, so that nobody has to find it:
+
+- **Intermediate commits do not build on their own.** The schema, the scenario library and the engine depend on each other, so commits 2 to 10 are not each runnable (for example `c88e535` imports an engine file that arrives in commit 7). The checks above were run on the final commit, and on nothing earlier.
+- **Independent review after the build.** Three read-only reviews of the committed engine, evaluator and call code found real defects (a failed message could lose its Retry notice, the microphone stayed open in a hidden tab, a pre-flight button did nothing, polite sentences were scored as blame, and more). Each was fixed with a test that fails without the fix, in commits 12 to 14.
+- **No `npm run calibrate`.** The script does not exist in this repository and nothing was added in its place; scores have not been compared with a mentor's.
+- **CBCF is not applied.** No authoritative material was found, so the report says so and no screen or document claims alignment.
+- **The scenario pane's main button says "Review brief"**, where the brief called it "Start configuration": it opens the case brief, and the customise options sit in the same pane.
+- **Not verified:** real speech-to-text and the customer's voice (only fakes, Edge's own speech synthesis and a scripted provider), Azure OpenAI, the OpenAI-compatible endpoint and Azure AI Speech (not run), screen readers, and any browser except Chromium. Gemini had one limited smoke check.
+- **Known limitation left as it is:** while the End call dialog is open on a spoken call the microphone stays live.

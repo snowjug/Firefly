@@ -52,7 +52,7 @@ describe('announcementFor', () => {
       ),
     ).toEqual([
       'Waiting for you to allow the microphone.',
-      'The customer is speaking. You can stop the response at any time.',
+      'The customer is speaking. You can stop the customer audio at any time.',
     ]);
   });
 

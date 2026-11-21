@@ -7,7 +7,22 @@ Firefly runs in one of two modes.
 
 This page is about the language model. Speaking and listening are a separate boundary with their own providers (none, a labelled demo voice, and Azure AI Speech), described in [voice-architecture.md](voice-architecture.md). Neither choice depends on the other.
 
-> **Verification status.** The Gemini provider has been run end to end against the real Gemini API (see [Verified against the Gemini API](#verified-against-the-gemini-api)). Azure OpenAI and generic OpenAI-compatible services have been verified only against a local fake server (`server/providers/fake-llm-server.ts`) in automated tests. For those two, anything that depends on a real service is unverified: the exact wording of error responses, content-filter payloads, JSON-mode support, token budgets for reasoning models, and the quality of the replies. Run the [smoke test](#optional-manual-smoke-test) with your own key before relying on them.
+> **Verification status.** Gemini had one limited live smoke check on 21 Nov 2026. Azure OpenAI and the OpenAI-compatible endpoint have not been run live. The three live providers share one adapter, which is tested against a local fake model server (`server/providers/fake-llm-server.ts`). Anything that depends on a real service and was not in the Gemini smoke check is unverified: the exact wording of error responses, content-filter payloads, JSON-mode support on other services, token budgets for reasoning models, and the quality of the replies. See [Status of each provider](#status-of-each-provider), and run the [smoke test](#optional-manual-smoke-test) with your own key before relying on one.
+
+## Status of each provider
+
+| Provider          | Setting                              | What is tested, against the local fake                                                                                                           | Live check                       |
+| ----------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| Demo mode         | `FIREFLY_PROVIDER=mock` (default)    | The rules engine, in unit, API and browser tests.                                                                                                | Not run (no external service)    |
+| Gemini            | `FIREFLY_PROVIDER=gemini`            | The request (bearer key, base URL, model in the body), token headroom and compatibility adjustments, JSON repair, and the reply and fact guards. | Limited smoke check, 21 Nov 2026 |
+| Azure OpenAI      | `FIREFLY_PROVIDER=azure-openai`      | The request (deployment route, `api-version` query, `api-key` header, no model in the body), and the same adapter behaviour as above.            | Not run                          |
+| OpenAI-compatible | `FIREFLY_PROVIDER=openai-compatible` | The request (bearer key, base URL, model in the body), and the same adapter behaviour as above.                                                  | Not run                          |
+
+**What the status column means.** The adapters are written against each vendor's documentation and tested against a local fake. CI uses the fake servers and the mock. "Not run" means Firefly has not been run against that service.
+
+**The Gemini smoke check.** Gemini (model `gemini-3.5-flash-lite`, free tier, key supplied locally by the user) got a limited live smoke check on 21 Nov 2026 through the real HTTP API: two scripted calls (Outlook shared mailbox, 7 engineer turns; Teams external meetings, 10 engineer turns) with live customer replies and a model-written v2 report for each; no errors, no retries, no coaching or list-style replies detected by simple automatic checks. That is a smoke check, not a quality evaluation: it says nothing about voice, about other scenarios, or about paid-tier behaviour.
+
+Azure OpenAI, the OpenAI-compatible endpoint and Azure AI Speech have not been run live. When another provider is run, add the date, the model and what was run here.
 
 ## Configure a provider
 
@@ -33,6 +48,8 @@ AZURE_OPENAI_API_VERSION=<api-version>
 
 Firefly calls `POST {endpoint}/openai/deployments/{deployment}/chat/completions?api-version={version}` with the key in an `api-key` header. The deployment must be a chat model; it selects the model, so no `model` field is sent.
 
+**A documentation check you should know about.** Microsoft's current pages describe a newer "v1" Azure OpenAI API: `POST {endpoint}/openai/v1/chat/completions`, with no `api-version` parameter, which you can opt in to ([Azure OpenAI v1 API](https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle) and the [chat reference](https://learn.microsoft.com/en-us/rest/api/microsoft-foundry/azureopenai/chat), both read on 21 November 2026). The chat reference accepts the key in the `api-key` header or the `authorization` header. Firefly's adapter still uses the dated route above. The pages read for this check do not say that route has been removed, and do not say it has not. It has not been tried against a live resource. If a resource rejects the dated route, that is the first thing to check, and supporting the v1 route would be a change to `server/providers/http.ts`.
+
 ### Gemini (Google AI Studio)
 
 A stand-in for Azure OpenAI that needs only an API key from [Google AI Studio](https://aistudio.google.com/apikey).
@@ -45,19 +62,19 @@ GEMINI_MODEL=<model-name>
 GEMINI_BASE_URL=<https://generativelanguage.googleapis.com/v1beta/openai>
 ```
 
-Only the key is required. Without `GEMINI_MODEL` Firefly uses `gemini-3.5-flash-lite`, a fast, low-cost model; without `GEMINI_BASE_URL` it uses Google's OpenAI-compatible endpoint. Firefly calls `POST {base-url}/chat/completions` with `Authorization: Bearer <key>` and the model name in the body. The provider label reads `Gemini (model "<name>")`.
+Only the key is required. Without `GEMINI_MODEL` Firefly uses `gemini-3.5-flash-lite`, which Google's [models page](https://ai.google.dev/gemini-api/docs/models) lists as Stable (read 21 November 2026). Without `GEMINI_BASE_URL` it uses Google's OpenAI-compatible endpoint, `https://generativelanguage.googleapis.com/v1beta/openai/`, as Google's [OpenAI compatibility page](https://ai.google.dev/gemini-api/docs/openai) gives it (read the same day). Firefly calls `POST {base-url}/chat/completions` with `Authorization: Bearer <key>` and the model name in the body, which is the shape that page shows. The provider label reads `Gemini (model "<name>")`.
 
 What Firefly does differently for Gemini:
 
-- Gemini models think before they answer, and that thinking counts against the completion limit. Firefly asks for the lowest reasoning effort (`reasoning_effort: "minimal"`) and adds token headroom so a reply is not cut off. A model that rejects the reasoning setting is retried once without it.
-- Google answers an invalid API key with HTTP 400 rather than 401. Firefly recognises that and reports "rejected the credentials".
+- Gemini models think before they answer, and that thinking counts against the completion limit. Firefly asks for the lowest reasoning effort (`reasoning_effort: "minimal"`) and adds token headroom so a reply is not cut off. Google's compatibility page lists `minimal`, `low`, `medium`, `high` and `xhigh` as values, and says that reasoning cannot be turned off for Gemini 2.5 Pro, Gemini 3 or Gemini 4 models. A model that rejects the reasoning setting is retried once without it.
+- Firefly treats a Google HTTP 400 that says the key is invalid as "rejected the credentials". An earlier run saw Google answer an invalid key with 400 rather than 401. That has not been re-checked on this version, and the tests reproduce the shape.
 - When Google says how long to wait after a rate limit, Firefly passes that on ("Please try again in about 40 seconds") instead of a vague message.
 
 Things to know before relying on it:
 
-- **Rate limits.** Limits apply per Google project (not per key), per model, and depend on the project's usage tier. When this was tested on a free-tier project, `gemini-3.5-flash-lite` allowed 15 requests per minute, and a trainee message costs two requests, so a fast conversation can hit the limit. Firefly then shows the wait Google asked for, and a failed coaching report can be retried from the report page. Linking a billing account moves a project to a paid tier with higher limits; Google AI Studio shows your current limits, and Google's [rate limit documentation](https://ai.google.dev/gemini-api/docs/rate-limits) explains the tiers.
-- **Data use.** Google's [Gemini API terms](https://ai.google.dev/gemini-api/terms) (effective 2026-03-23 when this was checked) say that for unpaid services, which includes the unpaid quota of the Gemini API, Google uses what you submit and the responses to improve its products and human reviewers may read it, and they say not to submit sensitive, confidential or personal information. For paid services, Google does not use prompts and responses to improve its products. Firefly sends only fictional scenario text and redacted trainee messages, so keep it that way: never type real customer data, and read the current terms before using a key for anything else.
-- **Model availability.** Models change. During testing some larger models sometimes answered HTTP 503 ("high demand"), which Firefly reports as "not available right now"; choosing another model with `GEMINI_MODEL` fixes that. To list the models your key can use, run `curl -H "Authorization: Bearer $GEMINI_API_KEY" https://generativelanguage.googleapis.com/v1beta/openai/models`.
+- **Rate limits.** Google's [rate limit documentation](https://ai.google.dev/gemini-api/docs/rate-limits) (read 21 November 2026) says limits are applied per project, not per key, that they vary by model, and that they depend on the project's usage tier. AI Studio shows your active limits. A trainee message costs two model requests, so a fast conversation can reach a low limit. Firefly then shows the wait Google asked for, and a failed coaching report can be retried from the report page.
+- **Data use.** Google's [Gemini API terms](https://ai.google.dev/gemini-api/terms) (effective 23 March 2026, read 21 November 2026) say that for unpaid services, which includes the unpaid quota of the Gemini API, Google uses what you submit and the responses to provide, improve and develop its products, that human reviewers may read, annotate and process the input and output, and not to submit sensitive, confidential or personal information. For paid services, Google does not use prompts and responses to improve its products. The terms also say that for users in the EEA, Switzerland or the United Kingdom the paid-service data terms apply to all services, and that only Paid Services may be used when making an application available to users there. Firefly sends only fictional scenario text and redacted trainee messages, so keep it that way: never type real customer data, and read the current terms for what applies to you.
+- **Model availability.** Models change. If a model is retired or busy, choose another with `GEMINI_MODEL`; Google's models page lists what is current.
 - **Keep the key private.** It belongs only in your git-ignored `.env`. `npm run check:secrets` also looks for Google key shapes, but it is a safety net. If a key is ever pasted somewhere public or shared, delete it in Google AI Studio and create a new one.
 
 ### OpenAI-compatible endpoint
@@ -92,34 +109,34 @@ Node's built-in `fetch` ignores `HTTP_PROXY` and `HTTPS_PROXY` unless asked. If 
 
 ## What each call does
 
-| Call                | When                     | Output                         | Temperature | If it fails                                                       |
-| ------------------- | ------------------------ | ------------------------------ | ----------- | ----------------------------------------------------------------- |
-| **Classify a turn** | Once per trainee message | JSON: what the trainee did     | 0           | The session service falls back to the rules classifier.           |
-| **Customer reply**  | Once per trainee message | Plain text, 1 to 6 sentences   | 0.7         | The message fails with a safe error. There is no silent fallback. |
-| **Coaching draft**  | Once when the call ends  | JSON: scores, quotes, guidance | 0.2         | The evaluation reports the error and can be retried.              |
+| Call                | When                     | Output                                                         | Temperature | If it fails                                                                                                                                                |
+| ------------------- | ------------------------ | -------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Classify a turn** | Once per trainee message | JSON: what the trainee did                                     | 0           | The session service falls back to the rules classifier.                                                                                                    |
+| **Customer reply**  | Once per trainee message | Plain speech, within the reply plan's sentence limit           | 0.7         | One retry with a generic reminder, then whatever is safe to say is kept. If nothing safe is left, the message fails with a safe error. No silent fallback. |
+| **Coaching draft**  | Once when the call ends  | JSON: six scores, quotes, guidance, strengths and improvements | 0.2         | The evaluation reports the error and can be retried.                                                                                                       |
 
 A trainee message therefore costs two model calls, and ending the call costs one. A repair or regeneration adds one more call for that step.
 
-The model never decides the numbers. Customer temperature, trust and patience, which hidden facts are revealed, when a curveball fires, score arithmetic and quote verification are all computed in code. The classifier _describes_ what the trainee did; the engine decides what that means. Every model output is validated before it is used:
+The model never decides the customer's state. Customer temperature, trust and patience, which hidden facts are revealed, when a curveball fires and quote verification are all computed in code, and so are CARE, the milestones, discovery and the overall score. The classifier _describes_ what the trainee did; the engine decides what that means. The coaching draft is the one place where a model proposes numbers: it scores the six skills, and the server then checks every quote and lowers a score that lacks evidence (see [care-cbcf-rubric.md](care-cbcf-rubric.md#when-a-model-writes-the-evaluation)). Every model output is validated before it is used:
 
 - **JSON answers** are read leniently (code fences, text around the object) and then checked against the shared schemas. Unknown intents, behaviours and fact names are dropped, numbers are clamped, long strings are trimmed, and quotes must appear verbatim in the trainee's message. If the result is still invalid, Firefly sends one corrective message naming the problem, then fails with `provider_bad_output`.
-- **Customer replies** are cleaned (markdown, speaker labels, stage directions, wrapping quotes) and rejected if empty, over 900 characters, or out of character (mentions being an AI, a system prompt, a language model and so on). A rejected reply is regenerated once with a stricter reminder.
+- **Customer replies** are cleaned (reasoning, speaker labels, stage directions and wrapping quotes removed, each line of a list turned into a sentence of its own, markdown stripped) and checked: empty, over 900 characters, out of character (mentions being an AI, a system prompt, a language model and so on), leaking an unearned fact, or making up what the customer does not know. A reply that fails is regenerated once with a generic reminder, and then what is safe is kept sentence by sentence. [customer-realism.md](customer-realism.md#live-model-guards) has the full list.
 
 ## What is sent to the model, and what is not
 
 **During the call**
 
 - Classifier: the trainee's latest message, the customer's last message, the scenario title, goal and impact line, and a list of discovery targets. Each target is a throwaway name (`t1`, `t2`, ...) with a description of the _kind of question_ that unlocks it. The targets carry no answers, labels or fact ids.
-- Customer reply: who the customer is (persona, goal, impact, earlier case history, what they believe), how they speak, how they feel in words (never numbers), how to react to what the trainee just did, any curveball in this reply, the facts they may state in this reply, what they have already said, the rules, and the conversation so far.
+- Customer reply: who the customer is (persona, goal, impact, what they hope for, background on their setup, what they tried and what changed, the case history on a call-back, what they believe), what they do not know and who would know, how they speak, how they feel in words (never numbers), what they have already said and what each side has committed to, how to react to what the trainee just did, any curveball in this reply, the facts they may state in this reply, a sentence limit, the rules, and the conversation so far.
 - Trainee messages are passed through Firefly's redaction (emails, phone numbers, long numbers and identifiers) before they are sent.
 
 **After the call (coaching draft)**
 
-- The scenario's grounding notes, the full transcript with turn numbers, the discovery results (the call is over, so what the customer held back is included), the customer-state timeline, and facts about how the call ended. Only the customer's first name is sent.
+- The scenario's grounding notes (including what a strong call looks like for each CARE principle), the settings used for the call, the full transcript with turn numbers, the discovery results (the call is over, so what the customer held back is included), the customer-state timeline, and facts about how the call ended. Only the customer's first name is sent. The CARE results, milestones and discovery are computed by the server, and the prompt tells the model to leave them alone and never to mention CBCF.
 
 **Never sent**
 
-- Hidden facts the trainee has not earned: no statement, label, id, hint or "do not mention" list, and no description of what is being held back. When the customer is holding something back, the model is told only that something related to what was just asked is not ready to be discussed, and why (trust, or the impact not yet being acknowledged).
+- Hidden facts the trainee has not earned: no statement, label, id or "do not mention" list, and no description of what is being held back. When the customer is holding something back, the model is told only that something related to what was just asked is not ready to be discussed, and why (trust, or the impact not yet being acknowledged). The one exception is a fact's `hint`, the author's gentle clue, which the engine may let the customer drop at Starter difficulty. It is sent as a clue to drop naturally, not as the fact.
 - Scenario answer keys during the call: the truth behind a belief, evaluator notes, success criteria, poor approaches, and curveballs that have not fired.
 - The customer's raw state numbers during the call (the model sees mood only in words), the API key (it goes only in the request header to the configured endpoint), and anything about other sessions.
 
@@ -129,7 +146,7 @@ Everything is sent to the provider you configure. Scenarios are fictional; do no
 
 1. **By construction.** The customer prompt is built only from what the engine decided the customer may say in this reply. Hidden facts are never read from anywhere else.
 2. **Screened setup notes.** Scenario background text (setup notes and earlier case history) sometimes restates a hidden fact. A line that shares a number, name or distinctive phrase with an unearned fact is left out until the fact is earned.
-3. **Reply check.** Each customer reply is scanned for numbers, codes, names and key phrases that appear only in an unearned fact and nowhere else in the scenario or conversation. A match counts as a leak. The reply is regenerated once with the generic reminder "Only use the facts you were given; do not invent specifics." (it never repeats the leak), and a second leak fails with `provider_bad_output`.
+3. **Reply check.** Each customer reply is scanned for numbers, codes, names and key phrases that appear only in an unearned fact and nowhere else in the scenario or conversation. A match counts as a leak. The reply is regenerated once with the generic reminder "Only use the facts you were given; do not invent specifics." (it never repeats the leak). If the second reply leaks too, the sentences that do not leak are kept, and only when none is left does the message fail with `provider_bad_output`.
 
 This is a safety net, not a proof. It catches near-verbatim details; a model could still paraphrase around it. The best protection is scenario text that does not restate hidden facts.
 
@@ -158,31 +175,20 @@ Models differ in the parameters they accept. If a 400 response says so, Firefly 
 - `response_format` is rejected: send the request without it. JSON is then read from the plain text reply.
 - `reasoning_effort` is rejected (Gemini only, the one provider that is sent it): send the request without it.
 
-## Verified against the Gemini API
-
-On 2026-11-19 the Gemini provider was run against the real Gemini API with the default model, `gemini-3.5-flash-lite`, through a running Firefly server. Each run created a call, sent four fictional trainee messages, ended the call and waited for the report.
-
-- Three calls (two on "Locked out after a password reset", one on "A new hire has no premium seat") completed. The customer replied in character each time, usually in 3 to 10 seconds, and the coaching was written by the model and then verified by the evaluator: the report records the evaluator as `model` with the Gemini label.
-- A fourth call (the Standard scenario "Team cannot open the shared project workspace") got its customer replies, but the coaching draft hit the free-tier rate limit (HTTP 429). Firefly showed it as a retryable failure with the transcript kept, as designed.
-- Separate requests confirmed that JSON mode (`response_format`) and `reasoning_effort: "minimal"` are accepted by `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`, and recorded the shape of Google's error responses for an invalid key, an unknown model, an unknown field and a rate limit. The tests for those cases use those shapes.
-
-This was a handful of scripted calls to show that the provider works. It says nothing about how the coaching compares with a mentor's; see [the scoring rubric](scoring-rubric.md) for how scores are checked.
-
 ## Prompt versions
 
-Prompts are plain functions in `server/prompts/` with exported version constants: `CUSTOMER_PROMPT_VERSION` (`customer-1`), `CLASSIFIER_PROMPT_VERSION` (`classifier-1`) and `EVALUATOR_PROMPT_VERSION` (`evaluator-2`). The versions are stored with every session. Change the version whenever you change a prompt's wording or sampling. The evaluator prompt's guidance for each dimension follows [the scoring rubric](scoring-rubric.md); update both together. A model-written coaching draft is verified and merged by `server/evaluator/merge.ts`, as described in that page.
+Prompts are plain functions in `server/prompts/` with exported version constants: `CUSTOMER_PROMPT_VERSION` (`customer-3`), `CLASSIFIER_PROMPT_VERSION` (`classifier-2`) and `EVALUATOR_PROMPT_VERSION` (`evaluator-3`). The versions are stored with every session. Change the version whenever you change a prompt's wording or sampling. The evaluator prompt's guidance for each dimension follows [the rubric](care-cbcf-rubric.md); update both together. A model-written coaching draft is verified and merged by `server/evaluator/merge.ts`, as described in that page.
 
 ## Optional manual smoke test
 
 This is for the maintainer and is not required. It needs your own key, makes two small model calls, and shows that the settings, the endpoint and the output handling work end to end.
 
 1. Put one provider block in `.env`, then start Firefly with `npm start`. The console should print `AI provider : Azure OpenAI (deployment "...")`, `Gemini (model "...")` or `OpenAI-compatible (model "...")`. If it prints a notice instead, a variable is missing.
-2. Optional script check: save the following as `smoke.ts` in the repository root, run `node --env-file=.env --disable-warning=ExperimentalWarning smoke.ts`, then delete it. It prints the label, one classification and one customer reply.
+2. Optional script check: save the following as `smoke.ts` in the repository root, run `node --env-file=.env --disable-warning=ExperimentalWarning smoke.ts`, then delete it. It prints the label, one classification and one customer reply. It uses the test fixture scenario from `server/engine/testing.ts`, not one from the library.
 
    ```ts
-   import { makeScenario } from './server/engine/testing.ts';
+   import { captureContexts, makeScenario } from './server/engine/testing.ts';
    import { createProviderFromEnv } from './server/providers/index.ts';
-   import { captureContexts } from './server/prompts/testing.ts';
 
    const { provider, problem } = createProviderFromEnv();
    if (provider.demo) throw new Error(problem ?? 'Set FIREFLY_PROVIDER to a live provider first.');
@@ -202,10 +208,10 @@ This is for the maintainer and is not required. It needs your own key, makes two
    if (ctx) console.log((await provider.generateCustomer(ctx)).text);
    ```
 
-3. In the app, start "Locked out after a password reset" and send three or four messages. Check that:
+3. In the app, start "Shared team mailbox missing from Outlook" (Starter) and send three or four messages. Check that:
    - the provider label is the live one, not "Demo mode";
    - the customer stays in character and never mentions being an AI;
-   - asking what the sign-in screen says reveals the lockout message, and the full phone story appears only after you ask about other devices (Starter difficulty drops a small hint about the phone in the opening);
+   - asking what he has already tried gets an answer from the scenario (see `hf-tried-restart` in `server/scenarios/library/outlook-shared-mailbox-missing.ts`), and the customer does not volunteer facts you have not asked about;
    - ending the call produces a coaching report whose quotes match your messages.
 4. Failure drills: a wrong key should give "rejected the credentials", a wrong deployment or model name should give "could not find", and `FIREFLY_LLM_TIMEOUT_MS=1000` with a slow model should give a timeout.
 

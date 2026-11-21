@@ -444,7 +444,7 @@ const speaking = snapshotOf({
   stage: 'customer-speaking',
   customerLevel: 0.55,
   customerState: state('concerned', 'rising'),
-  announcement: said('The customer is speaking. You can stop the response at any time.'),
+  announcement: said('The customer is speaking. You can stop the customer audio at any time.'),
 });
 
 /** A harder call: the customer's patience runs out. Used for the frustrated, angry and escalating fixtures. */

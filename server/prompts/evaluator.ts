@@ -17,7 +17,7 @@ import type { PromptRequest } from './types.ts';
 // trusted on its own. The CARE behaviours, the journey milestones and the CBCF status are computed
 // by the server for every report (a model never decides them), so this prompt tells the model what
 // the stage and the scenario's careExpectations ask of a call, and leaves those results alone. The
-// dimension guidance follows docs/scoring-rubric.md: update it with the rubric (RUBRIC_VERSION in
+// dimension guidance follows docs/care-cbcf-rubric.md: update it with the rubric (RUBRIC_VERSION in
 // engine/types.ts) and bump EVALUATOR_PROMPT_VERSION when either changes.
 
 export const EVALUATOR_PROMPT_VERSION = 'evaluator-3';
@@ -63,7 +63,7 @@ const scaleLines = [1, 2, 3, 4, 5].map(
   (score) => `${score} (${SCORE_LABELS[score - 1]}): ${SCORE_DESCRIPTIONS[score]}`,
 );
 
-// Where to look for each dimension, from docs/scoring-rubric.md.
+// Where to look for each dimension, from docs/care-cbcf-rubric.md.
 const LOOK_AT = `- opening-rapport: judge mainly the first two trainee turns. Credit a greeting, giving their name, role or team, an open invitation to explain the problem (or confirming why the customer called), and early empathy or acknowledging the impact. A greeting alone is not an introduction. On a follow-up or escalated call, acknowledging the history or the wait counts; on a closure call, confirming the purpose of the call counts. Going straight to fixes, blaming or dismissing counts against.
 - scoping-discovery: start from the share of hidden facts found, weighted by importance (critical 3, important 2, helpful 1; a partly found fact counts half). 85% or more points to 5, 65 to 84% to 4, 40 to 64% to 3, 20 to 39% to 2, under 20% to 1. Then lower the score for too few core topics asked (what is happening, when it started, recent changes, who is affected, business impact, the exact error, what was already tried, environment), repeated questions, or fixes offered before the problem was understood.
 - empathy-deescalation: specific empathy (tied to what the customer said) and acknowledging the impact count most. Sympathy repeated word for word, or followed by nothing useful, counts little. Blaming or dismissing the customer counts against. Consider how the customer's mood moved and whether a curveball was handled well.

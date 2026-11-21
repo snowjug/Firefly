@@ -31,7 +31,7 @@ import { assessRubric } from './rubric.ts';
 import { stageGapsOf } from './stage-gaps.ts';
 
 // The rules evaluator: scores the six dimensions from the turn classifications and the recorded
-// state events by the explicit rules in docs/scoring-rubric.md, and reads CARE, the customer
+// state events by the explicit rules in docs/care-cbcf-rubric.md, and reads CARE, the customer
 // journey milestones and the CBCF status from the transcript (see rubric.ts). It is deterministic:
 // the same input always produces the same report (apart from `generatedAt`).
 

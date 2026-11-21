@@ -1,69 +1,56 @@
 // Regenerates the pictures in docs/images/ from a running Firefly, using a locally installed browser.
 //
-// Start Firefly in demo mode with the scripted demo speech provider, on a build of the current code:
+// Start Firefly in demo mode with the scripted demo speech provider, on a build of the current code,
+// with its own port and an in-memory database:
 //
 //   npm run build
-//   FIREFLY_PROVIDER=mock FIREFLY_SPEECH_PROVIDER=mock FIREFLY_DB_PATH=:memory: FIREFLY_MOCK_DELAY_MS=300 npm start
+//   $env:FIREFLY_PROVIDER='mock'; $env:FIREFLY_SPEECH_PROVIDER='mock'; $env:FIREFLY_DB_PATH=':memory:'
+//   $env:FIREFLY_MOCK_DELAY_MS='300'; $env:FIREFLY_PORT='8791'; npm start          (PowerShell)
 //
 // then, in another terminal:
 //
-//   node scripts/readme-screenshots.mjs                      (uses http://127.0.0.1:8787, Microsoft Edge)
-//   FIREFLY_URL=http://127.0.0.1:8791 PW_CHANNEL=chrome node scripts/readme-screenshots.mjs
+//   $env:FIREFLY_URL='http://127.0.0.1:8791'; node scripts/readme-screenshots.mjs
 //
-// Everything in the pictures is the fictional demo content of the app. The microphone is a fake device
-// that plays a short generated tone (no real audio is recorded or committed), the demo speech provider
-// answers with scripted sentences, and the demo rules engine plays the customer. Look at every picture
-// before committing it: a picture that shows something the app does not do is worse than none.
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+// Variables: FIREFLY_URL (default http://127.0.0.1:8787), PW_CHANNEL (msedge by default; chrome, or
+// none for Playwright's own Chromium), FIREFLY_SHOTS_DIR (where the pictures go, docs/images by
+// default) and FIREFLY_SHOTS_WORK (a git-ignored folder for the fake microphone's file, by default
+// scripts/_tmp/readme-shots). The browser runs headless.
+//
+// It takes five pictures of the real app: the landing page, the scenario workspace with a scenario
+// selected, the case brief, a spoken call in progress, and the top of the coaching report. The call is
+// a real voice call in demo mode: the microphone is a fake device that plays a generated, speech-like
+// burst in a loop (e2e/support/fake-microphone.ts; no real audio is recorded or committed), the demo
+// speech provider answers each burst with the next of its eight scripted sentences, so what the
+// engineer "says" is scripted, and a rules engine plays the customer. Nothing in the pictures is a
+// live model, a real voice or a real person. The call preview on the landing page is a captioned
+// illustration, not a call. Look at every picture before committing it: a picture that shows
+// something the app does not do is worse than none.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { chromium } from '@playwright/test';
+import { fakeMicrophoneArgs, speechLikeWav } from '../e2e/support/fake-microphone.ts';
 
 const base = (process.env.FIREFLY_URL ?? 'http://127.0.0.1:8787').replace(/\/$/, '');
 const channel = process.env.PW_CHANNEL ?? 'msedge';
 const outDir = process.env.FIREFLY_SHOTS_DIR ?? 'docs/images';
+const workDir = process.env.FIREFLY_SHOTS_WORK ?? join('scripts', '_tmp', 'readme-shots');
 mkdirSync(outDir, { recursive: true });
+mkdirSync(workDir, { recursive: true });
 
-// A 16-bit mono WAV the fake microphone plays in a loop: 1.6 s of a wobbling tone that the voice
-// activity detector hears as speech, then 2.4 s of silence so it can tell the utterance has ended.
-function makeToneWav() {
-  const rate = 16000;
-  const seconds = 4;
-  const samples = new Int16Array(rate * seconds);
-  for (let i = 0; i < rate * 1.6; i++) {
-    const t = i / rate;
-    const wobble = 0.55 + 0.45 * Math.sin(2 * Math.PI * 3.1 * t);
-    samples[i] = Math.round(
-      Math.sin(2 * Math.PI * (180 + 40 * Math.sin(2 * Math.PI * 1.3 * t)) * t) * wobble * 9000,
-    );
-  }
-  const data = Buffer.from(samples.buffer);
-  const header = Buffer.alloc(44);
-  header.write('RIFF', 0);
-  header.writeUInt32LE(36 + data.length, 4);
-  header.write('WAVEfmt ', 8);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(rate, 24);
-  header.writeUInt32LE(rate * 2, 28);
-  header.writeUInt16LE(2, 32);
-  header.writeUInt16LE(16, 34);
-  header.write('data', 36);
-  header.writeUInt32LE(data.length, 40);
-  const dir = mkdtempSync(join(tmpdir(), 'firefly-shots-'));
-  const file = join(dir, 'tone.wav');
-  writeFileSync(file, Buffer.concat([header, data]));
-  return file;
-}
+// The scenario in the pictures, and how many scripted sentences the engineer "says". The demo speech
+// provider has eight, in order, and the eight make a whole call: greeting, empathy, scoping questions,
+// ownership with a time, a summary and a close.
+const SCENARIO = 'Colleagues cannot join scheduled Teams meetings';
+const SPOKEN_TURNS = 8;
+const PICTURE_AFTER = 4; // the call picture is taken while the customer answers this turn
+
+// Chromium needs an absolute path for the fake microphone's file.
+const microphoneFile = resolve(workDir, 'speech-like.wav');
+writeFileSync(microphoneFile, speechLikeWav());
 
 const browser = await chromium.launch({
   channel: channel === 'none' ? undefined : channel,
-  args: [
-    '--use-fake-ui-for-media-stream',
-    '--use-fake-device-for-media-stream',
-    `--use-file-for-fake-audio-capture=${makeToneWav()}`,
-  ],
+  args: fakeMicrophoneArgs({ file: microphoneFile }),
 });
 
 try {
@@ -73,9 +60,9 @@ try {
     reducedMotion: 'no-preference',
   });
   const page = await context.newPage();
-  const shot = async (name, options = {}) => {
-    await page.waitForTimeout(500);
-    await page.screenshot({ path: `${outDir}/${name}.png`, ...options });
+  const shot = async (name) => {
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: `${outDir}/${name}.png` });
     console.log(`saved ${outDir}/${name}.png`);
   };
 
@@ -86,66 +73,61 @@ try {
     );
   }
 
-  // 1. Landing
+  // 1. The landing page.
   await page.goto(`${base}/`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(4200); // the preview waveform settles after a few seconds
+  await page.getByRole('heading', { level: 1 }).waitFor();
+  await page.waitForTimeout(3000); // the preview of a call settles after a few seconds
   await shot('landing');
 
-  // 2. Scenario workspace with a scenario chosen
+  // 2. The scenario workspace, with one scenario selected.
   await page.goto(`${base}/scenarios`, { waitUntil: 'networkidle' });
-  await page.getByRole('radio', { name: /Team cannot open the shared project workspace/ }).click();
+  await page.getByRole('radio', { name: SCENARIO, exact: true }).check();
   await shot('scenarios');
 
-  // 3. Call brief
-  await page.getByRole('link', { name: 'Continue to call brief' }).click();
+  // 3. The case brief.
+  await page
+    .getByRole('region', { name: SCENARIO })
+    .getByRole('link', { name: 'Review brief' })
+    .click();
   await page.waitForURL(/\/brief/);
+  await page.getByRole('button', { name: 'Start voice call' }).waitFor();
   await shot('brief');
 
-  // 4. A spoken call: the customer speaks, then the trainee is heard
+  // 4. A spoken call: the brief starts it, the pre-flight asks for the microphone, and each tone from
+  // the fake microphone becomes the next scripted sentence.
   await page.getByRole('button', { name: 'Start voice call' }).click();
   await page.waitForURL(/\/calls\//);
-  await shot('call-preflight');
-  await page.getByRole('button', { name: 'Allow microphone and start' }).click();
-  await page.locator('[data-stage="speaking"]').waitFor({ timeout: 15000 });
-  await page.locator('[data-stage="hearing"]').waitFor({ timeout: 40000 });
-  await shot('call-hearing-you');
-  // Let the exchange finish, then switch the microphone off and carry on by typing, so the call has
-  // real content and each customer reply is heard to the end.
-  await page.getByRole('button', { name: 'Stop talking' }).click();
-  await page.locator('[data-stage="speaking"]').waitFor({ timeout: 15000 });
-  await page.getByRole('button', { name: 'Interrupt' }).click();
-  await page.getByRole('button', { name: 'Mute' }).click();
-  const typed = [
-    'Thank you, Daniel. When did it start, and has anything changed recently, like a permissions update?',
-    "That's not my problem, you should have told us earlier. Calm down.",
-    'I am sorry, that was wrong of me. I will take ownership of this and call you back by three o\u2019clock with an update. Is there anything else I can help with?',
-  ];
-  for (const line of typed) {
-    const box = page.getByRole('textbox', { name: /Type a reply/ });
-    if (!(await box.isVisible().catch(() => false))) {
-      await page
-        .getByRole('button', { name: /Type instead|Type a reply instead/ })
-        .first()
-        .click();
-    }
-    await box.fill(line);
-    await page.getByRole('button', { name: 'Send' }).click();
-    await page.locator('[data-stage="speaking"]').waitFor({ timeout: 20000 });
-    // The microphone is muted, so the call settles on "muted" once the customer has finished.
-    await page.locator('[data-stage="speaking"]').waitFor({ state: 'hidden', timeout: 40000 });
-  }
-  await shot('call-in-progress');
+  await page.getByRole('heading', { level: 1, name: 'Ready to call?' }).waitFor();
+  await page.getByRole('button', { name: 'Start voice call' }).click();
 
-  // 5. End the call and read the report
-  await page.getByRole('button', { name: 'End call' }).click();
-  await page.getByRole('button', { name: 'End and review' }).click();
-  await page.waitForURL(/\/report/, { timeout: 30000 });
-  await page.getByRole('heading', { name: 'Coaching report' }).waitFor({ timeout: 30000 });
-  await shot('report-summary');
+  const turns = page.getByRole('log', { name: 'Call transcript' }).getByRole('listitem');
+  const status = page
+    .getByRole('region', { name: 'Customer', exact: true })
+    .locator('[data-status] .cw-status__label');
+  let taken = false;
+  for (let exchange = 1; exchange <= SPOKEN_TURNS; exchange++) {
+    // The greeting is turn 1; each exchange adds the engineer's turn and the customer's reply.
+    await turns.nth(exchange * 2 - 1).waitFor({ timeout: 90_000 });
+    if (exchange === PICTURE_AFTER && !taken) {
+      await status.filter({ hasText: 'Customer speaking' }).waitFor({ timeout: 30_000 });
+      await shot('call-in-progress');
+      taken = true;
+    }
+    await turns.nth(exchange * 2).waitFor({ timeout: 90_000 });
+  }
+  if (!taken) throw new Error('The call picture was not taken.');
+
+  // 5. End the call and read the report.
+  await page.getByRole('button', { name: 'End call', exact: true }).click();
   await page
-    .getByRole('heading', { name: 'Customer temperature' })
-    .evaluate((heading) => heading.scrollIntoView({ block: 'start' })); // the page leaves room for its header
-  await shot('report-temperature');
+    .getByRole('dialog', { name: 'End the call?' })
+    .getByRole('button', { name: 'End and review' })
+    .click();
+  await page.waitForURL(/\/report/, { timeout: 60_000 });
+  await page
+    .getByRole('heading', { level: 1, name: 'Coaching report' })
+    .waitFor({ timeout: 60_000 });
+  await shot('report-summary');
 } finally {
   await browser.close();
 }

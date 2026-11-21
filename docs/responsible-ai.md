@@ -11,14 +11,14 @@ Firefly is a **training aid**. It gives apprentices a safe place to practise cus
 | Discussing a call with a mentor, who adds what automatic feedback cannot    | Replacing mentor review                                             |
 | Repeating a scenario at a different difficulty                              | Training on or storing real customer cases, logs or screenshots     |
 
-Scores are practice signals from a simulated call. Firefly has no leaderboard, no ranking, no points and no progress tracking, and it never compares one person with another. The only place scores are listed together is the **Recent calls** list, which shows each call's own overall score for the browser that made the call, and nothing else.
+Scores are practice signals from a simulated call. Firefly has no leaderboard, no ranking, no points and no progress tracking, no screen that lists calls or scores together, and it never compares one person with another. A report shows that call's own scores and nothing else.
 
 ## Safeguards in the product
 
 **Fictional by design**
 
 - Every scenario uses invented people, organisations and products. The library tests fail if a scenario contains an email address, a phone number or a link.
-- The interface labels the customer as fictional on the brief and the pre-flight page, the call brief's ground rules say that the customer, organisation and product are fictional, and the landing page and the Responsible AI page say never to enter real customer information.
+- The interface labels the customer as fictional: the footer on the landing, scenario, brief, report and information pages says "A training aid. Customers and scenarios are fictional.", the brief's ground rules say so, and the Responsible AI page tells you to keep every call fictional.
 
 **Less personal data**
 
@@ -27,29 +27,30 @@ Scores are practice signals from a simulated call. Firefly has no leaderboard, n
 
 **Voice**
 
-- A call can always be typed. A spoken call asks for the microphone only after an explicit click, and the pre-flight page says before that where your speech will be processed.
-- Firefly never writes audio to disk, logs it or stores it. With a server speech provider (Azure AI Speech) the recording goes through Firefly's server to the provider and is held in memory for one request. With the browser's own recognition, the audio is handled by the browser, which in Chrome and Edge is usually the browser maker's online service; Firefly never receives it. With the scripted demo provider, the audio is discarded. See [privacy-and-audio.md](privacy-and-audio.md).
-- The customer's voice is synthetic: a prebuilt voice from the browser or the provider, not a real person, not a clone and not an imitation. Pace and pitch (and, for a few voices, a style) are adjusted to suggest the customer's mood. Nobody has measured how that sounds, and Firefly does not claim it shows real emotion.
+- A call can always be typed. A spoken call asks for the microphone only after an explicit click (the optional **Check microphone** on the brief, or **Start voice call** on the pre-flight page), and the brief and the pre-flight page say before that where your speech will be processed.
+- Firefly never writes audio to disk, logs it or stores it. With a server speech provider (Azure AI Speech) the recording goes through Firefly's server to the provider and is held in memory for one request. With the browser's own recognition, the audio is handled by the browser, which in Chrome and Edge is usually the browser maker's online service; Firefly does not record or send it. With the scripted demo provider, the audio is discarded. See [privacy-audio.md](privacy-audio.md).
+- The customer's voice is synthetic: a prebuilt voice from the browser or the provider, not a real person, not a clone and not an imitation. The trainee chooses between four neutral voices, labelled by pace and never by a person, a gender or an accent. Pace and pitch (and, for a few voices, a style) are adjusted to suggest the customer's mood. No test or measurement here checks how that sounds, and Firefly does not claim it shows real emotion.
 - Firefly does not analyse your voice for emotion, stress, tone, accent or pace. Coaching reads the words only. Speech recognition can mishear words, so a report on a call that used voice says to check the quotes against what you said.
 
 **Control of the model**
 
-- In live mode, a model only ever receives the facts the engine has decided the customer may share in the current reply. Hidden facts the trainee has not earned are never in the prompt, and replies are scanned for details that appear only in an unearned fact. See [ai-providers.md](ai-providers.md#how-hidden-facts-are-protected).
+- In live mode, a model only ever receives the facts the engine has decided the customer may share in the current reply. Hidden facts the trainee has not earned are never in the prompt, apart from a gentle clue the scenario's author wrote for a fact, which the customer may drop at Starter difficulty. Replies are scanned for details that appear only in an unearned fact. See [ai-providers.md](ai-providers.md#how-hidden-facts-are-protected).
 - The customer, the turn classifier and the coaching evaluator are separate steps with separate instructions, so the customer's role cannot be changed by what a trainee types. Attempts to make the customer break character or reveal instructions are recognised and answered in character.
-- A model never decides a number that matters. Customer state, discovery, curveball timing and scoring arithmetic are computed in code, and every model output is validated before it is used. When a live model drafts the coaching, the server checks its scores against the evidence. Text that came from a model is shown as plain text, never as HTML.
+- A model never decides the customer's state. Customer state, discovery and curveball timing are computed in code, and every model output is validated before it is used. When a live model drafts the coaching, it proposes the six skill scores and the server checks them against the evidence; CARE behaviours, milestones, discovery and the overall score are always computed in code. Text that came from a model is shown as plain text, never as HTML.
 - API keys, for the model and for speech, live only in the server's environment. They are never sent to the browser or written to logs.
 
 **Honest feedback**
 
 - Every quote in a report is checked against the turn it cites. A quote that does not appear there is removed before a report is saved.
 - A score needs evidence: a 4 needs a verified quote and a 5 needs two. A short call says its report rests on limited evidence instead of inventing a full assessment, and a call of two trainee turns or fewer shows no overall score.
-- Scores do not go down because of short messages, a terse style, grammar or spelling, an accent or non-native phrasing, or a communication style that differs from the reviewer's own ([scoring-rubric.md](scoring-rubric.md#what-is-never-penalised)).
+- Scores do not go down because of short messages, a terse style, grammar or spelling, an accent or non-native phrasing, or a communication style that differs from the reviewer's own ([care-cbcf-rubric.md](care-cbcf-rubric.md#what-is-never-scored)).
 - Demo mode is always labelled. Replies and feedback from the built-in rules engine are never presented as coming from an AI model, and a live model is shown by its provider's name.
 - The scripted demo speech provider is labelled "Demo speech (scripted)" on the pre-flight page and in voice settings, and says that it does not understand audio.
+- CBCF mapping is not applied, and the report says so. No CBCF material was found in this repository or supplied for it, so Firefly makes no claim of alignment with it ([care-cbcf-rubric.md](care-cbcf-rubric.md#cbcf)).
 
 **Human review**
 
-- A mentor reading the transcript will see things the report cannot. Every report ends with a note recommending that review. Firefly has no mentor tooling, and nobody has measured how closely its scores agree with mentors' scores.
+- A mentor reading the transcript will see things the report cannot. Every report carries a note, in its About this report section, that a mentor's review adds what automatic coaching cannot. Firefly has no mentor tooling, and this repository holds no comparison of its scores with mentors' scores.
 
 ## Limits you should know about
 
@@ -57,17 +58,17 @@ Scores are practice signals from a simulated call. Firefly has no leaderboard, n
 - **Tone of voice is not assessed.** Coaching reads the words that were said or typed. Warmth, pace, accent and pauses cannot be assessed, even when voice is used.
 - **A simulation is not a customer.** A scenario has fixed facts, and the demo-mode customer is rules-based and less flexible than a person or a model.
 - **English only**, and nothing here has been tested for how well it works for every kind of speaker. Non-native phrasing must never be marked down; if you see it happen, treat that as a bug.
-- **Speech is only partly verified.** Azure AI Speech has never been run against the live service. The browser's own recognition returned no words in automated Edge and Chrome. The scripted demo works end to end in a real browser. See [voice-architecture.md](voice-architecture.md#verification).
-- **The live model path is only partly verified.** Gemini has been run end to end against the real API in a few scripted calls; Azure OpenAI and other OpenAI-compatible services have been tested only against a local fake server. None of this measures how good a model's coaching is. See the verification notes in [ai-providers.md](ai-providers.md).
+- **Speech is only partly verified.** Azure AI Speech has never been run against the live service, and nothing has been tested with real speech or real recognition. The scripted demo speech works end to end in the browser tests, which run in Chromium with a fake microphone. See [voice-architecture.md](voice-architecture.md#verification).
+- **Live models have had little testing.** Gemini had one limited smoke check on 21 Nov 2026 (two scripted calls; no errors, no retries, and no coaching or list-style replies found by simple automatic checks). That is a smoke check, not a quality evaluation: it says nothing about voice, other scenarios or paid-tier behaviour. Azure OpenAI and OpenAI-compatible services have been run only against a local fake server. None of this says how good a model's coaching is. See [ai-providers.md](ai-providers.md#status-of-each-provider).
 - **Accessibility has not been checked with assistive technology.** See [accessibility.md](accessibility.md) for what was checked and what was not.
-- **No certification.** Firefly makes no claim of compliance with any standard or regulation, and nothing here is legal advice.
+- **No certification.** Firefly makes no claim of compliance or alignment with any standard, framework or regulation, including CBCF, and nothing here is legal advice.
 
 ## For people who run Firefly
 
 - **Where data lives.** In the default setup, everything is in a SQLite file on the machine that runs the server (`data/firefly.db`, git-ignored) and is not encrypted by Firefly. If you use a live model, redacted transcript text is sent to the provider you configure, and if you use a speech provider, recordings and the customer's lines go to it, so choose and configure them with your organisation's data rules in mind.
-- **Free-tier model services may learn from what you send.** Google's Gemini API terms say that, for unpaid services, Google uses the content you submit and the responses to improve its products, that human reviewers may read it, and that sensitive, confidential or personal information must not be submitted; terms differ by plan and region. Firefly sends only fictional scenario text and redacted trainee messages, so type nothing real. Read the provider's current terms before connecting any key. See [ai-providers.md](ai-providers.md#gemini-google-ai-studio).
-- **Tell trainees which speech set-up is active.** The pre-flight page shows it to them. Speech-to-text of something sensitive said aloud is processed by the provider you chose.
+- **Free-tier model services may learn from what you send.** Google's Gemini API terms (effective 23 March 2026, read on 21 November 2026) say that, for unpaid services, Google uses the content you submit and the responses to improve its products, that human reviewers may read it, and that sensitive, confidential or personal information must not be submitted; terms differ by plan and region. Firefly sends only fictional scenario text and redacted trainee messages, so type nothing real. Read the provider's current terms before connecting any key. See [ai-providers.md](ai-providers.md#gemini-google-ai-studio).
+- **Tell trainees which speech set-up is active.** The brief and the pre-flight page show it to them. Speech-to-text of something sensitive said aloud is processed by the provider you chose.
 - **Keep API keys out of Git.** Keys belong in the git-ignored `.env`. If one is ever pasted into a chat, a ticket or a commit, treat it as exposed: delete it at the provider and create a new one.
 - **Who can see it.** Firefly has no accounts: the anonymous cookie separates one browser's calls from another's on a shared server, but it is not authentication, and anyone with access to the server can read its database. Keep Firefly on a trusted network, or put sign-in and TLS in front of it.
-- **Deleting data.** A call can be deleted from the bottom of its report. Deleting the database file removes everything.
+- **Deleting data.** A call can be deleted from its report page ("Delete this call"). Deleting the database file removes everything.
 - **Using it well.** Use scores to start a conversation with a mentor. Do not use them for evaluation, and do not publish individual results.

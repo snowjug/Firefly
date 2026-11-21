@@ -10,7 +10,7 @@ import {
 // Every statement on this page describes what this codebase does today, in short bullets with the
 // detail folded away. When the behaviour behind a sentence changes, change the sentence; when a
 // sentence cannot be checked against the code, it is not here. The sources are
-// docs/responsible-ai.md, docs/privacy-and-audio.md, docs/ai-providers.md, shared/domain/text.ts
+// docs/responsible-ai.md, docs/privacy-audio.md, docs/ai-providers.md, shared/domain/text.ts
 // (what is replaced), server/http (what is logged and kept) and server/speech (what is sent where).
 
 function Practice() {

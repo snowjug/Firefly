@@ -69,7 +69,7 @@ function rows(snapshot: CallSnapshot, provider: { demo: boolean; label: string }
       : support.capture === 'browser-recognition'
         ? { label: 'Speech', value: support.captureLabel, tone: 'info' }
         : support.speechDemo
-          ? { label: 'Speech', value: `${support.captureLabel}: scripted`, tone: 'info' }
+          ? { label: 'Speech', value: support.captureLabel, tone: 'info' }
           : { label: 'Speech', value: support.captureLabel, tone: 'ok' };
   return [
     microphoneRow(snapshot),

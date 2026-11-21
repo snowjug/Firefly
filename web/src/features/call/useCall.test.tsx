@@ -270,7 +270,7 @@ describe('starting a spoken call', () => {
     expect(server.spoken).toEqual([1]);
     expect(env.audio.listeningWorklets()).toHaveLength(0);
     expect(snap().announcement?.text).toBe(
-      'The customer is speaking. You can stop the response at any time.',
+      'The customer is speaking. You can stop the customer audio at any time.',
     );
     expect(snap().voiceDetails).toMatchObject({
       voice: 'en-GB-SoniaNeural',

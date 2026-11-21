@@ -1002,9 +1002,9 @@ describe('announcements', () => {
     h.do(() => h.actions().toggleMute());
     note();
     expect(seen.map((entry) => entry.text)).toEqual([
-      'The customer is speaking. You can stop the response at any time.',
+      'The customer is speaking. You can stop the customer audio at any time.',
       'Listening. Speak when you are ready.',
-      'The customer is speaking. You can stop the response at any time.',
+      'The customer is speaking. You can stop the customer audio at any time.',
       'Listening. Speak when you are ready.',
       'Your microphone is muted.',
       'Microphone on.',

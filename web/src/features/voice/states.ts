@@ -106,7 +106,7 @@ export const VOICE_STATE_TEXT: Record<VoiceState, VoiceStateText> = {
   },
   'customer-speaking': {
     label: 'Customer speaking',
-    announcement: 'The customer is speaking. You can stop the response at any time.',
+    announcement: 'The customer is speaking. You can stop the customer audio at any time.',
     politeness: 'polite',
   },
   paused: { label: 'Paused', announcement: 'The call is paused.', politeness: 'polite' },

@@ -1,289 +1,193 @@
 # Firefly
 
-**Practise difficult customer conversations before they become real ones.**
+Practise difficult customer conversations before they become real ones.
 
-Firefly is a call simulator for new technical support engineers and apprentices. Choose a fictional scenario, speak (or type) with a simulated customer, end the call, and read coaching that quotes what you actually said. It trains the conversation, not a product: opening a call, scoping an unclear problem, handling a frustrated customer, taking ownership and agreeing next steps.
+Firefly is a voice-first simulator for new Microsoft support engineers. You take a call from a fictional customer, then read coaching that quotes what you actually said.
 
-![Firefly landing page](docs/images/landing.png)
-
-> **Status.** A working prototype for practice and demonstration. Every customer, organisation and scenario is fictional. Scores are coaching feedback, not an assessment of a person. Firefly is **not deployed** anywhere and has no sign-in. Live speech through Azure AI Speech is built but has **not been verified against the real service**: see [What is verified](#what-is-verified-and-what-is-not).
-
-## Contents
-
-[Why Firefly](#why-firefly) · [The journey](#the-journey) · [What you can do today](#what-you-can-do-today) · [Voice and demo modes](#voice-and-demo-modes) · [Run it](#run-it) · [Configuration](#configuration) · [Architecture](#architecture) · [Privacy and Responsible AI](#privacy-and-responsible-ai) · [Testing](#testing-and-quality) · [What is verified](#what-is-verified-and-what-is-not) · [Documentation](#documentation) · [Contributing](#contributing)
+![The Firefly landing page](docs/images/landing.png)
 
 ## Why Firefly
 
-Technical knowledge alone does not make a good support experience. New engineers also have to scope unclear problems, understand business impact, explain clearly, calm a frustrated customer, take ownership and set expectations. Learning that only on real cases is hard, because every mistake lands on a real customer.
+A live customer is a poor place to practise the basics: introducing yourself, finding out what the problem costs the customer, saying what happens next and owning it. Firefly gives you a call you can repeat.
 
-Firefly gives them somewhere safe to repeat it: the same situation at a different difficulty, a customer who only shares important details when asked the right question, and feedback tied to the exact words that were said.
+The customer and the case are invented. The customer gives up some facts only when you ask a question that fits. After the call, the report points to the turns behind each score, so you can check it against what you said.
 
-## The journey
+The scores are practice signals from a simulated call. They are not an assessment of a person.
 
-Landing, scenario, brief, call, report. Nothing else.
+## What it does
 
-| Step | What happens                                                                                                                                                                                            |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | **Choose a scenario.** Thirteen fictional scenarios, grouped by kind of issue, with search and filters. Change difficulty, impact, the customer's mood and style, the call stage, curveballs and hints. |
-| 2    | **Read the call brief.** Everything you are allowed to know before the call, and what the chosen speech set-up will really do. Hidden facts are never shown.                                            |
-| 3    | **Hold the call.** Speak or type. The customer's mood moves with what you say, and they share important details only when you ask relevant questions.                                                   |
-| 4    | **End the call** when you are ready. The microphone and any customer audio stop, the transcript is saved and the report is built.                                                                       |
-| 5    | **Read the coaching report.** Six skills scored with quoted evidence, what went well, what to try instead, which hidden facts you found or missed, how the mood moved, and one next target.             |
+1. **Choose a scenario.** Pick one of sixteen fictional Microsoft support cases and set how hard the call should be.
+2. **Review the brief.** It shows what you may read before the call, such as the issue, the impact and your objective. It never shows the facts the customer holds back. Choose a customer voice and try it.
+3. **Start a call.** Start a voice call or a text call. A voice call opens your microphone only after you press a button and your browser allows it.
+4. **Talk to the customer.** The customer greets you first and gives the reason for the call once you have greeted them. Speak, or type if you prefer. Typing always works.
+5. **End the call.** Choose **End call**, then **End and review**.
+6. **Read the coaching report.** It scores six skills, shows the CARE behaviours it found, follows the customer's mood through the call, quotes your words, and suggests better wording and what to practise next.
 
-|                                                         |                                                        |
-| ------------------------------------------------------- | ------------------------------------------------------ |
-| ![Scenario workspace](docs/images/scenarios.png)        | ![Call brief](docs/images/brief.png)                   |
-| _Choose and configure a scenario_                       | _Read the call brief_                                  |
-| ![Pre-flight check](docs/images/call-preflight.png)     | ![A spoken call](docs/images/call-hearing-you.png)     |
-| _Check what speech will really do before the call_      | _A spoken call, in demo mode_                          |
-| ![A call in progress](docs/images/call-in-progress.png) | ![The coaching report](docs/images/report-summary.png) |
-| _A demo call continued by typing, with the mood chart_  | _The report that follows every call_                   |
+|                                                                                 |                                                                 |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| ![The scenario workspace with one scenario selected](docs/images/scenarios.png) | ![The case brief before a call](docs/images/brief.png)          |
+| ![A call in progress](docs/images/call-in-progress.png)                         | ![The top of a coaching report](docs/images/report-summary.png) |
 
-The pictures were taken from a running copy in demo mode with `scripts/readme-screenshots.mjs`. The "customer" in them is Firefly's built-in rules engine and the "voice" is the scripted demo speech provider; see [Voice and demo modes](#voice-and-demo-modes). The picture at the top is the landing page, whose example call is an illustration written for that page, not a recording.
+These pictures come from the running app in demo mode with demo speech (`node scripts/readme-screenshots.mjs`). In the call picture, the engineer's lines are the demo speech provider's scripted sentences, not a real voice, and the customer is played by the rules engine. The call preview on the landing page is a captioned illustration, not a call.
 
-## What you can do today
+## Features
 
-Everything here exists in the repository and is covered by automated tests, unless it says otherwise.
+- Sixteen fictional Microsoft support scenarios across Microsoft 365, Windows, Azure and Dynamics 365.
+- Settings for impact, the customer's starting state, proficiency, style, call stage, difficulty and curveballs (called complications in the interface), and live hints for guided practice.
+- A customer who greets first and gives the reason once you have greeted them, remembers what was said and promised, can say "I don't know", and reveals a hidden fact only to a question that fits.
+- Voice with a text fallback. A voice step that fails never ends the call.
+- Four neutral synthetic voices, Voice A to Voice D, where the speech provider offers them, with a **Test voice** button.
+- A coaching report with six skills scored 1 to 5 and quotes checked against the transcript, CARE behaviours read from what you said, a customer-journey timeline with milestones, better wording, and the facts you found and missed.
+- Demo mode that needs no credentials. A rules engine plays the customer and writes the coaching.
+- Delete a call, its transcript and its report from the report page.
 
-### Scenarios
+## Scenarios
 
-Thirteen synthetic scenarios across seven kinds of issue, each with a persona, a business impact, a starting mood, a communication style and four to six hidden facts (fewer are in play at Starter).
+All people, companies and cases are invented. Product details are what a customer might report. They are not checked against product behaviour.
 
-| Scenario                                                | Issue type          | Difficulty | Customer starts | Style                      | Minutes |
-| ------------------------------------------------------- | ------------------- | ---------- | --------------- | -------------------------- | ------- |
-| Locked out after a password reset                       | Sign-in or access   | Starter    | Calm            | Talkative                  | 8       |
-| A user needs help finding a feature                     | How-to              | Starter    | Calm            | Terse                      | 7       |
-| Dashboard slow on and off, with a workaround            | Slow performance    | Starter    | Anxious         | Vague                      | 8       |
-| A new hire has no premium seat                          | Billing or licence  | Starter    | Calm            | Non-native English speaker | 9       |
-| Closing out a case where the fix is not fully confirmed | Feature not working | Standard   | Calm            | Talkative                  | 12      |
-| Team cannot open the shared project workspace           | Sign-in or access   | Standard   | Frustrated      | Demanding                  | 10      |
-| Orders missing from the weekly report                   | Data missing        | Standard   | Frustrated      | Vague                      | 10      |
-| Order entry slows down at certain times                 | Slow performance    | Standard   | Anxious         | Talkative                  | 12      |
-| Reminders still missing and no update for days          | Feature not working | Standard   | Frustrated      | Terse                      | 9       |
-| Checkout is down and the clock is running               | Service outage      | Challenge  | Angry           | Demanding                  | 12      |
-| Fourth contact, same failing uploads                    | Feature not working | Challenge  | Angry           | Non-native English speaker | 15      |
-| A much bigger invoice than expected                     | Billing or licence  | Challenge  | Frustrated      | Vague                      | 14      |
-| A firm diagnosis and a demand to upgrade                | Slow performance    | Challenge  | Frustrated      | Terse                      | 12      |
+| Family        | Product                 | What the customer reports                                          | Stage         | Difficulty |
+| ------------- | ----------------------- | ------------------------------------------------------------------ | ------------- | ---------- |
+| Microsoft 365 | Outlook                 | Shared team mailbox missing from Outlook                           | First contact | Starter    |
+| Microsoft 365 | OneDrive for Business   | Closing a case on files that stopped syncing                       | Closure       | Starter    |
+| Microsoft 365 | Power Platform          | An approval process that used to run by itself has stopped         | Follow-up     | Starter    |
+| Microsoft 365 | Microsoft Teams         | Colleagues cannot join scheduled Teams meetings                    | First contact | Standard   |
+| Microsoft 365 | Exchange Online         | Email to and from some recipients arrives late                     | Follow-up     | Standard   |
+| Microsoft 365 | Microsoft 365 Apps      | Excel keeps closing since an update                                | First contact | Standard   |
+| Microsoft 365 | Microsoft Intune        | Closing a case on laptops that showed as not compliant             | Closure       | Standard   |
+| Microsoft 365 | Defender for Office 365 | Genuine supplier invoices held in quarantine before a payment run  | First contact | Standard   |
+| Microsoft 365 | SharePoint Online       | Programme team still blocked from their SharePoint site            | Escalated     | Challenge  |
+| Microsoft 365 | Microsoft Entra ID      | New starters blocked from signing in on day one                    | First contact | Challenge  |
+| Windows       | Windows 11              | Laptop has felt slow since an update                               | First contact | Starter    |
+| Windows       | Windows 11              | Work laptop asks for a recovery key after an update                | First contact | Standard   |
+| Azure         | Azure                   | Azure bill far above budget after a team deployed a new project    | Escalated     | Standard   |
+| Azure         | Azure                   | Production virtual machine unreachable, airport check-in affected  | First contact | Challenge  |
+| Azure         | Azure                   | Scripted deployment now fails for a service account                | Follow-up     | Challenge  |
+| Dynamics 365  | Dynamics 365            | Some sales staff can't see customer records after a reorganisation | First contact | Standard   |
 
-Each scenario can be reconfigured before the call (the call brief and the report show what was chosen):
+[docs/scenario-authoring.md](docs/scenario-authoring.md) explains how scenarios are written and checked.
 
-| Setting                  | Options                                                                                                                                                                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Difficulty               | **Starter**, **Standard**, **Challenge** (see below)                                                                                                                                                    |
-| Business impact          | Low, medium, high                                                                                                                                                                                       |
-| Customer's starting mood | Calm, anxious, frustrated, angry                                                                                                                                                                        |
-| Technical proficiency    | Novice, intermediate, expert                                                                                                                                                                            |
-| Communication style      | Talkative, terse, demanding, vague, non-native English speaker                                                                                                                                          |
-| Call stage               | First contact, follow-up, escalated, closure                                                                                                                                                            |
-| Curveballs               | None, or any the scenario offers of: asks for a manager, threatens to cancel, imposes a deadline, changes the issue, goes quiet, mentions a bad experience, demands a guarantee, challenges credibility |
-| Live hints               | On (guided practice) or off (immersive). On by default for Starter only.                                                                                                                                |
+## How coaching works
 
-| Difficulty    | What changes                                                                                                                   |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Starter**   | Clearer clues, fewer hidden facts, a more cooperative customer, at most one optional curveball; guided practice by default.    |
-| **Standard**  | Moderate ambiguity, several hidden facts and one possible curveball. The customer rewards focused questions.                   |
-| **Challenge** | High pressure, incomplete first information, every hidden fact in play, stricter trust and patience, and up to two curveballs. |
+- **Six skills**, each scored 1 to 5: Opening and Rapport, Scoping and Discovery, Empathy and De-escalation, Clarity, Ownership and Next Steps, and Closing. The overall score is their mean. A call that is too short to judge gets no overall score.
+- **CARE** is read separately, behaviour by behaviour, from what you said: Communicate effectively, Be accountable, Be resourceful and Be empathetic. A behaviour that is shown or partly shown carries a quote of the moment.
+- **Evidence is checked.** Every quote in the report must be a word-for-word part of the turn it cites. A quote that is not is dropped. A score of 4 needs one verified quote and a 5 needs two, or the score is lowered.
+- **Rules or a model.** In demo mode, rules score all six skills from the transcript. With a live model, the model proposes the six scores and the wording, and the server checks them. CARE behaviours, milestones, discovery and the overall score always come from the server's rules, never from a model.
+- **Never scored:** accent, fluency, harmless grammar and speaking style. Tone of voice is never heard.
+- **CBCF mapping is not applied.** No CBCF material was found in this repository or supplied for it. The report says "CBCF mapping is not applied: awaiting authoritative source confirmation." Firefly makes no claim of alignment or compliance with CBCF.
 
-The scenarios are written in TypeScript and checked by `npm run validate:scenarios` and the library tests. To add one, see [docs/scenario-authoring.md](docs/scenario-authoring.md).
+Details and limits are in [docs/care-cbcf-rubric.md](docs/care-cbcf-rubric.md).
 
-### The customer
+## Voice and privacy
 
-- **Mood.** The customer's mood is one of five bands (calm, concerned, frustrated, angry, escalating) with a direction (rising, steady, easing). It moves according to explicit, tested rules: acknowledging the impact and owning the problem calm a customer; blaming, dismissing or telling them to calm down raise tension. A model never decides a number.
-- **Hidden facts.** Each scenario holds facts the customer shares only in answer to an appropriate question: what the screen says, when it started, what changed, who is affected. The report later shows which you found, which you only partly found and which you missed, with a better question for each. In guided practice the call shows how many facts have been found, never the facts.
-- **Curveballs.** The unexpected turns above can fire during a call, and the report says whether you handled them.
-- **Honest limits.** In demo mode the customer is a rules engine, so replies repeat in long calls and are less flexible than a person or a language model.
+- Your microphone opens only after you press a button and your browser allows it. A text call never opens it. A spoken call pauses by itself when its browser tab is hidden, and stays paused until you press **Resume**.
+- Where speech goes depends on the speech provider:
+  - **Azure AI Speech** (when configured): your recording is sent to the service to be turned into text, and each customer line is sent to it to be spoken.
+  - **The browser's own speech** (Edge or Chrome, when no server provider is set): the browser handles the audio. In Chromium that is usually the browser maker's online service.
+  - **Demo speech:** the recording goes to the Firefly server, which does not understand it, and no further.
+- With a live model provider, the redacted conversation text and the facts the customer may share are sent to that provider. In demo mode nothing is sent to a model.
+- Firefly does not write audio to disk or to its database. A recording is held in memory only while it is being turned into text. If that fails in a way you can retry, the browser keeps it until you retry, type instead or end the call.
+- Firefly stores the transcript, the report and a snapshot of the scenario settings in a local SQLite database. You can delete a call from its report page.
+- Obvious personal data such as email addresses and phone numbers is replaced with a marker before a message is saved or sent to a model. This is pattern matching and will not catch everything. Use fictional content only.
+- Logs carry identifiers, sizes and timings, not audio or transcript text.
 
-### The coaching report
+Details: [docs/privacy-audio.md](docs/privacy-audio.md) and [docs/responsible-ai.md](docs/responsible-ai.md).
 
-Six skills, each scored 1 to 5 against a published rubric, using quotes from your own call: **Opening & Rapport**, **Scoping & Discovery**, **Empathy & De-escalation**, **Clarity**, **Ownership & Next Steps** and **Closing**, loosely mapped to the CARE behaviours (communicate effectively, be accountable, be resourceful, be empathetic).
+## Demo mode and live providers
 
-- **Evidence is checked.** Every quote must be a real part of the turn it cites, or it is dropped. A 4 needs one verified quote and a 5 needs two. A short call says its report rests on limited evidence, and a call of two trainee turns or fewer gets no overall score.
-- **Nothing invented.** The report only describes the customer's reaction when the engine recorded it, and never prints internal numbers.
-- **What is never penalised:** short messages, a terse style, grammar or spelling, accent or non-native phrasing.
-- **Who wrote it is shown.** Demo mode: Firefly's built-in rules evaluator. Live mode: a model drafts the coaching and the server verifies it. Either way it is practice feedback, can be incomplete or wrong, and is meant to be discussed with a mentor.
-- **After the call:** a customer-temperature chart (with a table alternative), turning points that link to the transcript, a discovery review, one next practice target with a suggested scenario, a searchable transcript, print styles, and a way to delete the call.
+Firefly runs fully in demo mode with no credentials. The model and the speech service are chosen separately, by environment variables (see `.env.example`).
 
-![The customer-temperature chart in a report](docs/images/report-temperature.png)
+| Kind   | Setting                                  | What it does                                                                                                                   | Tested with                                                          | Live check                       |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | -------------------------------- |
+| Model  | `FIREFLY_PROVIDER=mock` (default)        | Demo mode. A rules engine plays the customer and writes the coaching. The app labels it "Demo mode".                           | Unit, API and browser tests                                          | Not run (no external service)    |
+| Model  | `FIREFLY_PROVIDER=gemini`                | Google's Gemini API, through its OpenAI-compatible endpoint. Needs `GEMINI_API_KEY`.                                           | A local fake model server: request shape, JSON repair and guards     | Limited smoke check, 21 Nov 2026 |
+| Model  | `FIREFLY_PROVIDER=azure-openai`          | An Azure OpenAI chat-completions deployment. Needs an endpoint, a key, a deployment name and an API version.                   | The same local fake model server                                     | Not run                          |
+| Model  | `FIREFLY_PROVIDER=openai-compatible`     | Any OpenAI-compatible chat-completions endpoint. Needs a base URL, a key and a model name.                                     | The same local fake model server                                     | Not run                          |
+| Speech | `FIREFLY_SPEECH_PROVIDER=none` (default) | Firefly's own speech is off. Calls are typed, or use the browser's own speech recognition and voices in Edge or Chrome.        | Unit and browser tests with fake microphones and fake browser speech | Not run (no external service)    |
+| Speech | `FIREFLY_SPEECH_PROVIDER=mock`           | A scripted demo. It does not understand audio: it answers with the next of a few fixed lines, and the "voice" is a soft sound. | Unit and browser tests                                               | Not run (no external service)    |
+| Speech | `FIREFLY_SPEECH_PROVIDER=azure-speech`   | Azure AI Speech. Needs a key and a region or an address.                                                                       | A local fake Azure speech server                                     | Not run                          |
 
-_The customer-temperature section of a report from a demo call. Each point is one of your turns; turning points link to the transcript._
+**What the status column means.** The live adapters are written against each vendor's documentation and tested against local fakes that stand in for the services. CI uses the fake servers and the mock. "Not run" means Firefly has not been run against that service.
 
-The full rules are in [docs/scoring-rubric.md](docs/scoring-rubric.md).
+Gemini (model `gemini-3.5-flash-lite`, free tier, key supplied locally by the user) got a limited live smoke check on 21 Nov 2026 through the real HTTP API: two scripted calls (Outlook shared mailbox, 7 engineer turns; Teams external meetings, 10 engineer turns) with live customer replies and a model-written v2 report for each; no errors, no retries, no coaching or list-style replies detected by simple automatic checks. That is a smoke check, not a quality evaluation: it says nothing about voice, about other scenarios, or about paid-tier behaviour.
 
-## Voice and demo modes
+Azure OpenAI, the OpenAI-compatible endpoint and Azure AI Speech have not been run live.
 
-A call can be spoken or typed, in every mode. A voice problem never blocks the call: the customer's words are always in the transcript, and typing always works. What a spoken call uses depends on how the server is set up and on the browser, and the pre-flight page says exactly which before anything is requested.
+If you choose a live model but leave out a required setting, Firefly starts in demo mode and prints a notice that names the missing variable. An incomplete Azure speech setting turns speech off in the same way. Neither notice shows a value.
 
-| Set-up                                               | Your speech becomes text by…                                                            | The customer's voice is…                                | Status                                                                                                                                                     |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FIREFLY_SPEECH_PROVIDER=azure-speech` (needs a key) | Firefly's server, through Azure AI Speech (the audio is held in memory for one request) | Azure's synthetic voices, chosen by speaker and mood    | Built, and tested against a fake Azure server. **Not verified against live Azure.**                                                                        |
-| `FIREFLY_SPEECH_PROVIDER=mock`                       | A scripted demo: it **does not understand audio** and returns the next fixed sentence   | A short placeholder sound, not speech                   | Demo only, for tests and demonstrations.                                                                                                                   |
-| Not configured (the default), in Edge or Chrome      | The browser's own speech recognition (Firefly never sees the audio)                     | The browser's own voices                                | Tested with fakes. In automated Edge 158 and Chrome 157 the browser returned no words for a clean test utterance, so real recognition is **not verified**. |
-| Not configured, other browsers                       | Typing                                                                                  | The browser's voices if it has them, otherwise captions | Tested.                                                                                                                                                    |
+With a live model, the customer's replies come from a model held to the same plan, fact rules and length limits as demo mode. Demo mode is simpler: its customer follows rules and a phrase bank, so it varies less than a live model. See [docs/customer-realism.md](docs/customer-realism.md), [docs/ai-providers.md](docs/ai-providers.md) and [docs/speech-providers.md](docs/speech-providers.md).
 
-- The microphone is requested only after you press **Allow microphone and start**, can be muted or paused, and is released when you pause, end the call or leave the call screen. Audio is never written to disk, logged or stored. See [docs/privacy-and-audio.md](docs/privacy-and-audio.md).
-- Speaking over the customer is **not** implemented: use **Interrupt** or **Talk** to take the turn.
-- The customer's voice is synthetic. Pace and pitch (and, for a few Azure voices that support it, a style) are adjusted to suggest their mood. Nobody has measured how that sounds, and Firefly never claims it shows real emotion, clones a voice or analyses yours.
-- How it all works, with the state machine, timers and failure handling: [docs/voice-architecture.md](docs/voice-architecture.md).
+## Run it locally
 
-**Language model.** Separately from speech, the customer and the coaching come from either Firefly's built-in rules engine (**demo mode**, the default, no credentials, labelled "Demo mode" everywhere) or a live model: Google's Gemini API, Azure OpenAI, or any OpenAI-compatible endpoint. Gemini has been run end to end against the real API in a handful of scripted calls; Azure OpenAI and generic endpoints are verified only against a local fake server. See [docs/ai-providers.md](docs/ai-providers.md).
-
-## Run it
-
-You need **Node.js 24 or newer**. Demo mode needs no credentials.
+You need Node.js 24 or later (the `engines` field in `package.json`) and npm.
 
 ```
-git clone https://github.com/snowjug/Firefly.git
-cd Firefly
 npm ci
 npm run dev
 ```
 
-Open <http://localhost:5173>. `npm run dev` starts the API server (port 8787) and the Vite dev server together, and Vite proxies `/api` to the server.
+Open <http://localhost:5173>. `npm run dev` starts the API on port 8787 and the Vite dev server on port 5173, and Vite forwards `/api` to the API. Change the ports with `FIREFLY_PORT` and `FIREFLY_WEB_PORT`.
 
-For a production-style run:
+With no configuration, Firefly starts in demo mode with speech off and keeps its database in `data/firefly.db`. To change that, copy `.env.example` to `.env`. Firefly loads `.env` when it starts, and variables already in the environment win. Never commit real values.
 
-```
-npm run build
-npm start
-```
+Typed calls work with no setup. For a spoken call without Azure, either use Edge or Chrome and leave `FIREFLY_SPEECH_PROVIDER` unset, or set `FIREFLY_SPEECH_PROVIDER=mock` for the scripted demo. [docs/demo-guide.md](docs/demo-guide.md) has a short script for a live demo.
 
-Then open <http://127.0.0.1:8787>. The server serves the built app and the API from one process and stores calls in a local SQLite file (`data/firefly.db`, git-ignored).
+## Test it
 
-To try a **spoken call without Azure**, run with `FIREFLY_SPEECH_PROVIDER=mock` (in PowerShell: `$env:FIREFLY_SPEECH_PROVIDER='mock'; npm run dev`) and use any microphone: the recognised text will be the scripted demo sentences, not your words. To try the **browser's own speech**, leave the variable unset, use Edge or Chrome, and check what the pre-flight page reports.
+| Command                      | What it does                                                                                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run check`              | Everything CI's first job runs: format check, lint, type check, scenario validation, unit and API tests, production build, size budgets, secret scan and lockfile check. |
+| `npm test`                   | Unit and API tests with Vitest.                                                                                                                                          |
+| `npm run test:e2e`           | Builds, then runs the Playwright browser tests against the production build in demo mode, in desktop and mobile Chromium.                                                |
+| `npm run validate:scenarios` | Checks every scenario against the schema and the authoring rules.                                                                                                        |
+| `npm run check:budgets`      | After a build, checks the gzip size budgets in `scripts/budgets.json`.                                                                                                   |
 
-| Command                       | What it does                                                                                                         |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                 | API with file watching plus the Vite dev server                                                                      |
-| `npm run build` / `npm start` | Build the web app into `dist/web`; serve it with the API                                                             |
-| `npm test`                    | Unit, component and API tests (Vitest)                                                                               |
-| `npm run test:e2e`            | Build, then run the browser tests (Playwright)                                                                       |
-| `npm run check`               | Everything CI runs: formatting, lint, types, scenario validation, tests, build, budgets, secret scan, lockfile check |
-| `npm run validate:scenarios`  | Validate the scenario library and print its coverage                                                                 |
+The browser tests need a browser. Run `npx playwright install chromium` once, or set `PW_CHANNEL=msedge` (or `chrome`) to use an installed one.
 
-## Configuration
+No test calls a live service. They use local fakes. There is no `npm run calibrate`, and no tool in this repository that compares Firefly's scores with a mentor's.
 
-Settings come from environment variables. Firefly loads `.env` on start-up (copy `.env.example`; `.env` is git-ignored), and variables already set in the environment win. Never commit real values. A wrong or incomplete setting never stops the server: the affected feature turns off, and the notice names the variable, never its value.
-
-| Variable                                                                | Default             | Purpose                                                                                  |
-| ----------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------- |
-| `FIREFLY_PORT`, `FIREFLY_HOST`                                          | `8787`, `127.0.0.1` | Where the server listens. Keep the host on loopback: Firefly has no sign-in.             |
-| `FIREFLY_DB_PATH`                                                       | `./data/firefly.db` | The SQLite file (`:memory:` for tests).                                                  |
-| `FIREFLY_LOG_LEVEL`                                                     | `info`              | `info`, `warn`, `error` or `silent`. Logs never contain transcripts or secrets.          |
-| `FIREFLY_PROVIDER`                                                      | `mock`              | `mock` (demo mode), `gemini`, `azure-openai` or `openai-compatible`.                     |
-| `GEMINI_API_KEY` (and optional `GEMINI_MODEL`)                          | none                | Gemini provider. The default model is `gemini-3.5-flash-lite`.                           |
-| `AZURE_OPENAI_ENDPOINT`, `_API_KEY`, `_DEPLOYMENT`, `_API_VERSION`      | none                | Azure OpenAI provider.                                                                   |
-| `FIREFLY_LLM_BASE_URL`, `FIREFLY_LLM_API_KEY`, `FIREFLY_LLM_MODEL`      | none                | Any OpenAI-compatible endpoint.                                                          |
-| `FIREFLY_LLM_TIMEOUT_MS`, `FIREFLY_LLM_MAX_RETRIES`                     | `30000`, `1`        | Model call limits.                                                                       |
-| `FIREFLY_SPEECH_PROVIDER`                                               | `none`              | `none`, `mock` (scripted demo) or `azure-speech`.                                        |
-| `AZURE_SPEECH_KEY` and `AZURE_SPEECH_REGION` or `AZURE_SPEECH_ENDPOINT` | none                | Azure AI Speech. The key stays on the server and is never sent to the browser or logged. |
-| `AZURE_SPEECH_VOICE_FEMALE`, `AZURE_SPEECH_VOICE_MALE`                  | built-in voices     | Optional prebuilt Azure voice names.                                                     |
-| `FIREFLY_SPEECH_TIMEOUT_MS`                                             | `15000`             | Limit for each call to the speech service (1,000 to 60,000).                             |
-| `FIREFLY_MOCK_DELAY_MS`                                                 | `700`               | Delay for demo-mode replies, so the "thinking" state is visible.                         |
-| `FIREFLY_TEST_HOOKS`, `FIREFLY_DEV_DIAGNOSTICS`                         | `0`                 | Test failure injection and developer diagnostics. Never enable on a shared host.         |
-
-`.env.example` lists every variable with placeholders only. Details: [docs/ai-providers.md](docs/ai-providers.md) and [docs/speech-providers.md](docs/speech-providers.md).
-
-## Architecture
-
-One Node.js process and one React single-page app, written in TypeScript. There is no external service in the default setup.
-
-```mermaid
-flowchart LR
-  subgraph Browser
-    UI[React app: landing, scenarios, brief, call, report] --> HOOK[useCall: state machine and controller]
-    HOOK --> CAP[Microphone, voice activity, WAV encoder]
-    HOOK --> PLAY[Audio playback]
-    HOOK --> BSPEECH[Browser speech recognition and voices]
-  end
-  subgraph Server["Node server: one process"]
-    API[HTTP API and static files] --> SVC[Session service]
-    SVC --> ENG[Simulation engine]
-    SVC --> EVAL[Coaching evaluator]
-    SVC --> DB[(SQLite)]
-    ENG --> LLM{Model provider}
-    EVAL --> LLM
-    API --> SPEECH{Speech provider}
-  end
-  UI -->|JSON over HTTP, anonymous cookie| API
-  CAP -->|"WAV (in memory only)"| API
-  PLAY -->|"customer audio"| API
-  LLM -.->|"demo rules engine, or only when configured"| EXT[Gemini, Azure OpenAI, OpenAI-compatible]
-  SPEECH -.->|"none, scripted demo, or only when configured"| AZ[Azure AI Speech]
-```
-
-| Area               | Where                                  | What it does                                                                                                                                   |
-| ------------------ | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared domain      | `shared/domain/`                       | The contract between server and web: vocabulary, schemas, API and speech types, scenario configuration. Pure, no I/O.                          |
-| Scenario library   | `server/scenarios/`                    | The thirteen scenarios as TypeScript, validated at start-up.                                                                                   |
-| Simulation engine  | `server/engine/`                       | Classifies what the trainee did, decides which facts may be revealed, updates the customer's state, fires curveballs, writes the reply (demo). |
-| Model provider     | `server/providers/`, `server/prompts/` | One interface: the demo rules engine, Gemini, Azure OpenAI, or an OpenAI-compatible endpoint.                                                  |
-| Coaching evaluator | `server/evaluator/`                    | Scores the six skills from the transcript, verifies every quote, builds the report.                                                            |
-| Speech             | `server/speech/`                       | Provider interface with `none`, a scripted demo and Azure AI Speech; voice and mood direction.                                                 |
-| Services, storage  | `server/services/`, `server/db/`       | Session lifecycle and idempotency, evaluation jobs; SQLite through `node:sqlite` with versioned migrations.                                    |
-| HTTP layer         | `server/http/`                         | A small router with validation, security headers, rate limits and static serving. No web framework.                                            |
-| Web app            | `web/`                                 | React 19 and React Router 7, built with Vite. Design system in `web/src/design`, features in `web/src/features`.                               |
-
-The browser bundle contains React, React Router and Firefly's own code only. The server runs TypeScript directly on Node 24, so it has no build step. More: [docs/architecture.md](docs/architecture.md) and [docs/design-system.md](docs/design-system.md).
-
-## Privacy and Responsible AI
-
-- **Synthetic data only.** Scenarios, customers and products are invented. Never type or say real customer information; Firefly removes obvious personal data from text but cannot remove it from audio.
-- **Audio is never stored or logged.** What leaves your device, and to whom, depends on the speech set-up and is shown on the pre-flight page. Details: [docs/privacy-and-audio.md](docs/privacy-and-audio.md).
-- **A training aid, not an assessment.** Scores are practice signals from a simulated call; automatic coaching can be wrong; nobody has measured how closely it agrees with mentors. Coaching reads words only, never tone, accent or pace.
-- **No accounts, no analytics.** One anonymous cookie keeps a browser's calls apart. Anyone with access to the server can read its database, so keep it on a trusted network. Calls can be deleted from their report.
-- **Keys stay on the server** (environment variables only; Key Vault and managed identity are documented as a path, not implemented).
-
-See [docs/responsible-ai.md](docs/responsible-ai.md) for the full safeguards and limits.
-
-## Testing and quality
+## Production build
 
 ```
-npm run check      # format, lint, types, scenarios, tests, build, budgets, secret scan, lockfile
-npm run test:e2e   # real-browser journeys against the production build (demo mode, scripted demo speech)
+npm run build   # writes the web app to dist/web
+npm start       # serves the API and dist/web from one process
 ```
 
-CI (GitHub Actions) runs the same checks on every push, plus the browser tests in Chromium and an advisory dependency audit. The suite covers the simulation engine and scoring, the speech layer against a fake Azure server, the call state machine (including 400 seeded random event sequences and a 100-exchange leak test), every page and state of the interface, and browser journeys with a fake microphone. Accessibility and performance work is described in [docs/accessibility.md](docs/accessibility.md) and [docs/performance.md](docs/performance.md).
+`npm start` listens on <http://127.0.0.1:8787> unless you change `FIREFLY_PORT` or `FIREFLY_HOST`. Firefly has no sign-in. Keep it on loopback, or put authentication and TLS in front of it.
 
-## What is verified, and what is not
+## Known limitations
 
-| Area                                                                | Status                                                                                                                                                             |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Scenario library, engine, scoring, report, API, storage             | Implemented and covered by automated tests.                                                                                                                        |
-| Interface (all pages and states), keyboard and responsive behaviour | Implemented, tested in jsdom and in real Edge and Chromium. Not tested with a screen reader or on real phones. See [docs/accessibility.md](docs/accessibility.md). |
-| Spoken calls with the scripted demo speech provider                 | Verified in a real browser with a fake microphone.                                                                                                                 |
-| Azure AI Speech                                                     | Built to Microsoft's documentation and tested against a local fake server. **Never run against the live service**: latency and recognition quality are unmeasured. |
-| Browser speech recognition                                          | Implemented; **returned no words in automated Edge and Chrome**, so real recognition is unverified. Typing always works.                                           |
-| Gemini                                                              | Run end to end against the real API in a few scripted calls. Says nothing about coaching quality.                                                                  |
-| Azure OpenAI, OpenAI-compatible endpoints                           | Tested against a fake server only.                                                                                                                                 |
-| Agreement with mentors' scores                                      | Not measured.                                                                                                                                                      |
-| Deployment                                                          | None. There is no hosting configuration. English only.                                                                                                             |
+- **Live providers.** Gemini had one limited smoke check on 21 Nov 2026. Azure OpenAI, the OpenAI-compatible endpoint and Azure AI Speech have not been run live. Everything else about them is tested against local fakes. See [Demo mode and live providers](#demo-mode-and-live-providers).
+- **No barge-in.** You cannot talk over the customer. Press **Stop customer audio**, then talk. [docs/voice-architecture.md](docs/voice-architecture.md) explains why.
+- **Speech is unverified with real speech.** Recognition and voices were tested with fakes and synthetic signals. Whether the customer's voice sounds like their mood has not been judged.
+- **Browsers.** The browser tests run in Chromium: Playwright's own Chromium in CI, or an installed Edge or Chrome chosen with `PW_CHANNEL`. Firefox and Safari have not been tried.
+- **Accessibility.** Automated axe checks run in the browser tests. No screen reader or other assistive technology has been used to test Firefly.
+- **Scenarios are synthetic.** Product details are not validated against real product behaviour.
+- **Demo mode is simpler.** The rules-based customer varies less than a live model.
+- **Scores are rules-based.** They read words, not tone, and they have not been compared with mentors' scores.
+- **English only.** Speech languages are en-GB, en-US, en-IE, en-AU and en-IN.
+- **No sign-in.** Firefly identifies a browser with a cookie and has no accounts.
 
-Known limits: no voice barge-in; one language setting for recognition and voice; demo-mode customers repeat themselves in long calls; the interface is light-only.
+## Deployment status
+
+Firefly is not deployed. This repository holds no deployment configuration: no container file, infrastructure code or hosting settings. `npm run build` and `npm start` run it on one machine.
 
 ## Documentation
 
-| Document                                                 | Contents                                                                          |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [docs/demo-guide.md](docs/demo-guide.md)                 | A 20-minute demo runbook, with what to say and what not to claim                  |
-| [docs/voice-architecture.md](docs/voice-architecture.md) | The spoken call: capture, playback, state machine, failure handling, verification |
-| [docs/speech-providers.md](docs/speech-providers.md)     | Speech provider kinds, environment variables, endpoints, errors, Azure details    |
-| [docs/privacy-and-audio.md](docs/privacy-and-audio.md)   | What leaves your device, what is stored, what is logged                           |
-| [docs/scoring-rubric.md](docs/scoring-rubric.md)         | How each skill is scored and what is never penalised                              |
-| [docs/ai-providers.md](docs/ai-providers.md)             | Configuring a live model, what is sent to it, failure behaviour                   |
-| [docs/responsible-ai.md](docs/responsible-ai.md)         | Safeguards and limits                                                             |
-| [docs/architecture.md](docs/architecture.md)             | Components, data flow, persistence, API, security, the web app                    |
-| [docs/design-system.md](docs/design-system.md)           | Tokens, components, shell and conventions                                         |
-| [docs/accessibility.md](docs/accessibility.md)           | What was built, how it was checked, and the known gaps                            |
-| [docs/performance.md](docs/performance.md)               | Budgets, how performance was measured and the numbers                             |
-| [docs/scenario-authoring.md](docs/scenario-authoring.md) | Writing and testing scenarios                                                     |
-| [docs/troubleshooting.md](docs/troubleshooting.md)       | Common problems                                                                   |
-
-## Contributing
-
-Branch from `main`, keep changes focused, run `npm run check` (and `npm run test:e2e` for anything visible), and update the documentation that describes the behaviour you changed. [CONTRIBUTING.md](CONTRIBUTING.md) has the conventions. Use fictional data only and never commit secrets, audio or real customer material.
-
-Firefly is a collaborative FY27 apprentice project; see the [contributors page](https://github.com/snowjug/Firefly/graphs/contributors).
-
-## Licence
-
-This repository does not currently specify a licence: there is no `LICENSE` file, so no licence is granted to others by the repository itself. Ask the repository owner before reusing the code.
+| Document                                                 | What it covers                                                      |
+| -------------------------------------------------------- | ------------------------------------------------------------------- |
+| [docs/demo-guide.md](docs/demo-guide.md)                 | A short script for a live demo, and how to recover from a failure   |
+| [docs/architecture.md](docs/architecture.md)             | How the web app, server, database and providers fit together        |
+| [docs/customer-realism.md](docs/customer-realism.md)     | How the customer behaves, and what was tested                       |
+| [docs/care-cbcf-rubric.md](docs/care-cbcf-rubric.md)     | The six skills, the CARE behaviours, levels, and the CBCF status    |
+| [docs/scenario-authoring.md](docs/scenario-authoring.md) | Writing and testing scenarios                                       |
+| [docs/voice-architecture.md](docs/voice-architecture.md) | Ports, call states, turn-taking, prosody and failure handling       |
+| [docs/speech-providers.md](docs/speech-providers.md)     | Speech provider setup, limits and status                            |
+| [docs/ai-providers.md](docs/ai-providers.md)             | Model provider setup, what is sent and status                       |
+| [docs/privacy-audio.md](docs/privacy-audio.md)           | What the microphone does, what leaves the device and what is stored |
+| [docs/responsible-ai.md](docs/responsible-ai.md)         | Limits and responsible use                                          |
+| [docs/accessibility.md](docs/accessibility.md)           | What was built and tested, and what was not                         |
+| [docs/performance.md](docs/performance.md)               | Size budgets and how to measure                                     |
+| [docs/design-system.md](docs/design-system.md)           | The visual system and components                                    |
+| [docs/troubleshooting.md](docs/troubleshooting.md)       | Common problems                                                     |
+| [docs/ecc-workflows.md](docs/ecc-workflows.md)           | Which agent skills the rebuild used and how they were installed     |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                       | Conventions for changing Firefly                                    |

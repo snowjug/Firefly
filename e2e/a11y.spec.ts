@@ -156,7 +156,7 @@ test('the call announces whole sentences once and leaves transcript text to the 
     .toBe(true);
   const said = await announced();
   expect(said, `the call announces itself: ${JSON.stringify(said)}`).toContain(
-    'The customer is speaking. You can stop the response at any time.',
+    'The customer is speaking. You can stop the customer audio at any time.',
   );
   // "Hearing you" changes with every breath, so it is on screen and never announced.
   expect(said.join(' ')).not.toMatch(/hearing you/i);

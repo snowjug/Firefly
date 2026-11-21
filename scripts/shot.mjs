@@ -3,7 +3,10 @@
 //
 //   node scripts/shot.mjs --url http://127.0.0.1:8787/ --out screenshots/home.png
 //   node scripts/shot.mjs --url http://127.0.0.1:8787/sessions/{id}/report --out r.png \
-//        --new-session locked-out-after-password-reset:starter --say "Hi, I'm Sam. What's going on?" --end
+//        --new-session outlook-shared-mailbox-missing:starter --say "Hi, I'm Sam. What's going on?" --end
+//
+// Use it for one-off looks while you work. The pictures in the README come from
+// scripts/readme-screenshots.mjs, which drives the real screens end to end.
 //
 // Options:
 //   --w 1440 --h 900   viewport size          --dpr 1       device scale factor

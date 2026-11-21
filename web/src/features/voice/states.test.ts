@@ -84,7 +84,7 @@ describe('what each state says', () => {
       const { label, announcement } = VOICE_STATE_TEXT[state];
       expect(`${label} ${announcement ?? ''}`).not.toMatch(/barge|interrupt|talk over/i);
     }
-    expect(VOICE_STATE_TEXT['customer-speaking'].announcement).toMatch(/stop the response/i);
+    expect(VOICE_STATE_TEXT['customer-speaking'].announcement).toMatch(/stop the customer audio/i);
   });
 });
 

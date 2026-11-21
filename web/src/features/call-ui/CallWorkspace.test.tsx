@@ -376,7 +376,9 @@ describe('landmarks and skip links', () => {
 describe('what a screen reader hears', () => {
   it('reads the engine’s announcement once, as a whole sentence', () => {
     renderCall('customer-speaking');
-    expect(announced()).toBe('The customer is speaking. You can stop the response at any time.');
+    expect(announced()).toBe(
+      'The customer is speaking. You can stop the customer audio at any time.',
+    );
   });
 
   it('says a change of the customer’s state once, and never why', () => {
