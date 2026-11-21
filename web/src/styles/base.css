@@ -1,33 +1,10 @@
-/* Base: reset, typography, focus, utilities. */
+/* Base: a small reset, the field, focus, selection, the skip link and the rules that make reduced
+   motion real. */
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
-}
-
-html {
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
-}
-/* Smooth scrolling is only for jumping between sections of a report. Everywhere else the page
-   scrolls exactly when asked, which keeps keyboard focus, anchors and assistive tools predictable. */
-@media (prefers-reduced-motion: no-preference) {
-  html:has(.rp-root):not([data-motion='reduce']) {
-    scroll-behavior: smooth;
-  }
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--text);
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 h1,
@@ -48,16 +25,8 @@ h1,
 h2,
 h3,
 h4 {
-  font-family: var(--font-heading);
-  line-height: var(--lh-snug);
-  letter-spacing: -0.012em;
+  font-family: var(--font-display);
   text-wrap: balance;
-}
-.t-display,
-.t-title,
-.t-section,
-.serif {
-  font-family: var(--font-heading);
 }
 
 p {
@@ -84,81 +53,71 @@ textarea {
   color: inherit;
 }
 
+/* A link in running text keeps its underline and takes the colour of the text around it. */
 a {
-  color: var(--accent);
+  color: inherit;
   text-underline-offset: 0.18em;
   text-decoration-thickness: 1px;
 }
-a:hover {
-  text-decoration-thickness: 2px;
-}
 
-::selection {
-  background: color-mix(in srgb, var(--accent) 40%, transparent);
-}
-
-/* Type scale */
-.t-display {
-  font-size: var(--fs-display);
-  line-height: var(--lh-tight);
-  letter-spacing: -0.03em;
-  font-weight: 750;
-}
-.t-title {
-  font-size: var(--fs-title);
-  line-height: var(--lh-tight);
-  letter-spacing: -0.02em;
-  font-weight: 720;
-}
-.t-section {
-  font-size: var(--fs-section);
-  font-weight: 680;
-  letter-spacing: -0.01em;
-}
-.t-body {
-  font-size: var(--fs-body);
-}
-.t-small {
-  font-size: var(--fs-small);
-}
-.t-meta {
-  font-size: var(--fs-meta);
-  color: var(--text-3);
-}
-.t-label {
-  font-size: var(--fs-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 650;
-  color: var(--text-3);
-}
-.t-lead {
-  font-size: clamp(0.98rem, 0.95rem + 0.2vw, 1.1rem);
-  color: var(--text-2);
-  line-height: 1.5;
-}
-.t-muted {
-  color: var(--text-2);
-}
-.mono {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-}
 .nowrap {
   white-space: nowrap;
 }
-.tabular {
-  font-variant-numeric: tabular-nums;
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: var(--field-0);
+  color: var(--ink-1);
+  scroll-padding-top: var(--sp-5);
+  scrollbar-color: var(--line-3) transparent;
 }
 
-/* Visible, consistent keyboard focus */
+body {
+  min-height: 100vh;
+  min-height: 100svh;
+  margin: 0;
+  background: transparent;
+  color: var(--ink-1);
+  font-family: var(--font-ui);
+  font-size: var(--t-body);
+  line-height: var(--lh-ui);
+  overflow-x: clip;
+}
+
+#root {
+  position: relative;
+  isolation: isolate;
+  min-height: inherit;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--amber) 38%, transparent);
+  color: inherit;
+}
+
+button,
+[role='button'],
+summary,
+select {
+  cursor: pointer;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* Keyboard focus: a ring that stays visible on any background (WCAG 2.4.7, 2.4.11, 1.4.11). */
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
-  border-radius: 6px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px var(--field-0); /* fills the offset gap so the ring never merges with a busy background */
 }
-:focus:not(:focus-visible) {
+main:focus,
+[tabindex='-1']:focus {
   outline: none;
+  box-shadow: none;
 }
 
 .sr-only {
@@ -173,75 +132,50 @@ a:hover {
   border: 0;
 }
 
+/* The first thing a keyboard user reaches. */
 .skip-link {
   position: fixed;
   left: var(--sp-4);
   top: var(--sp-3);
-  z-index: 100;
-  padding: var(--sp-2) var(--sp-4);
-  border-radius: var(--r-control);
-  background: var(--surface-3);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  transform: translateY(-200%);
-  transition: transform var(--dur-2) var(--ease-out);
+  z-index: var(--z-skip);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: 2px;
+  background: var(--ink-1);
+  color: var(--ink-inverse);
+  border: 0;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-220%);
+  transition: transform var(--dur-micro) var(--ease-exit-decelerated);
 }
 .skip-link:focus {
   transform: translateY(0);
 }
 
-/* Layout helpers */
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--stack-gap, var(--sp-4));
+/* Text links read as links without a box around them. */
+.text-link {
+  color: var(--ink-1);
+  text-decoration: underline;
+  text-decoration-color: var(--line-3);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.28em;
+  transition: text-decoration-color var(--dur-micro);
 }
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--row-gap, var(--sp-3));
-}
-.cluster {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--cluster-gap, var(--sp-2));
-}
-.grow {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.between {
-  justify-content: space-between;
-}
-.center-text {
-  text-align: center;
-}
-.hide-sm {
-  display: initial;
-}
-@media (max-width: 720px) {
-  .hide-sm {
-    display: none !important;
-  }
-}
-.show-sm {
-  display: none !important;
-}
-@media (max-width: 720px) {
-  .show-sm {
-    display: initial !important;
-  }
+.text-link:hover {
+  text-decoration-color: var(--amber);
 }
 
-/* Never hide content from people who need it: reduced motion turns movement off entirely. */
+/* Reduced motion: the system asks for it, or the user chose it in Settings. Movement stops; state
+   changes still happen, instantly, so nothing is hidden from anyone. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
     scroll-behavior: auto !important;
   }
 }
@@ -250,24 +184,32 @@ a:hover {
 :root[data-motion='reduce'] *::after {
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
+  animation-delay: 0ms !important;
   transition-duration: 0.001ms !important;
+  transition-delay: 0ms !important;
   scroll-behavior: auto !important;
 }
 
-/* High-contrast / forced colours: keep boundaries visible. */
+/* Ambient motion has its own, always-reachable switch (WCAG 2.2.2): anything marked
+   data-ambient drifts, breathes or twinkles only while the user has not paused it. */
+:root[data-ambient='paused'] [data-ambient],
+:root[data-ambient='paused'] [data-ambient]::before,
+:root[data-ambient='paused'] [data-ambient]::after {
+  animation-play-state: paused !important;
+}
+
 @media (forced-colors: active) {
-  .glass,
-  .card,
-  .btn,
-  .chip,
-  .input {
-    border: 1px solid CanvasText;
+  :focus-visible {
+    outline-color: Highlight;
+    box-shadow: none;
   }
 }
 
 @media print {
-  body {
+  html {
     background: #fff;
+  }
+  body {
     color: #000;
   }
 }

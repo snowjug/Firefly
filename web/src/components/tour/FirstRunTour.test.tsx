@@ -18,6 +18,7 @@ function renderTour(onClose = vi.fn()) {
 const stored = () => JSON.parse(localStorage.getItem('firefly.tour') ?? 'null') as string | null;
 const next = (user: ReturnType<typeof userEvent.setup>) =>
   user.click(screen.getByRole('button', { name: /^Next/ }));
+const presence = () => document.querySelector('.sig-presence') as HTMLElement;
 
 beforeEach(() => {
   localStorage.clear();
@@ -33,10 +34,10 @@ describe('FirstRunTour', () => {
       'Five small examples, under a minute. Skip any time.',
     );
     expect(within(dialog).getByText('Step 1 of 5')).toBeInTheDocument();
-    expect(within(dialog).getByRole('progressbar', { name: 'Tour progress' })).toHaveAttribute(
-      'aria-valuenow',
-      '1',
-    );
+    const progress = within(dialog).getByRole('progressbar', { name: 'Tour progress' });
+    expect(progress).toHaveAttribute('aria-valuenow', '1');
+    expect(progress).toHaveAttribute('aria-valuemax', '5');
+    expect(progress).toHaveAttribute('aria-valuetext', 'Step 1 of 5');
     expect(
       within(dialog).getByRole('heading', { level: 3, name: 'Pick a practice call' }),
     ).toBeVisible();
@@ -50,17 +51,22 @@ describe('FirstRunTour', () => {
     renderTour();
 
     // 1. Pick a practice call: the example difficulty changes what the customer is like.
+    expect(screen.getByRole('radio', { name: 'Starter' })).toBeChecked();
     expect(screen.getByText(/Calm and cooperative/)).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Challenge' }));
+    expect(screen.getByRole('radio', { name: 'Challenge' })).toBeChecked();
     expect(screen.getByText(/High pressure and sure it is not their fault/)).toBeInTheDocument();
-    expect(screen.getByText(/real scenarios under/)).toHaveTextContent('Practice');
+    expect(screen.queryByText(/Calm and cooperative/)).not.toBeInTheDocument();
+    expect(screen.getByText(/real scenarios under/)).toHaveTextContent('Missions');
     await next(user);
 
-    // 2. A good question brings out a hidden fact.
+    // 2. A good question brings out a hidden fact, and the instrument gains a lit signal.
     expect(
       screen.getByRole('heading', { level: 3, name: 'Some things stay hidden' }),
     ).toHaveFocus();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
     expect(screen.queryByText('Hidden fact found')).not.toBeInTheDocument();
+    expect(presence().querySelector('.sig-dot.is-lit')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Have you tried restarting it?' }));
     expect(screen.queryByText('Hidden fact found')).not.toBeInTheDocument();
     await user.click(
@@ -70,14 +76,22 @@ describe('FirstRunTour', () => {
     expect(
       screen.getByRole('button', { name: 'When did it start, and did anything change?' }),
     ).toBeDisabled();
+    expect(presence().querySelectorAll('.sig-dot.is-lit')).toHaveLength(1);
     await next(user);
 
-    // 3. The customer reacts to what you say.
+    // 3. The customer reacts to what you say: words and the instrument both change.
     expect(screen.getByText('Choose a reply to see how the customer reacts.')).toBeInTheDocument();
+    expect(presence()).toHaveAttribute('data-sig-mood', 'frustrated');
     await user.click(screen.getByRole('button', { name: /^I can hear how frustrating this is/ }));
     expect(screen.getByText(/The customer settles\./)).toBeInTheDocument();
+    expect(presence()).toHaveAttribute('data-sig-mood', 'calm');
     await user.click(screen.getByRole('button', { name: 'That is not how it works.' }));
     expect(screen.getByText(/The customer gets more tense\./)).toBeInTheDocument();
+    expect(presence()).toHaveAttribute('data-sig-mood', 'angry');
+    expect(screen.getByRole('button', { name: 'That is not how it works.' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await next(user);
 
     // 4. Feedback quotes your own words, and is not a rating.
@@ -102,6 +116,23 @@ describe('FirstRunTour', () => {
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByText('Step 4 of 5')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Tour progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '4',
+    );
+  });
+
+  it('points at the dock and the search, not at a sidebar that is no longer there', async () => {
+    const user = userEvent.setup();
+    renderTour();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent(/dock at the bottom of the screen/);
+    expect(dialog).toHaveTextContent(/Ctrl or Cmd\+K/);
+    for (let step = 0; step < 4; step++) {
+      expect(dialog).not.toHaveTextContent(/sidebar|top bar/i);
+      await next(user);
+    }
+    expect(dialog).not.toHaveTextContent(/sidebar|top bar/i);
   });
 
   it('can be skipped at any step, and a skip is remembered on this device', async () => {
@@ -119,6 +150,15 @@ describe('FirstRunTour', () => {
     await next(user);
     await user.keyboard('{Escape}');
     expect(stored()).toBe('skipped');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts Escape on the last step as finishing it', async () => {
+    const user = userEvent.setup();
+    const { onClose } = renderTour();
+    for (let step = 0; step < 4; step++) await next(user);
+    await user.keyboard('{Escape}');
+    expect(stored()).toBe('done');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -149,11 +189,24 @@ describe('FirstRunTour', () => {
     expect(stored()).toBe('done');
   });
 
+  it('starts again from the first step each time it is opened', async () => {
+    const user = userEvent.setup();
+    const first = renderTour();
+    await next(user);
+    await next(user);
+    await user.click(screen.getByRole('button', { name: 'Skip tour' }));
+    first.unmount();
+
+    renderTour();
+    expect(screen.getByText('Step 1 of 5')).toBeInTheDocument();
+  });
+
   it('turns sound on only when asked', async () => {
     const user = userEvent.setup();
     renderTour();
     for (let step = 0; step < 4; step++) await next(user);
     const sound = screen.getByRole('switch', { name: /Sound effects/ });
+    expect(localStorage.getItem('firefly.sound')).toBeNull();
     await user.click(sound);
     await waitFor(() => expect(sound).toBeChecked());
     expect(localStorage.getItem('firefly.sound')).toBe('true');

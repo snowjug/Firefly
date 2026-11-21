@@ -1,60 +1,130 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router';
-import { recommendMission, summariseScenarioPractice } from '#shared/domain/recommend.ts';
-import { EmptyState, ErrorState, LoadingCards, Page, PageHeader } from '../components/Page.tsx';
-import { LibraryFilters } from '../components/scenario/LibraryFilters.tsx';
 import {
-  EMPTY_QUERY,
-  facetCounts,
-  filterScenarios,
-  isFiltered,
-  orderScenarios,
-  parseQuery,
-  toSearchParams,
-  withFacet,
-  type FacetKey,
-  type LibraryQuery,
-} from '../components/scenario/library-filters.ts';
-import { ScenarioCard } from '../components/scenario/ScenarioCard.tsx';
+  Link,
+  useLocation,
+  useNavigate,
+  useNavigation,
+  useNavigationType,
+  useSearchParams,
+} from 'react-router';
+import { recommendMission } from '#shared/domain/recommend.ts';
+import { Atlas } from '../components/atlas/Atlas.tsx';
+import { AtlasList } from '../components/atlas/AtlasList.tsx';
+import { AtlasToolbar, PLATE_PANEL, plateTabId } from '../components/atlas/AtlasToolbar.tsx';
+import { HistoryKnown } from '../components/atlas/MissionDetail.tsx';
+import {
+  cleared,
+  isNarrowed,
+  lensGroups,
+  lensOf,
+  lensSetCount,
+  parsePlateQuery,
+  toPlateSearchParams,
+  withLens,
+  type LensKey,
+  type PlateQuery,
+  type PlateView,
+} from '../components/atlas/atlas-lens.ts';
+import { applyLens, buildAtlas, isLensEmpty } from '../components/atlas/atlas-model.ts';
+import {
+  Disclosure,
+  EmptyNotice,
+  ErrorNotice,
+  LoadingNotice,
+  PageFrame,
+  PageHead,
+  tabPanelDomId,
+} from '../components/frame/index.ts';
+import { setupPath } from '../components/scenario/paths.ts';
+import { useScenarioLibrary } from '../components/scenario/useScenarioLibrary.ts';
+import { KeyToPlate } from '../components/signal/index.ts';
+import { useWorldPose } from '../components/world/useWorldPose.ts';
+import { api } from '../lib/api.ts';
 import { plural } from '../lib/format.ts';
-import { usePractice } from '../lib/practice.ts';
-import '../styles/library.css';
+import { useApi, useMediaQuery } from '../lib/hooks.ts';
+import { useReducedMotion } from '../lib/theme.tsx';
+import '../styles/atlas.css';
 
 /** The address follows typing after this pause, so every key press does not make a history entry. */
 const SEARCH_DEBOUNCE_MS = 250;
 
+const NUMBER_WORDS = [
+  'No',
+  'One',
+  'Two',
+  'Three',
+  'Four',
+  'Five',
+  'Six',
+  'Seven',
+  'Eight',
+  'Nine',
+  'Ten',
+  'Eleven',
+  'Twelve',
+  'Thirteen',
+  'Fourteen',
+  'Fifteen',
+  'Sixteen',
+];
+const numberWord = (n: number) => NUMBER_WORDS[n] ?? String(n);
+
+/**
+ * Missions: the scenario library as a field of small instruments, and the way into calibrating a
+ * call. The plate never rearranges: a search or a lens only lights the missions that match.
+ */
 export default function Library() {
-  const { scenarios, sessions, progress } = usePractice();
+  const scenarios = useScenarioLibrary();
+  const sessions = useApi(
+    (signal) => api.listSessions({ limit: 100, includeSamples: false }, signal),
+    [],
+  );
+  const progress = useApi((signal) => api.progress(false, signal), []);
   const navigate = useNavigate();
   const location = useLocation();
   const navigationType = useNavigationType();
+  const navigation = useNavigation();
   const [params] = useSearchParams();
   const searchRef = useRef<HTMLInputElement>(null);
+  const reduced = useReducedMotion();
+  const beside = useMediaQuery('(min-width: 74rem)');
+  const narrow = useMediaQuery('(max-width: 39.99rem)');
+  const roomy = useMediaQuery('(min-width: 74rem) and (min-height: 56rem)');
 
-  const urlQuery = useMemo(() => parseQuery(params), [params]);
-  const urlSearch = urlQuery.q;
+  useWorldPose({ intensity: 0.55 });
+
+  const urlQuery = useMemo(() => parsePlateQuery(params), [params]);
+  const urlSearch = urlQuery.search.q;
 
   // The search box keeps its own text so typing is never held up by the address. The address follows
   // after a short pause (replacing the entry, so Back is not flooded), and the box follows the address
-  // again when the person navigates (the top bar search, Back, Forward, a link) rather than types.
+  // again when the person navigates (Ctrl+K, Back, Forward, a link) rather than types.
   const [text, setText] = useState(urlSearch);
   const [seenLocation, setSeenLocation] = useState(location.key);
   if (seenLocation !== location.key) {
     setSeenLocation(location.key);
     if (navigationType !== 'REPLACE') setText(urlSearch);
   }
-  const query = useMemo<LibraryQuery>(() => ({ ...urlQuery, q: text }), [urlQuery, text]);
+  const query = useMemo<PlateQuery>(
+    () => ({ ...urlQuery, search: { ...urlQuery.search, q: text } }),
+    [urlQuery, text],
+  );
 
   const writeSearch = useCallback(() => {
     // The pause can end just after a link was followed, while the next page's code is still loading
     // and this page is still on screen. Writing then would replace the new address and send the
-    // person back to the library.
-    if (window.location.pathname !== location.pathname) return;
+    // person back to the missions.
+    if (navigation.state !== 'idle') return;
     void navigate(
-      { search: toSearchParams({ ...urlQuery, q: text }).toString() },
+      {
+        search: toPlateSearchParams({
+          ...urlQuery,
+          search: { ...urlQuery.search, q: text },
+        }).toString(),
+      },
       { replace: true },
     );
-  }, [navigate, location.pathname, urlQuery, text]);
+  }, [navigate, navigation.state, urlQuery, text]);
 
   const searchPending = text.trim() !== urlSearch.trim();
   useEffect(() => {
@@ -63,21 +133,18 @@ export default function Library() {
     return () => window.clearTimeout(timer);
   }, [searchPending, writeSearch]);
 
-  const go = (next: LibraryQuery) => {
-    void navigate({ search: toSearchParams(next).toString() });
+  const go = (next: PlateQuery, replace = false) => {
+    void navigate({ search: toPlateSearchParams(next).toString() }, { replace });
   };
-  const changeFacet = (key: FacetKey, value: string) => go(withFacet(query, key, value));
   const clearAll = () => {
     setText('');
-    go(EMPTY_QUERY);
+    go(cleared(query));
     searchRef.current?.focus();
   };
 
   const all = scenarios.data;
   const history = sessions.data?.sessions;
-  // What has been practised and what to suggest next. Both are optional: if the history cannot be
-  // loaded, scenarios simply show without a practice line.
-  const practice = useMemo(() => summariseScenarioPractice(history ?? []), [history]);
+  const historyKnown = history !== undefined;
   const recommendation = useMemo(
     () =>
       all && history
@@ -85,98 +152,156 @@ export default function Library() {
         : null,
     [all, history, progress.data],
   );
-  const counts = useMemo(() => facetCounts(all ?? [], query), [all, query]);
-  const visible = useMemo(
-    () => orderScenarios(filterScenarios(all ?? [], query), recommendation?.scenario.id ?? null),
-    [all, query, recommendation],
+  const model = useMemo(
+    () => buildAtlas(all ?? [], history ?? [], recommendation?.scenario.id ?? null),
+    [all, history, recommendation],
   );
-  const filtered = isFiltered(query);
 
-  const total = all?.length ?? 0;
-  const countText =
-    visible.length === 0
-      ? 'No scenarios match'
-      : filtered
-        ? `Showing ${visible.length} of ${plural(total, 'scenario')}`
-        : plural(total, 'scenario');
+  const lens = lensOf(query);
+  const matching = useMemo(() => applyLens(model, lens), [model, lens]);
+  const narrowed = isNarrowed(query);
+  const lit = isLensEmpty(lens) ? null : matching.matches;
+  const groups = useMemo(() => lensGroups(model, query), [model, query]);
 
-  return (
-    <Page title="Scenarios" className="lib">
-      <PageHeader
-        title="Scenarios"
-        lead="Choose a customer call to practise. Every customer here is fictional, so never type real customer information."
-      />
+  const total = model.missions.length;
+  const shown = matching.count;
+  const view: PlateView = query.view ?? (narrow ? 'list' : 'chart');
+  const backTo = `${location.pathname}${location.search}`;
+  const reason = recommendation?.reason;
 
-      {scenarios.loading ? (
-        <LoadingCards count={6} label="Loading scenarios" />
-      ) : scenarios.error ? (
-        <ErrorState
+  const statusText =
+    shown === 0
+      ? 'No missions match'
+      : narrowed
+        ? `Showing ${shown} of ${plural(total, 'mission')}`
+        : plural(total, 'mission');
+
+  if (scenarios.loading || (sessions.loading && !sessions.data)) {
+    return (
+      <PageFrame title="Missions" width="wide">
+        <LoadingNotice label="Loading missions" />
+      </PageFrame>
+    );
+  }
+  if (scenarios.error) {
+    return (
+      <PageFrame title="Missions" width="wide">
+        <ErrorNotice
+          level={1}
           error={scenarios.error}
           onRetry={scenarios.reload}
-          title="Could not load scenarios"
+          title="Could not load the missions"
         />
-      ) : !all || all.length === 0 ? (
-        <EmptyState icon="book" title="No scenarios are available yet">
-          Scenarios will appear here once they have been added.
-        </EmptyState>
-      ) : (
-        <>
+      </PageFrame>
+    );
+  }
+  if (!all || all.length === 0) {
+    return (
+      <PageFrame title="Missions" width="wide">
+        <EmptyNotice level={1} title="No missions are available yet">
+          Missions will appear here once scenarios have been added.
+        </EmptyNotice>
+      </PageFrame>
+    );
+  }
+
+  const families = model.families.length;
+  return (
+    <PageFrame title="Missions" width="wide">
+      <div className="plate-layout" data-view={view}>
+        <div className="plate-rail">
+          <div className="plate-intro">
+            <PageHead
+              eyebrow="Missions"
+              title={
+                <>
+                  The mission <em>field</em>
+                </>
+              }
+              lead={`${numberWord(total)} practice ${total === 1 ? 'call' : 'calls'} in ${numberWord(families).toLowerCase()} ${families === 1 ? 'family' : 'families'}. Choose a signal to calibrate it.`}
+            />
+            {recommendation ? (
+              <p className="plate-suggest">
+                <span className="type-label">Suggested next</span>
+                <Link
+                  className="plate-suggest__link"
+                  to={setupPath(recommendation.scenario.id)}
+                  state={{ from: backTo }}
+                  viewTransition={!reduced}
+                >
+                  {recommendation.scenario.title}
+                </Link>
+                <span className="plate-suggest__why">{recommendation.reason}</span>
+              </p>
+            ) : null}
+          </div>
+          <div className="plate-key">
+            <Disclosure summary="Key to the plate" defaultOpen={roomy}>
+              <KeyToPlate compact />
+            </Disclosure>
+          </div>
+        </div>
+
+        <div className="plate-main">
           {all.length > 1 ? (
-            <LibraryFilters
-              query={query}
-              counts={counts}
+            <AtlasToolbar
+              view={view}
+              onView={(next) => go({ ...query, view: next }, true)}
+              search={text}
               searchRef={searchRef}
-              onSearchChange={setText}
+              onSearch={setText}
               onSearchBlur={() => {
                 if (searchPending) writeSearch();
               }}
-              onFacetChange={changeFacet}
+              groups={groups}
+              lensSet={lensSetCount(query)}
+              onLens={(key: LensKey, value) => go(withLens(query, key, value || null))}
+              status={statusText}
+              narrowed={narrowed}
+              onClear={clearAll}
             />
           ) : null}
-
-          <div className="lib-results">
-            <p role="status" aria-live="polite" className="lib-count">
-              {countText}
+          {!historyKnown ? (
+            <p className="plate-note">
+              Your practice history could not be read, so no mission is marked as tried and none is
+              suggested.
             </p>
-            {filtered ? (
-              <button type="button" className="btn btn-ghost" onClick={clearAll}>
-                Clear filters
-              </button>
-            ) : null}
-          </div>
-
-          {visible.length === 0 ? (
-            <EmptyState
-              icon="search"
-              title="No scenarios match"
-              action={
-                <button type="button" className="btn btn-secondary" onClick={clearAll}>
-                  Clear all filters
-                </button>
-              }
+          ) : null}
+          {shown === 0 ? (
+            <div className="plate-empty">
+              <EmptyNotice
+                title="No missions match"
+                action={
+                  <button type="button" className="action action--quiet" onClick={clearAll}>
+                    Clear all filters
+                  </button>
+                }
+              >
+                Try a different word, or remove a filter to see more of the field.
+              </EmptyNotice>
+            </div>
+          ) : null}
+          <HistoryKnown.Provider value={historyKnown}>
+            <div
+              role="tabpanel"
+              id={tabPanelDomId(PLATE_PANEL, view)}
+              aria-labelledby={plateTabId(view)}
             >
-              Try a different word, or remove a filter to see more of the library.
-            </EmptyState>
-          ) : (
-            <ul role="list" className="lib-grid">
-              {visible.map((scenario) => (
-                <li key={scenario.id}>
-                  <ScenarioCard
-                    scenario={scenario}
-                    practice={practice.get(scenario.id)}
-                    recommendedReason={
-                      recommendation?.scenario.id === scenario.id
-                        ? recommendation.reason
-                        : undefined
-                    }
-                    showPractice={history !== undefined}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
-    </Page>
+              {view === 'chart' ? (
+                <Atlas model={model} lit={lit} beside={beside} reason={reason} backTo={backTo} />
+              ) : (
+                <AtlasList
+                  model={model}
+                  lit={lit}
+                  reason={reason}
+                  backTo={backTo}
+                  morph={!reduced}
+                />
+              )}
+            </div>
+          </HistoryKnown.Provider>
+        </div>
+      </div>
+    </PageFrame>
   );
 }

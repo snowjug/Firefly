@@ -1,6 +1,7 @@
 import type { SessionDTO } from '#shared/domain/api.ts';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { DIMENSIONS, type DimensionId, type FactImportance } from '#shared/domain/vocab.ts';
+import { formatDate } from '../../lib/format.ts';
 
 // Plain-language wording shared by the report, transcript, history and progress screens.
 
@@ -82,6 +83,24 @@ export const PRINT_HINT = "Opens your browser's print dialog. Choose Save as PDF
 /** The reminder that closes the report. It is also on paper, where the app's own footer is not. */
 export const TRAINING_AID_NOTE =
   'Firefly is a training aid. Scenarios are fictional; never enter real customer information. Scores are for practice, not performance assessment.';
+
+/**
+ * What "Copy summary" puts on the clipboard: the call, the coach's own overall words and the next
+ * focus, with the reminder that scores are for practice. Nothing but the report's own words.
+ */
+export function summaryToCopy(
+  session: Pick<SessionDTO, 'scenarioTitle' | 'startedAt'>,
+  report: Pick<CoachingReport, 'summary' | 'nextPractice'>,
+): string {
+  return [
+    `Call feedback: ${session.scenarioTitle} (${formatDate(session.startedAt)})`,
+    '',
+    report.summary.overall,
+    '',
+    `Next practice target: ${DIMENSIONS[report.nextPractice.dimension].label}.`,
+    'Scores are for practice, not performance assessment.',
+  ].join('\n');
+}
 
 /**
  * The line under "Call feedback". It describes this result and never praises by default: an early

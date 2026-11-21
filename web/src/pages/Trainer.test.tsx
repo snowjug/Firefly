@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigDTO, DemoStatusDTO, PublicScenarioDTO } from '#shared/domain/api.ts';
+import { spotlightHighlights } from '../components/trainer/trainer-model.ts';
+import { ApiError } from '../lib/api.ts';
 import type * as ApiModule from '../lib/api.ts';
 import { ConfigProvider } from '../lib/config.tsx';
 import { loadDraft } from '../lib/draft.ts';
@@ -113,6 +115,39 @@ beforeEach(() => {
   mocks.scenarios.mockResolvedValue([SPOTLIGHT, STARTER]);
 });
 
+describe('Trainer studio frame', () => {
+  it('is the first of two studio tools, with a real link to the other', async () => {
+    renderTrainer();
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Trainer' })).toBeInTheDocument();
+    const nav = screen.getByRole('navigation', { name: 'Studio' });
+    expect(within(nav).getByRole('link', { name: 'Trainer' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    const other = within(nav).getByRole('link', { name: 'Calibration' });
+    expect(other).toHaveAttribute('href', '/calibration');
+    expect(other).not.toHaveAttribute('aria-current');
+    expect(screen.getByText(/05 \/ Studio/)).toBeInTheDocument();
+    expect(document.title).toBe('Trainer \u00b7 Firefly');
+  });
+
+  it('names every part of the page as a section, in reading order', async () => {
+    renderTrainer();
+
+    await screen.findByRole('heading', { name: 'Demo spotlight' });
+    const names = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(names).toEqual([
+      'Provider status',
+      'Demo spotlight',
+      'Quick start',
+      'Demo checklist',
+      'Demo data',
+      'Where a demo goes next',
+    ]);
+  });
+});
+
 describe('Trainer data actions', () => {
   it.each([
     {
@@ -160,6 +195,8 @@ describe('Trainer data actions', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Reset all demo data?' });
     expect(dialog).toHaveTextContent('7 sessions');
     expect(dialog).toHaveTextContent('4 practice sessions and 3 sample sessions');
+    // Focus starts on Cancel, so Enter never deletes by accident.
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -170,6 +207,7 @@ describe('Trainer data actions', () => {
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(mocks.resetDemo).not.toHaveBeenCalled();
+    expect(countFor('Practice sessions')).toHaveTextContent('4');
   });
 
   it('refreshes the counts after a delete and then offers nothing more to delete', async () => {
@@ -252,8 +290,39 @@ describe('Trainer data actions', () => {
 
     const button = await screen.findByRole('button', { name: 'Load sample sessions' });
     expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAccessibleDescription(/Already loaded \(3 sample sessions\)/);
     await user.click(button);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('offers nothing to delete when there is nothing, and says so', async () => {
+    mocks.demo.mockResolvedValue(status({ practiceSessions: 0, sampleSessions: 0 }));
+    renderTrainer();
+
+    for (const name of [
+      'Remove sample sessions',
+      'Delete my practice sessions',
+      'Reset everything',
+    ]) {
+      expect(await screen.findByRole('button', { name })).toHaveAttribute('aria-disabled', 'true');
+    }
+    expect(screen.getByText(/There is nothing to reset\./)).toBeInTheDocument();
+    expect(countFor('Sample sessions')).toHaveTextContent('0');
+  });
+
+  it('says the counts could not be loaded, offers no action and tries again on request', async () => {
+    const user = userEvent.setup();
+    mocks.demo
+      .mockRejectedValueOnce(new ApiError(0, 'network', 'Cannot reach Firefly.', true))
+      .mockResolvedValue(status());
+    renderTrainer();
+
+    expect(await screen.findByText('The session counts could not be loaded')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reset everything' })).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Try again' })[0] as HTMLElement);
+
+    expect(await screen.findByRole('button', { name: 'Reset everything' })).toBeInTheDocument();
+    expect(mocks.demo).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -304,6 +373,31 @@ describe('Trainer starting a call', () => {
       screen.queryByRole('button', { name: /Start the spotlight call/ }),
     ).not.toBeInTheDocument();
   });
+
+  it('says when the scenarios cannot be listed, and tries again on request', async () => {
+    const user = userEvent.setup();
+    mocks.scenarios
+      .mockRejectedValueOnce(new ApiError(0, 'network', 'Cannot reach Firefly.', true))
+      .mockResolvedValue([SPOTLIGHT, STARTER]);
+    renderTrainer();
+
+    expect(await screen.findByText('Could not load the scenarios')).toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Try again' })[0] as HTMLElement);
+    expect(await screen.findByRole('combobox', { name: 'Scenario' })).toBeInTheDocument();
+  });
+
+  it('writes the settings out in words beside the instrument, and never counts hidden facts', async () => {
+    renderTrainer();
+
+    const settings = await screen.findByRole('list', { name: 'Scenario settings' });
+    expect(settings).toHaveTextContent('StandardMedium impactFrustratedDemandingFirst contact');
+    expect(settings).toHaveTextContent('About 10 min');
+    const text = spotlightHighlights(SPOTLIGHT)
+      .map((item) => item.text)
+      .join(' ');
+    expect(text).toContain('Some areas hold details the customer shares only when asked');
+    expect(spotlightHighlights(SPOTLIGHT)[1]?.text).not.toMatch(/\d/);
+  });
 });
 
 describe('Trainer provider status', () => {
@@ -319,13 +413,12 @@ describe('Trainer provider status', () => {
 
     const card = (await screen.findByRole('heading', { name: 'Provider status' })).closest(
       'section',
-    );
-    expect(card).not.toBeNull();
-    expect(
-      within(card as HTMLElement).getByText('Demo mode (built-in rules engine)'),
-    ).toBeInTheDocument();
+    ) as HTMLElement;
+    expect(await within(card).findByText('Demo mode (built-in rules engine)')).toBeInTheDocument();
     expect(card).toHaveTextContent('No AI model is called in demo mode');
     expect(card).toHaveTextContent('FIREFLY_PROVIDER=azure-openai but a setting is missing.');
+    expect(card).toHaveTextContent('Firefly is running in demo mode instead.');
+    expect(within(card).getByText('Demo mode')).toBeInTheDocument();
   });
 
   it('says the replies come from the configured model for a live provider', async () => {
@@ -342,11 +435,71 @@ describe('Trainer provider status', () => {
 
     const card = (await screen.findByRole('heading', { name: 'Provider status' })).closest(
       'section',
-    );
-    expect(
-      await within(card as HTMLElement).findByText('Azure OpenAI (deployment "chat")'),
-    ).toBeInTheDocument();
+    ) as HTMLElement;
+    expect(await within(card).findByText('Azure OpenAI (deployment "chat")')).toBeInTheDocument();
     expect(card).toHaveTextContent('replies come from the configured model');
+    expect(card).toHaveTextContent('Live model');
     expect(card).not.toHaveTextContent('No AI model is called');
+    expect(card).not.toHaveTextContent('Demo mode');
+  });
+
+  it('does not guess when the settings cannot be read, and tries again on request', async () => {
+    const user = userEvent.setup();
+    mocks.config.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(CONFIG);
+    renderTrainer();
+
+    expect(await screen.findByText('The provider is unknown')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Firefly could not read the server.s settings, so the provider is unknown/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Live model')).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Try again' })[0] as HTMLElement);
+
+    expect(await screen.findByText('Demo mode (built-in rules engine)')).toBeInTheDocument();
+  });
+});
+
+describe('Trainer demo checklist', () => {
+  it('says Done or Not yet in words, and keeps the presenter\u2019s ticks for this tab only', async () => {
+    const user = userEvent.setup();
+    const first = renderTrainer();
+
+    const step = await screen.findByRole('checkbox', { name: 'Configure the scenario' });
+    expect(step).not.toBeChecked();
+    expect(step).toHaveAccessibleDescription(/Change the difficulty/);
+    expect(screen.getByText('0 of 8 done')).toBeInTheDocument();
+    expect(screen.getAllByText('Not yet')).toHaveLength(8);
+
+    await user.click(step);
+    await user.click(screen.getByRole('checkbox', { name: 'Meet a curveball' }));
+    expect(screen.getByText('2 of 8 done')).toBeInTheDocument();
+    expect(screen.getAllByText('Done')).toHaveLength(2);
+    expect(JSON.parse(sessionStorage.getItem('firefly.trainer.checklist') ?? '[]')).toEqual([
+      'configure',
+      'curveball',
+    ]);
+
+    // A reload of the tab keeps them; Clear forgets them.
+    first.unmount();
+    renderTrainer();
+    expect(await screen.findByRole('checkbox', { name: 'Meet a curveball' })).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Clear the ticks' }));
+    expect(screen.getByText('0 of 8 done')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Configure the scenario' })).not.toBeChecked();
+  });
+
+  it('links each step to the place it needs, and ignores ticks it does not know', async () => {
+    sessionStorage.setItem('firefly.trainer.checklist', JSON.stringify(['nonsense', 'run']));
+    renderTrainer();
+
+    expect(await screen.findByRole('checkbox', { name: 'Run an unscripted call' })).toBeChecked();
+    expect(screen.getByText('1 of 8 done')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Open setup' })).toHaveAttribute(
+      'href',
+      `/scenarios/${SPOTLIGHT.id}/setup`,
+    );
+    expect(screen.getByRole('link', { name: 'History' })).toHaveAttribute('href', '/history');
+    expect(screen.getAllByRole('link', { name: 'Calibration' }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Unscripted by design/)).toBeInTheDocument();
   });
 });

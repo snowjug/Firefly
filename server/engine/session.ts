@@ -54,5 +54,6 @@ export function publicState(runtime: EngineRuntime): PublicStateDTO {
     trend: delta >= 3 ? 'rising' : delta <= -3 ? 'falling' : 'steady',
     discoveredCount: Object.keys(runtime.discovery).length,
     silent: runtime.customer.silentUntilEngaged,
+    shifts: runtime.firedCurveballs.length,
   };
 }

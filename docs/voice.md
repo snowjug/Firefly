@@ -8,7 +8,7 @@ Voice mode lets you practise a customer call the way it happens for real: you **
 - **The customer answers aloud.** Replies are spoken with a voice from your browser. A customer keeps the same voice for the whole call, and sounds a little quicker and tenser as their mood rises.
 - **Two ways to talk.** _Hands-free_ listens again by itself after the customer has finished. _Push to talk_ listens only when you press the talk button. You can mute the microphone without ending the call.
 - **The customer never talks over you.** The microphone is closed while the customer speaks, so it cannot hear their voice and mistake it for yours. There is also a short pause before it opens again.
-- **Call sounds.** Short, quiet tones mark the line connecting, your turn to speak and the call ending. They can be switched off.
+- **Call sounds.** When **Sound effects** is on, short, quiet tones mark the line connecting, your turn to speak and the call ending. Sound effects is off until you switch it on, under Settings > Preferences or with the button on the call.
 - **The transcript is still the record.** Everything said, spoken or typed, appears in the transcript. Coaching is based on those words, not on how your voice sounded.
 
 ## Browser support
@@ -17,7 +17,7 @@ Voice mode lets you practise a customer call the way it happens for real: you **
 | --------------------------------------- | ------------------------------------------------------------------------------ |
 | Speaking to the customer (speech input) | Chrome and Edge, on a secure (https) connection or on localhost                |
 | Hearing the customer (speech output)    | Most current browsers, using the voices installed in the browser or the system |
-| A single "Listen" on one message        | Anywhere speech output works, with or without a voice call                     |
+| A single "Listen" on one message        | Anywhere speech output works, with or without a voice call, once voice is on   |
 
 Where speech input is missing, Firefly says so in one sentence and you carry on by typing. No audio files are shipped with Firefly: the call sounds are generated in the browser.
 
@@ -29,7 +29,7 @@ Where speech input is missing, Firefly says so in one sentence and you carry on 
 
 ## Turning it on
 
-Voice is off by default. The microphone is never opened until you turn voice on and start a voice call, and your browser asks for microphone permission the first time. Hang up (or leave the page) and the microphone and the customer's voice stop at once.
+Voice is off by default. Turn it on with **Enable voice (Beta)** under **Settings > Preferences**, or with the **Voice (Beta)** link under the message box on a call. Either one first explains what voice means (**Turn on voice (Beta)?**), and nothing changes until you choose **Turn on voice**. The choice is saved on your local profile, so create one first. It also adds a **Listen** button to each customer message. The microphone is never opened until voice is on and you press **Voice call** under the message box, and your browser asks for microphone permission the first time. Hang up (press **Voice call** again, end the call, or leave the page) and the microphone and the customer's voice stop at once.
 
 ## Check the transcript
 
@@ -38,7 +38,7 @@ Speech recognition makes mistakes, and mistakes are not yours. A name, a product
 ## If something goes wrong
 
 **"Microphone access is blocked."**
-Allow the microphone for this site in your browser's address bar or site settings, then choose to try again. On a work computer a policy may block it.
+Allow the microphone for this site in your browser's address bar or site settings, then choose to try again. On a work computer a policy may block it. If you serve Firefly behind your own proxy or add a `Permissions-Policy` header, keep `microphone=(self)`: `microphone=()` makes Chromium refuse speech recognition outright, with this same message, even when the browser has the permission.
 
 **"No microphone was found."**
 Connect or enable a microphone, and close any other app that is using it.
@@ -67,4 +67,6 @@ Voice mode is set up for English. Other languages have not been checked.
 
 ## For developers
 
-The code is in `web/src/lib/voice/` and uses only browser APIs: no audio is sent anywhere by the app and no packages were added. `useVoiceCall` is the one hook a call screen needs. Every piece checks that its browser API exists, so nothing throws where one is missing, and the tests (`voice.test.ts`) run against fake browser APIs.
+The code is in `web/src/lib/voice/` and uses only browser APIs: no audio is sent anywhere by the app and no packages were added. `useVoiceCall` is the hook that hears and speaks, `web/src/components/call/useCallVoice.ts` joins it to the conversation, and the controls, the opt-in dialog and the Listen button are in `web/src/components/voice/`. Every piece checks that its browser API exists, so nothing throws where one is missing, and the tests (`voice.test.ts`) run against fake browser APIs.
+
+**The microphone policy.** The server sends `Permissions-Policy: camera=(), microphone=(self), geolocation=(), payment=()`, and `server/http/api.test.ts` checks it. An earlier build sent `microphone=()`. That made Chromium refuse speech recognition at once (`not-allowed`, shown as "Microphone access is blocked") however the browser permission was set, and the unit tests could not see it because they use fake speech APIs. What has been checked since, in Microsoft Edge with a synthetic audio device and the browser's real recognition: with `microphone=()` recognition fails at once, and with `microphone=(self)` it starts and finishes (in the app, a call reaches "Nothing was heard", because the device plays a tone and not speech). It has not been checked with a person speaking, or in other browsers.

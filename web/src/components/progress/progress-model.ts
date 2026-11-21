@@ -1,9 +1,15 @@
 import type { DimensionTrendDTO, ProgressDTO } from '#shared/domain/api.ts';
-import { DIMENSION_IDS, DIMENSIONS } from '#shared/domain/vocab.ts';
+import { DIMENSION_IDS, DIMENSIONS, type DimensionId } from '#shared/domain/vocab.ts';
+import { plural } from '../../lib/format.ts';
+import {
+  CLUSTER_NODE_CAP,
+  type SkillInput,
+  type SkillLevel,
+} from '../atlas/constellation-layout.ts';
 import type { IconName } from '../Icon.tsx';
-import type { Tone } from '../ui/StatCard.tsx';
 
-// Wording and chart geometry for the My progress page. Every number comes from the progress summary.
+// Wording and chart geometry for the progress page. Every number comes from the progress summary;
+// nothing here estimates, ranks or compares.
 
 const SEPARATOR = ' \u00b7 ';
 
@@ -59,35 +65,25 @@ export function orderedTrends(trends: readonly DimensionTrendDTO[]): DimensionTr
 export interface ChangeView {
   label: string;
   text: string;
-  icon: IconName;
-  tone: Tone;
 }
 
-/** The overall direction of recent calls, in calm words. A dip is never drawn in alarm colours. */
+/** The overall direction of recent calls, in calm words. A dip is never put in alarm wording. */
 export const RECENT_CHANGE: Record<ProgressDTO['recentChange'], ChangeView> = {
   improving: {
     label: 'Improving',
     text: 'Your most recent calls scored a little higher overall than the ones before them.',
-    icon: 'trending-up',
-    tone: 'green',
   },
   steady: {
     label: 'Steady',
     text: 'Your most recent calls scored about the same overall as the ones before them.',
-    icon: 'arrow-right',
-    tone: 'blue',
   },
   declining: {
     label: 'A little lower',
     text: 'Your most recent calls scored a little lower overall than the ones before them. That can happen when you try a harder scenario or a different kind of customer.',
-    icon: 'trending-down',
-    tone: 'violet',
   },
   'not-enough-data': {
     label: 'Not enough data yet',
     text: `A few more completed calls are needed before Firefly can describe how your scores are changing. It looks for ${CALLS_FOR_TREND} or more.`,
-    icon: 'info',
-    tone: 'blue',
   },
 };
 
@@ -151,4 +147,131 @@ export function sparkGeometry(scores: readonly number[]): SparkGeometry {
   const area =
     first && last && points.length > 1 ? `${line} L${last.x} ${base} L${first.x} ${base} Z` : '';
   return { points, line, area, grid: [y(1), y(3), y(5)] };
+}
+
+// ------------------------------------------------------------------------------------------
+// The sky: how a skill is read from its stars
+
+/** "01" to "06": a skill's place in the report order, which is also how the sky numbers it. */
+export const skillNumber = (id: DimensionId): string =>
+  String(DIMENSION_IDS.indexOf(id) + 1).padStart(2, '0');
+
+/** Every skill has this many stars; the ones beyond the evidence stay dormant. */
+export const STARS_PER_SKILL = CLUSTER_NODE_CAP;
+export const STARS_IN_SKY = STARS_PER_SKILL * DIMENSION_IDS.length;
+
+/**
+ * What it takes to burn at each light. These are the thresholds `levelFor` applies (a test keeps the
+ * two in step), written out so the key to the sky can say them instead of hiding them.
+ */
+export const LIGHT_STEPS: readonly {
+  light: 1 | 2 | 3 | 4;
+  calls: number;
+  average: number | null;
+}[] = [
+  { light: 1, calls: 1, average: null },
+  { light: 2, calls: 2, average: 2.5 },
+  { light: 3, calls: 3, average: 3.5 },
+  { light: 4, calls: 5, average: 4.2 },
+];
+
+/** "No evidence yet", or "Light 2 of 4": a skill with practice is always at least light 1. */
+export function lightText(level: SkillLevel): string {
+  return level === 0 ? 'No evidence yet' : `Light ${level} of 4`;
+}
+
+/** What the next light asks for, or what lights the first star, or that this is the brightest. */
+export function lightNext(level: SkillLevel): string {
+  if (level >= 4) return 'This is the brightest light.';
+  const step = LIGHT_STEPS[level];
+  if (!step) return '';
+  if (level === 0) return 'A star lights once a completed call is scored on this skill.';
+  return `Light ${step.light} asks for ${plural(step.calls, 'call')} averaging ${step.average?.toFixed(1)} or more.`;
+}
+
+/** "3 calls scored", "1 call scored" or "Not scored yet". */
+export function callsScored(evidence: number): string {
+  return evidence > 0 ? `${plural(evidence, 'call')} scored` : 'Not scored yet';
+}
+
+/** The short line under a skill's name in the sky: "3 calls · light 2 of 4". */
+export function skillCaption(skill: Pick<SkillInput, 'level' | 'evidence'>): string {
+  if (skill.evidence <= 0) return 'No evidence yet';
+  return [plural(skill.evidence, 'call'), `light ${skill.level} of 4`].join(SEPARATOR);
+}
+
+/** How many stars a skill has lit: one per scored call, up to the cap. */
+export const litStarsOf = (evidence: number): number =>
+  Math.min(STARS_PER_SKILL, Math.max(0, Math.floor(Number.isFinite(evidence) ? evidence : 0)));
+
+export function starCounts(skills: readonly Pick<SkillInput, 'evidence'>[]): {
+  lit: number;
+  total: number;
+} {
+  return {
+    lit: skills.reduce((sum, skill) => sum + litStarsOf(skill.evidence), 0),
+    total: STARS_IN_SKY,
+  };
+}
+
+/** The mean of every score in every skill, or null when nothing has been scored. */
+export function overallAverage(trends: readonly DimensionTrendDTO[]): number | null {
+  const scores = trends.flatMap((trend) => trend.points.map((point) => point.score));
+  if (scores.length === 0) return null;
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+}
+
+/** The newest scored call, across every skill: the one whose stars have just been lit. */
+export function latestCall(
+  trends: readonly DimensionTrendDTO[],
+): { sessionId: string; at: string } | null {
+  let latest: { sessionId: string; at: string } | null = null;
+  for (const trend of trends) {
+    for (const point of trend.points) {
+      if (!latest || Date.parse(point.at) > Date.parse(latest.at)) latest = point;
+    }
+  }
+  return latest ? { sessionId: latest.sessionId, at: latest.at } : null;
+}
+
+/**
+ * The stars the newest call lit: for each skill it was scored on, the last of its lit stars. The
+ * sky marks these in amber and pulses them once when someone arrives from a report.
+ */
+export function recentStarIds(trends: readonly DimensionTrendDTO[]): ReadonlySet<string> {
+  const latest = latestCall(trends);
+  const ids = new Set<string>();
+  if (!latest) return ids;
+  for (const trend of trends) {
+    const last = trend.points[trend.points.length - 1];
+    if (last?.sessionId !== latest.sessionId) continue;
+    ids.add(`${trend.dimension}:${litStarsOf(trend.points.length) - 1}`);
+  }
+  return ids;
+}
+
+/** What moved on the latest call: the two newest scores side by side, in plain numbers. */
+export function movedText(trend: DimensionTrendDTO): string | null {
+  const [before, last] = trend.points.slice(-2);
+  if (!before || !last || trend.points.length < 2) return null;
+  if (last.score > before.score)
+    return `Latest ${last.score}, up from ${before.score} on the call before.`;
+  if (last.score < before.score)
+    return `Latest ${last.score}, down from ${before.score} on the call before.`;
+  return `Latest ${last.score}, the same as the call before.`;
+}
+
+/** One sentence for assistive technology: what the cluster is made of, with every figure in words. */
+export function describeSkill(skill: SkillInput, trend: DimensionTrendDTO | undefined): string {
+  const label = DIMENSIONS[skill.id].label;
+  if (skill.evidence <= 0) {
+    return `${label}: no evidence yet. A star lights once a completed call is scored on this skill.`;
+  }
+  const lit = litStarsOf(skill.evidence);
+  const parts = [
+    `${label}: ${plural(lit, 'star')} lit of ${STARS_PER_SKILL}, ${callsScored(skill.evidence)}, light ${skill.level} of 4.`,
+  ];
+  if (trend) parts.push(`${trendSummary(trend).text}.`);
+  if (skill.focus) parts.push('Suggested next focus.');
+  return parts.join(' ');
 }

@@ -135,12 +135,24 @@ and does each line sound human?
   contact details or links; that no hidden fact leaks into an opening under any combination of settings; that
   every hidden fact can be discovered by a considerate conversation (by cue, or by topic when it has no
   cues) at every difficulty; and that irrelevant messages reveal nothing.
+- **The Missions atlas draws what the scenario sets.** A mission's mark comes from `difficulty`, `impact`,
+  `startingTemperature`, `callStage` and `estimatedMinutes` (one tick a minute, up to fifteen), it sits with the
+  other missions of its `issueType`, and **Find a signal** searches its title, summary, customer (name, role and
+  organisation) and tags. Keep `estimatedMinutes` honest and give the scenario useful tags. The mark shows public
+  settings only, never a hidden fact.
 
 ## Adding a scenario to the library
 
 1. Create `server/scenarios/library/<id>.ts` and make `npm run validate:scenarios -- server/scenarios/library/<id>.ts` pass.
 2. Import it in `server/scenarios/index.ts` and add it to `LIBRARY_INPUT`. The list is ordered easiest first,
-   which is the order the library page shows by default.
-3. Run `npm test`. The library tests above will tell you if a hidden fact cannot be found, leaks, or collides
-   with another scenario's persona name.
-4. Play it once in the app in demo mode, as a trainee would.
+   which is the order `GET /api/scenarios` returns. The Missions page does not depend on it: it groups the
+   missions by issue type and lists each group gentlest first.
+3. Add the scenario's public fields to `CATALOGUE` in `web/src/components/atlas/atlas.fixtures.ts`, in the same
+   position. The Missions tests stand on that fixture, and `web/src/components/atlas/atlas.fixtures.test.ts`
+   fails until it matches the registry (id, title, summary, tags, minutes, issue type, impact, starting
+   temperature, proficiency, style, call stage, difficulty, customer, coaching focus and spotlight).
+   `web/src/pages/Library.test.tsx` also counts the missions, so update its totals.
+4. Run `npm test`. The library tests above will tell you if a hidden fact cannot be found, leaks, or collides
+   with another scenario's persona name, and the atlas tests will tell you if the new mission cannot be placed
+   or labelled without touching its neighbours.
+5. Play it once in the app in demo mode, as a trainee would, starting from **Missions**.

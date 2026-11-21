@@ -1,4 +1,4 @@
-import { Dialog } from '../Dialog.tsx';
+import { ChamberModal } from './ChamberModal.tsx';
 import { Icon } from '../Icon.tsx';
 
 /** Confirms ending the call. A call with no messages can only be discarded, never evaluated. */
@@ -23,7 +23,7 @@ export function EndCallDialog({
 }) {
   const empty = traineeTurns === 0;
   return (
-    <Dialog
+    <ChamberModal
       open={open}
       onClose={onClose}
       dismissible={!pending}
@@ -34,10 +34,10 @@ export function EndCallDialog({
           : 'Firefly will save your conversation and build your coaching report. You cannot send more messages after you end the call.'
       }
     >
-      <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-4)' }}>
+      <div className="ch-modal__body">
         {!empty && traineeTurns < 3 ? (
-          <p className="callout callout-caution">
-            <Icon name="info" />
+          <p className="ch-aside">
+            <Icon name="info" size={16} />
             <span>
               You have sent {traineeTurns} {traineeTurns === 1 ? 'message' : 'messages'}. You can
               still end now, but the report will say it rests on limited evidence.
@@ -45,54 +45,52 @@ export function EndCallDialog({
           </p>
         ) : null}
         {replying ? (
-          <p className="callout">
-            <Icon name="info" />
+          <p className="ch-aside">
+            <Icon name="info" size={16} />
             <span>The customer is still replying. You can end the call as soon as they have.</span>
           </p>
         ) : null}
         {error ? (
-          <p className="callout callout-negative" role="alert">
-            <Icon name="alert" />
+          <p className="ch-aside" data-tone="negative" role="alert">
+            <Icon name="alert" size={16} />
             <span>{error}</span>
           </p>
         ) : null}
-        <div className="cluster" style={{ justifyContent: 'flex-end' }}>
+      </div>
+      <div className="ch-modal__actions">
+        <button
+          type="button"
+          className="ch-link"
+          onClick={onClose}
+          disabled={pending}
+          data-autofocus
+        >
+          Keep talking
+        </button>
+        {empty ? (
           <button
             type="button"
-            className="btn btn-secondary"
-            onClick={onClose}
+            className="ch-button"
+            data-tone="negative"
+            onClick={onDiscard}
             disabled={pending}
-            data-autofocus
           >
-            Keep talking
+            <Icon name="trash" size={16} />
+            Discard call
           </button>
-          {empty ? (
-            <button
-              type="button"
-              className="btn btn-danger-solid"
-              onClick={onDiscard}
-              disabled={pending}
-            >
-              {pending ? (
-                <span className="spinner" aria-hidden="true" />
-              ) : (
-                <Icon name="trash" size={18} />
-              )}
-              Discard call
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={onConfirm}
-              disabled={pending || replying}
-            >
-              {pending ? <span className="spinner" aria-hidden="true" /> : null}
-              {pending ? 'Ending call…' : 'End call and get feedback'}
-            </button>
-          )}
-        </div>
+        ) : (
+          <button
+            type="button"
+            className="ch-button"
+            data-tone="primary"
+            onClick={onConfirm}
+            disabled={pending || replying}
+          >
+            {pending ? 'Ending call…' : 'End call and get feedback'}
+            <Icon name="arrow-right" size={16} />
+          </button>
+        )}
       </div>
-    </Dialog>
+    </ChamberModal>
   );
 }

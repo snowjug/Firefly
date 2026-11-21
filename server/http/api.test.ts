@@ -45,6 +45,14 @@ describe('basics and security headers', () => {
     expect(res.headers.get('cache-control')).toBe('no-store');
   });
 
+  it('lets its own pages use the microphone (Voice needs it) and nothing else sensitive', async () => {
+    const policy = (await app.client().get('/api/health')).headers.get('permissions-policy') ?? '';
+    // `microphone=()` makes browser speech recognition fail at once with "not-allowed".
+    expect(policy).toContain('microphone=(self)');
+    expect(policy).toContain('camera=()');
+    expect(policy).toContain('geolocation=()');
+  });
+
   it('issues an HttpOnly, SameSite profile cookie', async () => {
     const res = await app.client().raw('/api/health');
     const cookie = res.headers.get('set-cookie') ?? '';
@@ -135,10 +143,12 @@ describe('sessions and messages', () => {
     expect(Object.keys(res.body.state).sort()).toEqual([
       'band',
       'discoveredCount',
+      'shifts',
       'silent',
       'trend',
     ]);
     expect(res.body.state.discoveredCount).toBe(1);
+    expect(res.body.state.shifts).toBe(0);
     const reload = await client.get(`/api/sessions/${session.id}`);
     expect(JSON.stringify(reload.body)).not.toContain('hiddenFacts');
     expect(reload.body.session.turns.map((t: { markers?: unknown }) => t.markers)).toEqual([
@@ -475,6 +485,32 @@ describe('history, progress and calibration', () => {
     expect(res.body.progress.completedSessions).toBe(0);
     expect(res.body.progress.recentChange).toBe('not-enough-data');
     expect(res.body.progress.note).toMatch(/not a performance rating/i);
+  });
+
+  it('leaves a call that ended early out of the progress figures, as the rewards and recommendations do', async () => {
+    const c = app.client();
+    const early = await newSession(c);
+    await say(c, early.session.id, 'Hello?');
+    await c.post(`/api/sessions/${early.session.id}/end`, {});
+    await app.service.settle(early.session.id);
+    expect((await c.get(`/api/sessions/${early.session.id}`)).body.session.completion).toBe(
+      'ended-early',
+    );
+    expect((await c.get('/api/progress')).body.progress.completedSessions).toBe(0);
+
+    const full = await newSession(c);
+    for (const text of [
+      'Hello, this is Sam from support. What exactly do you see when you sign in?',
+      'To summarise: I will check the account and email you the steps. Is there anything else I can help with today?',
+    ]) {
+      await say(c, full.session.id, text);
+    }
+    await c.post(`/api/sessions/${full.session.id}/end`, {});
+    await app.service.settle(full.session.id);
+    expect((await c.get(`/api/sessions/${full.session.id}`)).body.session.completion).toBe(
+      'completed',
+    );
+    expect((await c.get('/api/progress')).body.progress.completedSessions).toBe(1);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { ScenarioOverrides } from '#shared/domain/scenario.ts';
 import type { PracticeMode } from '#shared/domain/vocab.ts';
@@ -16,6 +16,12 @@ export interface CallRequest {
   mode: PracticeMode;
 }
 
+/** Who is calling, handed to the call page so that it can name the customer while it opens. */
+export interface CallCustomer {
+  name: string;
+  role?: string;
+}
+
 function newRequestId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -28,35 +34,24 @@ function newRequestId(): string {
  *  - while a request is out, pressing again does nothing;
  *  - a retry of the same setup reuses the request id, so a call that did start is not started twice,
  *    while a changed setup gets a new id, so it is never answered with the earlier call.
- * The launch moment is only for people who have not asked for less motion.
+ * The call opens the moment it exists (with a view transition unless motion is reduced): there is
+ * no staged sequence, so what is on screen while it waits is only the real wait.
  */
-export function useBeginCall(request: CallRequest) {
+export function useBeginCall(request: CallRequest, customer?: CallCustomer) {
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
-  const [launching, setLaunching] = useState(false);
-  const [startedId, setStartedId] = useState<string | null>(null);
   const inFlight = useRef(false);
   const attempt = useRef<{ key: string; id: string } | null>(null);
-
-  const openCall = useCallback(
-    (id: string) => {
-      void navigate(`/calls/${encodeURIComponent(id)}`, { viewTransition: true });
-    },
-    [navigate],
-  );
 
   const begin = async () => {
     if (inFlight.current) return;
     inFlight.current = true;
     setPending(true);
     setFailure(null);
-    // While the launch plays, fetch the call screen so the hand-over is instant.
-    if (!reducedMotion) {
-      setLaunching(true);
-      void import('../../pages/Call.tsx').catch(() => undefined);
-    }
+    // While the call is created, fetch the call screen so the hand-over is instant.
+    void import('../../pages/Call.tsx').catch(() => undefined);
     const key = JSON.stringify(request);
     if (attempt.current?.key !== key) attempt.current = { key, id: newRequestId() };
     const clientRequestId = attempt.current.id;
@@ -73,15 +68,16 @@ export function useBeginCall(request: CallRequest) {
           ),
       );
       clearDraft();
-      if (reducedMotion) openCall(session.id);
-      else setStartedId(session.id);
+      void navigate(`/calls/${encodeURIComponent(session.id)}`, {
+        viewTransition: !reducedMotion,
+        ...(customer ? { state: { customer } } : {}),
+      });
     } catch (error) {
       setFailure(error);
       inFlight.current = false;
       setPending(false);
-      setLaunching(false);
     }
   };
 
-  return { begin, pending, failure, launching, startedId, openCall };
+  return { begin, pending, failure };
 }

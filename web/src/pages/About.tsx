@@ -1,15 +1,17 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router';
-import { DimensionCards, ScaleList } from '../components/about/Dimensions.tsx';
-import { TableOfContents, type TocItem } from '../components/about/TableOfContents.tsx';
-import { Icon, type IconName } from '../components/Icon.tsx';
-import { Page, PageHeader } from '../components/Page.tsx';
+import { AboutSection } from '../components/about/AboutSection.tsx';
+import { Dimensions, ScaleList } from '../components/about/Dimensions.tsx';
+import { PageIndex, type IndexItem } from '../components/about/PageIndex.tsx';
+import { Ledger } from '../components/frame/Ledger.tsx';
+import { PageFrame, PageHead } from '../components/frame/PageFrame.tsx';
+import { Icon } from '../components/Icon.tsx';
 import { useAppConfig } from '../lib/config.tsx';
 import '../styles/about.css';
 
 const REPOSITORY_URL = 'https://github.com/snowjug/Firefly';
 
-const SECTIONS: TocItem[] = [
+const SECTIONS: readonly IndexItem[] = [
   { id: 'what-firefly-is', label: 'What Firefly is' },
   { id: 'how-a-session-works', label: 'How a practice call works' },
   { id: 'coaching-dimensions', label: 'The six coaching dimensions' },
@@ -138,38 +140,6 @@ const LIMITATIONS = [
   'There are no accounts, teams or sharing. Your profile, points and badges are private to this browser, and notices appear in the app only.',
 ];
 
-/** A card for one topic: a small icon, the heading and the text. The card is an anchor target. */
-function Section({
-  id,
-  icon,
-  tone,
-  title,
-  children,
-}: {
-  id: string;
-  icon: IconName;
-  tone: 'blue' | 'violet' | 'amber' | 'green' | 'red';
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section
-      id={id}
-      tabIndex={-1}
-      className="glass card ab-section"
-      aria-labelledby={`${id}-title`}
-    >
-      <h2 id={`${id}-title`} className="ab-title">
-        <span className="tone-icon" data-tone={tone} aria-hidden="true">
-          <Icon name={icon} size={20} />
-        </span>
-        <span>{title}</span>
-      </h2>
-      {children}
-    </section>
-  );
-}
-
 /** A link such as /help#voice lands on its section: scrolled into view, with focus on it. */
 function useHashTarget() {
   const { hash } = useLocation();
@@ -192,19 +162,20 @@ export default function About() {
   useHashTarget();
 
   return (
-    <Page title="Help" className="ab-root">
-      <PageHeader
+    <PageFrame title="Help" className="ab-root">
+      <PageHead
+        eyebrow="Help"
         title="Help & responsible AI"
         lead="How Firefly works, how its feedback is produced, what happens to your data and what it can’t do."
       />
 
       <div className="ab-layout">
         <div className="ab-aside">
-          <TableOfContents items={SECTIONS} />
+          <PageIndex items={SECTIONS} />
         </div>
 
         <div className="ab-content">
-          <Section id="what-firefly-is" icon="spark" tone="blue" title="What Firefly is">
+          <AboutSection id="what-firefly-is" title="What Firefly is">
             <p>
               Firefly is a practice environment for apprentice technical support engineers. You hold
               a conversation with a simulated customer, end the call, and get coaching based on what
@@ -215,19 +186,14 @@ export default function About() {
               problem, handling frustration and agreeing next steps, not knowledge of any particular
               product. Every scenario, customer and organisation in it is fictional.
             </p>
-          </Section>
+          </AboutSection>
 
-          <Section
-            id="how-a-session-works"
-            icon="headset"
-            tone="violet"
-            title="How a practice call works"
-          >
+          <AboutSection id="how-a-session-works" title="How a practice call works">
             <ol role="list" className="ab-steps">
               {CALL_STEPS.map((step, index) => (
                 <li key={step.title}>
-                  <span className="ab-step-number" aria-hidden="true">
-                    {index + 1}
+                  <span className="ab-steps__no type-number" aria-hidden="true">
+                    {String(index + 1).padStart(2, '0')}
                   </span>
                   <p>
                     <strong>{step.title}.</strong> {step.text}
@@ -235,30 +201,20 @@ export default function About() {
                 </li>
               ))}
             </ol>
-          </Section>
+          </AboutSection>
 
-          <Section
-            id="coaching-dimensions"
-            icon="chart"
-            tone="green"
-            title="The six coaching dimensions"
-          >
+          <AboutSection id="coaching-dimensions" title="The six coaching dimensions">
             <p>
               Feedback covers six skills. Each maps to one or more CARE behaviours. The mapping is a
               working guide for coaching conversations, not an official standard.
             </p>
-            <DimensionCards />
+            <Dimensions />
             <h3 className="ab-subhead">The 1 to 5 scale</h3>
             <p>Every skill is scored from 1 to 5, using the same descriptors for each.</p>
             <ScaleList />
-          </Section>
+          </AboutSection>
 
-          <Section
-            id="how-feedback-is-produced"
-            icon="notes"
-            tone="blue"
-            title="How feedback is produced"
-          >
+          <AboutSection id="how-feedback-is-produced" title="How feedback is produced">
             <ul role="list" className="ab-points">
               {FEEDBACK_POINTS.map((point) => (
                 <li key={point.title}>
@@ -266,36 +222,26 @@ export default function About() {
                 </li>
               ))}
             </ul>
-          </Section>
+          </AboutSection>
 
-          <Section
-            id="points-and-badges"
-            icon="trophy"
-            tone="amber"
-            title="How points and badges work"
-          >
+          <AboutSection id="points-and-badges" title="How points and badges work">
             <ul role="list" className="ab-points">
               {POINTS_LINES.map((line) => (
                 <li key={line}>{line}</li>
               ))}
             </ul>
             <p>
-              <Link to="/rewards" className="link-more" viewTransition>
-                See your points and badges <Icon name="arrow-right" size={16} />
+              <Link to="/rewards" className="text-link" viewTransition>
+                See your points and badges
               </Link>
             </p>
-          </Section>
+          </AboutSection>
 
-          <Section
-            id="voice"
-            icon="mic"
-            tone="violet"
-            title="Voice (Beta): how it works and your privacy"
-          >
+          <AboutSection id="voice" title="Voice (Beta): how it works and your privacy">
             <p>
               Voice lets you speak to the customer and hear them answer. It is optional, it is off
               until you turn it on in{' '}
-              <Link to="/settings" viewTransition>
+              <Link to="/settings#preferences" className="text-link" viewTransition>
                 Settings
               </Link>
               , and typing always keeps working. It works best in Chrome or Edge.
@@ -312,9 +258,9 @@ export default function About() {
                 <li key={line}>{line}</li>
               ))}
             </ul>
-          </Section>
+          </AboutSection>
 
-          <Section id="mentor" icon="users" tone="blue" title="Using Firefly with a mentor">
+          <AboutSection id="mentor" title="Using Firefly with a mentor">
             <p>
               <strong>Coaching, not assessment.</strong> A report helps you see what to try next. It
               is not a performance rating, and it should not be used to judge, rank or compare
@@ -326,27 +272,25 @@ export default function About() {
               incomplete or wrong, and a mentor can tell you when it is.
             </p>
             <p>
-              <strong>Calibration.</strong> On the <Link to="/calibration">Calibration page</Link> a
-              mentor can score a finished call without seeing the automatic scores, then compare the
-              two. Over time this shows whether the automatic scores roughly agree with an
-              experienced mentor. The <Link to="/trainer">Trainer page</Link> helps you run a clean
-              demo and manage the saved practice.
+              <strong>Calibration.</strong> On the{' '}
+              <Link to="/calibration" className="text-link">
+                Calibration page
+              </Link>{' '}
+              a mentor can score a finished call without seeing the automatic scores, then compare
+              the two. Over time this shows whether the automatic scores roughly agree with an
+              experienced mentor. The{' '}
+              <Link to="/trainer" className="text-link">
+                Trainer page
+              </Link>{' '}
+              helps you run a clean demo and manage the saved practice.
             </p>
-          </Section>
+          </AboutSection>
 
-          <Section
-            id="responsible-ai"
-            icon="shield-check"
-            tone="green"
-            title="Responsible AI and data safety"
-          >
-            <div className="callout">
-              <Icon name="shield" size={18} />
-              <p>
-                <strong>Firefly is a training aid.</strong> Its scenarios use invented people and
-                organisations, and its scores are for practice, not for judging anyone.
-              </p>
-            </div>
+          <AboutSection id="responsible-ai" title="Responsible AI and data safety">
+            <p className="ab-pull">
+              <strong>Firefly is a training aid.</strong> Its scenarios use invented people and
+              organisations, and its scores are for practice, not for judging anyone.
+            </p>
 
             <h3 className="ab-subhead">Use fictional information only</h3>
             <p>
@@ -362,8 +306,10 @@ export default function About() {
             <p>
               AI feedback can be incomplete or wrong. Use it as input for a conversation with a
               mentor, not as a verdict. Mentor review remains valuable, and the{' '}
-              <Link to="/calibration">Calibration page</Link> lets mentors score the same calls
-              without seeing the AI&rsquo;s scores, then compare.
+              <Link to="/calibration" className="text-link">
+                Calibration page
+              </Link>{' '}
+              lets mentors score the same calls without seeing the AI&rsquo;s scores, then compare.
             </p>
 
             <h3 className="ab-subhead">Scores are for practice</h3>
@@ -396,20 +342,29 @@ export default function About() {
 
             <h3 className="ab-subhead">Deleting your data</h3>
             <p>
-              You can delete any call from <Link to="/history">History</Link>, and practice and
-              sample calls can be deleted or reset from the <Link to="/trainer">Trainer page</Link>.
-              Deleting a call also deletes its transcript, report and mentor scores.{' '}
-              <Link to="/settings">Settings</Link> shows how many calls are stored and lets you sign
-              out of this device to remove your profile.
+              You can delete any call from{' '}
+              <Link to="/history" className="text-link">
+                History
+              </Link>
+              , and practice and sample calls can be deleted or reset from the{' '}
+              <Link to="/trainer" className="text-link">
+                Trainer page
+              </Link>
+              . Deleting a call also deletes its transcript, report and mentor scores.{' '}
+              <Link to="/settings#data" className="text-link">
+                Settings
+              </Link>{' '}
+              shows how many calls are stored and lets you sign out of this device to remove your
+              profile.
             </p>
 
             <p>
               Firefly does not claim any compliance certification or legal guarantee. If your
               organisation has data or AI policies, they apply here too.
             </p>
-          </Section>
+          </AboutSection>
 
-          <Section id="faq" icon="help" tone="violet" title="Questions and answers">
+          <AboutSection id="faq" title="Questions and answers">
             <dl className="ab-faq">
               {FAQ.map((item) => (
                 <div key={item.question}>
@@ -418,48 +373,53 @@ export default function About() {
                 </div>
               ))}
             </dl>
-          </Section>
+          </AboutSection>
 
-          <Section id="limitations" icon="alert" tone="red" title="What Firefly can’t do">
+          <AboutSection id="limitations" title="What Firefly can’t do">
             <ul role="list" className="ab-points">
               {LIMITATIONS.map((item) => (
                 <li key={item}>{item}</li>
               ))}
             </ul>
-          </Section>
+          </AboutSection>
 
-          <Section id="this-build" icon="info" tone="blue" title="About this build">
-            <dl className="ab-build">
-              <div>
-                <dt>Version</dt>
-                <dd>{config ? config.app.version : loading ? 'Loading\u2026' : 'Unavailable'}</dd>
-              </div>
-              <div>
-                <dt>AI provider</dt>
-                <dd>
-                  {config
+          <AboutSection id="this-build" title="About this build">
+            <Ledger
+              rows={[
+                {
+                  label: 'Version',
+                  value: config ? config.app.version : loading ? 'Loading\u2026' : 'Unavailable',
+                },
+                {
+                  label: 'AI provider',
+                  value: config
                     ? config.provider.label
                     : loading
                       ? 'Loading\u2026'
                       : error
                         ? 'Unavailable: the server could not be reached'
-                        : 'Unavailable'}
-                </dd>
-              </div>
-              <div>
-                <dt>Source code</dt>
-                <dd>
-                  <a href={REPOSITORY_URL} target="_blank" rel="noreferrer noopener">
-                    github.com/snowjug/Firefly
-                    <Icon name="external" size={14} />
-                    <span className="sr-only"> (opens in a new tab)</span>
-                  </a>
-                </dd>
-              </div>
-            </dl>
-          </Section>
+                        : 'Unavailable',
+                },
+                {
+                  label: 'Source code',
+                  value: (
+                    <a
+                      href={REPOSITORY_URL}
+                      className="text-link"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      github.com/snowjug/Firefly
+                      <Icon name="external" size={14} />
+                      <span className="sr-only"> (opens in a new tab)</span>
+                    </a>
+                  ),
+                },
+              ]}
+            />
+          </AboutSection>
         </div>
       </div>
-    </Page>
+    </PageFrame>
   );
 }

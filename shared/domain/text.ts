@@ -79,6 +79,27 @@ export function sanitizeModelText(input: string, maxLen = 1200): string {
 
 export type RedactionKind = 'email' | 'phone' | 'card' | 'id';
 
+// A run of digits that someone would write as a phone number: an optional +, then digits grouped by
+// spaces, dots, dashes or brackets. It is judged by how many digits it holds and not by how they are
+// grouped, because the grouping differs from country to country. The run is bounded, so the search
+// stays linear however long the message is.
+const PHONE_CANDIDATE = /(?<![\w.+-])\+?\(?\d[\d\s().-]{7,18}\d(?![\w])/g;
+const DATE_START = /^(?:\d{4}[-./]\d{1,2}[-./]\d{1,2}|\d{1,2}[-./]\d{1,2}[-./]\d{2,4})(?!\d)/;
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+/** Dots alone, as in 555.123.4567: at least three groups of two to four digits (not a version number or a decimal). */
+const DOTTED_PHONE = /^\+?\(?\d{2,4}(?:\.\d{2,4}){2,}$/;
+
+function looksLikePhone(candidate: string): boolean {
+  const digits = candidate.replace(/\D/g, '');
+  if (digits.length < 9 || digits.length > 15) return false;
+  if (DATE_START.test(candidate) || IPV4.test(candidate)) return false;
+  const body = candidate.replace(/^\+/, '');
+  // A bare run of digits is a national number (ten to twelve digits), not an order or a reference.
+  if (!/[\s().-]/.test(body)) return digits.length >= 10 && digits.length <= 12;
+  if (body.includes('.') && !/[\s()-]/.test(body)) return DOTTED_PHONE.test(candidate);
+  return true;
+}
+
 export function redactSensitive(input: string): { text: string; redactions: RedactionKind[] } {
   const found = new Set<RedactionKind>();
   let text = input;
@@ -86,7 +107,8 @@ export function redactSensitive(input: string): { text: string; redactions: Reda
     found.add('email');
     return '[email removed]';
   });
-  text = text.replace(/\b(?:\d[ -]?){13,19}\b/g, (match) => {
+  // Ends on a digit, so the space after a number is kept.
+  text = text.replace(/\b\d(?:[ -]?\d){12,18}\b/g, (match) => {
     const digits = match.replace(/\D/g, '');
     if (digits.length >= 13 && digits.length <= 19) {
       found.add('card');
@@ -94,17 +116,11 @@ export function redactSensitive(input: string): { text: string; redactions: Reda
     }
     return match;
   });
-  text = text.replace(
-    /(?<![\w])(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{3,4}[\s.-]\d{3,4}(?:[\s.-]\d{2,4})?(?![\w])/g,
-    (match) => {
-      const digits = match.replace(/\D/g, '');
-      if (digits.length >= 9 && digits.length <= 15) {
-        found.add('phone');
-        return '[phone removed]';
-      }
-      return match;
-    },
-  );
+  text = text.replace(PHONE_CANDIDATE, (match) => {
+    if (!looksLikePhone(match)) return match;
+    found.add('phone');
+    return '[phone removed]';
+  });
   text = text.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, () => {
     found.add('id');
     return '[id removed]';

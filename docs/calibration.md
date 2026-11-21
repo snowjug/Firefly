@@ -10,11 +10,11 @@ Firefly does not claim any level of agreement. Every number it shows is computed
 2. **Have a mentor score each session blind.** The mentor reads the transcript and scores the six coaching dimensions from 1 to 5 using the rubric ([evaluation-rubric.md](evaluation-rubric.md)) without seeing the AI scores or the report.
 3. **Compare.** Firefly computes the differences, the share of scores within one point, and any consistent over- or under-scoring, overall and per dimension.
 4. **Discuss the large gaps.** Where a mentor and the evaluator differ by two points or more, read the transcript together. Either the rubric needs clearer wording, the evaluator needs a fix, or the mentors need to align with each other.
-5. **Track versions.** When you change the evaluator or the rubric, change its version and calibrate again. Results from different versions are listed side by side, never silently mixed.
+5. **Track versions.** When you change the evaluator or the rubric, change its version and calibrate again. The figures list the evaluator and rubric versions they rest on, in the app and in `npm run calibrate`, and the app says so when they combine reviews made with more than one version.
 
 ### In the app
 
-The Calibration page lists completed sessions that no mentor has reviewed yet. Choosing one opens a blind review: the transcript, the rubric's 1-to-5 scale, and a form for the reviewer's initials, six scores and optional notes. The review loads only the transcript, never the session or its report, and the queue it came from carries no AI scores. Saving records the review and shows the AI's scores beside the mentor's for that session, and the page then shows the metrics computed from every stored review. A toggle includes the bundled sample records, which are always labelled as samples.
+The Calibration page is the second tool in the Studio, beside the Trainer (the Studio is 05 in the dock). Under **Sessions waiting for review** it lists completed sessions that no mentor has reviewed yet. **Score this session** opens a blind review: the transcript, a disclosure for the rubric's 1-to-5 scale, and a form for the reviewer's name or initials, six scores and optional notes. The review loads only the transcript, never the session or its report, and the queue it came from carries no AI scores. **Save review** records the review and shows the AI's scores beside the mentor's for that session. The page then shows the figures computed from every stored review under **What the reviews show**, and a table of the review records. The toggle **Include sample records (synthetic examples)** adds the synthetic mentor reviews that come with the sample sessions loaded from the Trainer; they are always labelled as samples.
 
 The blindness is a process aid, not an access control. Anyone using the app can open a report from History, so mentors should score a call before they read its report.
 
@@ -78,12 +78,12 @@ The dimension ids are `opening-rapport`, `scoping-discovery`, `empathy-deescalat
 
 ## What the numbers mean
 
-| Measure                      | How it is computed                                                      | How to read it                                                                                |
-| ---------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| **Mean absolute difference** | The average of \|AI score minus mentor score\| over all compared scores | 0 means identical scores. 1 means they differ by one point on average.                        |
-| **Within 1 point**           | The share of compared scores where the two differ by at most one        | A high share is reassuring only if the sample is large and varied.                            |
-| **Bias**                     | The average of (AI score minus mentor score)                            | Positive means the AI scores higher than mentors. Differences under 0.25 are not called bias. |
-| **Per dimension**            | The same three measures for each of the six dimensions                  | Shows where to look first, for example a dimension where the AI is consistently generous.     |
+| Measure                      | How it is computed                                                      | How to read it                                                                                              |
+| ---------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Mean absolute difference** | The average of \|AI score minus mentor score\| over all compared scores | 0 means identical scores. 1 means they differ by one point on average. The app calls it Average difference. |
+| **Within 1 point**           | The share of compared scores where the two differ by at most one        | A high share is reassuring only if the sample is large and varied.                                          |
+| **Bias**                     | The average of (AI score minus mentor score)                            | Positive means the AI scores higher than mentors. Differences under 0.25 are not called bias.               |
+| **Per dimension**            | The same three measures for each of the six dimensions                  | Shows where to look first, for example a dimension where the AI is consistently generous.                   |
 
 ## Limits
 

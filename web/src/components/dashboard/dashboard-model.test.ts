@@ -7,6 +7,9 @@ import {
   activeCall,
   demandText,
   formatPracticeTime,
+  hasPractised,
+  heroMissionOf,
+  missionFacts,
   pickScenarios,
   practiceStats,
   recentCalls,
@@ -175,5 +178,85 @@ describe('demandText', () => {
     expect(demandText(makeScenario({ impact: 'low', difficulty: 'starter' }))).toBe(
       'Low impact \u00b7 Starter',
     );
+  });
+});
+
+describe('missionFacts', () => {
+  it('lists the public settings of a mission as short facts, and nothing about scoring', () => {
+    expect(
+      missionFacts({
+        impact: 'medium',
+        difficulty: 'standard',
+        start: 'frustrated',
+        stage: 'follow-up',
+        minutes: 9,
+      }),
+    ).toEqual(['Medium impact \u00b7 Standard', 'Starts frustrated', 'Follow-up', '9 min']);
+  });
+
+  it('leaves out the stage and the length when a call has no scenario to ask about', () => {
+    expect(missionFacts({ impact: 'low', difficulty: 'starter', start: 'calm' })).toEqual([
+      'Low impact \u00b7 Starter',
+      'Starts calm',
+    ]);
+    expect(
+      missionFacts({
+        impact: 'low',
+        difficulty: 'starter',
+        start: 'calm',
+        stage: 'first-contact',
+        minutes: 1,
+      }).at(-1),
+    ).toBe('1 min');
+  });
+});
+
+describe('heroMissionOf', () => {
+  it('turns a scenario into a mission that has not been tried, with the glint, from public fields only', () => {
+    const scenario = makeScenario({
+      id: 'unusual',
+      title: 'An unusual kind of call',
+      difficulty: 'challenge',
+      impact: 'high',
+      startingTemperature: 'angry',
+      callStage: 'escalated',
+      estimatedMinutes: 14,
+      persona: {
+        name: 'Hannah Becker',
+        role: 'CTO',
+        organisation: 'Lucerne Publishing',
+        // Anything else a server might add must not ride along.
+        secret: 'hidden',
+      } as never,
+    });
+    const mission = heroMissionOf(scenario);
+    expect(mission).toEqual({
+      id: 'unusual',
+      title: 'An unusual kind of call',
+      persona: { name: 'Hannah Becker', role: 'CTO', organisation: 'Lucerne Publishing' },
+      difficulty: 'challenge',
+      impact: 'high',
+      start: 'angry',
+      stage: 'escalated',
+      minutes: 14,
+      status: 'new',
+      recommended: true,
+    });
+  });
+});
+
+describe('hasPractised', () => {
+  it('is false until something has finished, so "none yet" is never dressed as data', () => {
+    expect(hasPractised(practiceStats([]), [])).toBe(false);
+    const open = call({ status: 'active', completion: null, endedAt: null, durationSeconds: null });
+    expect(hasPractised(practiceStats([open]), recentCalls([open]))).toBe(false);
+  });
+
+  it('is true for any finished call, including one that ended early and has no score', () => {
+    const early = call({ completion: 'ended-early', overallScore: null, durationSeconds: 90 });
+    expect(hasPractised(practiceStats([early]), recentCalls([early]))).toBe(true);
+    // Only a sample exists: samples are demonstration data, so it still counts as nothing.
+    const sample = call({ isSample: true });
+    expect(hasPractised(practiceStats([sample]), recentCalls([sample]))).toBe(false);
   });
 });

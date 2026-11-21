@@ -2,15 +2,21 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
+import type { JourneyDiscovery } from './journey-model.ts';
 import { TemperatureTimeline } from './TemperatureTimeline.tsx';
 import { PEAKED_JOURNEY, longJourney, point } from './report.fixtures.ts';
 
 const href = (turn: number) => `/sessions/s1/transcript?turn=${turn}`;
 
-function renderTimeline(points = PEAKED_JOURNEY) {
+const FOUND: JourneyDiscovery[] = [
+  { turn: 2, label: 'The message says the account is locked', status: 'partial' },
+  { turn: 4, label: 'Started right after the password change', status: 'discovered' },
+];
+
+function renderTimeline(points = PEAKED_JOURNEY, discoveries: JourneyDiscovery[] = []) {
   return render(
     <MemoryRouter>
-      <TemperatureTimeline points={points} turnHref={href} />
+      <TemperatureTimeline points={points} turnHref={href} discoveries={discoveries} facts={3} />
     </MemoryRouter>,
   );
 }
@@ -130,5 +136,66 @@ describe('TemperatureTimeline', () => {
   it('says so when there is nothing to draw', () => {
     renderTimeline([]);
     expect(screen.getByText(/not enough recorded moments/i)).toBeInTheDocument();
+  });
+
+  it('lights a star for each signal found, with words for it in the legend and the panel', async () => {
+    const user = userEvent.setup();
+    const { container } = renderTimeline(PEAKED_JOURNEY, FOUND);
+    expect(container.querySelectorAll('.tl-star')).toHaveLength(2);
+    expect(
+      within(screen.getByRole('list', { name: 'Point shapes' })).getByText('Signal found'),
+    ).toBeInTheDocument();
+
+    // The signal at turn 4 belongs to the point at turn 4; the panel names it when that point is chosen.
+    await user.click(screen.getByRole('button', { name: /^Turn 4,/ }));
+    const panel = screen.getByRole('group', { name: 'Selected moment' });
+    expect(
+      within(panel).getByText('Signal found: Started right after the password change'),
+    ).toBeInTheDocument();
+    // A fact that was only partly found says so, at the point where it came out.
+    await user.click(screen.getByRole('button', { name: /^Turn 2,/ }));
+    expect(
+      within(panel).getByText('Signal found in part: The message says the account is locked'),
+    ).toBeInTheDocument();
+    // Other points carry no signal text.
+    await user.click(screen.getByRole('button', { name: /^Turn 6,/ }));
+    expect(within(panel).queryByText(/Signal found/)).not.toBeInTheDocument();
+  });
+
+  it('draws no star and no legend entry for a call that found nothing', () => {
+    const { container } = renderTimeline(PEAKED_JOURNEY, []);
+    expect(container.querySelectorAll('.tl-star')).toHaveLength(0);
+    expect(screen.queryByText('Signal found')).not.toBeInTheDocument();
+  });
+
+  it('holds the customer still as they were at the selected point, as a picture only', async () => {
+    const user = userEvent.setup();
+    const { container } = renderTimeline();
+    const presence = () => container.querySelector('.tl-panel__presence') as HTMLElement;
+    expect(presence()).toHaveAttribute('aria-hidden', 'true');
+    const figure = () => presence().querySelector('[data-sig-mood]') as HTMLElement;
+    // Turn 8 is where the customer had eased to Concerned.
+    expect(figure()).toHaveAttribute('data-sig-mood', 'concerned');
+    expect(figure()).toHaveAttribute('data-frozen');
+    await user.click(screen.getByRole('button', { name: /^Turn 6,/ }));
+    expect(figure()).toHaveAttribute('data-sig-mood', 'angry');
+    expect(figure()).toHaveAttribute('data-sig-trend', 'rising');
+  });
+
+  it('says plainly that a curveball has nothing of the learner to quote, and jogs the line there', async () => {
+    const user = userEvent.setup();
+    const { container } = renderTimeline([
+      point(1, 40, 'start', 0),
+      point(3, 64, 'curveball', 24, { reason: 'The customer asked for a manager', quote: null }),
+      point(5, 30, 'end', -34),
+    ]);
+    await user.click(screen.getByRole('button', { name: /^Turn 3,/ }));
+    const panel = screen.getByRole('group', { name: 'Selected moment' });
+    expect(
+      within(panel).getByText(
+        'The customer raised this themselves, so there is nothing of yours to quote.',
+      ),
+    ).toBeInTheDocument();
+    expect(container.querySelectorAll('.tl-piece[data-kink]')).toHaveLength(1);
   });
 });

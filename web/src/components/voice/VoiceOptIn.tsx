@@ -28,7 +28,7 @@ export function VoiceOptIn({ onEnabled }: { onEnabled?: () => void }) {
     <>
       <button
         type="button"
-        className="btn btn-ghost btn-sm vc-optin"
+        className="ch-link vc-optin"
         onClick={choose}
         title="Speak instead of typing and hear the customer answer. Voice is a beta and is off until you turn it on."
       >
@@ -36,9 +36,9 @@ export function VoiceOptIn({ onEnabled }: { onEnabled?: () => void }) {
         Voice (Beta)
       </button>
       {needsProfile && !profile ? (
-        <p className="t-meta vc-needs-profile" role="status">
-          <Link to="/sign-in">Create your profile in Settings</Link> to use voice.
-        </p>
+        <span className="vc-needs-profile" role="status">
+          <Link to="/sign-in">Create your profile</Link> to use voice.
+        </span>
       ) : null}
       <VoiceDisclosureDialog open={open} onAccept={accept} onCancel={() => setOpen(false)} />
     </>

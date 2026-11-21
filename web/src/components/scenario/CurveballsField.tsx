@@ -2,8 +2,7 @@ import { useEffect, useId, useRef } from 'react';
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import { CURVEBALL_LABELS } from '#shared/domain/vocab.ts';
-import { Icon } from '../Icon.tsx';
-import { ToggleRow } from './Fields.tsx';
+import { Toggle } from '../frame/index.ts';
 import {
   availableCurveballs,
   curveballCount,
@@ -37,18 +36,18 @@ export function CurveballsField({
   disabled = false,
 }: CurveballsFieldProps) {
   const baseId = useId();
+  const switchId = `${baseId}-switch`;
   const capId = `${baseId}-cap`;
-  const switchRef = useRef<HTMLInputElement>(null);
   const on = curveballsOn(choices);
   const wasOn = useRef(on);
 
   // Unticking the last curveball can switch the field off and remove the list that had focus.
   useEffect(() => {
     if (wasOn.current && !on && document.activeElement === document.body) {
-      switchRef.current?.focus();
+      document.getElementById(switchId)?.focus();
     }
     wasOn.current = on;
-  }, [on]);
+  }, [on, switchId]);
 
   const label = DIFFICULTY_PROFILES[choices.difficulty].label;
   const available = availableCurveballs(scenario);
@@ -57,25 +56,25 @@ export function CurveballsField({
   const atLimit = picks.length >= max;
 
   return (
-    <ToggleRow
-      title="Curveballs"
-      checked={on}
-      onChange={(next) => onChange(withCurveballsOn(scenario, choices, next))}
-      description={curveballSummary(choices)}
-      disabled={disabled}
-      switchRef={switchRef}
-    >
+    <div className="cal-curve">
+      <Toggle
+        id={switchId}
+        label="Curveballs"
+        hint={curveballSummary(choices)}
+        checked={on}
+        onChange={(next) => onChange(withCurveballsOn(scenario, choices, next))}
+        disabled={disabled}
+      />
       {notice ? (
-        <p role="status" className="callout callout-caution stp-cv-notice">
-          <Icon name="info" size={18} />
-          <span>{notice}</span>
+        <p role="status" className="cal-aside">
+          {notice}
         </p>
       ) : null}
 
       {on && available.length > 0 ? (
-        <fieldset className="stp-cv" disabled={disabled} aria-describedby={capId}>
-          <legend className="label">Choose which curveballs can happen</legend>
-          <p id={capId} role="status" className="hint stp-cv-cap" data-full={atLimit || undefined}>
+        <fieldset className="cal-curve__set" disabled={disabled} aria-describedby={capId}>
+          <legend className="type-label">Choose which curveballs can happen</legend>
+          <p id={capId} role="status" className="cal-curve__cap" data-full={atLimit || undefined}>
             {picks.length === 0
               ? `Optional. Tick up to ${curveballCount(max)}, or leave them all unticked to use what ${label} recommends.`
               : `${picks.length} of ${max} chosen.${
@@ -84,44 +83,41 @@ export function CurveballsField({
                     : ''
                 }`}
           </p>
-          <div className="stp-cv-grid">
+          <ul className="cal-curve__list" role="list">
             {available.map((type) => {
               const chosen = picks.includes(type);
               const blocked = !chosen && atLimit;
               const id = `${baseId}-${type}`;
               return (
-                <label
-                  key={type}
-                  className="option stp-cv-option"
-                  data-blocked={blocked || undefined}
-                >
-                  <input
-                    type="checkbox"
-                    checked={chosen}
-                    aria-disabled={blocked || undefined}
-                    aria-labelledby={`${id}-title`}
-                    aria-describedby={blocked ? `${id}-desc ${capId}` : `${id}-desc`}
-                    onChange={() => {
-                      if (!blocked) onChange(withCurveballPick(scenario, choices, type, !chosen));
-                    }}
-                  />
-                  <span className="option-check" aria-hidden="true">
-                    {chosen ? <Icon name="check" size={12} strokeWidth={3} /> : null}
-                  </span>
-                  <span className="stp-cv-body">
-                    <span id={`${id}-title`} className="option-title">
-                      {CURVEBALL_LABELS[type].label}
+                <li key={type}>
+                  <label className="cal-check" data-blocked={blocked || undefined}>
+                    <input
+                      type="checkbox"
+                      className="cal-check__input"
+                      checked={chosen}
+                      aria-disabled={blocked || undefined}
+                      aria-labelledby={`${id}-title`}
+                      aria-describedby={blocked ? `${id}-desc ${capId}` : `${id}-desc`}
+                      onChange={() => {
+                        if (!blocked) onChange(withCurveballPick(scenario, choices, type, !chosen));
+                      }}
+                    />
+                    <span className="cal-check__mark" aria-hidden="true" />
+                    <span className="cal-check__text">
+                      <span id={`${id}-title`} className="cal-check__title">
+                        {CURVEBALL_LABELS[type].label}
+                      </span>
+                      <span id={`${id}-desc`} className="cal-check__desc">
+                        {CURVEBALL_LABELS[type].description}
+                      </span>
                     </span>
-                    <span id={`${id}-desc`} className="stp-cv-desc">
-                      {CURVEBALL_LABELS[type].description}
-                    </span>
-                  </span>
-                </label>
+                  </label>
+                </li>
               );
             })}
-          </div>
+          </ul>
         </fieldset>
       ) : null}
-    </ToggleRow>
+    </div>
   );
 }

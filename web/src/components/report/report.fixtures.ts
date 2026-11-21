@@ -340,6 +340,7 @@ export function makeSession(overrides: Partial<SessionDTO> = {}): SessionDTO {
       trend: 'steady',
       discoveredCount: 1,
       silent: false,
+      shifts: 0,
     },
     evaluationPhase: report ? 'saved' : null,
     evaluationError: null,
@@ -641,6 +642,7 @@ export function makeSpecSession(overrides: Partial<SessionDTO> = {}): SessionDTO
       trend: 'rising',
       discoveredCount: 0,
       silent: false,
+      shifts: 0,
     },
     scenario: {
       ...base.scenario,

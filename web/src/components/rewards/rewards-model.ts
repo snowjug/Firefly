@@ -3,13 +3,13 @@ import type {
   BadgeId,
   ChallengeDTO,
   ChallengeId,
+  LedgerEntryDTO,
   RewardsDTO,
 } from '#shared/domain/api.ts';
 import { plural } from '../../lib/format.ts';
-import type { IconName } from '../Icon.tsx';
 
-// Wording and grouping for the rewards page. The numbers all come from the server; nothing here
-// works out what was earned.
+// Wording and grouping for the recognition section. The numbers all come from the server; nothing
+// here works out what was earned.
 
 /** How many points-history entries show before "Show more". */
 export const LEDGER_PAGE = 20;
@@ -17,23 +17,37 @@ export const LEDGER_PAGE = 20;
 export const REWARD_TABS = ['all', 'progress', 'challenges'] as const;
 export type RewardTab = (typeof REWARD_TABS)[number];
 
-export interface BadgeVisual {
-  icon: IconName;
-  tone: 'amber' | 'violet';
-}
+/** The engraved figure each badge carries inside its ring. */
+export type BadgeFigure = 'first' | 'lens' | 'filament' | 'owner' | 'compass' | 'days';
 
-const BADGE_VISUALS: Record<BadgeId, BadgeVisual> = {
-  'first-practice': { icon: 'award', tone: 'amber' },
-  'scope-detective': { icon: 'search', tone: 'violet' },
-  'de-escalator': { icon: 'smile', tone: 'violet' },
-  'ownership-builder': { icon: 'flag', tone: 'amber' },
-  'scenario-explorer': { icon: 'compass', tone: 'violet' },
-  'consistency-streak': { icon: 'flame', tone: 'amber' },
+const BADGE_FIGURES: Record<BadgeId, BadgeFigure> = {
+  'first-practice': 'first',
+  'scope-detective': 'lens',
+  'de-escalator': 'filament',
+  'ownership-builder': 'owner',
+  'scenario-explorer': 'compass',
+  'consistency-streak': 'days',
 };
 
-/** The icon and tint for a badge. An id this app does not know yet still gets a sensible look. */
-export function badgeVisual(id: string): BadgeVisual {
-  return BADGE_VISUALS[id as BadgeId] ?? { icon: 'award', tone: 'amber' };
+/** A badge this app has not heard of yet still gets the plainest figure, and everything else works. */
+export function badgeFigure(id: string): BadgeFigure {
+  return BADGE_FIGURES[id as BadgeId] ?? 'first';
+}
+
+export type BadgeState = 'earned' | 'progress' | 'locked';
+
+/** Earned, started, or not started: written out in words wherever it is shown, never colour alone. */
+export function badgeState(badge: BadgeDTO): BadgeState {
+  if (badge.earned) return 'earned';
+  return badge.progress.current > 0 ? 'progress' : 'locked';
+}
+
+/** How far along a badge is, 0 to 1, whatever the server sent for a target. */
+export function badgeRatio(badge: Pick<BadgeDTO, 'earned' | 'progress'>): number {
+  if (badge.earned) return 1;
+  const { current, target } = badge.progress;
+  if (!(target > 0) || !Number.isFinite(current)) return 0;
+  return Math.min(1, Math.max(0, current / target));
 }
 
 export const earnedCount = (badges: readonly BadgeDTO[]) => badges.filter((b) => b.earned).length;
@@ -118,3 +132,32 @@ export function levelProgress(
 }
 
 export const streakText = (days: number) => plural(days, 'day');
+
+// ------------------------------------------------------------------------------------------
+// The moment a badge is earned
+
+/**
+ * The badges to show a lit moment for: earned in the newest finished call and not shown before. The
+ * newest call is the one at the top of the points history, so an old badge never replays, and a
+ * badge that was already shown (or that arrived with a call that earned nothing else) stays quiet.
+ */
+export function badgesToCelebrate(
+  badges: readonly BadgeDTO[],
+  ledger: readonly Pick<LedgerEntryDTO, 'sessionId'>[],
+  acknowledged: ReadonlySet<string>,
+): BadgeDTO[] {
+  const newest = ledger.find((entry) => entry.sessionId)?.sessionId;
+  if (!newest) return [];
+  return badges.filter(
+    (badge) => badge.earned && badge.earnedInSessionId === newest && !acknowledged.has(badge.id),
+  );
+}
+
+/** "New badge: Ownership Builder." or "New badges: A and B." for the status line. */
+export function celebrationText(badges: readonly Pick<BadgeDTO, 'title'>[]): string {
+  const titles = badges.map((badge) => badge.title);
+  if (titles.length === 0) return '';
+  if (titles.length === 1) return `New badge: ${titles[0]}.`;
+  const last = titles[titles.length - 1];
+  return `New badges: ${titles.slice(0, -1).join(', ')} and ${last}.`;
+}

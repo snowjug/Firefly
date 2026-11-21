@@ -104,6 +104,28 @@ test.describe('the live call', () => {
     expect(gone.status()).toBe(404);
   });
 
+  test('can still be ended, and read, on a screen as small as a desktop zoomed to 400%', async ({
+    page,
+  }) => {
+    const call = await createCall(page);
+    await sayViaApi(page, call.id, "I'm sorry you're locked out. What happens when you sign in?");
+    // 1280 x 1024 at 400% zoom is 320 x 256 CSS pixels (WCAG 1.4.10, reflow).
+    await page.setViewportSize({ width: 320, height: 256 });
+    await page.goto(`/calls/${call.id}`);
+    const endButton = page.getByRole('button', { name: 'End call', exact: true });
+    await expect(endButton).toBeVisible();
+    // The conversation keeps a usable height instead of being squeezed away, and nothing scrolls sideways.
+    const conversation = page.getByRole('region', { name: 'Conversation' });
+    expect((await conversation.boundingBox())?.height ?? 0).toBeGreaterThan(100);
+    const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }));
+    expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
+    await endButton.click();
+    await expect(page.getByRole('dialog', { name: 'End this call?' })).toBeVisible();
+  });
+
   test('keeps the draft private notes in the tab and passes automated accessibility checks', async ({
     page,
   }) => {
@@ -157,7 +179,8 @@ test.describe('guided and immersive practice', () => {
     const call = await createCall(page, 'locked-out-after-password-reset', 'starter', {});
     await page.goto(`/calls/${call.id}`);
     // Starter calls start guided: the mood in words, a count of what was found, a few ideas.
-    await expect(page.getByText(/facts? uncovered so far/)).toBeVisible();
+    await expect(page.getByText('Customer mood', { exact: true })).toBeVisible();
+    await expect(page.getByText(/signals? found/)).toBeVisible();
     const hints = page.getByRole('group', { name: 'Ideas for what to say' });
     await expect(hints).toBeVisible();
     await hints.getByRole('button').first().click();
@@ -168,13 +191,37 @@ test.describe('guided and immersive practice', () => {
     ).toHaveCount(1);
   });
 
+  test('guided practice marks a signal where it was found, and says only that it was found', async ({
+    page,
+  }) => {
+    const call = await createCall(page, 'locked-out-after-password-reset', 'starter', {});
+    await page.goto(`/calls/${call.id}`);
+    const conversation = page.getByRole('region', { name: 'Conversation' });
+    await say(page, 'Thanks, I am sorry about this. When did it start, and has anything changed?');
+    await expect(conversation.getByRole('listitem')).toHaveCount(3);
+    const found = conversation.getByRole('listitem').last();
+    await expect(found.getByText('Signal found')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /^Signal found$/ })).toHaveCount(1);
+    await expect(page.getByText(/^1 signal found$/)).toBeVisible();
+  });
+
   test('immersive practice shows none of it, because a real call does not', async ({ page }) => {
     const call = await createCall(page, 'team-cannot-open-shared-workspace', 'standard');
     await page.goto(`/calls/${call.id}`);
     await expect(composer(page)).toBeVisible();
-    await expect(page.getByText(/facts? uncovered so far/)).toHaveCount(0);
+    await expect(page.getByText(/signals? found/)).toHaveCount(0);
     await expect(page.getByRole('group', { name: 'Ideas for what to say' })).toHaveCount(0);
-    await expect(page.getByText('Customer mood')).toHaveCount(0);
+    await expect(page.getByText('Customer mood', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Customer mood cues are off in immersive practice.')).toBeVisible();
+  });
+
+  test('immersive practice marks nothing when a signal is found', async ({ page }) => {
+    const call = await createCall(page, 'locked-out-after-password-reset', 'standard');
+    await page.goto(`/calls/${call.id}`);
+    const conversation = page.getByRole('region', { name: 'Conversation' });
+    await say(page, 'Thanks, I am sorry about this. When did it start, and has anything changed?');
+    await expect(conversation.getByRole('listitem')).toHaveCount(3);
+    await expect(page.getByText(/Signal found|Situation shift|Mood shift/)).toHaveCount(0);
   });
 });
 

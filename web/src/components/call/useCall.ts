@@ -27,12 +27,26 @@ export interface ChatTurn {
 export interface ChatShift {
   /** The customer turn after which this change appeared. */
   afterKey: string;
-  kind: 'band' | 'silent';
+  /** A `curveball` is only ever "the conversation changed": its kind is never sent or shown. */
+  kind: 'band' | 'silent' | 'curveball';
   /** For a band change: the customer's mood before and after. */
   from?: { id: PublicStateDTO['band']['id']; label: string };
   to?: { id: PublicStateDTO['band']['id']; label: string };
   direction?: 'tenser' | 'calmer';
 }
+
+/** The customer's visible state at one of their replies: what a guided call can say about it. */
+export interface TurnMood {
+  id: PublicStateDTO['band']['id'];
+  label: string;
+  trend: PublicStateDTO['trend'];
+}
+
+const moodOf = (state: PublicStateDTO): TurnMood => ({
+  id: state.band.id,
+  label: state.band.label,
+  trend: state.trend,
+});
 
 export interface CallState {
   turns: ChatTurn[];
@@ -49,6 +63,12 @@ export interface CallState {
   signalKeys: string[];
   /** Changes in the customer's mood or silence, in order. Used in guided practice only. */
   shifts: ChatShift[];
+  /**
+   * The customer's mood at each reply seen on this screen, by turn key: the reply that was newest
+   * when the call opened, and every one after it. Earlier replies are absent: the server only says
+   * how the customer is now, so the screen cannot say how they were. Guided practice only.
+   */
+  moods: Record<string, TurnMood>;
 }
 
 export type CallAction =
@@ -87,6 +107,7 @@ export function initialCallState(session: SessionDTO, maxTurns: number | null): 
       };
     }
   }
+  const newest = turns.findLast((turn) => turn.role === 'customer');
   return {
     turns,
     state: session.state,
@@ -98,6 +119,7 @@ export function initialCallState(session: SessionDTO, maxTurns: number | null): 
     discoveries: 0,
     signalKeys: [],
     shifts: [],
+    moods: newest ? { [newest.key]: moodOf(session.state) } : {},
   };
 }
 
@@ -123,6 +145,8 @@ function shiftsBetween(
     });
   }
   if (!before.silent && after.silent) shifts.push({ afterKey, kind: 'silent' });
+  // One entry however far the count jumped: the screen only says the conversation changed.
+  if (after.shifts > before.shifts) shifts.push({ afterKey, kind: 'curveball' });
   return shifts;
 }
 
@@ -158,6 +182,7 @@ export function callReducer(current: CallState, action: CallAction): CallState {
         discoveries: found ? current.discoveries + 1 : current.discoveries,
         signalKeys: found ? [...current.signalKeys, customer.key] : current.signalKeys,
         shifts: [...current.shifts, ...shiftsBetween(current.state, response.state, customer.key)],
+        moods: { ...current.moods, [customer.key]: moodOf(response.state) },
       };
     }
     case 'failed':

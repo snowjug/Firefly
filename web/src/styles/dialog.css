@@ -1,0 +1,177 @@
+/* Dialog, sheet and drawer (components/Dialog.tsx).
+
+   A glass surface (materials.css) over a scrim. The panel is a column: a header with a hairline
+   under it, then a body that scrolls on its own, so the title and the close button stay in view.
+   `.dialog`, `.sheet`, `.drawer` and `.scrim*` are the variant hooks the component sets. Reduced
+   motion is handled globally (base.css); the exit is a cloned fade made in the component. */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  /* One definite row and column: with auto tracks a tall dialog would grow its own row, and
+     centring it in that row would push it off the screen. */
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+  padding: var(--sp-4);
+  overscroll-behavior: contain;
+}
+/* The tint is its own layer: fading the whole scrim would make it the backdrop root and stop the
+   glass panel above it from blurring the page behind. */
+.scrim::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  animation: ff-scrim-in var(--dur-component) var(--ease-exit-decelerated) both;
+}
+.scrim-bottom {
+  place-items: end center;
+  padding-block-end: 0;
+}
+.scrim-start {
+  place-items: stretch start;
+  padding: 0;
+}
+.scrim.is-leaving {
+  pointer-events: none;
+}
+.scrim.is-leaving::before,
+.scrim.is-leaving .ff-dialog {
+  animation: none;
+}
+
+.ff-dialog.glass {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(36rem, 100%);
+  max-height: min(88vh, 100%);
+  max-height: min(88dvh, 100%);
+  border: 0;
+  border-radius: var(--r-2);
+  animation: ff-dialog-in var(--dur-component) var(--ease-enter-emphasised) both;
+}
+.ff-dialog.sheet {
+  width: min(44rem, 100%);
+  max-height: 86dvh;
+  border-radius: var(--r-2) var(--r-2) 0 0;
+  padding-block-end: var(--safe-b);
+  animation-name: ff-sheet-in;
+  animation-duration: var(--dur-route);
+}
+.ff-dialog.drawer {
+  width: min(22rem, 88vw);
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  animation-name: ff-drawer-in;
+  animation-duration: var(--dur-route);
+}
+
+.ff-dialog__head {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-5) var(--sp-4) var(--sp-6);
+  border-block-end: 1px solid var(--line-2);
+}
+.ff-dialog__titles {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.ff-dialog__eyebrow,
+.ff-dialog__title,
+.ff-dialog__desc {
+  margin: 0;
+}
+.ff-dialog__title {
+  font-family: var(--font-display);
+  font-size: clamp(1.375rem, 1.1rem + 0.9vw, 1.75rem);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: var(--track-title);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.ff-dialog__desc {
+  margin-block-start: var(--sp-2);
+  max-width: var(--measure-ui);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.ff-dialog__close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  margin: -0.5rem -0.5rem 0 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-micro),
+    color var(--dur-micro);
+}
+@media (hover: hover) {
+  .ff-dialog__close:hover {
+    border-color: var(--line-3);
+    color: var(--ink-1);
+  }
+}
+.ff-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--sp-5) var(--sp-6) var(--sp-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* In forced colours the glass is already Canvas with a CanvasText border (materials.css); this sheet
+   removed the border to let the lit edge do the work, so give it back. */
+@media (forced-colors: active) {
+  .ff-dialog.glass {
+    border: 1px solid CanvasText;
+  }
+}
+
+@keyframes ff-scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes ff-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+@keyframes ff-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+}
+@keyframes ff-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+}
+
+@media (max-width: 30rem) {
+  .ff-dialog__head {
+    padding-inline: var(--sp-5) var(--sp-4);
+  }
+  .ff-dialog__body {
+    padding-inline: var(--sp-5);
+  }
+}

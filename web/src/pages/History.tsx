@@ -1,20 +1,31 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import type { SessionSummaryDTO } from '#shared/domain/api.ts';
+import { Disclosure } from '../components/frame/Disclosure.tsx';
+import { EmptyNotice, ErrorNotice, LoadingNotice } from '../components/frame/Notices.tsx';
+import { PageFrame, PageHead } from '../components/frame/PageFrame.tsx';
+import { tabDomId, tabPanelDomId } from '../components/frame/TabRow.tsx';
 import { CompareDialog } from '../components/history/CompareDialog.tsx';
 import { DeleteDialog } from '../components/history/DeleteDialog.tsx';
-import { HistoryFilterBar, type ScenarioOption } from '../components/history/HistoryFilters.tsx';
-import { HistoryTable } from '../components/history/HistoryTable.tsx';
+import {
+  RefineFilters,
+  StatusTabs,
+  refinementsApplied,
+  type ScenarioOption,
+} from '../components/history/HistoryFilters.tsx';
 import {
   DEFAULT_FILTERS,
   isDefault,
   narrowed,
   type HistoryFilters,
 } from '../components/history/status.ts';
+import { Trail } from '../components/history/Trail.tsx';
+import type { ScenarioFacts } from '../components/history/trail-model.ts';
 import { useEarnedBadges } from '../components/history/useEarnedBadges.ts';
 import { useSessionList } from '../components/history/useSessionList.ts';
+import { useStatusCounts } from '../components/history/useStatusCounts.ts';
 import { Icon } from '../components/Icon.tsx';
-import { EmptyState, ErrorState, Page, PageHeader, SkeletonBlock } from '../components/Page.tsx';
+import { KeyToPlate } from '../components/signal/KeyToPlate.tsx';
 import { api, errorMessage } from '../lib/api.ts';
 import { useApi } from '../lib/hooks.ts';
 import '../styles/history.css';
@@ -29,6 +40,7 @@ interface Notice {
 export default function History() {
   const [filters, setFilters] = useState<HistoryFilters>(DEFAULT_FILTERS);
   const list = useSessionList(filters);
+  const counts = useStatusCounts(filters);
   const scenarioList = useApi((signal) => api.scenarios(signal), []);
   const badges = useEarnedBadges();
   const [pendingDelete, setPendingDelete] = useState<SessionSummaryDTO | null>(null);
@@ -64,6 +76,18 @@ export default function History() {
       .sort((a, b) => a.title.localeCompare(b.title));
   })();
 
+  // What the library knows about each scenario that a call's own summary does not.
+  const facts = useMemo(
+    () =>
+      new Map<string, ScenarioFacts>(
+        (scenarioList.data ?? []).map((s) => [
+          s.id,
+          { stage: s.callStage, minutes: s.estimatedMinutes, customer: s.persona?.name },
+        ]),
+      ),
+    [scenarioList.data],
+  );
+
   const change = (next: HistoryFilters) => {
     setFilters(next);
     setNotice(null);
@@ -75,6 +99,7 @@ export default function History() {
     const neighbour = list.items[index + 1] ?? list.items[index - 1];
     focusAfter.current = neighbour ? neighbour.id : 'results';
     list.remove(session.id);
+    counts.reload();
     setSelected((current) => current.filter((s) => s.id !== session.id));
     setPendingDelete(null);
     setNotice({ text: `Deleted \u201c${session.scenarioTitle}\u201d.`, tone: 'info' });
@@ -96,6 +121,7 @@ export default function History() {
     try {
       const next = await api.evaluate(session.id);
       list.replace(next);
+      counts.reload();
       setSelected((current) => current.filter((s) => s.id !== session.id));
       setNotice(
         next.status === 'completed'
@@ -141,45 +167,32 @@ export default function History() {
 
   let body;
   if (!list.hasData && list.loading) {
-    body = (
-      <div className="surface hs-card hs-skeleton" role="status" aria-label="Loading your calls">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="hs-skeleton-row">
-            <SkeletonBlock height={18} width="12%" />
-            <SkeletonBlock height={18} width="38%" />
-            <SkeletonBlock height={18} width="10%" />
-            <SkeletonBlock height={18} width="8%" />
-          </div>
-        ))}
-      </div>
-    );
+    body = <LoadingNotice label="Loading your calls" lines={5} />;
   } else if (list.error) {
     body = (
-      <ErrorState error={list.error} onRetry={list.reload} title="We couldn’t load your history" />
+      <ErrorNotice error={list.error} onRetry={list.reload} title="We couldn’t load your history" />
     );
   } else if (list.hasData && list.total === 0) {
     body = narrowed(filters) ? (
-      <EmptyState
-        icon="filter"
+      <EmptyNotice
         title="No calls match these filters"
         action={
-          <button type="button" className="btn btn-secondary" onClick={clear}>
+          <button type="button" className="action action--quiet" onClick={clear}>
             Clear filters
           </button>
         }
       >
         Try a different scenario, difficulty or status.
-      </EmptyState>
+      </EmptyNotice>
     ) : (
-      <EmptyState
-        icon="history"
+      <EmptyNotice
         title="No practice calls yet"
         action={
-          <div className="cluster" style={{ justifyContent: 'center' }}>
-            <Link to="/practice" className="btn btn-primary" viewTransition>
-              Start practising <Icon name="arrow-right" size={16} />
+          <div className="action-row">
+            <Link to="/practice" className="action" viewTransition>
+              Start practising <Icon name="arrow-right" size={18} />
             </Link>
-            <Link to="/scenarios" className="btn btn-secondary" viewTransition>
+            <Link to="/scenarios" className="text-link" viewTransition>
               Browse scenarios
             </Link>
           </div>
@@ -190,44 +203,50 @@ export default function History() {
           <>
             {' '}
             To see what a finished call looks like first, sample calls can be loaded from the{' '}
-            <Link to="/trainer">Trainer page</Link>.
+            <Link to="/trainer" className="text-link">
+              Trainer page
+            </Link>
+            .
           </>
         ) : (
           <>
             {' '}
-            Sample calls are hidden; turn them on above to include any you have loaded from the{' '}
-            <Link to="/trainer">Trainer page</Link>.
+            Sample calls are hidden; turn them on under Refine to include any you have loaded from
+            the{' '}
+            <Link to="/trainer" className="text-link">
+              Trainer page
+            </Link>
+            .
           </>
         )}
-      </EmptyState>
+      </EmptyNotice>
     );
   } else {
     body = (
       <>
-        <div className="surface hs-card">
-          <HistoryTable
-            sessions={list.items}
-            badges={badges}
-            busy={refreshing}
-            retryingId={retryingId}
-            compareFor={compareFor}
-            onDelete={setPendingDelete}
-            onRetry={retry}
-          />
-        </div>
+        <Trail
+          sessions={list.items}
+          scenarios={facts}
+          badges={badges}
+          more={list.hasMore}
+          retryingId={retryingId}
+          compareFor={compareFor}
+          onDelete={setPendingDelete}
+          onRetry={retry}
+        />
         {list.hasMore ? (
-          <div className="hs-more">
+          <div className="trail-more">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="action action--quiet"
               onClick={showMore}
               disabled={list.loadingMore}
+              aria-busy={list.loadingMore || undefined}
             >
-              {list.loadingMore ? <span className="spinner" aria-hidden="true" /> : null}
               {list.loadingMore ? 'Loading more\u2026' : 'Show more'}
             </button>
             {list.moreError ? (
-              <p className="field-error" role="alert">
+              <p className="trail-problem" role="alert">
                 {errorMessage(list.moreError)}
               </p>
             ) : null}
@@ -237,72 +256,138 @@ export default function History() {
     );
   }
 
+  const applied = refinementsApplied(filters);
   return (
-    <Page title="History" className="hs-page">
-      <PageHeader title="My practice history" lead="Track your progress over time." />
+    <PageFrame title="History" className="trail-page">
+      <PageHead
+        eyebrow="History"
+        title="My practice history"
+        lead="Every call you practise, newest first. Open one to read its coaching report or its transcript."
+      />
 
-      <HistoryFilterBar filters={filters} scenarios={scenarios} onChange={change} />
+      <div className="trail-column">
+        <form
+          className="trail-filters"
+          role="search"
+          aria-label="Filter calls"
+          onSubmit={(event) => event.preventDefault()}
+        >
+          <StatusTabs
+            value={filters.status}
+            // With no calls at all every count would be a zero, which says nothing.
+            counts={counts.data && counts.data.all > 0 ? counts.data : null}
+            panelId="trail"
+            onChange={(status) => change({ ...filters, status })}
+          />
+          <Disclosure
+            defaultOpen={applied > 0}
+            summary={
+              <>
+                Refine
+                {applied > 0 ? (
+                  <span className="trail-refine-count"> {applied} applied</span>
+                ) : null}
+              </>
+            }
+          >
+            <RefineFilters filters={filters} scenarios={scenarios} onChange={change} />
+          </Disclosure>
+        </form>
 
-      {selected.length > 0 ? (
-        <div className="surface hs-comparebar" role="region" aria-label="Compare calls">
-          <p role="status">
-            {selected.length === 1
-              ? 'One call selected. Choose one more to compare them.'
-              : 'Two calls selected.'}
-          </p>
-          <div className="cluster">
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={selected.length !== 2}
-              onClick={() => setComparing(true)}
-            >
-              Compare
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={() => setSelected([])}>
-              Clear selection
-            </button>
+        {selected.length > 0 ? (
+          <div
+            className="trail-compare-bar glass glass--inspector"
+            role="region"
+            aria-label="Compare calls"
+          >
+            <p role="status">
+              {selected.length === 1
+                ? 'One call selected. Choose one more to compare them.'
+                : 'Two calls selected.'}
+            </p>
+            <div className="action-row">
+              <button
+                type="button"
+                className="action action--compact"
+                disabled={selected.length !== 2}
+                onClick={() => setComparing(true)}
+              >
+                Compare
+              </button>
+              <button
+                type="button"
+                className="text-link"
+                onClick={() => {
+                  // The bar goes with the selection, so hand focus to the list before it does.
+                  resultsHeading.current?.focus();
+                  setSelected([]);
+                }}
+              >
+                Clear selection
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="trail-status">
+          <div className="trail-status__text">
+            <p role="status" className="trail-status__count">
+              {notice?.tone === 'info' ? `${notice.text} ` : ''}
+              {list.hasData && list.total === 0 ? (
+                <span className="sr-only">{countText}</span>
+              ) : (
+                countText
+              )}
+            </p>
+            {notice?.tone === 'problem' ? (
+              <p role="alert" className="trail-problem">
+                {notice.text}
+              </p>
+            ) : null}
+          </div>
+          <div className="trail-status__end">
+            {comparable >= 2 && selected.length === 0 ? (
+              <p className="trail-hint">Tick two finished calls to compare their scores.</p>
+            ) : null}
+            {refreshing ? (
+              <span className="trail-hint" aria-hidden="true">
+                Updating
+              </span>
+            ) : null}
+            {isDefault(filters) ? null : (
+              <button type="button" className="text-link" onClick={clear}>
+                Clear filters
+              </button>
+            )}
           </div>
         </div>
-      ) : null}
 
-      <h2 ref={resultsHeading} tabIndex={-1} className="sr-only">
-        Practice calls
-      </h2>
-      <div className="hs-status">
-        <div className="hs-status-text">
-          <p role="status" className="t-small t-muted">
-            {notice?.tone === 'info' ? `${notice.text} ` : ''}
-            {list.hasData && list.total === 0 ? (
-              <span className="sr-only">{countText}</span>
-            ) : (
-              countText
-            )}
-          </p>
-          {notice?.tone === 'problem' ? (
-            <p role="alert" className="field-error">
-              {notice.text}
-            </p>
-          ) : null}
-          {comparable >= 2 && selected.length === 0 ? (
-            <p className="t-meta">Tick two finished calls to compare their scores.</p>
-          ) : null}
+        <div
+          role="tabpanel"
+          id={tabPanelDomId('trail', filters.status)}
+          aria-labelledby={tabDomId('trail', filters.status)}
+          aria-busy={refreshing}
+          className="trail-panel"
+        >
+          <h2 ref={resultsHeading} tabIndex={-1} className="sr-only">
+            Practice calls
+          </h2>
+          {body}
         </div>
-        <div className="hs-status-end">
-          {refreshing ? (
-            <span className="t-meta hs-updating" aria-hidden="true">
-              <span className="spinner" /> Updating
-            </span>
-          ) : null}
-          {isDefault(filters) ? null : (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={clear}>
-              Clear filters
-            </button>
-          )}
-        </div>
+
+        {list.hasData && list.total > 0 ? (
+          <div className="trail-key">
+            <Disclosure summary="How to read the instruments">
+              <p>
+                Each call is drawn from its own settings. Rings are difficulty and size is impact;
+                the edge is how the customer started; the heart is the stage of the call, solid only
+                for a call taken to a close; a tick is a minute.
+              </p>
+              <KeyToPlate compact />
+            </Disclosure>
+          </div>
+        ) : null}
       </div>
-
-      {body}
 
       <DeleteDialog
         session={pendingDelete}
@@ -313,6 +398,6 @@ export default function History() {
         sessions={comparing && selected.length === 2 ? [selected[0], selected[1]] : null}
         onClose={() => setComparing(false)}
       />
-    </Page>
+    </PageFrame>
   );
 }

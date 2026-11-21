@@ -1,13 +1,14 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionSummaryDTO } from '#shared/domain/api.ts';
-import { makeRewards } from '../components/rewards/rewards.fixtures.ts';
 import { EMPTY_PROGRESS, trend } from '../components/progress/progress.fixtures.ts';
 import { makeSummary } from '../components/report/report.fixtures.ts';
+import { makeRewards } from '../components/rewards/rewards.fixtures.ts';
 import { makeScenario } from '../components/scenario/scenario-fixtures.ts';
-import { api } from '../lib/api.ts';
+import { useWorldPose } from '../components/world/useWorldPose.ts';
+import { ApiError, api } from '../lib/api.ts';
 import type * as ApiModule from '../lib/api.ts';
 import { resetProfileForTests, saveProfile } from '../lib/profile.ts';
 import { resetTourForTests, useTourRequests } from '../lib/tour.ts';
@@ -20,6 +21,7 @@ vi.mock('../lib/api.ts', async (importOriginal) => {
     api: { scenarios: vi.fn(), listSessions: vi.fn(), progress: vi.fn(), rewards: vi.fn() },
   };
 });
+vi.mock('../components/world/useWorldPose.ts', () => ({ useWorldPose: vi.fn() }));
 
 const scenarios = vi.mocked(api.scenarios);
 const listSessions = vi.mocked(api.listSessions);
@@ -41,6 +43,7 @@ const LIBRARY = [
     difficulty: 'standard',
     impact: 'medium',
     issueType: 'service-outage',
+    persona: { name: 'Daniel Osei', role: 'Project lead', organisation: 'Proseware' },
   }),
   makeScenario({
     id: 'slow-dashboard',
@@ -56,31 +59,26 @@ const LIBRARY = [
     impact: 'high',
     issueType: 'billing-licence',
   }),
-  makeScenario({
-    id: 'missing-orders',
-    title: 'Orders missing from a report',
-    difficulty: 'challenge',
-    impact: 'high',
-    issueType: 'data-missing',
-  }),
 ];
 
-let counter = 0;
-/** A finished full call unless told otherwise; each one ends a minute after the last. */
-function call(overrides: Partial<SessionSummaryDTO> = {}): SessionSummaryDTO {
-  counter += 1;
-  const minute = String(counter).padStart(2, '0');
-  return makeSummary({
-    id: `call-${counter}`,
-    scenarioId: 'gentle-start',
-    scenarioTitle: 'A gentle start',
-    startedAt: `2026-11-10T10:${minute}:00.000Z`,
-    endedAt: `2026-11-10T10:${minute}:30.000Z`,
-    overallScore: 3.2,
-    durationSeconds: 300,
-    ...overrides,
-  });
-}
+const call = (() => {
+  let counter = 0;
+  return (overrides: Partial<SessionSummaryDTO> = {}): SessionSummaryDTO => {
+    counter += 1;
+    // A finished full call unless told otherwise; each one ends a minute after the last.
+    const started = new Date(Date.UTC(2026, 10, 10, 10, counter));
+    return makeSummary({
+      id: `call-${counter}`,
+      scenarioId: 'gentle-start',
+      scenarioTitle: 'A gentle start',
+      startedAt: started.toISOString(),
+      endedAt: new Date(started.getTime() + 30_000).toISOString(),
+      overallScore: 3.2,
+      durationSeconds: 300,
+      ...overrides,
+    });
+  };
+})();
 const open = (overrides: Partial<SessionSummaryDTO> = {}) =>
   call({
     status: 'active',
@@ -106,9 +104,10 @@ function renderHome() {
   );
 }
 
-const stat = (label: string) => screen.getByText(label).closest('.stat') as HTMLElement;
-const findStat = async (label: string) =>
-  (await screen.findByText(label)).closest('.stat') as HTMLElement;
+const section = (name: string) => screen.findByRole('region', { name });
+/** The row of the practice ledger with this label. */
+const ledgerRow = (label: string) =>
+  screen.getByText(label, { selector: 'dt' }).closest('.ff-ledger__row') as HTMLElement;
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -134,156 +133,56 @@ describe('Dashboard: the greeting', () => {
     vi.setSystemTime(new Date(2026, 10, 19, 9, 30));
     saveProfile({ name: 'Priya Raman' });
     renderHome();
-    expect(screen.getByRole('heading', { level: 1, name: 'Good morning, Priya' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Good morning, Priya.' })).toBeVisible();
     expect(screen.getByText('Ready to practise a customer call?')).toBeVisible();
-    expect(await screen.findByRole('heading', { name: 'Recommended scenarios' })).toBeVisible();
+    expect(screen.getByText(/^Home\s·/)).toBeVisible();
+    await section('A gentle start');
   });
 
   it('welcomes someone who has not made a profile, with no name to invent', async () => {
     renderHome();
-    expect(screen.getByRole('heading', { level: 1, name: 'Welcome to Firefly' })).toBeVisible();
-    await screen.findByRole('heading', { name: 'Recommended scenarios' });
+    expect(screen.getByRole('heading', { level: 1, name: 'Welcome to Firefly.' })).toBeVisible();
+    await section('A gentle start');
+  });
+
+  it('asks the field for a calm presence, and nothing louder', () => {
+    renderHome();
+    expect(vi.mocked(useWorldPose)).toHaveBeenCalledWith({ intensity: 0.65 });
   });
 });
 
-describe('Dashboard: four real numbers', () => {
-  it('counts full calls, averages their scores, adds up time and never counts sample calls', async () => {
-    listSessions.mockResolvedValue({
-      sessions: [
-        call({ overallScore: 4, durationSeconds: 600 }),
-        call({ overallScore: 3, durationSeconds: 300 }),
-        call({ completion: 'ended-early', overallScore: 2, durationSeconds: 120 }),
-        call({ isSample: true, overallScore: 5, durationSeconds: 7200 }),
-        open(),
-      ],
-      total: 5,
-    });
+describe('Dashboard: the next mission', () => {
+  it('shows the recommended mission large, with who is calling, its settings and why', async () => {
     renderHome();
-    await screen.findByText('Badges earned');
-    expect(within(stat('Scenarios completed')).getByText('2')).toBeVisible();
-    expect(within(stat('Average score')).getByText('3.5 of 5')).toBeVisible();
-    expect(within(stat('Badges earned')).getByText('2 of 6')).toBeVisible();
-    // 600 + 300 + 120 seconds: the call that ended early still took time, the sample took none.
-    expect(within(stat('Practice time')).getByText('17 min')).toBeVisible();
-  });
-
-  it('shows zeros and a dash, not made-up numbers, before the first call', async () => {
-    rewards.mockResolvedValue(
-      makeRewards({
-        badges: makeRewards().badges.map((badge) => ({ ...badge, earned: false })),
-      }),
-    );
-    renderHome();
-    await screen.findByText('Badges earned');
-    expect(within(stat('Scenarios completed')).getByText('0')).toBeVisible();
-    expect(within(stat('Average score')).getByText('\u2014')).toBeVisible();
-    expect(within(stat('Badges earned')).getByText('0 of 6')).toBeVisible();
-    expect(within(stat('Practice time')).getByText('0 min')).toBeVisible();
-  });
-
-  it('says plainly when the badge count could not be loaded, and keeps the other numbers', async () => {
-    rewards.mockRejectedValue(new Error('boom'));
-    listSessions.mockResolvedValue({ sessions: [call()], total: 1 });
-    renderHome();
+    const hero = await section('A gentle start');
+    expect(within(hero).getByText('Recommended')).toBeVisible();
+    expect(within(hero).getByText('Maya Okafor, IT administrator, Northwind Foods')).toBeVisible();
     expect(
-      await within(await findStat('Badges earned')).findByText('Not available right now'),
-    ).toBeVisible();
-    expect(within(stat('Scenarios completed')).getByText('1')).toBeVisible();
-  });
-
-  it('says when the totals only cover the latest calls', async () => {
-    listSessions.mockResolvedValue({ sessions: [call(), call()], total: 250 });
-    renderHome();
-    expect(await screen.findByText('These totals use your latest 2 calls.')).toBeVisible();
-  });
-});
-
-describe('Dashboard: the invitation to practise', () => {
-  it('invites a new practice session when no call is open', async () => {
-    renderHome();
-    expect(
-      await screen.findByRole('heading', { level: 2, name: 'Start a new practice session' }),
+      within(hero).getByText(
+        'Low impact \u00b7 Starter \u00b7 Starts frustrated \u00b7 First contact \u00b7 7 min',
+      ),
     ).toBeVisible();
     expect(
-      screen.getByText('Choose a scenario, configure the customer, and begin your simulation.'),
+      within(hero).getByText('A gentle place to start: a Starter call of about 7 minutes.'),
     ).toBeVisible();
-    expect(screen.getByRole('link', { name: /Start practice/ })).toHaveAttribute(
-      'href',
-      '/practice',
-    );
-    expect(screen.queryByRole('link', { name: /Resume call/ })).not.toBeInTheDocument();
-  });
-
-  it('offers to pick up a call that is still open before anything else', async () => {
-    listSessions.mockResolvedValue({
-      sessions: [
-        call(),
-        open({ id: 'open-call', scenarioTitle: 'Team cannot open the workspace' }),
-      ],
-      total: 2,
-    });
-    renderHome();
-    expect(
-      await screen.findByRole('heading', { level: 2, name: 'You have a call in progress' }),
-    ).toBeVisible();
-    expect(screen.getByText(/Team cannot open the workspace, started/)).toBeVisible();
-    expect(screen.getByRole('link', { name: /Resume call/ })).toHaveAttribute(
-      'href',
-      '/calls/open-call',
-    );
-    expect(screen.getByRole('link', { name: 'Start a new practice' })).toHaveAttribute(
-      'href',
-      '/practice',
-    );
-  });
-
-  it('draws the illustration only where there is room, and hides it from assistive technology', async () => {
-    vi.stubGlobal(
-      'matchMedia',
-      (query: string) =>
-        ({
-          matches: true,
-          media: query,
-          addEventListener: () => undefined,
-          removeEventListener: () => undefined,
-        }) as unknown as MediaQueryList,
-    );
-    const { container } = renderHome();
-    await screen.findByRole('heading', { name: 'Start a new practice session' });
-    // The figure arrives a moment after the page, so it is waited for.
-    await waitFor(() =>
-      expect(container.querySelector('.dash-banner-art svg.ill-agent')).not.toBeNull(),
-    );
-    expect(container.querySelector('.dash-banner-art svg.ill-agent')).toHaveAttribute(
-      'aria-hidden',
-      'true',
-    );
-  });
-});
-
-describe('Dashboard: recommended scenarios', () => {
-  it('starts with a gentle first scenario and says why, then adds variety', async () => {
-    renderHome();
-    const first = (await screen.findByRole('link', { name: 'A gentle start' })).closest(
-      'article',
-    ) as HTMLElement;
-    expect(within(first).getByText('Recommended')).toBeVisible();
-    expect(within(first).getByText('Low impact \u00b7 Starter')).toBeVisible();
-    expect(
-      within(first).getByText('A gentle place to start: a Starter call of about 7 minutes.'),
-    ).toBeVisible();
-    expect(within(first).getByRole('link', { name: 'A gentle start' })).toHaveAttribute(
+    expect(within(hero).getByRole('link', { name: /Calibrate this mission/ })).toHaveAttribute(
       'href',
       '/scenarios/gentle-start/setup',
     );
+    expect(within(hero).getByRole('link', { name: 'See all missions' })).toHaveAttribute(
+      'href',
+      '/scenarios',
+    );
+  });
 
-    // Four different scenarios, each linking to its own setup page; only the first is "Recommended".
-    const cards = screen.getAllByRole('article');
-    expect(cards).toHaveLength(4);
-    const hrefs = cards.map((card) => within(card).getByRole('link').getAttribute('href'));
-    expect(new Set(hrefs).size).toBe(4);
-    expect(hrefs.every((href) => /^\/scenarios\/[\w-]+\/setup$/.test(href ?? ''))).toBe(true);
-    expect(screen.getAllByText('Recommended')).toHaveLength(1);
+  it('draws the mission as an instrument with the glint, hidden from assistive technology', async () => {
+    const { container } = renderHome();
+    await section('A gentle start');
+    const glyph = container.querySelector('.home-hero__figure svg.sig-glyph');
+    expect(glyph).toHaveAttribute('aria-hidden', 'true');
+    expect(glyph).toHaveAttribute('data-recommended');
+    // No cartoon figure and no picture of any kind: the page is words and one instrument.
+    expect(container.querySelector('.ill-agent, img')).toBeNull();
   });
 
   it('gives the evidence behind a recommendation made from real practice', async () => {
@@ -304,18 +203,30 @@ describe('Dashboard: recommended scenarios', () => {
       ),
     });
     renderHome();
-    const card = (await screen.findAllByRole('article'))[0] as HTMLElement;
-    expect(within(card).getByText('Recommended')).toBeVisible();
-    expect(card).toHaveTextContent(
-      /Scoping & Discovery is your lowest skill so far \(average 2\.0 of 5\)/,
-    );
+    expect(
+      await screen.findByText(
+        /Scoping & Discovery is your lowest skill so far \(average 2\.0 of 5\)/,
+      ),
+    ).toBeVisible();
+    expect(screen.getByText('Recommended')).toBeVisible();
   });
 
-  it('links View all to the library', async () => {
+  it('still names the recommendation when the map does not know its kind of issue', async () => {
+    scenarios.mockResolvedValue([
+      makeScenario({
+        id: 'new-kind',
+        title: 'A kind of call the map has not heard of',
+        issueType: 'something-new' as never,
+        difficulty: 'starter',
+      }),
+    ]);
     renderHome();
-    await screen.findAllByRole('article');
-    const links = screen.getAllByRole('link', { name: /View all/ });
-    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/scenarios', '/history']);
+    const hero = await section('A kind of call the map has not heard of');
+    expect(within(hero).getByRole('link', { name: /Calibrate this mission/ })).toHaveAttribute(
+      'href',
+      '/scenarios/new-kind/setup',
+    );
+    expect(screen.queryByRole('heading', { name: 'No scenarios are available' })).toBeNull();
   });
 
   it('explains an empty library instead of showing nothing', async () => {
@@ -325,56 +236,172 @@ describe('Dashboard: recommended scenarios', () => {
       await screen.findByRole('heading', { name: 'No scenarios are available' }),
     ).toBeVisible();
   });
+
+  it('puts a call that is still open before anything else, and keeps the suggestion quieter', async () => {
+    listSessions.mockResolvedValue({
+      sessions: [
+        call(),
+        open({
+          id: 'open-call',
+          scenarioId: 'team-workspace',
+          scenarioTitle: 'Team cannot open the workspace',
+        }),
+      ],
+      total: 2,
+    });
+    renderHome();
+    const hero = await section('Team cannot open the workspace');
+    expect(screen.getByText('A call is waiting where you left it.')).toBeVisible();
+    expect(within(hero).getByText('You have a call in progress')).toBeVisible();
+    expect(hero).toHaveTextContent(/Started .+\. Everything you have sent is saved\./);
+    expect(within(hero).getByText('Daniel Osei, Project lead, Proseware')).toBeVisible();
+    expect(within(hero).getByRole('link', { name: /Return to your call/ })).toHaveAttribute(
+      'href',
+      '/calls/open-call',
+    );
+    expect(within(hero).getByRole('link', { name: 'Start a new practice' })).toHaveAttribute(
+      'href',
+      '/practice',
+    );
+    expect(screen.queryByRole('link', { name: /Calibrate this mission/ })).not.toBeInTheDocument();
+    // The recommendation is still one press away, in a line of its own.
+    const also = await section('Also suggested');
+    expect(within(also).getByRole('link')).toHaveAttribute(
+      'href',
+      expect.stringMatching(/^\/scenarios\/[\w-]+\/setup$/),
+    );
+  });
+
+  it('still offers the open call when the library cannot be loaded', async () => {
+    scenarios.mockRejectedValue(new Error('down'));
+    listSessions.mockResolvedValue({
+      sessions: [open({ id: 'open-call', scenarioTitle: 'Still open' })],
+      total: 1,
+    });
+    renderHome();
+    const hero = await section('Still open');
+    expect(within(hero).getByRole('link', { name: /Return to your call/ })).toHaveAttribute(
+      'href',
+      '/calls/open-call',
+    );
+    // Nobody is named when the library is not there to ask.
+    expect(hero.querySelector('.home-hero__persona')).toBeNull();
+  });
 });
 
-describe('Dashboard: recent practice', () => {
-  it('lists the last three finished calls with a score and a link to each report', async () => {
+describe('Dashboard: what the practice adds up to', () => {
+  it('counts full calls, averages their scores, adds up time and never counts sample calls', async () => {
+    listSessions.mockResolvedValue({
+      sessions: [
+        call({ overallScore: 4, durationSeconds: 600 }),
+        call({ overallScore: 3, durationSeconds: 300 }),
+        call({ completion: 'ended-early', overallScore: 2, durationSeconds: 120 }),
+        call({ isSample: true, overallScore: 5, durationSeconds: 7200 }),
+        open(),
+      ],
+      total: 5,
+    });
+    renderHome();
+    const region = await section('Your practice so far');
+    expect(await within(region).findByText('2 of 6')).toBeVisible();
+    expect(within(ledgerRow('Scenarios completed')).getByText('2')).toBeVisible();
+    expect(within(ledgerRow('Average score')).getByText('3.5 of 5')).toBeVisible();
+    expect(within(ledgerRow('Badges earned')).getByText('555 points')).toBeVisible();
+    // 600 + 300 + 120 seconds: the call that ended early still took time, the sample took none.
+    expect(within(ledgerRow('Practice time')).getByText('17 min')).toBeVisible();
+  });
+
+  it('puts no numbers where there is nothing to count, only one sentence', async () => {
+    renderHome();
+    expect(
+      await screen.findByText(/^No finished calls yet\. Finish one and this page/),
+    ).toBeVisible();
+    expect(screen.queryByText('Scenarios completed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Average score')).not.toBeInTheDocument();
+    expect(screen.queryByText('0 min')).not.toBeInTheDocument();
+    // Nothing but the sentence and the way on: no empty ledger, no empty "last call".
+    expect(screen.queryByRole('region', { name: 'Your last call' })).not.toBeInTheDocument();
+  });
+
+  it('says why there is no average yet, without a made-up score', async () => {
+    listSessions.mockResolvedValue({
+      sessions: [call({ overallScore: null, durationSeconds: 90 })],
+      total: 1,
+    });
+    renderHome();
+    await section('Your practice so far');
+    expect(within(ledgerRow('Average score')).getByText('\u2014')).toBeVisible();
+    expect(
+      within(ledgerRow('Average score')).getByText('Appears after your first finished call.'),
+    ).toBeVisible();
+  });
+
+  it('says plainly when the badge count could not be loaded, and keeps the other rows', async () => {
+    rewards.mockRejectedValue(new Error('boom'));
+    listSessions.mockResolvedValue({ sessions: [call()], total: 1 });
+    renderHome();
+    await section('Your practice so far');
+    expect(await screen.findByText('Not available right now')).toBeVisible();
+    expect(within(ledgerRow('Badges earned')).getByText('\u2014')).toBeVisible();
+    expect(within(ledgerRow('Scenarios completed')).getByText('1')).toBeVisible();
+  });
+
+  it('says when the totals only cover the latest calls', async () => {
+    listSessions.mockResolvedValue({ sessions: [call(), call()], total: 250 });
+    renderHome();
+    expect(await screen.findByText('These totals use your latest 2 calls.')).toBeVisible();
+  });
+});
+
+describe('Dashboard: the last call', () => {
+  it('shows the latest finished call, with its score and a link to its report', async () => {
     listSessions.mockResolvedValue({
       sessions: [
         call({ id: 'a', scenarioTitle: 'Oldest call', overallScore: 2.4 }),
-        call({ id: 'b', scenarioTitle: 'Second call', overallScore: 3.0 }),
         call({ id: 'sample', scenarioTitle: 'A sample call', isSample: true }),
-        call({
-          id: 'c',
-          scenarioTitle: 'Third call',
-          completion: 'ended-early',
-          overallScore: null,
-        }),
         call({ id: 'd', scenarioTitle: 'Newest call', overallScore: 4.6 }),
         open({ scenarioTitle: 'Still open' }),
       ],
-      total: 6,
+      total: 4,
     });
     renderHome();
-    const section = (await screen.findByRole('heading', { name: 'Recent practice' })).closest(
-      'section',
-    ) as HTMLElement;
-    await within(section).findAllByRole('listitem');
-    const items = within(section).getAllByRole('listitem');
-    expect(items.map((item) => item.querySelector('.dash-recent-title')?.textContent)).toEqual([
-      'Newest call',
-      'Third call',
-      'Second call',
-    ]);
-    expect(within(items[0] as HTMLElement).getByText('4.6')).toBeVisible();
-    expect(within(items[1] as HTMLElement).getByText('Ended early')).toBeVisible();
-    expect(within(items[2] as HTMLElement).getByText('3.0')).toBeVisible();
+    const last = await section('Your last call');
+    expect(within(last).getByText('Newest call')).toBeVisible();
+    expect(within(last).getByText('4.6')).toBeVisible();
+    expect(within(last).getByText('Completed')).toBeVisible();
+    expect(within(last).getByRole('link', { name: 'View report: Newest call' })).toHaveAttribute(
+      'href',
+      '/sessions/d/report',
+    );
     expect(
-      within(items[0] as HTMLElement).getByRole('link', { name: 'View report: Newest call' }),
-    ).toHaveAttribute('href', '/sessions/d/report');
-    expect(
-      within(section).queryByText(/sample call|Still open|Oldest call/i),
+      within(last).queryByText(/Oldest call|A sample call|Still open/),
     ).not.toBeInTheDocument();
-    expect(within(section).getByRole('link', { name: /View all/ })).toHaveAttribute(
+    expect(within(last).getByRole('link', { name: 'View all calls' })).toHaveAttribute(
       'href',
       '/history',
     );
   });
 
-  it('is calm for a new learner and points at the way in', async () => {
+  it('says so, and has no score, when the latest call ended early', async () => {
+    listSessions.mockResolvedValue({
+      sessions: [call({ id: 'early', completion: 'ended-early', overallScore: null })],
+      total: 1,
+    });
     renderHome();
-    expect(await screen.findByText('No finished calls yet')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'Start practising' })).toHaveAttribute(
+    const last = await section('Your last call');
+    expect(within(last).getByText('Ended early')).toBeVisible();
+    expect(within(last).getByText('No score')).toBeInTheDocument();
+  });
+
+  it('is calm when calls were started but none has finished, and points at the way in', async () => {
+    listSessions.mockResolvedValue({
+      sessions: [call({ status: 'evaluation_failed', completion: null, overallScore: null })],
+      total: 1,
+    });
+    renderHome();
+    const last = await section('Your last call');
+    expect(within(last).getByText('No finished calls yet')).toBeVisible();
+    expect(within(last).getByRole('link', { name: 'Start practising' })).toHaveAttribute(
       'href',
       '/practice',
     );
@@ -382,21 +409,25 @@ describe('Dashboard: recent practice', () => {
 
   it('can be retried when the calls cannot be loaded', async () => {
     const user = userEvent.setup();
-    listSessions.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({
+    listSessions.mockRejectedValueOnce(new ApiError(0, 'network', 'Can’t reach Firefly.', true));
+    listSessions.mockResolvedValue({
       sessions: [call({ scenarioTitle: 'Back again' })],
       total: 1,
     });
     renderHome();
-    const section = (await screen.findByRole('heading', { name: 'Recent practice' })).closest(
-      'section',
-    ) as HTMLElement;
-    const alert = await within(section).findByRole('alert');
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('We could not load your calls');
+    expect(alert).toHaveTextContent('Can’t reach Firefly.');
     await user.click(within(alert).getByRole('button', { name: /Try again/ }));
-    expect(await within(section).findByText('Back again')).toBeVisible();
+    expect(await screen.findByText('Back again')).toBeVisible();
   });
 });
 
 describe('Dashboard: your next skill', () => {
+  beforeEach(() => {
+    listSessions.mockResolvedValue({ sessions: [call()], total: 1 });
+  });
+
   it('names one skill from your own scores and links to the progress page', async () => {
     progress.mockResolvedValue({
       ...EMPTY_PROGRESS,
@@ -405,11 +436,10 @@ describe('Dashboard: your next skill', () => {
       focusReason: 'Clarity averaged 2.5 across 2 sessions.',
     });
     renderHome();
-    const card = (
-      await screen.findByRole('heading', { name: 'Your next skill to practise' })
-    ).closest('section') as HTMLElement;
-    expect(await within(card).findByText('Clarity averaged 2.5 across 2 sessions.')).toBeVisible();
-    expect(within(card).getByRole('link', { name: /See my progress/ })).toHaveAttribute(
+    const skill = await section('Your next skill to practise');
+    expect(await within(skill).findByText('Clarity averaged 2.5 across 2 sessions.')).toBeVisible();
+    expect(within(skill).getByText('Clarity')).toBeVisible();
+    expect(within(skill).getByRole('link', { name: /See my progress/ })).toHaveAttribute(
       'href',
       '/progress',
     );
@@ -420,6 +450,19 @@ describe('Dashboard: your next skill', () => {
     expect(
       await screen.findByText(/Finish a practice call and Firefly will suggest one skill/),
     ).toBeVisible();
+  });
+
+  it('can be retried on its own when the progress cannot be loaded', async () => {
+    const user = userEvent.setup();
+    progress.mockRejectedValueOnce(new Error('boom'));
+    progress.mockResolvedValue({ ...EMPTY_PROGRESS, focus: 'closing', focusReason: 'Closing.' });
+    renderHome();
+    const skill = await section('Your next skill to practise');
+    expect(
+      await within(skill).findByText('We could not load your progress just now.'),
+    ).toBeVisible();
+    await user.click(within(skill).getByRole('button', { name: /Try again/ }));
+    expect(await within(skill).findByText('Closing')).toBeVisible();
   });
 });
 
@@ -438,6 +481,8 @@ describe('Dashboard: the optional tour', () => {
     expect(screen.getByTestId('tour-requests')).toHaveTextContent('0');
     await user.click(screen.getByRole('button', { name: 'Start the tour' }));
     expect(screen.getByTestId('tour-requests')).toHaveTextContent('1');
+    // Offered at the top, so it is not listed a second time with the other ways on.
+    expect(screen.queryByRole('button', { name: 'Take the tour' })).not.toBeInTheDocument();
   });
 
   it('remembers "No thanks", stops inviting and keeps keyboard focus on the page', async () => {
@@ -449,29 +494,49 @@ describe('Dashboard: the optional tour', () => {
     expect(document.getElementById('main')).toHaveFocus();
   });
 
-  it('leaves the tour out once it has been seen', async () => {
+  it('leaves the offer out once the tour has been seen, and keeps a way back to it', async () => {
+    const user = userEvent.setup();
     localStorage.setItem('firefly.tour', JSON.stringify('done'));
     resetTourForTests();
     renderHome();
-    await screen.findByRole('heading', { name: 'Recommended scenarios' });
+    await section('A gentle start');
     expect(screen.queryByText(/New here\?/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Take the tour' }));
+    expect(screen.getByTestId('tour-requests')).toHaveTextContent('1');
+  });
+});
+
+describe('Dashboard: the ways on', () => {
+  it('lists the missions, the history and the progress, each with where it goes', async () => {
+    renderHome();
+    // The page settles first: the links are remounted when the calls arrive.
+    await section('A gentle start');
+    const nav = screen.getByRole('navigation', { name: 'Quick links' });
+    const hrefs = within(nav)
+      .getAllByRole('link')
+      .map((link) => [link.textContent, link.getAttribute('href')]);
+    expect(hrefs).toEqual([
+      ['Missions', '/scenarios'],
+      ['History', '/history'],
+      ['Progress', '/progress'],
+    ]);
+    expect(within(nav).getByText('Every call you have practised, newest first.')).toBeVisible();
   });
 });
 
 describe('Dashboard: loading and errors', () => {
-  it('keeps the page in place with skeletons while the numbers arrive', () => {
+  it('keeps the page in place with quiet placeholders while the numbers arrive', () => {
     const never = new Promise<never>(() => undefined);
     scenarios.mockReturnValue(never);
     listSessions.mockReturnValue(never);
     progress.mockReturnValue(never);
     rewards.mockReturnValue(never);
-    const { container } = renderHome();
+    renderHome();
     expect(screen.getByRole('heading', { level: 1 })).toBeVisible();
-    expect(container.querySelectorAll('.dash-stat-skeleton')).toHaveLength(4);
-    expect(
-      screen.getByRole('status', { name: 'Loading recommended scenarios' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading your next mission' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading your practice' })).toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'Loading recent practice' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Quick links' })).toBeVisible();
   });
 
   it('explains that the scenarios could not be loaded and retries them', async () => {
@@ -479,33 +544,89 @@ describe('Dashboard: loading and errors', () => {
     scenarios.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(LIBRARY);
     renderHome();
     expect(
-      await screen.findByRole('heading', { name: 'We could not load your recommendations' }),
+      await screen.findByRole('heading', { name: 'We could not load your next mission' }),
     ).toBeVisible();
     await user.click(screen.getByRole('button', { name: /Try again/ }));
-    expect(await screen.findAllByRole('article')).toHaveLength(4);
+    expect(await section('A gentle start')).toBeVisible();
   });
 
-  it('still offers to start practising when nothing at all can be loaded', async () => {
-    scenarios.mockRejectedValue(new Error('down'));
-    listSessions.mockRejectedValue(new Error('down'));
+  it('still offers to start practising when nothing at all can be loaded, offline included', async () => {
+    const offline = new ApiError(0, 'network', 'Can’t reach Firefly right now.', true);
+    scenarios.mockRejectedValue(offline);
+    listSessions.mockRejectedValue(offline);
     renderHome();
     expect(
       await screen.findByRole('heading', { name: 'We could not load your home page' }),
     ).toBeVisible();
+    expect(screen.getByText('Can’t reach Firefly right now.')).toBeVisible();
     expect(screen.getByRole('link', { name: /Start practice/ })).toHaveAttribute(
       'href',
       '/practice',
     );
+    expect(screen.getByRole('navigation', { name: 'Quick links' })).toBeVisible();
+  });
+});
+
+describe('Dashboard: imperfect content', () => {
+  it('lets a very long mission title, persona and open call wrap and show every word', async () => {
+    const title = 'A very long recommended mission title '.repeat(6).trim();
+    scenarios.mockResolvedValue([
+      makeScenario({
+        id: 'long',
+        title,
+        difficulty: 'starter',
+        persona: {
+          name: 'Maximilian Featherstonehaugh-Smythe',
+          role: 'Senior principal customer-facing operations and escalations coordinator',
+          organisation: 'The International Association of Extremely Long Organisation Names',
+        },
+      }),
+    ]);
+    renderHome();
+    const hero = await section(title);
+    expect(within(hero).getByRole('heading', { level: 2 })).toHaveTextContent(title);
+    expect(
+      within(hero).getByText(/Maximilian Featherstonehaugh-Smythe, Senior principal/),
+    ).toBeVisible();
+  });
+
+  it('copes with exactly one call', async () => {
+    listSessions.mockResolvedValue({ sessions: [call({ scenarioTitle: 'Only call' })], total: 1 });
+    renderHome();
+    const last = await section('Your last call');
+    expect(within(last).getByText('Only call')).toBeVisible();
+    expect(within(ledgerRow('Scenarios completed')).getByText('1')).toBeVisible();
+  });
+
+  it('copes with a hundred calls and a total far above them', async () => {
+    const many = Array.from({ length: 100 }, () => call());
+    listSessions.mockResolvedValue({ sessions: many, total: 4000 });
+    renderHome();
+    expect(await screen.findByText('These totals use your latest 100 calls.')).toBeVisible();
+    expect(within(ledgerRow('Scenarios completed')).getByText('100')).toBeVisible();
+  });
+
+  it('greets by the first name only, and ignores a profile that is only spaces', async () => {
+    saveProfile({ name: 'Ana Maria de la Cruz' });
+    const { unmount } = renderHome();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/, Ana\.$/);
+    unmount();
+    localStorage.clear();
+    resetProfileForTests();
+    saveProfile({ name: '   ' });
+    renderHome();
+    expect(screen.getByRole('heading', { level: 1, name: 'Welcome to Firefly.' })).toBeVisible();
   });
 });
 
 describe('Dashboard: wording', () => {
-  it('never uses hype, ranking or experience-point words', async () => {
+  it('never uses hype, ranking or experience-point words, or an exclamation mark', async () => {
     listSessions.mockResolvedValue({ sessions: [call(), call()], total: 2 });
     const { container } = renderHome();
-    await screen.findAllByRole('article');
+    await section('Your last call');
     expect(container.textContent).not.toMatch(
-      /\bXP\b|experience points|leaderboard|top performer|level up/i,
+      /\bXP\b|experience points|leaderboard|top performer|level up|streak/i,
     );
+    expect(container.textContent).not.toContain('!');
   });
 });

@@ -158,17 +158,37 @@ export function resetProfileForTests(): void {
   cached = undefined;
 }
 
+/** The first whole character of a word (an emoji or an accented letter is one character, not half of one). */
+const firstCharacter = (word: string | undefined): string => (word ? ([...word][0] ?? '') : '');
+
+/** One capital letter: "ß" upper-cases to "SS", which is two, so only the first of them is kept. */
+const capital = (character: string): string => [...character.toLocaleUpperCase()][0] ?? '';
+
 /** "Vidhi Kamat" becomes "VK"; a single name gives one letter. */
 export function initials(name: string): string {
   const parts = name.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
-  return (first + last).toUpperCase();
+  const first = capital(firstCharacter(parts[0]));
+  const last = parts.length > 1 ? capital(firstCharacter(parts[parts.length - 1])) : '';
+  return first + last;
 }
 
+/** Titles that come before a name and are not the name. */
+const TITLES = new Set(['mr', 'mrs', 'ms', 'mx', 'miss', 'dr', 'prof', 'sir', 'madam']);
+
+/**
+ * What to call someone in a greeting: "Priya Raman" is "Priya", "Dr. Jane Doe" is "Jane" and "Smith,
+ * John" is "John", with no stray full stop or comma left on the end.
+ */
 export function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] ?? name;
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return name;
+  // "Smith, John": the surname comes first, so the given name is the word after it.
+  if (words.length > 1 && words[0]?.endsWith(',')) words.shift();
+  while (words.length > 1 && TITLES.has((words[0] ?? '').replace(/[.,]+$/, '').toLowerCase())) {
+    words.shift();
+  }
+  return (words[0] ?? name).replace(/[.,;:]+$/, '');
 }
 
 export function greetingFor(date: Date = new Date()): string {

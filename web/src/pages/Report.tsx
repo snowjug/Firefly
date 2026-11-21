@@ -1,5 +1,5 @@
 import { Link, Navigate, useParams } from 'react-router';
-import { ErrorState, Page } from '../components/Page.tsx';
+import { PageFrame, ErrorNotice } from '../components/report/bridge.tsx';
 import {
   EvaluationFailed,
   EvaluationProgress,
@@ -8,6 +8,7 @@ import {
 } from '../components/report/EvaluationStates.tsx';
 import { ReportView } from '../components/report/ReportView.tsx';
 import { useSession } from '../components/report/useSession.ts';
+import '../styles/report.css';
 
 function ReportScreen({ id }: { id: string }) {
   const { session, error, loading, stalled, waited, reload, replace } = useSession(id);
@@ -15,19 +16,19 @@ function ReportScreen({ id }: { id: string }) {
   if (!session) {
     if (loading) return <ReportSkeleton />;
     return (
-      <Page title="Report not found" width="narrow" className="rp-root">
-        <ErrorState
+      <PageFrame title="Report not found" width="narrow" className="rp rp--wait">
+        <ErrorNotice
           level={1}
           error={error}
           onRetry={reload}
           title={'We couldn\u2019t open this report'}
         />
-        <p className="center-text">
-          <Link to="/history" className="btn btn-secondary">
+        <div className="action-row">
+          <Link to="/history" className="action action--quiet">
             Back to history
           </Link>
-        </p>
-      </Page>
+        </div>
+      </PageFrame>
     );
   }
 

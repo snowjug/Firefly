@@ -6,6 +6,9 @@ import {
 } from '#shared/domain/recommend.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import { IMPACT_LABELS, ISSUE_TYPE_LABELS, type IssueType } from '#shared/domain/vocab.ts';
+import type { AtlasMission } from '../atlas/atlas-model.ts';
+import { STAGE_WORDS } from '../signal/describe.ts';
+import type { GlyphTraits } from '../signal/types.ts';
 
 // What the home page shows, worked out from the saved practice calls. Sample calls are demonstration
 // data, so none of these numbers ever count them.
@@ -163,6 +166,56 @@ export function pickScenarios(input: {
 }
 
 /** "Medium impact · Standard", the two settings that say how demanding a call is. */
-export function demandText(scenario: PublicScenarioDTO): string {
+export function demandText(scenario: Pick<PublicScenarioDTO, 'impact' | 'difficulty'>): string {
   return `${IMPACT_LABELS[scenario.impact].label} impact \u00b7 ${DIFFICULTY_PROFILES[scenario.difficulty].label}`;
+}
+
+/**
+ * The public settings of a mission as short facts for a telemetry line: how demanding it is, how
+ * the customer starts, the stage of the call and its length. Never anything about how it is scored.
+ */
+export function missionFacts(
+  mission: Pick<AtlasMission, 'impact' | 'difficulty' | 'start'> &
+    Partial<Pick<AtlasMission, 'stage' | 'minutes'>>,
+): string[] {
+  const facts = [demandText(mission), `Starts ${mission.start}`];
+  if (mission.stage) {
+    const stage = STAGE_WORDS[mission.stage];
+    facts.push(`${stage.charAt(0).toUpperCase()}${stage.slice(1)}`);
+  }
+  if (mission.minutes !== undefined) {
+    facts.push(mission.minutes === 1 ? '1 min' : `${mission.minutes} min`);
+  }
+  return facts;
+}
+
+/** True once there is any finished practice to report on, so "none yet" is never dressed as data. */
+export function hasPractised(stats: PracticeStats, recent: readonly SessionSummaryDTO[]): boolean {
+  return stats.completed > 0 || stats.practiceSeconds > 0 || recent.length > 0;
+}
+
+/** What the hero and the "also suggested" line need of a mission: who, what and how it is drawn. */
+export type HeroMission = Pick<AtlasMission, 'id' | 'title' | 'persona'> & GlyphTraits;
+
+/**
+ * A scenario as a mission that has not been tried, for when the map's own model leaves it out (it
+ * skips an issue type it does not know) but the recommendation still names it.
+ */
+export function heroMissionOf(scenario: PublicScenarioDTO): HeroMission {
+  return {
+    id: scenario.id,
+    title: scenario.title,
+    persona: {
+      name: scenario.persona.name,
+      role: scenario.persona.role,
+      organisation: scenario.persona.organisation,
+    },
+    difficulty: scenario.difficulty,
+    impact: scenario.impact,
+    start: scenario.startingTemperature,
+    stage: scenario.callStage,
+    minutes: scenario.estimatedMinutes,
+    status: 'new',
+    recommended: true,
+  };
 }

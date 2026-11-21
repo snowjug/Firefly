@@ -1,165 +1,68 @@
-import { useId } from 'react';
 import { Link } from 'react-router';
 import type { DemoStatusDTO, PublicScenarioDTO } from '#shared/domain/api.ts';
-import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
-import {
-  CURVEBALL_LABELS,
-  IMPACT_LABELS,
-  START_TEMPERATURE_LABELS,
-  temperatureBand,
-} from '#shared/domain/vocab.ts';
-import { useMediaQuery, type AsyncState } from '../../lib/hooks.ts';
-import { SettingChips } from '../Chips.tsx';
-import { Icon, type IconName } from '../Icon.tsx';
-import { CustomerAvatar } from '../illustration/index.ts';
-import { EmptyState, ErrorState, SkeletonBlock } from '../Page.tsx';
+import type { AsyncState } from '../../lib/hooks.ts';
+import { Icon, LoadingNotice, SignalGlyph } from './bridge.tsx';
+import { StudioError, StudioNote, StudioSection } from './StudioFrame.tsx';
+import { scenarioFacts, scenarioTraits, spotlightHighlights } from './trainer-model.ts';
 import { useStartCall } from './useStartCall.ts';
 
-interface Highlight {
-  icon: IconName;
-  title: string;
-  text: string;
-}
+function SpotlightCard({ scenario }: { scenario: PublicScenarioDTO }) {
+  const { start, error } = useStartCall();
+  const { persona } = scenario;
 
-const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
-
-const joinList = (items: string[]) =>
-  items.length <= 1
-    ? (items[0] ?? '')
-    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
-
-/** What the spotlight scenario shows, worded only from its public fields and the difficulty presets. */
-export function spotlightHighlights(scenario: PublicScenarioDTO): Highlight[] {
-  const profile = DIFFICULTY_PROFILES[scenario.difficulty];
-  const areas = scenario.expectedDiscoveryAreas;
-  const kinds = scenario.curveballOptions.map((type) => CURVEBALL_LABELS[type].label);
-  const examples = joinList(kinds.slice(0, 2).map((kind) => `\u201c${kind}\u201d`));
-  const byDefault = profile.defaultCurveballCount;
-
-  return [
-    {
-      icon: 'sliders',
-      title: 'Configurable',
-      text: `Starts at ${profile.label} difficulty with ${IMPACT_LABELS[scenario.impact].label.toLowerCase()} business impact and a ${START_TEMPERATURE_LABELS[scenario.startingTemperature].label.toLowerCase()} customer. Every setting can be changed before the call.`,
-    },
-    {
-      icon: 'eye',
-      title: 'Hidden facts',
-      text:
-        areas.length > 0
-          ? `${areas.length} areas hold details the customer shares only when asked, for example ${lowerFirst(areas[0] as string)}.`
-          : 'The customer holds some details back until you ask about them.',
-    },
-    {
-      icon: 'flame',
-      title: 'A curveball',
-      text:
-        byDefault === 0
-          ? `${profile.label} difficulty starts with no curveball. You can switch one on in setup, from ${kinds.length} kinds such as ${examples}.`
-          : `${profile.label} difficulty switches on up to ${byDefault === 1 ? 'one curveball' : `${byDefault} curveballs`} by default: an unexpected turn partway through the call. Setup offers ${kinds.length} kinds, such as ${examples}.`,
-    },
-    {
-      icon: 'chart',
-      title: 'Evidence in the report',
-      text: 'The customer\u2019s mood moves with what you say. The report quotes your own words, shows the temperature timeline and suggests alternative phrasing.',
-    },
-  ];
-}
-
-function SpotlightSkeleton() {
   return (
-    <div
-      className="glass card tr-spotlight-loading"
-      role="status"
-      aria-label="Loading the demo spotlight"
-    >
-      <div className="stack">
-        <SkeletonBlock height={14} width="22%" />
-        <SkeletonBlock height={32} width="60%" />
-        <SkeletonBlock height={16} width="40%" />
-        <SkeletonBlock height={52} />
-        <SkeletonBlock height={44} width="45%" />
+    <div className="tr-spot">
+      <div className="tr-spot__text">
+        <h3 className="tr-spot__title type-title">{scenario.title}</h3>
+        <p className="tr-spot__who">
+          {persona.name}, {persona.role} at {persona.organisation}
+        </p>
+        <ul className="tr-facts type-label" aria-label="Scenario settings">
+          {scenarioFacts(scenario).map((fact) => (
+            <li key={fact}>{fact}</li>
+          ))}
+          <li>About {scenario.estimatedMinutes} min</li>
+        </ul>
+        <p className="tr-spot__summary">{scenario.summary}</p>
+        <div className="action-row tr-spot__actions">
+          <button type="button" className="action" onClick={() => start(scenario.id, {})}>
+            Start the spotlight call <Icon name="arrow-right" size={18} />
+          </button>
+          <Link
+            to={`/scenarios/${encodeURIComponent(scenario.id)}/setup`}
+            className="text-link"
+            viewTransition
+          >
+            Customise first
+          </Link>
+        </div>
+        {error ? (
+          <p role="alert" className="tr-problem">
+            {error}
+          </p>
+        ) : null}
+      </div>
+      {/* Every fact the instrument draws is written out beside it. */}
+      <div className="tr-spot__figure" aria-hidden="true">
+        <SignalGlyph traits={scenarioTraits(scenario)} size={190} />
+      </div>
+
+      <div className="tr-shows">
+        <h4 className="tr-shows__label type-label">What this scenario shows</h4>
+        <ul className="tr-shows__list">
+          {spotlightHighlights(scenario).map((item) => (
+            <li key={item.title}>
+              <p className="tr-shows__title">{item.title}</p>
+              <p className="tr-shows__text">{item.text}</p>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
 }
 
-function SpotlightCard({ scenario }: { scenario: PublicScenarioDTO }) {
-  const titleId = useId();
-  const withArt = useMediaQuery('(min-width: 721px)');
-  const { start, error } = useStartCall();
-  const { persona } = scenario;
-  const mood = temperatureBand(START_TEMPERATURE_LABELS[scenario.startingTemperature].startValue);
-
-  return (
-    <section id="spotlight" className="tr-spotlight" aria-labelledby={titleId}>
-      <div className="banner tr-banner">
-        <div className="tr-banner-copy">
-          <p className="tr-banner-label">Demo spotlight</p>
-          <h2 id={titleId} className="tr-spotlight-title">
-            {scenario.title}
-          </h2>
-          <p className="tr-persona">
-            {persona.name}, {persona.role} at {persona.organisation}
-            <span className="tr-persona-time">
-              <Icon name="clock" size={14} /> About {scenario.estimatedMinutes} min
-            </span>
-          </p>
-          <p className="tr-banner-summary">{scenario.summary}</p>
-          <SettingChips
-            settings={scenario}
-            only={['difficulty', 'impact', 'startingTemperature', 'style', 'callStage']}
-          />
-          <div className="tr-actions">
-            <button
-              type="button"
-              className="btn btn-light btn-lg"
-              onClick={() => start(scenario.id, {})}
-            >
-              Start the spotlight call <Icon name="arrow-right" size={18} />
-            </button>
-            <Link
-              to={`/scenarios/${encodeURIComponent(scenario.id)}/setup`}
-              className="btn btn-outline-light btn-lg"
-              viewTransition
-            >
-              Customise first
-            </Link>
-          </div>
-          {error ? (
-            <p role="alert" className="tr-banner-error">
-              {error}
-            </p>
-          ) : null}
-        </div>
-        {withArt ? (
-          <div className="tr-banner-art">
-            <CustomerAvatar seed={persona.name} mood={mood.id} />
-          </div>
-        ) : null}
-      </div>
-
-      <div className="glass card tr-shows">
-        <h3 className="t-label">What this scenario shows</h3>
-        <ul role="list" className="tr-shows-list">
-          {spotlightHighlights(scenario).map((item) => (
-            <li key={item.title}>
-              <span className="tone-icon" data-tone="blue" aria-hidden="true">
-                <Icon name={item.icon} size={18} />
-              </span>
-              <span>
-                <span className="tr-shows-title">{item.title}</span>
-                <span className="t-small t-muted">{item.text}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-/** The demo spotlight: loading, error and "no spotlight" states around the scenario card. */
+/** The demo spotlight: loading, error and "no spotlight" states around the scenario. */
 export function SpotlightSection({
   demo,
   spotlight,
@@ -167,42 +70,54 @@ export function SpotlightSection({
   demo: AsyncState<DemoStatusDTO>;
   spotlight: AsyncState<PublicScenarioDTO | null>;
 }) {
+  let body;
   if (!demo.data) {
-    return demo.error ? (
-      <ErrorState
+    body = demo.error ? (
+      <StudioError
         error={demo.error}
         onRetry={demo.reload}
         title="Could not load the demo spotlight"
       />
     ) : (
-      <SpotlightSkeleton />
+      <LoadingNotice label="Loading the demo spotlight" lines={4} />
     );
-  }
-  if (demo.data.spotlightScenarioId === null) {
-    return (
-      <EmptyState
-        icon="spark"
+  } else if (demo.data.spotlightScenarioId === null) {
+    body = (
+      <StudioNote
         title="No demo spotlight is set"
         action={
-          <Link to="/scenarios" className="btn btn-secondary">
+          <Link to="/scenarios" className="action action--quiet" viewTransition>
             Browse the scenario library
           </Link>
         }
       >
-        The spotlight is a scenario marked for demos. You can still start any scenario from the
-        quick start below or from the library.
-      </EmptyState>
+        <p>
+          The spotlight is a scenario marked for demos. You can still start any scenario from the
+          quick start below or from the library.
+        </p>
+      </StudioNote>
     );
-  }
-  if (spotlight.error) {
-    return (
-      <ErrorState
+  } else if (spotlight.error) {
+    body = (
+      <StudioError
         error={spotlight.error}
         onRetry={spotlight.reload}
         title="Could not load the spotlight scenario"
       />
     );
+  } else if (!spotlight.data) {
+    body = <LoadingNotice label="Loading the demo spotlight" lines={4} />;
+  } else {
+    body = <SpotlightCard scenario={spotlight.data} />;
   }
-  if (!spotlight.data) return <SpotlightSkeleton />;
-  return <SpotlightCard scenario={spotlight.data} />;
+
+  return (
+    <StudioSection
+      id="spotlight"
+      title="Demo spotlight"
+      about="The scenario marked for demos, one press from a call."
+    >
+      {body}
+    </StudioSection>
+  );
 }

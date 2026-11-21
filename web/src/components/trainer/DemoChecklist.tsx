@@ -1,101 +1,95 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Icon } from '../Icon.tsx';
+import { checklistSteps, readTicks, writeTicks } from './checklist-model.ts';
+import { StudioSection } from './StudioFrame.tsx';
 
-interface Step {
-  title: string;
-  text: string;
-  links?: { to: string; label: string }[];
-}
+/**
+ * A short "what to show" list for a live demo, with links to the places that need one. The
+ * presenter ticks a step when it has been shown; the ticks are theirs, kept for this tab only, and
+ * every step says "Done" or "Not yet" in words as well as in its mark.
+ */
+export function DemoChecklist({ spotlightId }: { spotlightId: string | null }) {
+  const base = useId();
+  const steps = useMemo(() => checklistSteps(spotlightId), [spotlightId]);
+  const ids = useMemo(() => steps.map((step) => step.id), [steps]);
+  const [ticked, setTicked] = useState(() => readTicks(ids));
 
-function steps(spotlightId: string | null): Step[] {
-  return [
-    {
-      title: 'Configure the scenario',
-      text: 'Change the difficulty, business impact, customer mood or communication style before the call.',
-      links: spotlightId
-        ? [{ to: `/scenarios/${encodeURIComponent(spotlightId)}/setup`, label: 'Open setup' }]
-        : [{ to: '/scenarios', label: 'Browse scenarios' }],
-    },
-    {
-      title: 'Run an unscripted call',
-      text: 'Type whatever you like. The customer reacts to what you actually say; nothing is pre-written for any expected conversation.',
-    },
-    {
-      title: 'Uncover a hidden fact',
-      text: 'The customer holds back key details until you ask about them. Try timing, recent changes or who is affected.',
-    },
-    {
-      title: 'Meet a curveball',
-      text: 'Partway through, the customer may raise something unexpected, such as asking for a manager or setting a deadline. Respond as you would on a real call.',
-    },
-    {
-      title: 'End the call',
-      text: 'End it when it reaches a natural close. Firefly locks the transcript and builds the report from it.',
-    },
-    {
-      title: 'Read the report',
-      text: 'Look at the evidence-based report: quotes from your own words, what was found and missed, the customer\u2019s temperature timeline and alternative phrasing.',
-    },
-    {
-      title: 'Open History and Progress',
-      text: 'See the call in your history and how skills trend across completed sessions.',
-      links: [
-        { to: '/history', label: 'History' },
-        { to: '/progress', label: 'Progress' },
-      ],
-    },
-    {
-      title: 'Open Calibration',
-      text: 'Show how AI scores are compared with a mentor\u2019s scores on the same call.',
-      links: [{ to: '/calibration', label: 'Calibration' }],
-    },
-  ];
-}
+  const change = (next: string[]) => {
+    const ordered = ids.filter((id) => next.includes(id));
+    setTicked(ordered);
+    writeTicks(ordered);
+  };
+  const toggle = (id: string, on: boolean) =>
+    change(on ? [...ticked, id] : ticked.filter((tick) => tick !== id));
 
-/** A short "what to show" list for a live demo, with links to the places that need one. */
-export function DemoChecklist({ spotlightId }: { spotlightId: string | null }): ReactNode {
-  const titleId = useId();
   return (
-    <section className="glass card stack tr-checklist" aria-labelledby={titleId}>
-      <div>
-        <h2 id={titleId} className="t-section">
-          Demo checklist
-        </h2>
-        <p className="t-small t-muted">A suggested order for showing the product end to end.</p>
-      </div>
+    <StudioSection
+      title="Demo checklist"
+      about="A suggested order for showing the product end to end."
+    >
+      <div className="tr-checklist">
+        <div className="tr-checklist__bar">
+          <p className="tr-checklist__count type-label">
+            {ticked.length} of {steps.length} done
+          </p>
+          {ticked.length > 0 ? (
+            <button type="button" className="text-link" onClick={() => change([])}>
+              Clear the ticks
+            </button>
+          ) : null}
+        </div>
 
-      <ol role="list" className="tr-steps">
-        {steps(spotlightId).map((step, index) => (
-          <li key={step.title} className="tr-step">
-            <span className="tr-step-number" aria-hidden="true">
-              {index + 1}
-            </span>
-            <div className="tr-step-body">
-              <p className="tr-step-title">{step.title}</p>
-              <p className="t-small t-muted">{step.text}</p>
-              {step.links ? (
-                <p className="tr-step-links">
-                  {step.links.map((link) => (
-                    <Link key={link.to} to={link.to} className="t-small" viewTransition>
-                      {link.label}
-                    </Link>
-                  ))}
-                </p>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ol>
+        <ol className="tr-steps">
+          {steps.map((step, index) => {
+            const done = ticked.includes(step.id);
+            const titleId = `${base}-${step.id}-title`;
+            const textId = `${base}-${step.id}-text`;
+            return (
+              <li key={step.id} className="tr-step" data-done={done ? '' : undefined}>
+                <span className="tr-step__num" aria-hidden="true">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <div className="tr-step__body">
+                  <p id={titleId} className="tr-step__title">
+                    {step.title}
+                  </p>
+                  <p id={textId} className="tr-step__text">
+                    {step.text}
+                  </p>
+                  {step.links ? (
+                    <p className="tr-step__links">
+                      {step.links.map((link) => (
+                        <Link key={link.to} to={link.to} className="text-link" viewTransition>
+                          {link.label}
+                        </Link>
+                      ))}
+                    </p>
+                  ) : null}
+                </div>
+                <label className="tr-check">
+                  <input
+                    type="checkbox"
+                    checked={done}
+                    aria-labelledby={titleId}
+                    aria-describedby={textId}
+                    onChange={(event) => toggle(step.id, event.target.checked)}
+                  />
+                  <span className="tr-check__mark" aria-hidden="true" />
+                  <span className="tr-check__state" aria-hidden="true">
+                    {done ? 'Done' : 'Not yet'}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+        </ol>
 
-      <div className="callout">
-        <Icon name="info" size={18} />
-        <p>
+        <p className="tr-aside">
           <strong>Unscripted by design.</strong> There are no canned answers for any anticipated
           conversation. The only pre-written content is the sample sessions, and those are always
           labelled Sample.
         </p>
       </div>
-    </section>
+    </StudioSection>
   );
 }

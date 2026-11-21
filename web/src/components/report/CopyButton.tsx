@@ -29,17 +29,20 @@ export async function copyText(text: string): Promise<boolean> {
 }
 
 /**
- * "Copy phrasing" button. Success and failure are announced politely. When copying is not
- * possible the target text is selected so the reader can copy it with the keyboard.
+ * A quiet "Copy phrasing" action. Success and failure are announced politely. When copying is not
+ * possible the target text is selected, so the reader can copy it with the keyboard.
  */
 export function CopyButton({
   text,
   targetRef,
   label = 'Copy phrasing',
+  done = 'Phrasing copied to the clipboard.',
 }: {
   text: string;
   targetRef?: RefObject<HTMLElement | null>;
   label?: string;
+  /** What is announced once the text is on the clipboard. */
+  done?: string;
 }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const timer = useRef(0);
@@ -55,13 +58,13 @@ export function CopyButton({
 
   return (
     <span className="rp-copy">
-      <button type="button" className="btn btn-secondary btn-sm" onClick={onClick}>
+      <button type="button" className="rp-link" onClick={onClick}>
         <Icon name={state === 'copied' ? 'check' : 'copy'} size={16} />
         {state === 'copied' ? 'Copied' : label}
       </button>
-      <span role="status" className={state === 'failed' ? 't-meta' : 'sr-only'}>
+      <span role="status" className={state === 'failed' ? 'rp-copy__note' : 'sr-only'}>
         {state === 'copied'
-          ? 'Phrasing copied to the clipboard.'
+          ? done
           : state === 'failed'
             ? 'Copying is not available here. The text is selected, so press Ctrl+C to copy it.'
             : ''}

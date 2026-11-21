@@ -1,16 +1,32 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Ledger } from '../components/frame/Ledger.tsx';
 import { Icon } from '../components/Icon.tsx';
-import { BuildingArt } from '../components/illustration/index.ts';
-import { BrandMark } from '../components/shell/BrandMark.tsx';
+import { PublicColophon } from '../components/entry/PublicColophon.tsx';
+import { ProfileForm } from '../components/settings/ProfileForm.tsx';
 import { useDocumentTitle } from '../lib/hooks.ts';
-import { clearProfile, firstName, saveProfile, useProfile } from '../lib/profile.ts';
+import { clearProfile, firstName, useProfile } from '../lib/profile.ts';
 import '../styles/public.css';
 
 /** Only addresses inside this app are honoured, so a crafted link cannot send someone elsewhere. */
 function safeNext(value: string | null): string {
   return value && /^\/(?!\/)[\w\-./?=&%#]*$/.test(value) ? value : '/home';
 }
+
+const NO_NAME = 'Enter a name so Firefly can greet you. A first name is enough.';
+
+// Where things live, said once and plainly. Organisation sign-in is listed as what it is: not
+// there yet.
+const WHERE = [
+  { label: 'Your profile', value: 'Stays in this browser' },
+  { label: 'Your data', value: 'Fictional practice only' },
+  {
+    label: 'Organisation sign-in',
+    value: 'Not available yet',
+    note: 'A local profile is all Firefly needs for now.',
+  },
+  { label: 'Our promise', value: 'Coaching, not assessment' },
+] as const;
 
 export default function SignIn() {
   useDocumentTitle('Sign in');
@@ -20,199 +36,97 @@ export default function SignIn() {
   const profile = useProfile();
 
   const [switching, setSwitching] = useState(false);
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('');
-  const [location, setLocation] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const nameRef = useRef<HTMLInputElement>(null);
-
   const returning = Boolean(profile) && !switching;
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!saveProfile({ name, role, location })) {
-      setError('Enter a name so Firefly can greet you. A first name is enough.');
-      nameRef.current?.focus();
-      return;
-    }
-    void navigate(next, { replace: true });
-  };
+  // When the page changes what it shows (a different name, a sign-out), the heading is where a
+  // keyboard or screen-reader user should land, unless the form has just opened with its own focus.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const shown = useRef(returning);
+  useEffect(() => {
+    if (shown.current === returning) return;
+    shown.current = returning;
+    if (returning || !switching) heading.current?.focus();
+  }, [returning, switching]);
 
   return (
-    <main id="main" tabIndex={-1} className="si">
-      <section className="si-art" aria-label="Firefly">
-        <div className="si-art-visual">
-          <BuildingArt />
-        </div>
-        <span className="si-art-rule" aria-hidden="true" />
-        <h2>Practice before it counts.</h2>
-        <p>
-          A safe place to rehearse difficult customer conversations, with coaching you can trust.
-        </p>
-      </section>
-
-      <div className="si-panel">
-        <div className="glass si-card">
-          <Link to="/" className="brand" aria-label="Firefly home">
-            <BrandMark />
-            <span>Firefly</span>
-          </Link>
-
-          {returning && profile ? (
-            <>
-              <div>
-                <h1>Welcome back, {firstName(profile.name)}</h1>
-                <p className="t-muted" style={{ marginTop: 'var(--sp-2)' }}>
-                  Your profile is saved in this browser. There is no password and no account.
-                </p>
-              </div>
-              <Link to={next} className="btn btn-primary btn-lg">
-                Continue <Icon name="arrow-right" size={18} />
-              </Link>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setSwitching(true);
-                  setName('');
-                  setRole('');
-                  setLocation('');
-                }}
-              >
-                Use a different name
-              </button>
-            </>
-          ) : (
-            <>
-              <div>
-                <h1>Create your practice profile</h1>
-                <p className="t-muted" style={{ marginTop: 'var(--sp-2)' }}>
-                  Your profile stays in this browser. There is no password and no account.
-                </p>
-              </div>
-              <form className="stack" noValidate onSubmit={submit}>
-                <div className="field">
-                  <label className="label" htmlFor="si-name">
-                    Name
-                  </label>
-                  <input
-                    id="si-name"
-                    ref={nameRef}
-                    className="input"
-                    value={name}
-                    maxLength={60}
-                    autoComplete="given-name"
-                    required
-                    aria-invalid={error ? true : undefined}
-                    aria-describedby={error ? 'si-name-error' : undefined}
-                    onChange={(event) => {
-                      setName(event.target.value);
-                      if (error) setError(null);
-                    }}
-                  />
-                  {error ? (
-                    <p id="si-name-error" className="field-error" role="alert">
-                      {error}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="field">
-                  <label className="label" htmlFor="si-role">
-                    Role <span className="t-meta">(optional)</span>
-                  </label>
-                  <input
-                    id="si-role"
-                    className="input"
-                    value={role}
-                    maxLength={80}
-                    placeholder="For example, apprentice support engineer"
-                    autoComplete="organization-title"
-                    onChange={(event) => setRole(event.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label className="label" htmlFor="si-location">
-                    Location <span className="t-meta">(optional)</span>
-                  </label>
-                  <input
-                    id="si-location"
-                    className="input"
-                    value={location}
-                    maxLength={80}
-                    autoComplete="address-level2"
-                    onChange={(event) => setLocation(event.target.value)}
-                  />
-                </div>
-                <button type="submit" className="btn btn-primary btn-lg">
-                  Continue <Icon name="arrow-right" size={18} />
-                </button>
-              </form>
-              {profile ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    setSwitching(false);
-                    setError(null);
-                  }}
-                >
-                  Keep using {profile.name}
-                </button>
-              ) : null}
-            </>
-          )}
-
-          <div className="si-or" aria-hidden="true">
-            or
-          </div>
-          <div className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-2)' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              aria-disabled="true"
-              aria-describedby="si-org-note"
-              onClick={(event) => event.preventDefault()}
-              style={{ opacity: 0.6, cursor: 'not-allowed' }}
-            >
-              <Icon name="building" size={18} /> Sign in with your organisation
-            </button>
-            <p id="si-org-note" className="t-meta">
-              Organisation sign-in is not available yet. A local profile is all Firefly needs for
-              now.
+    <>
+      <main id="main" tabIndex={-1} className="entry">
+        <div className="entry__frame">
+          <div className="entry__intro">
+            <p className="entry__eyebrow type-label">Sign in, on this device</p>
+            <h1 className="entry__title" tabIndex={-1} ref={heading}>
+              {returning && profile ? (
+                <>
+                  Welcome back, <em>{firstName(profile.name)}</em>
+                </>
+              ) : (
+                'Create your practice profile'
+              )}
+            </h1>
+            <p className="entry__lead type-lead">
+              {returning
+                ? 'Your profile is saved in this browser. There is no password and no account.'
+                : 'Your profile stays in this browser. There is no password and no account.'}
             </p>
           </div>
 
-          <ul className="si-facts" role="list">
-            <li>
-              <Icon name="user" size={20} />
-              <strong>Your profile</strong>
-              Stays in this browser
-            </li>
-            <li>
-              <Icon name="lock" size={20} />
-              <strong>Your data</strong>
-              Fictional practice only
-            </li>
-            <li>
-              <Icon name="shield-check" size={20} />
-              <strong>Our promise</strong>
-              Coaching, not assessment
-            </li>
-          </ul>
-          {profile && switching ? null : profile ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                clearProfile();
-                setSwitching(false);
-              }}
-            >
-              Sign out of this device
-            </button>
-          ) : null}
+          <div className="entry__panel">
+            {returning ? (
+              <div className="action-row entry__actions">
+                <Link to={next} className="action" viewTransition>
+                  Continue
+                  <Icon name="arrow-right" size={18} />
+                </Link>
+                <button type="button" className="text-link" onClick={() => setSwitching(true)}>
+                  Use a different name
+                </button>
+              </div>
+            ) : (
+              <ProfileForm
+                key={switching ? 'another' : 'new'}
+                submitLabel="Create profile"
+                note={null}
+                missingName={NO_NAME}
+                nameAutoComplete="given-name"
+                autoFocusName={switching}
+                onSaved={() => void navigate(next, { replace: true })}
+              >
+                {profile ? (
+                  <button type="button" className="text-link" onClick={() => setSwitching(false)}>
+                    Keep using {profile.name}
+                  </button>
+                ) : (
+                  <Link to={next} className="text-link">
+                    Continue without a profile
+                  </Link>
+                )}
+              </ProfileForm>
+            )}
+          </div>
+
+          <div className="entry__facts">
+            <Ledger rows={WHERE} />
+            {profile && !switching ? (
+              <div className="entry__block">
+                <button
+                  type="button"
+                  className="text-link entry__signout"
+                  onClick={() => {
+                    clearProfile();
+                    setSwitching(false);
+                  }}
+                >
+                  Sign out of this device
+                </button>
+                <p className="entry__note">
+                  Signing out forgets the profile here. Your saved practice calls are kept.
+                </p>
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
+      <PublicColophon />
+    </>
   );
 }

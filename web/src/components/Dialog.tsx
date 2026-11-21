@@ -1,42 +1,95 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { durationToken, motionAllowed } from './frame/motion.ts';
 import { Icon } from './Icon.tsx';
+import '../styles/dialog.css';
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+type Variant = 'dialog' | 'sheet' | 'drawer';
 
 interface DialogProps {
   open: boolean;
   onClose(): void;
   title: string;
+  /** A small mono line above the title, such as the name of the place the dialog belongs to. */
+  eyebrow?: string;
   description?: string;
   children: ReactNode;
   /** 'sheet' slides up from the bottom and 'drawer' in from the left (used for mobile panels). */
-  variant?: 'dialog' | 'sheet' | 'drawer';
+  variant?: Variant;
   /** Set false for confirmations that must be answered explicitly. */
   dismissible?: boolean;
 }
 
+/** A cloned scrim fades out where the real one was, so unmounting stays immediate and testable. */
+function animateOut(node: HTMLElement, variant: Variant) {
+  if (typeof node.animate !== 'function' || !motionAllowed()) return;
+  const clone = node.cloneNode(true) as HTMLElement;
+  clone.setAttribute('aria-hidden', 'true');
+  clone.setAttribute('inert', '');
+  clone.classList.add('is-leaving');
+  document.body.appendChild(clone);
+  const timing: KeyframeAnimationOptions = {
+    duration: durationToken('--dur-micro', 160),
+    easing: 'cubic-bezier(0, 0, 0.2, 1)',
+    fill: 'forwards',
+  };
+  const gone = () => clone.remove();
+  const tint = clone.animate([{ opacity: 1 }, { opacity: 0 }], {
+    ...timing,
+    pseudoElement: '::before',
+  });
+  tint.finished.then(gone, gone);
+  const to =
+    variant === 'sheet'
+      ? 'translateY(24px)'
+      : variant === 'drawer'
+        ? 'translateX(-24px)'
+        : 'translateY(8px) scale(0.99)';
+  clone.firstElementChild?.animate(
+    [
+      { opacity: 1, transform: 'none' },
+      { opacity: 0, transform: to },
+    ],
+    timing,
+  );
+}
+
 /**
  * Accessible modal: labelled, traps focus, closes on Escape (when dismissible), restores focus to the
- * element that opened it, makes the rest of the app inert and locks background scrolling.
+ * element that opened it, makes the rest of the app inert and locks background scrolling. It is a
+ * glass surface over a scrim: a header with a hairline (an optional mono eyebrow and the serif
+ * title), a scrolling body, and a close button unless it must be answered. The drawer is a glass
+ * inspector on the left edge, the sheet a glass panel rising from the bottom. It fades in on the
+ * component and route durations, fades out on the micro duration, and is instant under reduced
+ * motion.
  */
 export function Dialog({
   open,
   onClose,
   title,
+  eyebrow,
   description,
   children,
   variant = 'dialog',
   dismissible = true,
 }: DialogProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const lastScrim = useRef<HTMLDivElement | null>(null);
+  const wasOpen = useRef(false);
   const titleId = useId();
   const descId = useId();
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
   });
+
+  useLayoutEffect(() => {
+    if (!open && wasOpen.current && lastScrim.current) animateOut(lastScrim.current, variant);
+    wasOpen.current = open;
+  }, [open, variant]);
 
   useEffect(() => {
     if (!open) return;
@@ -97,12 +150,15 @@ export function Dialog({
         : 'scrim';
   const panelClass =
     variant === 'sheet'
-      ? 'glass glass-strong sheet'
+      ? 'ff-dialog sheet glass glass--modal'
       : variant === 'drawer'
-        ? 'drawer'
-        : 'glass glass-strong dialog';
+        ? 'ff-dialog drawer glass glass--inspector'
+        : 'ff-dialog dialog glass glass--modal';
   return createPortal(
     <div
+      ref={(node) => {
+        if (node) lastScrim.current = node;
+      }}
       role="presentation"
       className={scrimClass}
       onMouseDown={(event) => {
@@ -118,30 +174,25 @@ export function Dialog({
         tabIndex={-1}
         className={panelClass}
       >
-        <div
-          className="row between"
-          style={{ alignItems: 'flex-start', marginBottom: 'var(--sp-3)' }}
-        >
-          <h2 id={titleId} className="t-section">
-            {title}
-          </h2>
+        <header className="ff-dialog__head">
+          <div className="ff-dialog__titles">
+            {eyebrow ? <p className="ff-dialog__eyebrow type-label">{eyebrow}</p> : null}
+            <h2 id={titleId} className="ff-dialog__title">
+              {title}
+            </h2>
+            {description ? (
+              <p id={descId} className="ff-dialog__desc">
+                {description}
+              </p>
+            ) : null}
+          </div>
           {dismissible ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-icon btn-sm"
-              onClick={onClose}
-              aria-label="Close"
-            >
+            <button type="button" className="ff-dialog__close" onClick={onClose} aria-label="Close">
               <Icon name="x" />
             </button>
           ) : null}
-        </div>
-        {description ? (
-          <p id={descId} className="t-small t-muted" style={{ marginBottom: 'var(--sp-4)' }}>
-            {description}
-          </p>
-        ) : null}
-        {children}
+        </header>
+        <div className="ff-dialog__body">{children}</div>
       </div>
     </div>,
     document.body,

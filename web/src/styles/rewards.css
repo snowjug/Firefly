@@ -1,593 +1,668 @@
-/* Rewards: level, badges and challenges, the rules for points and the history of every award.
-   Amber is kept for rewards, so it only appears here and on the home page's badge count.
+/* Recognition: points, badges and challenges, below the sky on the Progress page.
 
-   Layouts follow the width of the page itself (the `rw` container), not the window, because the
-   sidebar takes a quarter of a laptop screen. */
+   Quiet on purpose. Points are points; a badge is a small engraved mark, not a trophy; a challenge
+   is a row of text. Rows sit on hairlines, nothing is boxed, nothing moves except the one lit moment
+   when a badge has just been earned (and reduced motion cuts that to nothing). Tokens only. The
+   columns line up with the sky above, through the page's `--pg-side` and `--pg-gap`. */
 
-.rw-content {
-  container: rw / inline-size;
+.rw {
   display: grid;
   gap: var(--sp-6);
+  min-width: 0;
 }
-.rw-meta {
-  color: var(--text-3);
-  font-size: var(--fs-meta);
+.rw-lead {
+  max-width: var(--measure-read);
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: var(--t-lead);
+  line-height: 1.4;
+  text-wrap: pretty;
 }
 
-/* ------------------------------------------------------------------ First points */
+/* ====================================================================== A first visit */
 .rw-first {
-  align-items: flex-start;
-}
-.rw-first > svg {
-  color: var(--info);
-}
-.rw-first-body {
+  position: relative;
   display: grid;
-  gap: var(--sp-3);
+  gap: var(--sp-4);
+  justify-items: start;
+  max-width: 44rem;
+  padding-inline-start: var(--sp-5);
+  border-inline-start: 1px solid var(--line-3);
+}
+.rw-first::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0.45rem;
+  inset-inline-start: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--amber) 60%, transparent);
+}
+.rw-first p {
+  margin: 0;
+  color: var(--ink-2);
+}
+.rw-first strong {
+  color: var(--ink-1);
+  font-weight: 600;
 }
 
-/* ------------------------------------------------------------------ Level, badges, challenges, streak */
-.rw-summary {
+/* ====================================================================== Standing, beside the marks */
+.rw-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-4);
+  gap: var(--sp-7) var(--pg-gap, var(--sp-8));
+  align-items: start;
 }
-.rw-level,
-.rw-stat {
-  min-width: 0;
-  padding: var(--sp-4) var(--sp-5);
+@media (min-width: 64rem) {
+  .rw-grid {
+    grid-template-columns: minmax(0, var(--pg-side, 29rem)) minmax(0, 1fr);
+  }
 }
-.rw-stat {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-}
-.rw-stat-body {
+.rw-standing {
   display: grid;
-  gap: 2px;
+  gap: var(--sp-6);
   min-width: 0;
 }
 .rw-level {
   display: grid;
-  align-content: center;
-  gap: var(--sp-3);
-}
-.rw-level-top {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-}
-.stat-icon.rw-level-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-}
-.rw-level-name {
-  font-family: var(--font-heading);
-  font-size: 1.35rem;
-  font-weight: 750;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-}
-.rw-level-points {
-  color: var(--text-2);
-  font-size: var(--fs-small);
-  font-weight: 650;
-}
-.rw-level-bar {
-  display: grid;
-  gap: var(--sp-2);
-}
-.rw-togo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-1) var(--sp-3);
-  color: var(--text-2);
-  font-size: var(--fs-meta);
-}
-.rw-togo strong {
-  color: var(--text);
-}
-
-/* ------------------------------------------------------------------ Tabs */
-.rw-tabs {
-  display: grid;
-  gap: var(--sp-4);
-}
-.rw-panel:focus-visible {
-  outline-offset: 6px;
-  border-radius: var(--r-card);
-}
-@container rw (max-width: 479px) {
-  .rw-tabs .tabs {
-    gap: var(--sp-3);
-  }
-  .rw-tabs .tab-count {
-    margin-left: 0.3rem;
-    padding-inline: 0.35rem;
-  }
-}
-/* On the narrowest phones the three tabs still fit without scrolling. */
-@container rw (max-width: 359px) {
-  .rw-tabs .tabs {
-    gap: var(--sp-2);
-  }
-  .rw-tabs .tab {
-    font-size: var(--fs-meta);
-  }
-  .rw-tabs .tab-count {
-    margin-left: 0.2rem;
-    padding-inline: 0.3rem;
-  }
-}
-.rw-empty {
-  padding: var(--sp-6) var(--sp-5);
-  color: var(--text-2);
-  text-align: center;
-}
-
-/* ------------------------------------------------------------------ Badges */
-.rw-badges,
-.rw-challenges {
-  display: grid;
-  gap: var(--sp-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.rw-badges {
-  grid-template-columns: minmax(0, 1fr);
-}
-.rw-badge {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-2);
-  min-width: 0;
-  padding: var(--sp-5) var(--sp-4) var(--sp-4);
-  text-align: center;
-}
-.rw-badge[data-earned='true'] {
-  border-color: color-mix(in srgb, var(--glow) 45%, var(--border));
-}
-.rw-badge-title {
-  font-size: 1.05rem;
-  font-weight: 720;
-  line-height: 1.25;
-}
-.rw-badge-state {
-  margin: 0;
-}
-.rw-badge-criteria {
-  max-width: 34ch;
-  color: var(--text-2);
-  font-size: var(--fs-small);
-}
-.rw-badge-progress {
-  display: grid;
-  gap: var(--sp-1);
-  width: 100%;
-  margin-top: auto;
-  padding-top: var(--sp-3);
-}
-.rw-badge-progress .rw-meta {
-  color: var(--text-2);
-  font-weight: 600;
-}
-
-/* A shield: gold or violet once earned, grey while locked. Each badge also says so in words. */
-.rw-emblem {
-  --emb-top: var(--surface-3);
-  --emb-bottom: var(--surface-2);
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 72px;
-  margin-bottom: var(--sp-1);
-}
-.rw-emblem svg {
-  width: 64px;
-  height: 72px;
-  overflow: visible;
-}
-.rw-emblem-top {
-  stop-color: var(--emb-top);
-}
-.rw-emblem-bottom {
-  stop-color: var(--emb-bottom);
-}
-.rw-emblem-inner {
-  stroke: rgba(255, 255, 255, 0.55);
-  stroke-width: 1.4;
-}
-.rw-emblem-body {
-  stroke: transparent;
-  stroke-width: 1.5;
-}
-.rw-emblem-glyph {
-  position: absolute;
-  inset: 0 0 4px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  filter: drop-shadow(0 1px 1px rgba(60, 30, 0, 0.5));
-}
-.rw-emblem[data-earned='true'][data-tone='amber'] {
-  --emb-top: #f7b52e;
-  --emb-bottom: #c46500;
-}
-.rw-emblem[data-earned='true'][data-tone='violet'] {
-  --emb-top: #9d86f8;
-  --emb-bottom: #5535c8;
-}
-.rw-emblem[data-earned='true'] svg {
-  filter: drop-shadow(0 6px 8px color-mix(in srgb, var(--emb-bottom) 38%, transparent));
-}
-.rw-emblem[data-earned='false'] .rw-emblem-body {
-  stroke: var(--border-strong);
-}
-.rw-emblem[data-earned='false'] .rw-emblem-inner {
-  stroke: var(--border);
-}
-.rw-emblem[data-earned='false'] .rw-emblem-glyph {
-  color: var(--text-3);
-  filter: none;
-}
-
-/* ------------------------------------------------------------------ Challenges */
-.rw-challenges {
-  grid-template-columns: minmax(0, 1fr);
-}
-.rw-challenge {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-3);
-  min-width: 0;
-  padding: var(--sp-5);
-}
-.rw-challenge-head {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-3);
-  width: 100%;
-}
-.rw-challenge-heading {
-  display: grid;
-  flex: 1;
   gap: var(--sp-2);
   justify-items: start;
-  min-width: 0;
 }
-.rw-challenge-title {
-  font-size: 1.05rem;
-  font-weight: 720;
-  line-height: 1.25;
-}
-.rw-challenge-reward {
+.rw-level__label {
   margin: 0;
 }
-.rw-challenge-detail {
-  color: var(--text-2);
-  font-size: var(--fs-small);
-}
-.rw-challenge .rw-badge-progress {
-  margin-top: auto;
-  padding-top: 0;
-}
-
-/* ------------------------------------------------------------------ How points work */
-.rw-section {
-  display: grid;
-  gap: var(--sp-3);
-}
-.rw-section-head {
-  display: grid;
-  gap: var(--sp-1);
-  max-width: 70ch;
-}
-.rw-subhead {
-  margin-top: var(--sp-3);
-  font-size: 1rem;
-  font-weight: 700;
-}
-.rw-levels-intro {
-  max-width: 70ch;
-}
-.rw-rules {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.rw-rule {
-  display: grid;
-  grid-template-columns: 4.5rem minmax(0, 1fr);
-  gap: var(--sp-4);
-  padding: var(--sp-4) var(--sp-5);
-  border-top: 1px solid var(--border);
-}
-.rw-rule:first-child {
-  border-top: 0;
-}
-.rw-rule-points,
-.rw-entry-points {
-  color: var(--glow-text);
-  font-family: var(--font-heading);
-  font-size: 1.25rem;
-  font-weight: 760;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-.rw-rule-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-1) var(--sp-6);
-  align-items: start;
-}
-.rw-rule-title {
-  grid-column: 1;
-  font-size: 1rem;
-  font-weight: 700;
-}
-.rw-rule-detail {
-  grid-column: 1;
-  color: var(--text-2);
-  font-size: var(--fs-small);
-}
-.rw-rule-safeguard {
-  grid-column: 1;
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  border-radius: var(--r-control);
-  background: var(--surface-2);
-  color: var(--text-2);
-  font-size: var(--fs-meta);
-}
-.rw-rule-safeguard svg {
-  flex: none;
-  margin-top: 1px;
-  color: var(--positive);
-}
-.rw-rule-safeguard strong {
-  color: var(--text);
-}
-.rw-levels {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.rw-levels-item {
-  display: grid;
-  align-content: start;
-  gap: 2px;
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--r-card);
-  background: var(--surface);
-}
-.rw-levels-item[aria-current='step'] {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-}
-.rw-levels-name {
+.rw-points {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2);
-  font-weight: 700;
+  align-items: baseline;
+  gap: 0 0.5rem;
+  margin: 0;
+}
+.rw-points__n {
+  font-family: var(--font-display);
+  font-size: clamp(3.25rem, 2.2rem + 3.6vw, 5rem);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: var(--track-display);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.rw-points__unit {
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-style: italic;
+}
+.rw-level__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--sp-4);
+  margin: var(--sp-3) 0 0;
+}
+.rw-level__title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+.rw-level .rw-meter {
+  max-width: none;
+  margin-block-start: var(--sp-2);
+}
+.rw-level__next,
+.rw-level__togo,
+.rw-level__kinds {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.rw-level__next strong {
+  color: var(--ink-1);
+  font-weight: 600;
+}
+.rw-level__kinds {
+  color: var(--ink-3);
+}
+.rw-standing .ff-ledger__label {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.rw-standing .ff-ledger__value {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 300;
+}
+.rw-standing .ff-ledger__note {
+  color: var(--ink-2);
 }
 
-/* ------------------------------------------------------------------ Points history */
-.rw-history {
-  overflow: hidden;
+/* A progress line: a hairline with end ticks and a lit stretch that ends in a point. */
+.rw-meter {
+  position: relative;
+  width: 100%;
+  max-width: 22rem;
+  height: 9px;
+  border-inline: 1px solid var(--line-3);
 }
-.rw-history-empty {
-  padding: var(--sp-6) var(--sp-5);
-  color: var(--text-2);
-  text-align: center;
+.rw-meter::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 4px;
+  border-block-start: 1px solid var(--line-3);
 }
-.rw-entries {
+.rw-meter__fill {
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-start: 0;
+  height: 3px;
+  max-width: 100%;
+  background: var(--ink-1);
+}
+.rw-meter__fill::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: -4px;
+  width: 8px;
+  height: 8px;
+  margin-block-start: -4px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--amber) 60%, transparent);
+}
+.rw-meter[data-empty] .rw-meter__fill::after {
+  display: none;
+}
+
+/* ====================================================================== Badges and challenges */
+.rw-marks {
+  display: grid;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+.rw-panel {
+  min-width: 0;
+}
+.rw-empty {
+  max-width: var(--measure-ui);
+  margin: 0;
+  padding-block: var(--sp-4);
+  border-block-start: 1px solid var(--line-2);
+  color: var(--ink-2);
+}
+
+.rw-badges {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  gap: var(--sp-6) var(--sp-5);
   margin: 0;
   padding: 0;
   list-style: none;
 }
+.rw-badge {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+  padding-block-start: var(--sp-4);
+  border-block-start: 1px solid var(--line-2);
+  min-width: 0;
+}
+.rw-badge__body {
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
+  min-width: 0;
+}
+.rw-badge__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.rw-badge__state {
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.rw-badge[data-state='earned'] .rw-badge__state {
+  color: var(--amber-text);
+}
+.rw-badge__criteria {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  overflow-wrap: anywhere;
+}
+.rw-badge__meter {
+  margin-block-start: var(--sp-1);
+}
+.rw-badge__progress,
+.rw-badge__link {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.rw-badge__link {
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  letter-spacing: 0;
+}
+
+/* --- the engraved mark ------------------------------------------------------------------------- */
+.rw-mark {
+  display: block;
+  width: 72px;
+  height: 72px;
+  overflow: visible;
+  color: var(--ink-1);
+}
+.rw-mark * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+}
+.rw-mark__track {
+  stroke-opacity: 0.22;
+}
+.rw-mark__ring {
+  stroke-opacity: 0.95;
+}
+.rw-mark__figure {
+  stroke-opacity: 0.85;
+}
+.rw-mark[data-state='progress'] .rw-mark__figure {
+  stroke-opacity: 0.6;
+}
+.rw-mark[data-state='locked'] .rw-mark__track {
+  stroke-dasharray: 2 4;
+  stroke-opacity: 0.45;
+}
+.rw-mark[data-state='locked'] .rw-mark__ring {
+  display: none;
+}
+.rw-mark[data-state='locked'] .rw-mark__figure {
+  stroke-opacity: 0.4;
+  stroke-dasharray: 1 3;
+}
+.rw-mark .rw-mark__glow {
+  fill: var(--amber);
+  fill-opacity: 0.13;
+  stroke: none;
+}
+.rw-mark .rw-mark__heart {
+  fill: var(--amber);
+  stroke: var(--amber-text);
+  stroke-width: 1;
+}
+
+/* The one lit moment: the ring draws itself, then the point at the heart lights. */
+@keyframes rw-draw {
+  from {
+    stroke-dasharray: 0 100;
+  }
+  to {
+    stroke-dasharray: 100 0;
+  }
+}
+@keyframes rw-light {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes rw-wash {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.rw-badge[data-moment] .rw-mark__ring {
+  animation: rw-draw 700ms var(--ease-exit-decelerated) both;
+}
+.rw-badge[data-moment] .rw-mark__heart {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rw-light 700ms var(--ease-discovery-settle) 360ms both;
+}
+.rw-badge[data-moment] .rw-mark__glow {
+  animation: rw-wash 700ms ease-out 360ms both;
+}
+
+/* --- challenges: rows of text ------------------------------------------------------------------ */
+.rw-challenges {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-challenge {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, auto);
+  gap: var(--sp-3) var(--sp-6);
+  padding-block: var(--sp-5);
+  border-block-start: 1px solid var(--line-2);
+}
+.rw-challenge:last-child {
+  border-block-end: 1px solid var(--line-2);
+}
+.rw-challenge__main {
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
+  min-width: 0;
+}
+.rw-challenge__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 400;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.rw-challenge__detail {
+  max-width: var(--measure-ui);
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  overflow-wrap: anywhere;
+}
+.rw-challenge__progress {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+}
+.rw-facts {
+  display: grid;
+  gap: var(--sp-3);
+  align-content: start;
+  margin: 0;
+}
+.rw-facts dt {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.rw-facts dd {
+  margin: 0;
+  color: var(--ink-1);
+  overflow-wrap: anywhere;
+}
+.rw-challenge[data-status='completed'] .rw-challenge__title {
+  color: var(--ink-2);
+}
+.rw-challenge__start {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+@media (max-width: 40rem) {
+  .rw-challenge {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rw-facts {
+    grid-auto-flow: column;
+    justify-content: start;
+    gap: var(--sp-6);
+  }
+}
+
+/* ====================================================================== Rules, levels, history */
+.rw-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4) var(--pg-gap, var(--sp-8));
+  padding-block-start: var(--sp-6);
+  border-block-start: 1px solid var(--line-2);
+}
+@media (min-width: 64rem) {
+  .rw-block {
+    grid-template-columns: minmax(0, var(--pg-side, 29rem)) minmax(0, 1fr);
+  }
+}
+.rw-block__aside,
+.rw-block__main {
+  min-width: 0;
+}
+.rw-block__title {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-display);
+  font-size: var(--t-heading);
+  font-weight: 400;
+  line-height: var(--lh-title);
+  letter-spacing: var(--track-title);
+}
+.rw-block__lead {
+  max-width: var(--measure-ui);
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.rw-rules {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-rule,
 .rw-entry {
   display: grid;
   grid-template-columns: 4.5rem minmax(0, 1fr);
   gap: var(--sp-4);
-  padding: var(--sp-4) var(--sp-5);
-  border-top: 1px solid var(--border);
+  padding-block: var(--sp-4);
+  border-block-start: 1px solid var(--line-2);
 }
-.rw-entry:first-child {
-  border-top: 0;
+.rw-rule:last-child,
+.rw-entry:last-child {
+  border-block-end: 1px solid var(--line-2);
 }
-.rw-entry:focus-visible {
-  outline-offset: -3px;
-  border-radius: var(--r-card);
+.rw-rule__points,
+.rw-entry__points {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  font-weight: 300;
+  line-height: 1.15;
+  font-variant-numeric: lining-nums tabular-nums;
 }
-.rw-entry-body {
+.rw-rule__body,
+.rw-entry__body {
   display: grid;
   gap: var(--sp-1);
   min-width: 0;
 }
-.rw-entry-head {
+.rw-rule__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+.rw-rule__detail,
+.rw-rule__safeguard,
+.rw-entry__reason,
+.rw-entry__call {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  overflow-wrap: anywhere;
+}
+.rw-rule__safeguard strong {
+  color: var(--ink-1);
+  font-weight: 500;
+}
+
+.rw-sub {
+  margin: var(--sp-6) 0 var(--sp-2);
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 400;
+}
+.rw-sub__lead {
+  max-width: var(--measure-ui);
+  margin: 0 0 var(--sp-4);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.rw-levels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-levels__item {
+  padding: var(--sp-3) var(--sp-4) var(--sp-3) 0;
+  border-block-start: 1px solid var(--line-2);
+}
+.rw-levels__item[aria-current='step'] {
+  border-block-start-color: var(--amber);
+}
+.rw-levels__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
+}
+.rw-levels__need {
+  margin: 0.15rem 0 0;
+  color: var(--ink-3);
+  font-size: var(--t-small);
+}
+
+.rw-history {
+  display: grid;
+  gap: var(--sp-4);
+}
+.rw-entries {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rw-entry[tabindex]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+.rw-entry__head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 0 var(--sp-3);
+  gap: var(--sp-1) var(--sp-4);
 }
-.rw-entry-title {
-  font-weight: 680;
-}
-.rw-entry-reason {
-  color: var(--text-2);
-  font-size: var(--fs-small);
-}
-.rw-quote {
-  margin: var(--sp-1) 0 0;
-  padding: var(--sp-2) var(--sp-3);
-  border-left: 3px solid var(--glow);
-  border-radius: 0 var(--r-control) var(--r-control) 0;
-  background: var(--surface-2);
-  font-size: var(--fs-small);
+.rw-entry__title {
+  margin: 0;
+  color: var(--ink-1);
+  font-family: var(--font-display);
+  font-size: 1.1875rem;
   overflow-wrap: anywhere;
 }
-.rw-history-foot {
+.rw-entry__when {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+}
+.rw-entry__quote {
+  margin: var(--sp-2) 0 0;
+  padding-inline-start: var(--sp-4);
+  border-inline-start: 1px solid var(--amber);
+  color: var(--ink-1);
+  font-family: var(--font-read);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.rw-entry__quote p {
+  margin: 0;
+}
+.rw-entry__quote .rw-entry__call {
+  margin-block-start: var(--sp-1);
+  font-family: var(--font-ui);
+  font-style: normal;
+}
+.rw-history__foot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-2) var(--sp-4);
-  padding: var(--sp-3) var(--sp-5);
-  border-top: 1px solid var(--border);
-  background: var(--surface-2);
+  gap: var(--sp-3) var(--sp-5);
 }
-.rw-history > .rw-meta {
-  padding: 0 var(--sp-5) var(--sp-3);
-  background: var(--surface-2);
+.rw-history__count {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
 }
-
 .rw-note {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-3);
-  max-width: 70ch;
-  color: var(--text-2);
-  font-size: var(--fs-small);
-}
-.rw-note svg {
-  flex: none;
-  margin-top: 2px;
-  color: var(--text-3);
+  max-width: var(--measure-read);
+  margin: 0;
+  padding-block-start: var(--sp-3);
+  border-block-start: 1px solid var(--line-1);
+  color: var(--ink-2);
+  font-family: var(--font-read);
+  font-size: 1rem;
+  font-style: italic;
 }
 
-/* On a touch screen every control is at least 44px tall, like the rest of the app. */
-@media (pointer: coarse) {
-  .rw .btn-sm {
-    min-height: var(--tap);
+/* ====================================================================== Higher contrast, forced colours */
+@media (prefers-contrast: more) {
+  .rw-mark__track {
+    stroke-opacity: 0.7;
   }
-  .rw-badge .rw-meta a {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--tap);
+  .rw-mark__figure {
+    stroke-opacity: 1;
   }
 }
-
-/* ------------------------------------------------------------------ Loading */
-.rw-skel-icon {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-}
-.rw-skel-text {
-  flex: 1;
-  gap: var(--sp-2);
-}
-.rw-skel-text .skeleton,
-.rw-skel-badge .skeleton {
-  display: block;
-}
-.rw-skel-badge {
-  min-height: 15rem;
-}
-.rw-skel-emblem {
-  width: 64px;
-  height: 72px;
-  border-radius: 18px;
-}
-
-/* ------------------------------------------------------------------ By width of the page */
-@container rw (min-width: 440px) {
-  .rw-levels {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+@media (forced-colors: active) {
+  .rw-mark * {
+    forced-color-adjust: none;
+    stroke: CanvasText;
   }
-}
-@container rw (min-width: 560px) {
-  .rw-badges {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .rw-mark .rw-mark__heart {
+    fill: Highlight;
+    stroke: Highlight;
   }
-}
-@container rw (min-width: 700px) {
-  .rw-summary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .rw-mark .rw-mark__glow {
+    display: none;
   }
-  .rw-level {
-    grid-column: 1 / -1;
+  .rw-meter__fill {
+    forced-color-adjust: none;
+    background: Highlight;
   }
-  .rw-challenges {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@container rw (min-width: 720px) {
-  /* The rule on the left, the safeguard that keeps it fair on the right. */
-  .rw-rule-body {
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-  }
-  .rw-rule-safeguard {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    margin-top: 0;
-  }
-}
-@container rw (min-width: 760px) {
-  .rw-levels {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-@container rw (min-width: 900px) {
-  .rw-badges {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-@container rw (min-width: 1000px) {
-  .rw-summary {
-    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr);
-  }
-  .rw-level {
-    grid-column: auto;
-  }
-}
-@container rw (max-width: 559px) {
-  /* One badge per row, with the shield beside its words instead of above them. */
-  .rw-badge {
-    display: grid;
-    grid-template-columns: 64px minmax(0, 1fr);
-    column-gap: var(--sp-4);
-    row-gap: var(--sp-1);
-    align-items: start;
-    justify-items: start;
-    padding: var(--sp-4);
-    text-align: left;
-  }
-  .rw-badge > .rw-emblem {
-    grid-row: 1 / span 4;
-  }
-  .rw-badge > :not(.rw-emblem) {
-    grid-column: 2;
-  }
-  .rw-badge-progress {
-    padding-top: var(--sp-2);
-  }
-  .rw-history-foot {
-    padding-inline: var(--sp-4);
-  }
-}
-@container rw (max-width: 479px) {
-  .rw-rule,
-  .rw-entry {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-1);
-    padding: var(--sp-4);
+  .rw-meter__fill::after {
+    background: Highlight;
   }
 }

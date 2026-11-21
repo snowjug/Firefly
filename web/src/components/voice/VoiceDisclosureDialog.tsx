@@ -1,4 +1,4 @@
-import { Dialog } from '../Dialog.tsx';
+import { ChamberModal } from '../call/ChamberModal.tsx';
 import { Icon, type IconName } from '../Icon.tsx';
 
 const POINTS: readonly { icon: IconName; text: string }[] = [
@@ -42,30 +42,35 @@ export function VoiceDisclosureDialog({
   onCancel(): void;
 }) {
   return (
-    <Dialog
+    <ChamberModal
       open={open}
       onClose={onCancel}
       title="Turn on voice (Beta)?"
       description="Voice lets you speak instead of typing and hear the customer answer."
     >
-      <ul role="list" className="stack" style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}>
+      <ul role="list" className="ch-points">
         {POINTS.map((point) => (
-          <li key={point.icon} className="row" style={{ alignItems: 'flex-start' }}>
-            <span className="tone-icon" style={{ width: 36, height: 36 }}>
-              <Icon name={point.icon} size={18} />
-            </span>
-            <span className="t-small grow">{point.text}</span>
+          <li key={point.icon}>
+            <Icon name={point.icon} size={16} />
+            <span>{point.text}</span>
           </li>
         ))}
       </ul>
-      <div className="cluster" style={{ justifyContent: 'flex-end', marginTop: 'var(--sp-5)' }}>
-        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+      <div className="ch-modal__actions">
+        <button type="button" className="ch-link" onClick={onCancel}>
           Cancel
         </button>
-        <button type="button" className="btn btn-primary" onClick={onAccept} data-autofocus>
+        <button
+          type="button"
+          className="ch-button"
+          data-tone="primary"
+          onClick={onAccept}
+          data-autofocus
+        >
           Turn on voice
+          <Icon name="arrow-right" size={16} />
         </button>
       </div>
-    </Dialog>
+    </ChamberModal>
   );
 }

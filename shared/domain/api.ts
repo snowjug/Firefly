@@ -101,6 +101,11 @@ export interface PublicStateDTO {
   trend: 'rising' | 'steady' | 'falling';
   discoveredCount: number;
   silent: boolean;
+  /**
+   * How many times the conversation has changed direction (a curveball landed). It is only a count:
+   * the kind of change is never sent, and only guided practice shows it.
+   */
+  shifts: number;
 }
 
 export interface SessionScenarioView {

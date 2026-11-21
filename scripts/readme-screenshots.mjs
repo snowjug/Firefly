@@ -11,9 +11,10 @@
 //   --only a,b       only these images (see NAMES below)
 //   PW_CHANNEL=msedge  browser channel (msedge, chrome); PW_CHANNEL=none uses Playwright's Chromium
 //
-// The images are ordinary screenshots, never mockups, saved as JPEG (quality 88) to keep the
-// repository small. After running it, look at `git diff --stat docs/images` and open the pictures
-// that changed: that is the visual review for a design change.
+// The images are ordinary screenshots, never mockups, saved as JPEG (quality 86) to keep the
+// repository small. The animated field is pinned to its highest effects tier (?perf=high) so the
+// pictures show what a capable device shows. After running it, look at `git diff --stat docs/images`
+// and open the pictures that changed: that is the visual review for a design change.
 /* global document, window */
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
@@ -31,17 +32,19 @@ const NAMES = [
   'landing',
   'home-dark',
   'home-light',
-  'setup',
-  'library',
+  'missions',
+  'calibration',
   'call',
+  'call-tension',
   'voice',
   'report',
   'evidence',
   'discovery',
-  'timeline',
-  'rewards',
-  'history',
+  'journey',
   'progress',
+  'recognition',
+  'history',
+  'studio',
   'settings',
   'mobile',
 ];
@@ -85,6 +88,10 @@ const RECOVERED = [
   "I'm sorry, that came across badly. I can hear how stressful this is.",
   "I'm going to get an engineer on this right now and call you back at 9:30 with an update.",
 ];
+const BLAME = [
+  'Hi. What is the problem.',
+  'You should have read the instructions before changing the password.',
+];
 
 const channel = process.env.PW_CHANNEL ?? 'msedge';
 const browser = await chromium.launch({ channel: channel === 'none' ? undefined : channel });
@@ -103,13 +110,15 @@ async function open(
   });
   if (cookies) await context.addCookies(cookies);
   // The theme and the profile are only chosen on the first page; later pictures change them
-  // themselves.
+  // themselves. The introduction is marked as seen so it does not cover the pictures.
   await context.addInitScript(
     ({ theme, person, withProfile }) => {
       if (localStorage.getItem('firefly.theme') === null)
         localStorage.setItem('firefly.theme', JSON.stringify(theme));
       if (withProfile && localStorage.getItem('firefly.profile') === null)
         localStorage.setItem('firefly.profile', JSON.stringify(person));
+      if (withProfile && localStorage.getItem('firefly.tour') === null)
+        localStorage.setItem('firefly.tour', JSON.stringify('done'));
     },
     {
       theme: scheme,
@@ -121,11 +130,11 @@ async function open(
 }
 
 const api = (page) => ({
-  async create(scenarioId, difficulty, mode) {
+  async create(scenarioId, difficulty, mode, extra = {}) {
     const response = await page.request.post('/api/sessions', {
       data: {
         scenarioId,
-        overrides: { difficulty },
+        overrides: { difficulty, ...extra },
         ...(mode ? { mode } : {}),
         clientRequestId: randomUUID(),
       },
@@ -136,10 +145,16 @@ const api = (page) => ({
   },
   async say(id, lines) {
     for (const text of lines) {
-      const response = await page.request.post(`/api/sessions/${id}/messages`, {
-        data: { text, clientMessageId: randomUUID() },
-      });
-      if (!response.ok()) throw new Error(`Could not send a message: ${response.status()}`);
+      // The server limits how fast one browser may write; a short pause keeps the seeding polite.
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const response = await page.request.post(`/api/sessions/${id}/messages`, {
+          data: { text, clientMessageId: randomUUID() },
+        });
+        if (response.ok()) break;
+        if (response.status() !== 429)
+          throw new Error(`Could not send a message: ${response.status()}`);
+        await page.waitForTimeout(2200);
+      }
     }
   },
   async finish(id) {
@@ -153,36 +168,42 @@ const api = (page) => ({
   },
 });
 
-const settle = async (page, extra = 1500) => {
+const settle = async (page, extra = 2500) => {
   await page.waitForLoadState('networkidle').catch(() => {});
+  // The animated field is requested once the browser is idle; give it time to draw its first frames.
   await page.waitForTimeout(extra);
 };
-/** Scrolls (at once, not smoothly) so the element sits just below the sticky "On this page" bar. */
+/** Scrolls (at once, not smoothly) so the element sits near the top of the screen. */
 const bring = async (page, selector) => {
   await page.evaluate((target) => {
     document.querySelector(target)?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    window.scrollBy(0, -24);
   }, selector);
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(1200);
 };
 const save = async (page, name, options = {}) => {
   const file = join(OUT, `${name}.jpg`);
-  await page.screenshot({ path: file, type: 'jpeg', quality: 88, ...options });
+  await page.screenshot({ path: file, type: 'jpeg', quality: 86, ...options });
   console.log('wrote', file);
 };
 const go = async (page, route, extra) => {
-  await page.goto(route);
+  // The effects tier goes in the query string, before any #fragment.
+  const [path, fragment] = route.split('#');
+  const url = `${path}${path.includes('?') ? '&' : '?'}perf=high${fragment ? `#${fragment}` : ''}`;
+  await page.goto(url);
   await settle(page, extra);
 };
 
-// The landing page is what someone sees before they have a profile.
+// The front door is what someone sees before they have a profile. The first-visit ignition lasts
+// about a second; wait it out so the picture shows the settled page.
 if (wanted('landing')) {
-  const first = await open(1440, 900, { profile: false });
-  await go(first.page, '/');
+  const first = await open(1440, 900, { profile: false, scheme: 'dark' });
+  await go(first.page, '/', 3500);
   await save(first.page, 'landing');
   await first.context.close();
 }
 
-// One browser profile holds all the practice; the phone pictures reuse its cookie.
+// One browser profile holds all the practice; the phone picture reuses its cookie.
 const desktop = await open(1440, 900);
 const firefly = api(desktop.page);
 const ids = {};
@@ -202,70 +223,95 @@ await firefly.say(ids.live, STRONG.slice(0, 3));
 const cookies = await desktop.context.cookies();
 const { page } = desktop;
 
+// The browser's storage can only be written once a page of the app is open.
+const onApp = async () => {
+  if (!page.url().startsWith('http')) await page.goto('/help');
+};
+const dark = async () => {
+  await onApp();
+  await page.evaluate(() => localStorage.setItem('firefly.theme', '"dark"'));
+  await page.emulateMedia({ colorScheme: 'dark' });
+};
+const light = async () => {
+  await onApp();
+  await page.evaluate(() => localStorage.setItem('firefly.theme', '"light"'));
+  await page.emulateMedia({ colorScheme: 'light' });
+};
+
 if (wanted('home-light')) {
   await go(page, '/home');
   await save(page, 'home-light');
 }
 if (wanted('home-dark')) {
-  await page.evaluate(() => localStorage.setItem('firefly.theme', '"dark"'));
-  await page.emulateMedia({ colorScheme: 'dark' });
+  await dark();
   await go(page, '/home');
   await save(page, 'home-dark');
-  await page.evaluate(() => localStorage.setItem('firefly.theme', '"light"'));
-  await page.emulateMedia({ colorScheme: 'light' });
+  await light();
 }
-if (wanted('setup')) {
-  await page.setViewportSize({ width: 1440, height: 1080 });
-  await go(page, '/scenarios/team-cannot-open-shared-workspace/setup');
-  await save(page, 'setup');
-  await page.setViewportSize({ width: 1440, height: 900 });
-}
-if (wanted('library')) {
+// The rest of the pictures use the dark field, where the interface was designed first.
+await dark();
+if (wanted('missions')) {
   await go(page, '/scenarios');
-  await save(page, 'library');
+  await save(page, 'missions');
+}
+if (wanted('calibration')) {
+  await go(page, '/scenarios/team-cannot-open-shared-workspace/setup');
+  await save(page, 'calibration');
 }
 if (wanted('call')) {
   await go(page, `/calls/${ids.live}`);
   await save(page, 'call');
 }
-if (wanted('report') || wanted('evidence') || wanted('discovery') || wanted('timeline')) {
-  await page.setViewportSize({ width: 1440, height: 1300 });
-  await go(page, `/sessions/${ids.standard}/report`, 2200);
+if (wanted('call-tension')) {
+  // A customer who has been blamed: the room tightens and the filament frays.
+  const tense = await firefly.create(
+    'checkout-outage-before-investor-event',
+    'challenge',
+    'guided',
+    {
+      startingTemperature: 'frustrated',
+    },
+  );
+  await firefly.say(tense, BLAME);
+  await go(page, `/calls/${tense}`, 3500);
+  await save(page, 'call-tension');
+}
+if (wanted('report') || wanted('evidence') || wanted('discovery') || wanted('journey')) {
+  await go(page, `/sessions/${ids.standard}/report`, 4500);
   if (wanted('report')) await save(page, 'report');
+  if (wanted('journey')) {
+    await bring(page, '#mood');
+    await save(page, 'journey');
+  }
   if (wanted('evidence')) {
-    // The skill details: each rationale, the quoted moments and what to try next.
-    await bring(page, '#skill-details');
+    // One skill's detail: the reason for the score, quoted moments and what to try.
+    await bring(page, '#dim-opening-rapport');
     await save(page, 'evidence');
   }
   if (wanted('discovery')) {
     await bring(page, '#discovery');
     await save(page, 'discovery');
   }
-  if (wanted('timeline')) {
-    // A call that started Frustrated, got worse after a mistake and ended Calm.
-    await bring(page, '#mood');
-    await save(page, 'timeline');
-  }
-  await page.setViewportSize({ width: 1440, height: 900 });
-}
-if (wanted('rewards')) {
-  await page.setViewportSize({ width: 1440, height: 1300 });
-  await go(page, '/rewards', 2200);
-  await save(page, 'rewards');
-  await page.setViewportSize({ width: 1440, height: 900 });
-}
-if (wanted('history')) {
-  await go(page, '/history', 2000);
-  await save(page, 'history');
 }
 if (wanted('progress')) {
-  await page.setViewportSize({ width: 1440, height: 1300 });
-  await go(page, '/progress', 2600);
+  await go(page, '/progress', 3500);
   await save(page, 'progress');
-  await page.setViewportSize({ width: 1440, height: 900 });
+}
+if (wanted('recognition')) {
+  await go(page, '/progress#recognition', 3500);
+  await bring(page, '#recognition');
+  await save(page, 'recognition');
+}
+if (wanted('history')) {
+  await go(page, '/history', 3000);
+  await save(page, 'history');
+}
+if (wanted('studio')) {
+  await go(page, '/calibration', 3000);
+  await save(page, 'studio');
 }
 if (wanted('settings')) {
-  await go(page, '/settings');
+  await go(page, '/settings#preferences');
   await save(page, 'settings');
 }
 await desktop.context.close();
@@ -274,7 +320,7 @@ if (wanted('voice')) {
   // The voice controls need a browser that can recognise speech. This one is given a stand-in that
   // reports "listening" and a partial sentence, which is all the picture needs: it does not use a
   // microphone.
-  const phone = await open(1440, 900, { cookies, voice: true });
+  const phone = await open(1440, 900, { cookies, voice: true, scheme: 'dark' });
   await phone.context.addInitScript(() => {
     class FakeRecognition {
       constructor() {
@@ -306,27 +352,27 @@ if (wanted('voice')) {
     .first()
     .click()
     .catch(() => {});
-  await phone.page.waitForTimeout(1200);
+  await phone.page.waitForTimeout(1500);
   await save(phone.page, 'voice');
   await phone.context.close();
 }
 
 if (wanted('mobile')) {
   // Three real phone-sized screenshots set side by side on one page.
-  const phone = await open(390, 844, { cookies, scale: 1 });
+  const phone = await open(390, 844, { cookies, scale: 1, scheme: 'dark' });
   const shots = [];
   for (const route of ['/home', `/calls/${ids.live}`, `/sessions/${ids.standard}/report`]) {
-    await go(phone.page, route, 2000);
+    await go(phone.page, route, 3000);
     shots.push((await phone.page.screenshot()).toString('base64'));
   }
   await phone.context.close();
-  const sheet = await open(1320, 940, { profile: false });
+  const sheet = await open(1320, 940, { profile: false, scheme: 'dark' });
   await sheet.page
-    .setContent(`<!doctype html><body style="margin:0;display:flex;gap:36px;justify-content:center;align-items:center;height:100vh;background:#0b1b4d">
+    .setContent(`<!doctype html><body style="margin:0;display:flex;gap:36px;justify-content:center;align-items:center;height:100vh;background:#060c0f">
     ${shots
       .map(
         (data) =>
-          `<img alt="" style="width:390px;height:844px;border-radius:34px;border:1px solid rgba(176,200,255,.3);box-shadow:0 30px 70px -20px #000" src="data:image/png;base64,${data}">`,
+          `<img alt="" style="width:390px;height:844px;border-radius:34px;border:1px solid rgba(236,231,218,.25);box-shadow:0 30px 70px -20px #000" src="data:image/png;base64,${data}">`,
       )
       .join('')}</body>`);
   await sheet.page.waitForTimeout(300);

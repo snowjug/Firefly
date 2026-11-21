@@ -4,6 +4,8 @@ Rewards are a private, explainable way to see that practice is adding up. They e
 
 The rules are pure functions in `shared/domain/rewards.ts`, covered by tests, so every number can be explained. The server assembles the inputs in `server/services/rewards.ts` and serves the result at `GET /api/rewards`.
 
+In the app they appear as **Recognition**, the last section of **Progress** (`/progress#recognition`; the older `/rewards` address redirects there): your points and level, the badges and challenges, how points work, and the points history. Each report also has **Rewards from this call**, Home shows how many badges are earned, and the bell menu announces a badge when it is earned.
+
 ## How they are worked out
 
 Nothing is stored. Each time rewards are requested, Firefly reads your saved calls, their coaching reports and any mentor reviews, takes the calls in the order they ended, and works out what each one earned.
@@ -27,9 +29,9 @@ Nothing is stored. Each time rewards are requested, Firefly reads your saved cal
 | **Practise on a day**             | 5               | At least one full call on a calendar day, in your own time zone.                                                          | One award per day however many calls you make, and a missed day never costs you anything.                                                                 |
 | **A mentor confirms the result**  | 25              | A mentor reviewed the call and scored every skill within one point of the rubric result.                                  | Needs a real mentor review, not a sample one. Once per call, and it is not taken back if another mentor sees the call differently.                        |
 
-The seven scenario families are: Sign-in or access problem, Service outage, Slow performance, Data missing, Billing or licence question, How-to question, and Feature not working as expected.
+The seven scenario families are: Sign-in or access problem, Service outage, Slow performance, Data missing, Billing or licence question, How-to question, and Feature not working as expected. These are the names in the **Issue type** menu where a call is set up. The Missions atlas groups the same seven, in the same order, as Access and Identity, Service Availability, Performance, Data and Recovery, Billing and Licensing, Guidance and How-To, and Unexpected Behaviour.
 
-Every entry in the ledger says why it was awarded in one plain sentence and, where there is one, quotes the moment from the call.
+Every entry in the ledger (the points history in the app) says why it was awarded in one plain sentence and, where there is one, quotes the moment from the call.
 
 ## Levels
 
@@ -110,7 +112,7 @@ The response is a single JSON object (`RewardsDTO` in `shared/domain/api.ts`):
 
 ## Limits
 
-- **Mentor reviews are trusted.** They come from the Calibration page, which has no sign-in, so the mentor reward relies on a real person having scored the call blind, just as calibration itself does. Rewards follow the saved reviews, so a mentor who revises their own review can change whether it confirms the result.
+- **Mentor reviews are trusted.** They come from the mentor Calibration page in the Studio, which has no sign-in, so the mentor reward relies on a real person having scored the call blind, just as calibration itself does. Rewards follow the saved reviews, so a mentor who revises their own review can change whether it confirms the result.
 - **The time zone is the one the browser reports now.** If you travel, a call near midnight can move to a neighbouring day, and the practice-day entries move with it.
 - **It reads every completed call on each request.** That is quick for one learner's history on one machine, which is what Firefly is built for.
 - **Points are encouragement, not an assessment.** See [responsible-ai.md](responsible-ai.md) for how Firefly treats scores and what it never claims.

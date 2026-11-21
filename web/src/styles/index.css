@@ -1,5 +1,6 @@
 @import './tokens.css';
 @import './base.css';
-@import './components.css';
-@import './layout.css';
-@import './tour.css';
+@import './type.css';
+@import './materials.css';
+@import './transitions.css';
+@import './world.css';

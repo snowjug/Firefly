@@ -81,7 +81,7 @@ function when(iso: string): string {
 export function NotificationsMenu() {
   const { pathname } = useLocation();
   const prefs = usePreferences();
-  const { open, setOpen, toggle, wrapRef, onBlur } = usePopover();
+  const { open, setOpen, toggle, wrapRef, triggerRef, onBlur } = usePopover();
   const [refresh, setRefresh] = useState(0);
   // Async loaders turn any failure (offline, an unexpected response) into a quiet "no notices".
   const sessions = useApi(
@@ -128,51 +128,49 @@ export function NotificationsMenu() {
   };
 
   return (
-    <div className="icon-button-wrap" ref={wrapRef} onBlur={onBlur}>
+    <div className="flyout-wrap" ref={wrapRef} onBlur={onBlur}>
       <button
+        ref={triggerRef}
         type="button"
-        className="btn btn-ghost btn-icon"
-        aria-haspopup="true"
+        className="util"
+        title="Notifications"
         aria-expanded={open}
         aria-controls="notifications-panel"
         aria-label={unread.length > 0 ? `Notifications, ${unread.length} new` : 'Notifications'}
         onClick={onToggle}
       >
-        <Icon name="bell" />
-        {unread.length > 0 ? <span className="badge-dot" aria-hidden="true" /> : null}
+        <Icon name="bell" size={18} />
+        {unread.length > 0 ? <span className="util__dot" aria-hidden="true" /> : null}
       </button>
       {open ? (
-        <div className="popover" id="notifications-panel" role="region" aria-label="Notifications">
-          <div className="popover-head">
-            <h2 className="t-section" style={{ fontSize: '1rem' }}>
-              Notifications
-            </h2>
-            <Link to="/settings" className="link-more" onClick={() => setOpen(false)}>
+        <div
+          className="flyout glass glass--inspector"
+          id="notifications-panel"
+          role="region"
+          aria-label="Notifications"
+        >
+          <div className="flyout__head">
+            <h2 className="flyout__title">Notifications</h2>
+            <Link to="/settings" className="text-link" onClick={() => setOpen(false)}>
               Settings
             </Link>
           </div>
           {notices.length === 0 ? (
-            <p className="popover-empty">
+            <p className="flyout__empty">
               Nothing new. When a coaching report is ready or you earn a badge, it shows up here.
             </p>
           ) : (
-            <ul role="list" style={{ margin: 0, padding: 0 }}>
+            <ul role="list" className="flyout__list">
               {notices.map((notice) => (
                 <li key={notice.id}>
-                  <Link to={notice.to} className="popover-item" onClick={() => setOpen(false)}>
-                    <span className="tone-icon" style={{ width: 36, height: 36 }}>
-                      <Icon name={notice.icon} size={18} />
-                    </span>
-                    <span className="grow">
-                      <strong style={{ display: 'block' }}>
+                  <Link to={notice.to} className="flyout__item" onClick={() => setOpen(false)}>
+                    <Icon name={notice.icon} size={16} />
+                    <span className="flyout__text">
+                      <strong className="flyout__strong">
                         {notice.title}
-                        {newIds.has(notice.id) ? (
-                          <span className="chip chip-accent" style={{ marginLeft: 8 }}>
-                            New
-                          </span>
-                        ) : null}
+                        {newIds.has(notice.id) ? <span className="flyout__new">New</span> : null}
                       </strong>
-                      <span className="t-meta">
+                      <span className="flyout__meta">
                         {notice.detail} · {when(notice.at)}
                       </span>
                     </span>

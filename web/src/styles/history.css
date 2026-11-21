@@ -1,396 +1,628 @@
-/* History: the filter row, the calls table (stacked cards when its card is narrow) and the
-   delete and compare dialogs. Tokens only, so both themes work. */
+/* History: a trail. Calls on a vertical hairline, newest first, each one a node (its instrument) and
+   a row of words: when, how it ended, what it was, how demanding, what it scored and what can be
+   done with it. No table, no boxes. Filters are words on a hairline. Tokens only, so both themes,
+   forced colours and higher contrast come with them. This is a quiet page: nothing here moves. */
 
-/* ------------------------------------------------------------------ Filters */
-.hs-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--sp-3) var(--sp-4);
-  margin-bottom: var(--sp-4);
+.trail-page {
+  --trail-node: 3.25rem;
+  --trail-gap: var(--sp-4);
 }
-.hs-filters .field {
-  flex: 0 1 12rem;
-  min-width: 9rem;
-}
-.hs-filters .hs-field-wide {
-  flex: 1 1 14rem;
-  max-width: 22rem;
-}
-.hs-filter-end {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-  min-height: var(--tap);
-}
-@media (max-width: 640px) {
-  .hs-filters .field,
-  .hs-filters .hs-field-wide {
-    flex: 1 1 100%;
-    max-width: none;
-  }
-  .hs-filter-end {
-    margin-left: 0;
+@media (min-width: 40rem) {
+  .trail-page {
+    --trail-gap: var(--sp-5);
   }
 }
+.trail-page .ff-head {
+  margin-block-end: var(--sp-6);
+}
+/* Everything under the title keeps to a reading width: a row of a call is read left to right. */
+.trail-column {
+  max-width: 62rem;
+}
 
-.hs-comparebar {
+/* ====================================================================== Filters */
+.trail-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+  margin: 0;
+}
+.trail-refine {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5) var(--sp-7);
+  padding-block-end: var(--sp-3);
+}
+@media (min-width: 52rem) {
+  .trail-refine {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  /* Difficulty is a row of words, so it takes the whole width; the list and the switch share the next. */
+  .trail-refine > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+.trail-refine-count {
+  color: var(--amber-text);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+
+/* The count, what just happened and what could be done next: one calm line above the trail. */
+.trail-status {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: var(--sp-3) var(--sp-5);
-  margin-bottom: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
-  background: var(--primary-soft);
+  gap: var(--sp-2) var(--sp-5);
+  min-height: 1.75rem;
+  margin-block: var(--sp-5) var(--sp-5);
 }
-
-.hs-status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  min-height: 2.25rem;
-  margin: 0 0 var(--sp-2);
-}
-.hs-status-text {
+.trail-status__text {
   display: grid;
   gap: var(--sp-1);
   min-width: 0;
 }
-.hs-status-end {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
+.trail-status__text > p,
+.trail-status__end > span {
+  margin: 0;
 }
-.hs-updating {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
+.trail-status__count,
+.trail-hint {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  line-height: 1.5;
+  text-transform: uppercase;
 }
-.hs-updating .spinner {
-  width: 0.9rem;
-  height: 0.9rem;
+.trail-status__end {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-1) var(--sp-4);
+}
+.trail-status button.text-link {
+  min-height: 2.75rem;
+  color: var(--ink-1);
+  text-decoration: underline;
+  text-decoration-color: var(--line-3);
+  text-underline-offset: 0.28em;
+}
+@media (hover: hover) {
+  .trail-status button.text-link:hover {
+    text-decoration-color: var(--amber);
+  }
+}
+.trail-problem {
+  margin: 0;
+  color: var(--coral-text);
+  font-size: var(--t-small);
 }
 
-/* ------------------------------------------------------------------ The table card */
-.hs-card {
-  /* The layout follows the width of the card, not the window, so it stacks the same way beside
-     the sidebar, below it and in a drawer layout. */
-  container: hs / inline-size;
-  overflow: hidden;
+/* Choosing calls to compare: a bar that stays in reach while the trail scrolls under it. */
+.trail-compare-bar.glass {
+  position: sticky;
+  inset-block-start: calc(var(--masthead-h) + var(--sp-2));
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-5);
+  margin-block-end: var(--sp-4);
+  padding: var(--sp-2) var(--sp-5);
+  border-radius: var(--r-1);
 }
-.hs-table-wrap[aria-busy='true'] {
-  opacity: 0.72;
-  transition: opacity var(--dur-2) var(--ease-out);
+.trail-compare-bar p {
+  margin: 0;
+  color: var(--ink-1);
+  font-size: var(--t-small);
 }
-.hs-table th,
-.hs-table td {
-  padding: var(--sp-3) var(--sp-4);
-}
-.hs-table tbody th {
-  font-size: inherit;
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--text);
-  font-weight: inherit;
-  background: transparent;
-}
-.hs-table tbody tr:last-child th {
-  border-bottom: 0;
-}
-.hs-table .hs-c-pick {
-  width: 3.5rem;
-  padding-inline: var(--sp-2) 0;
-}
-.hs-c-date {
-  white-space: nowrap;
-}
-.hs-c-scenario {
-  min-width: 15rem;
-}
-.hs-c-score {
-  min-width: 10rem;
-}
-.hs-c-badges {
-  min-width: 8rem;
-}
-.hs-c-actions {
-  white-space: nowrap;
+.trail-compare-bar button.text-link {
+  min-height: 2.75rem;
+  color: var(--ink-1);
+  text-decoration: underline;
+  text-decoration-color: var(--line-3);
+  text-underline-offset: 0.28em;
 }
 
-.hs-sub {
-  display: block;
-  color: var(--text-3);
-  font-size: var(--fs-meta);
+.trail-panel {
+  min-width: 0;
+  transition: opacity var(--dur-component) var(--ease-exit-decelerated);
 }
-.hs-title {
-  display: block;
-  font-weight: 650;
-  line-height: 1.3;
+.trail-panel[aria-busy='true'] {
+  opacity: 0.7;
+}
+
+/* ====================================================================== The trail */
+.trail,
+.trail__calls {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A month: its name sits on the line, which carries on through it. */
+.trail__monthhead {
+  display: grid;
+  grid-template-columns: var(--trail-node) minmax(0, 1fr);
+  align-items: stretch;
+  column-gap: var(--trail-gap);
+  min-height: 2.5rem;
+}
+.trail__monthname {
+  align-self: center;
+  margin: 0;
+  color: var(--ink-2);
+}
+.trail__tick {
+  position: relative;
+  justify-self: center;
+  width: 1px;
+  background: var(--line-2);
+}
+.trail__tick::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: -5px;
+  width: 11px;
+  height: 1px;
+  background: var(--line-3);
+}
+/* The line starts at the first month's mark, and ends a little below the last call. */
+.trail__month:first-child .trail__tick {
+  background: linear-gradient(to bottom, transparent 50%, var(--line-2) 50%);
+}
+
+.trail__call {
+  display: grid;
+  grid-template-columns: var(--trail-node) minmax(0, 1fr);
+  grid-template-areas:
+    'node top'
+    'node title'
+    'node meta'
+    'node score'
+    'node note'
+    'node actions'
+    'node pick';
+  column-gap: var(--trail-gap);
+}
+.trail__call > * {
+  min-width: 0;
+  margin: 0;
+}
+/* The room between calls is inside the last cell, so the line runs on through it unbroken. */
+.trail__call > :last-child {
+  margin-block-end: var(--sp-5);
+}
+@media (min-width: 40rem) {
+  .trail__call {
+    grid-template-columns: var(--trail-node) minmax(0, 1fr) auto;
+    grid-template-areas:
+      'node top    score'
+      'node title  score'
+      'node meta   meta'
+      'node note   note'
+      'node actions pick';
+  }
+}
+
+/* The node: the call's instrument on the line. The line runs into it from above and out below. */
+.trail__node {
+  grid-area: node;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+}
+.trail__seg {
+  flex: 1 1 auto;
+  width: 1px;
+  min-height: 0.5rem;
+  background: var(--line-2);
+}
+.trail__seg--lead {
+  flex: 0 0 0.75rem;
+}
+.trail:not([data-more]) .trail__month:last-child .trail__call:last-child .trail__seg:last-child {
+  flex: 0 0 1rem;
+  background: linear-gradient(to bottom, var(--line-2), transparent);
+}
+
+.trail__top {
+  grid-area: top;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-4);
+  padding-block-start: var(--sp-3);
+}
+.trail__when {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.trail__title {
+  grid-area: title;
+  margin-block-start: var(--sp-2);
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: var(--track-title);
+  text-wrap: balance;
   overflow-wrap: anywhere;
 }
-.hs-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1) var(--sp-2);
-  margin: var(--sp-2) 0 0;
-  padding: 0;
+.trail__meta {
+  grid-area: meta;
+  margin-block-start: var(--sp-2);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  overflow-wrap: anywhere;
 }
-.hs-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--sp-3);
-  margin-top: var(--sp-2);
-  color: var(--text-3);
-  font-size: var(--fs-meta);
-  font-weight: 500;
+.trail__meta > [aria-hidden='true'] {
+  color: var(--ink-3);
 }
-.hs-note {
-  display: block;
-  max-width: 44ch;
-  margin-top: var(--sp-1);
-  color: var(--text-3);
-  font-size: var(--fs-meta);
-  font-weight: 500;
+.trail__note {
+  grid-area: note;
+  max-width: var(--measure-ui);
+  margin-block-start: var(--sp-2);
+  color: var(--ink-3);
+  font-size: var(--t-small);
 }
 
-.hs-score-cell {
+.trail__score {
+  grid-area: score;
+  justify-self: start;
+  margin-block-start: var(--sp-2);
+  color: var(--ink-1);
+  white-space: nowrap;
+}
+@media (min-width: 40rem) {
+  .trail__score {
+    justify-self: end;
+    padding-block-start: var(--sp-2);
+    text-align: end;
+  }
+}
+.trail__figure {
+  font-family: var(--font-display);
+  font-size: 1.875rem;
+  font-weight: 300;
+  line-height: 1;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: var(--track-display);
+}
+.trail__of {
+  margin-inline-start: 0.35rem;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.trail__none {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+
+/* What can be done with the call: words with a hairline under them, the main one in full ink. */
+.trail__actions {
+  grid-area: actions;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-1) var(--sp-2);
+  gap: 0 var(--sp-5);
+  margin-block-start: var(--sp-2);
 }
-.hs-score {
-  min-width: 2.6rem;
-  justify-content: center;
-  font-size: var(--fs-small);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.hs-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1) var(--sp-2);
-  margin: 0;
-  padding: 0;
-}
-
-/* The compare tick box: a 44px target in the table, a labelled box in the stacked card. */
-.hs-pick {
+.trail__act {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--sp-2);
-  min-width: var(--tap);
-  min-height: var(--tap);
-  color: var(--text-2);
-  font-size: var(--fs-small);
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-family: var(--font-ui);
+  font-size: var(--t-small);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.3em;
+  cursor: pointer;
+  transition:
+    color var(--dur-micro),
+    text-decoration-color var(--dur-micro);
+}
+.trail__act > svg {
+  flex: none;
+  transition: transform var(--dur-component) var(--ease-spatial-spring);
+}
+.trail__act--primary {
+  color: var(--ink-1);
   font-weight: 600;
+  text-decoration-color: var(--line-3);
+}
+@media (hover: hover) {
+  .trail__act:hover {
+    color: var(--ink-1);
+    text-decoration-color: var(--amber);
+  }
+  .trail__act:hover > svg:last-child:not(:only-child) {
+    transform: translateX(3px);
+  }
+  .trail__act--delete:hover {
+    color: var(--coral-text);
+    text-decoration-color: var(--coral);
+  }
+}
+.trail__act:focus-visible > svg:last-child:not(:only-child) {
+  transform: translateX(3px);
+}
+.trail__act[aria-disabled='true'] {
+  color: var(--ink-3);
+  cursor: progress;
+}
+@media (pointer: coarse) {
+  .trail__act {
+    min-height: 2.75rem;
+  }
+}
+
+/* Choosing a call to compare: a hairline box that fills with an aqua tick (selection is aqua). */
+.trail__pick {
+  grid-area: pick;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
   cursor: pointer;
 }
-.hs-pick input {
-  width: 1.15rem;
-  height: 1.15rem;
+@media (min-width: 40rem) {
+  .trail__pick {
+    justify-self: end;
+  }
+}
+.trail__pick input {
+  position: relative;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
   margin: 0;
-  accent-color: var(--primary);
-  cursor: pointer;
+  border: 1px solid var(--line-3);
+  border-radius: 2px;
+  background: transparent;
+  appearance: none;
+  cursor: inherit;
+  transition:
+    border-color var(--dur-micro),
+    background-color var(--dur-micro);
 }
-.hs-pick input:disabled {
+.trail__pick input::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 7px;
+  width: 7px;
+  height: 12px;
+  border-inline-end: 2px solid var(--aqua);
+  border-block-end: 2px solid var(--aqua);
+  transform: rotate(45deg) scale(0);
+  transition: transform var(--dur-component) var(--ease-press-spring);
+}
+.trail__pick input:checked {
+  border-color: var(--aqua);
+  background: color-mix(in srgb, var(--aqua) 14%, transparent);
+}
+.trail__pick input:checked::after {
+  transform: rotate(45deg) scale(1);
+}
+@media (hover: hover) {
+  .trail__pick:hover input:not(:disabled) {
+    border-color: var(--ink-1);
+  }
+  .trail__pick:hover input:checked {
+    border-color: var(--aqua);
+  }
+}
+.trail__pick:has(input:disabled) {
   cursor: not-allowed;
-}
-.hs-pick-text {
-  display: none;
+  opacity: 0.5;
 }
 
-.hs-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-}
-.hs-actions .btn {
-  min-height: var(--tap);
-}
-.hs-primary {
-  min-width: 4.5rem;
-}
-.hs-soft {
-  --btn-fg: var(--accent-strong);
-  --btn-border: color-mix(in srgb, var(--accent) 35%, transparent);
-  background: var(--primary-soft);
-}
-.hs-soft:hover {
-  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
-}
-.hs-act-text {
-  display: none;
-}
-.hs-delete {
-  color: var(--text-2);
-}
-.hs-delete:hover {
-  color: var(--negative);
-  background: var(--negative-bg);
-}
-
-.hs-more {
+.trail-more {
   display: grid;
-  justify-items: center;
+  justify-items: start;
   gap: var(--sp-3);
-  margin-top: var(--sp-5);
+  margin-block-start: var(--sp-5);
+  padding-inline-start: calc(var(--trail-node) + var(--trail-gap));
+}
+.trail-more > p {
+  margin: 0;
+}
+.trail-key {
+  margin-block-start: var(--sp-8);
+}
+.trail-key .ff-disclosure__body > p {
+  max-width: var(--measure-ui);
+  margin: 0 0 var(--sp-4);
+  font-size: var(--t-small);
 }
 
-/* ------------------------------------------------------------------ Loading */
-.hs-skeleton {
+/* ====================================================================== Dialogs */
+.trail-dialog {
   display: grid;
-}
-.hs-skeleton-row {
-  display: flex;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-5);
-  padding: var(--sp-4) var(--sp-5);
-  border-bottom: 1px solid var(--border);
 }
-.hs-skeleton-row:last-child {
-  border-bottom: 0;
+.trail-dialog > * {
+  margin: 0;
 }
-
-/* ------------------------------------------------------------------ Stacked cards (narrow card) */
-@container hs (max-width: 56rem) {
-  .hs-table,
-  .hs-table tbody {
-    display: block;
-  }
-  .hs-table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-  }
-  .hs-table tbody tr {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
-    align-items: start;
-    gap: var(--sp-3) var(--sp-4);
-    padding: var(--sp-4);
-    border-bottom: 1px solid var(--border);
-  }
-  .hs-table tbody tr:last-child {
-    border-bottom: 0;
-  }
-  .hs-table tbody th,
-  .hs-table tbody td {
-    display: block;
-    min-width: 0;
-    padding: 0;
-    border: 0;
-  }
-  .hs-table tbody td[data-label]::before {
-    content: attr(data-label);
-    content: attr(data-label) / '';
-    display: block;
-    margin-bottom: 2px;
-    color: var(--text-3);
-    font-size: var(--fs-label);
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-  .hs-table .chip {
-    white-space: normal;
-  }
-  .hs-c-scenario {
-    grid-column: 1 / -1;
-    order: -1;
-    min-width: 0;
-  }
-  .hs-c-date,
-  .hs-c-actions {
-    white-space: normal;
-  }
-  .hs-c-actions {
-    grid-column: 1 / -1;
-    padding-top: var(--sp-3);
-    border-top: 1px solid var(--border);
-  }
-  .hs-table tbody tr:has(.hs-pick) .hs-c-scenario {
-    padding-right: 6rem;
-  }
-  .hs-table .hs-c-pick {
-    position: absolute;
-    top: var(--sp-2);
-    right: var(--sp-2);
-    width: auto;
-    padding: 0;
-  }
-  .hs-pick-text {
-    display: inline;
-  }
-  .hs-actions {
-    flex-wrap: wrap;
-  }
-  .hs-actions .hs-act-text {
-    display: inline;
-  }
-  .hs-actions .hs-icon-btn {
-    padding-inline: 0.75rem;
-  }
-  .hs-delete {
-    margin-left: auto;
-  }
+.trail-dialog__actions {
+  justify-content: flex-end;
 }
-
-/* ------------------------------------------------------------------ Dialogs */
-.hs-delete-target {
+.trail-dialog__problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  color: var(--coral-text);
+  font-size: var(--t-small);
+}
+.trail-dialog__problem > svg {
+  flex: none;
+  margin-block-start: 0.15em;
+}
+.trail-delete-target {
   display: grid;
   gap: 2px;
-  padding: var(--sp-3) var(--sp-4);
-  border-radius: var(--r-control);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
+  padding-inline-start: var(--sp-4);
+  border-inline-start: 1px solid var(--line-3);
   overflow-wrap: anywhere;
 }
-.hs-compare-who {
+.trail-delete-target strong {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+.trail-delete-target span {
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.trail-caution {
+  padding-inline-start: var(--sp-4);
+  border-inline-start: 1px solid color-mix(in srgb, var(--amber) 70%, transparent);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.trail-compare-who {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-3);
+  gap: var(--sp-4) var(--sp-5);
   margin: 0;
 }
-@media (max-width: 480px) {
-  .hs-compare-who {
+@media (max-width: 30rem) {
+  .trail-compare-who {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-.hs-compare-who dd {
+.trail-compare-who dt {
+  margin: 0;
+}
+.trail-compare-who dd {
   display: grid;
   gap: 2px;
-  margin: 2px 0 0;
+  margin: var(--sp-1) 0 0;
   overflow-wrap: anywhere;
 }
-.hs-compare-table th,
-.hs-compare-table td {
-  padding: 0.55rem 0.6rem;
+.trail-compare-who strong {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.25;
 }
-.hs-compare-table tbody th {
-  font-size: inherit;
-  font-weight: 620;
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--text);
-  background: transparent;
+.trail-compare-who dd span {
+  color: var(--ink-2);
+  font-size: var(--t-small);
 }
-.hs-compare-table td:nth-child(2),
-.hs-compare-table td:nth-child(3) {
-  text-align: center;
+.trail-compare {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
 }
-.hs-compare-overall th,
-.hs-compare-overall td {
-  font-weight: 650;
-  border-top: 1px solid var(--border-strong);
+.trail-compare th,
+.trail-compare td {
+  padding: 0.6rem 0.5rem;
+  border-block-start: 1px solid var(--line-2);
+  text-align: start;
 }
-.hs-compare-table tbody tr:last-child th {
-  border-bottom: 0;
+.trail-compare thead th {
+  border-block-start: 0;
+  border-block-end: 1px solid var(--line-3);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: var(--track-mono);
+  text-transform: uppercase;
+}
+.trail-compare tbody th {
+  color: var(--ink-1);
+  font-weight: 400;
+}
+.trail-compare td:nth-child(2),
+.trail-compare td:nth-child(3) {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 300;
+}
+.trail-compare td:last-child {
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.trail-compare__overall th,
+.trail-compare__overall td {
+  border-block-start-color: var(--line-3);
+  font-weight: 600;
+}
+
+/* ====================================================================== Higher contrast, forced colours */
+@media (prefers-contrast: more) {
+  .trail__seg,
+  .trail__tick {
+    background-color: var(--line-3);
+  }
+  .trail__act {
+    text-decoration-color: currentColor;
+  }
+}
+@media (forced-colors: active) {
+  .trail__seg,
+  .trail__tick,
+  .trail__tick::before {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  .trail__act {
+    text-decoration-color: LinkText;
+  }
+  .trail__pick input {
+    border-color: CanvasText;
+  }
+  .trail__pick input:checked {
+    border-color: Highlight;
+    background: Highlight;
+  }
+  .trail__pick input::after {
+    border-color: HighlightText;
+  }
+  .trail-compare th,
+  .trail-compare td,
+  .trail-compare thead th,
+  .trail-delete-target,
+  .trail-caution {
+    border-color: CanvasText;
+  }
 }

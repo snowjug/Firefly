@@ -5,31 +5,30 @@ import {
   SCORE_DESCRIPTIONS,
   SCORE_LABELS,
 } from '#shared/domain/vocab.ts';
+import { Ledger } from '../frame/Ledger.tsx';
 
 const SCORES = [1, 2, 3, 4, 5] as const;
 
 /** The six coaching dimensions, straight from the shared vocabulary the evaluator also uses. */
-export function DimensionCards() {
+export function Dimensions() {
   return (
     <ol role="list" className="ab-dimensions">
       {DIMENSION_IDS.map((id, index) => {
         const dimension = DIMENSIONS[id];
         return (
           <li key={id} className="ab-dimension">
-            <div className="ab-dimension-head">
-              <span className="ab-dimension-number" aria-hidden="true">
-                {index + 1}
-              </span>
-              <h3 className="ab-dimension-title">{dimension.label}</h3>
+            <span className="ab-dimension__no type-number" aria-hidden="true">
+              {String(index + 1).padStart(2, '0')}
+            </span>
+            <div className="ab-dimension__body">
+              <h3 className="ab-dimension__title">{dimension.label}</h3>
+              <p className="ab-dimension__text">{dimension.description}</p>
+              <ul role="list" className="ab-care" aria-label="CARE behaviours">
+                {dimension.care.map((behaviour) => (
+                  <li key={behaviour}>{CARE_LABELS[behaviour]}</li>
+                ))}
+              </ul>
             </div>
-            <p className="t-small t-muted">{dimension.description}</p>
-            <ul role="list" className="cluster ab-care" aria-label="CARE behaviours">
-              {dimension.care.map((behaviour) => (
-                <li key={behaviour} className="chip">
-                  {CARE_LABELS[behaviour]}
-                </li>
-              ))}
-            </ul>
           </li>
         );
       })}
@@ -40,15 +39,11 @@ export function DimensionCards() {
 /** The 1 to 5 scale with the descriptors scorers and the evaluator both use. */
 export function ScaleList() {
   return (
-    <dl className="ab-scale">
-      {SCORES.map((score) => (
-        <div key={score}>
-          <dt>
-            {score} &ndash; {SCORE_LABELS[score - 1]}
-          </dt>
-          <dd>{SCORE_DESCRIPTIONS[score]}</dd>
-        </div>
-      ))}
-    </dl>
+    <Ledger
+      rows={SCORES.map((score) => ({
+        label: `${score} \u2013 ${SCORE_LABELS[score - 1]}`,
+        value: SCORE_DESCRIPTIONS[score],
+      }))}
+    />
   );
 }

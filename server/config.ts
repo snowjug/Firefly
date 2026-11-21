@@ -28,7 +28,8 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     host: env.FIREFLY_HOST?.trim() || '127.0.0.1',
     // ":memory:" keeps everything in RAM and is used by automated browser tests.
     dbPath: dbSetting === ':memory:' ? dbSetting : resolve(root, dbSetting),
-    webDir: resolve(root, 'dist/web'),
+    // The built web app. FIREFLY_WEB_DIR lets several builds be served side by side.
+    webDir: resolve(root, env.FIREFLY_WEB_DIR?.trim() || 'dist/web'),
     version: pkg.version,
     logLevel: parseLogLevel(env.FIREFLY_LOG_LEVEL),
     devDiagnostics: flag(env.FIREFLY_DEV_DIAGNOSTICS),

@@ -1,13 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import { DIMENSION_IDS } from '#shared/domain/vocab.ts';
-import { trend } from './progress.fixtures.ts';
+import {
+  levelFor,
+  skillsFromProgress,
+  type SkillInput,
+  type SkillLevel,
+} from '../atlas/constellation-layout.ts';
+import { EMPTY_PROGRESS, PROGRESS_WITH_DATA, trend } from './progress.fixtures.ts';
 import {
   CALLS_FOR_TREND,
+  LIGHT_STEPS,
   RECENT_CHANGE,
   SPARK,
+  STARS_IN_SKY,
+  STARS_PER_SKILL,
+  callsScored,
+  describeSkill,
+  latestCall,
+  lightNext,
+  lightText,
+  litStarsOf,
+  movedText,
   orderedTrends,
+  overallAverage,
+  recentStarIds,
   scoreRows,
+  skillCaption,
+  skillNumber,
   sparkGeometry,
+  starCounts,
   trendAlt,
   trendSummary,
 } from './progress-model.ts';
@@ -114,7 +135,152 @@ describe('RECENT_CHANGE', () => {
       'not-enough-data',
       'steady',
     ]);
-    expect(RECENT_CHANGE.declining.tone).not.toBe('red');
     expect(RECENT_CHANGE.declining.label).toBe('A little lower');
+    expect(RECENT_CHANGE.declining.text).toMatch(/can happen when you try a harder scenario/);
+    const wording = Object.values(RECENT_CHANGE)
+      .map((change) => `${change.label} ${change.text}`)
+      .join(' ');
+    expect(wording).not.toMatch(/\b(worse|poor|bad|fail|drop|decline|alarm)/i);
+  });
+});
+
+describe('how a skill is read from its stars', () => {
+  it('numbers the skills 01 to 06 in report order', () => {
+    expect(DIMENSION_IDS.map(skillNumber)).toEqual(['01', '02', '03', '04', '05', '06']);
+    expect(STARS_PER_SKILL).toBe(14);
+    expect(STARS_IN_SKY).toBe(84);
+  });
+
+  it('states the thresholds the constellation really applies', () => {
+    // Each light needs exactly its stated calls and average, and falls to the light below without them.
+    for (const step of LIGHT_STEPS) {
+      const average = step.average ?? 1;
+      expect(levelFor(average, step.calls)).toBe(step.light);
+      expect(levelFor(average, step.calls - 1)).toBeLessThan(step.light);
+      if (step.average !== null)
+        expect(levelFor(step.average - 0.1, step.calls)).toBeLessThan(step.light);
+    }
+  });
+
+  it('says in words how far a skill is lit, and never calls no evidence low', () => {
+    expect(lightText(0)).toBe('No evidence yet');
+    expect(lightText(3)).toBe('Light 3 of 4');
+    expect(callsScored(0)).toBe('Not scored yet');
+    expect(callsScored(1)).toBe('1 call scored');
+    expect(callsScored(9)).toBe('9 calls scored');
+    expect(skillCaption({ level: 2, evidence: 3 })).toBe('3 calls \u00b7 light 2 of 4');
+    expect(skillCaption({ level: 0, evidence: 0 })).toBe('No evidence yet');
+  });
+
+  it('says what the next light asks for, or that there is none', () => {
+    expect(lightNext(0)).toBe('A star lights once a completed call is scored on this skill.');
+    expect(lightNext(1)).toBe('Light 2 asks for 2 calls averaging 2.5 or more.');
+    expect(lightNext(3)).toBe('Light 4 asks for 5 calls averaging 4.2 or more.');
+    expect(lightNext(4)).toBe('This is the brightest light.');
+  });
+
+  it('lights one star per call up to the stars there are, and counts them all', () => {
+    expect([0, 1, 5, 14, 15, 400, -3, Number.NaN, 2.9].map(litStarsOf)).toEqual([
+      0, 1, 5, 14, 14, 14, 0, 0, 2,
+    ]);
+    const skills = skillsFromProgress(PROGRESS_WITH_DATA);
+    expect(starCounts(skills)).toEqual({ lit: 30, total: 84 });
+    expect(starCounts(skillsFromProgress(EMPTY_PROGRESS))).toEqual({ lit: 0, total: 84 });
+  });
+});
+
+describe('overallAverage and latestCall', () => {
+  it('is the mean of every score, or nothing when nothing has been scored', () => {
+    expect(overallAverage(EMPTY_PROGRESS.dimensionTrends)).toBeNull();
+    expect(
+      overallAverage([
+        trend('clarity', [2, 4], 'not-enough-data'),
+        trend('closing', [3], 'not-enough-data'),
+      ]),
+    ).toBeCloseTo(3, 5);
+  });
+
+  it('finds the newest scored call across every skill', () => {
+    const trends = [
+      trend('clarity', [3, 4], 'not-enough-data', 1),
+      trend('closing', [2], 'not-enough-data', 9),
+    ];
+    expect(latestCall(trends)).toEqual({ sessionId: 'call-1', at: trends[1]?.points[0]?.at });
+    expect(latestCall(EMPTY_PROGRESS.dimensionTrends)).toBeNull();
+  });
+});
+
+describe('recentStarIds', () => {
+  it('marks, for each skill the newest call scored, the last star it lit', () => {
+    const trends = [
+      trend('opening-rapport', [3, 3, 4], 'not-enough-data', 1),
+      trend('clarity', [4, 4], 'not-enough-data', 2),
+      // Scored before the newest call, so nothing of it is new.
+      trend('closing', [2], 'not-enough-data', 1),
+    ];
+    // The newest call is call-3 of opening (day 3); clarity's last call is day 3 as well (call-2 on day 3).
+    const ids = recentStarIds(trends);
+    expect(ids.has('opening-rapport:2')).toBe(true);
+    expect(ids.has('clarity:1')).toBe(false);
+    expect(ids.size).toBe(1);
+  });
+
+  it('never points past the last star of a long history', () => {
+    const long = trend(
+      'clarity',
+      Array.from({ length: 30 }, () => 3),
+      'steady',
+    );
+    expect([...recentStarIds([long])]).toEqual(['clarity:13']);
+  });
+
+  it('is empty when nothing has been scored', () => {
+    expect(recentStarIds(EMPTY_PROGRESS.dimensionTrends).size).toBe(0);
+  });
+});
+
+describe('movedText', () => {
+  it('puts the two newest scores side by side, in plain numbers', () => {
+    expect(movedText(trend('clarity', [3, 4], 'not-enough-data'))).toBe(
+      'Latest 4, up from 3 on the call before.',
+    );
+    expect(movedText(trend('clarity', [4, 2], 'not-enough-data'))).toBe(
+      'Latest 2, down from 4 on the call before.',
+    );
+    expect(movedText(trend('clarity', [3, 3], 'not-enough-data'))).toBe(
+      'Latest 3, the same as the call before.',
+    );
+  });
+
+  it('says nothing when there is no earlier call to compare with', () => {
+    expect(movedText(trend('clarity', [3], 'not-enough-data'))).toBeNull();
+    expect(movedText(trend('clarity', [], 'not-enough-data'))).toBeNull();
+  });
+});
+
+describe('describeSkill', () => {
+  const skill = (patch: Partial<SkillInput>): SkillInput => ({
+    id: 'clarity',
+    label: 'Clarity',
+    level: 2 as SkillLevel,
+    evidence: 3,
+    trend: 'steady',
+    ...patch,
+  });
+
+  it('puts every figure in words, with the direction, and names the suggested focus', () => {
+    const text = describeSkill(
+      skill({ focus: true }),
+      trend('clarity', [3, 3, 3], 'not-enough-data'),
+    );
+    expect(text).toContain('Clarity: 3 stars lit of 14, 3 calls scored, light 2 of 4.');
+    expect(text).toContain('Latest 3');
+    expect(text).toContain('Suggested next focus.');
+  });
+
+  it('says there is no evidence yet, rather than that the skill is low', () => {
+    expect(describeSkill(skill({ evidence: 0, level: 0 }), undefined)).toBe(
+      'Clarity: no evidence yet. A star lights once a completed call is scored on this skill.',
+    );
   });
 });

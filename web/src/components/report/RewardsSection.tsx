@@ -6,10 +6,10 @@ import { api } from '../../lib/api.ts';
 import { useApi } from '../../lib/hooks.ts';
 import { play } from '../../lib/sound.ts';
 import { Icon } from '../Icon.tsx';
-import { SkeletonBlock } from '../Page.tsx';
+import { LoadingNotice, Section } from './bridge.tsx';
 import { EvidenceQuote } from './EvidenceQuote.tsx';
-import { SectionHead } from './SectionHead.tsx';
 import { noPointsReason, transcriptHref } from './labels.ts';
+import { StarMark } from './marks.tsx';
 
 export interface SessionRewards {
   /** `hidden` when the rewards could not be loaded: the report simply leaves the section out. */
@@ -59,28 +59,21 @@ function Earned({ sessionId, rewards }: { sessionId: string; rewards: SessionRew
   const { entries, badges, points } = rewards;
   return (
     <>
-      <div className="rp-rewards-total">
-        <span className="rp-points-mark" aria-hidden="true">
-          <Icon name="trophy" size={22} />
-        </span>
-        <div>
-          <p className="rp-rewards-headline">
-            You earned {points} {points === 1 ? 'point' : 'points'} from this call
-          </p>
-          <p className="t-small t-muted">Every award below says why it was given.</p>
-        </div>
-      </div>
+      <p className="rp-rewards__headline">
+        You earned {points} {points === 1 ? 'point' : 'points'} from this call
+      </p>
+      <p className="rp-quiet">Every award below says why it was given.</p>
 
       {entries.length > 0 ? (
         <ul role="list" className="rp-ledger">
           {entries.map((entry) => (
             <li key={entry.id} className="rp-ledger-item">
-              <span className="chip chip-amber rp-ledger-points">
+              <p className="rp-ledger-points">
                 <span className="sr-only">Points: </span>+{entry.points}
-              </span>
+              </p>
               <div className="rp-ledger-body">
                 <p className="rp-ledger-title">{entry.title}</p>
-                <p className="t-small t-muted">{entry.reason}</p>
+                <p className="rp-quiet">{entry.reason}</p>
                 {entry.evidence && (entry.evidence.quote || entry.evidence.turnIndex !== null) ? (
                   <EvidenceQuote
                     quote={entry.evidence.quote}
@@ -102,12 +95,10 @@ function Earned({ sessionId, rewards }: { sessionId: string; rewards: SessionRew
         <ul role="list" className="rp-badges" aria-label="Badges earned in this call">
           {badges.map((badge) => (
             <li key={badge.id} className="rp-badge-item">
-              <span className="rp-points-mark" aria-hidden="true">
-                <Icon name="award" size={22} />
-              </span>
+              <StarMark size={20} className="rp-badge-item__mark" />
               <div>
                 <p className="rp-ledger-title">Badge earned: {badge.title}</p>
-                <p className="t-small t-muted">{badge.criteria}</p>
+                <p className="rp-quiet">{badge.criteria}</p>
               </div>
             </li>
           ))}
@@ -123,12 +114,14 @@ export function RewardsSection({
   completion,
   rewards,
   celebrate,
+  eyebrow,
 }: {
   session: Pick<SessionDTO, 'id' | 'isSample'>;
   completion: CoachingReport['completion'];
   rewards: SessionRewards;
   /** Arriving straight from the call: a short sound, if the person turned sound on. */
   celebrate: boolean;
+  eyebrow?: string;
 }) {
   const earned = rewards.points > 0 || rewards.badges.length > 0;
   useEffect(() => {
@@ -138,47 +131,28 @@ export function RewardsSection({
   if (rewards.phase === 'hidden') return null;
   const loading = rewards.phase === 'loading';
   return (
-    <section
-      id="rewards"
-      className="rp-section"
-      aria-labelledby="rewards-title"
-      aria-busy={loading ? 'true' : undefined}
-    >
-      <SectionHead id="rewards-title" title="Rewards from this call">
+    <Section id="rewards" eyebrow={eyebrow} title="Rewards from this call">
+      <p className="rp-lead">
         Points encourage practice, and each one comes with the reason it was given.
-      </SectionHead>
+      </p>
       {loading ? (
-        <div
-          className="glass card stack"
-          role="status"
-          aria-label="Checking what this call earned"
-          style={{ ['--stack-gap' as string]: 'var(--sp-3)' }}
-        >
-          <SkeletonBlock height={22} width="45%" />
-          <SkeletonBlock height={14} />
-          <SkeletonBlock height={14} width="70%" />
-        </div>
+        <LoadingNotice label="Checking what this call earned" lines={2} />
       ) : (
-        <div className="glass card rp-rewards" data-earned={earned ? 'true' : 'false'}>
+        <div className="rp-rewards" data-earned={earned ? 'true' : 'false'}>
           {earned ? (
             <Earned sessionId={session.id} rewards={rewards} />
           ) : (
-            <div className="rp-rewards-none">
-              <span className="tone-icon" data-tone="blue" aria-hidden="true">
-                <Icon name="info" size={20} />
-              </span>
-              <p>{noPointsReason(session, completion)}</p>
-            </div>
+            <p className="rp-rewards__none">{noPointsReason(session, completion)}</p>
           )}
-          <div className="rp-rewards-foot">
-            <Link to="/rewards" className="link-more" viewTransition>
+          <div className="rp-rewards__foot">
+            <Link to="/rewards" className="text-link" viewTransition>
               {earned ? 'See all your rewards' : 'See how points are earned'}
-              <Icon name="arrow-right" size={16} />
+              <Icon name="arrow-right" size={14} />
             </Link>
-            {rewards.note ? <p className="t-meta">{rewards.note}</p> : null}
+            {rewards.note ? <p className="rp-quiet">{rewards.note}</p> : null}
           </div>
         </div>
       )}
-    </section>
+    </Section>
   );
 }

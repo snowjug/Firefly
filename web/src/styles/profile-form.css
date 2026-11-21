@@ -1,0 +1,19 @@
+/* The profile form (components/settings/ProfileForm): used on the sign-in page, in Settings and in
+   the edit dialog. Fields and buttons come from the page frame's primitives; this is only the rhythm
+   between them. */
+
+.pf-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+  min-width: 0;
+}
+.pf-form__note {
+  margin: 0;
+  max-width: var(--measure-ui);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.pf-form__actions {
+  margin-block-start: var(--sp-2);
+}

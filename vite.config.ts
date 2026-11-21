@@ -9,13 +9,15 @@ export default defineConfig({
   root: 'web',
   plugins: [react()],
   build: {
-    outDir: '../dist/web',
+    // FIREFLY_OUT_DIR lets several builds exist side by side (paired with FIREFLY_WEB_DIR).
+    outDir: process.env.FIREFLY_OUT_DIR ?? '../dist/web',
     emptyOutDir: true,
     sourcemap: false,
     target: 'es2022',
   },
   server: {
-    port: 5173,
+    // The port can be overridden so that several copies of the app can run side by side.
+    port: Number(process.env.FIREFLY_WEB_PORT ?? 5173),
     fs: { allow: ['..'] },
     strictPort: true,
     proxy: {

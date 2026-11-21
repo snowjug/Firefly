@@ -112,7 +112,8 @@ export function isFiltered(query: LibraryQuery): boolean {
 // ------------------------------------------------------------------------------------------
 // Matching
 
-function fold(text: string): string {
+/** Lower case without accents: "Fräser" matches "fraser". Also used by the mission atlas. */
+export function fold(text: string): string {
   return text.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
 }
 

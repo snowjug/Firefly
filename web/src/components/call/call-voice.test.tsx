@@ -138,9 +138,9 @@ describe('voice is off until it is turned on', () => {
     await open();
     await user.click(screen.getByRole('button', { name: 'Voice (Beta)' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    const link = screen.getByRole('link', { name: 'Create your profile in Settings' });
+    const link = screen.getByRole('link', { name: 'Create your profile' });
     expect(link).toHaveAttribute('href', '/sign-in');
-    expect(link.parentElement).toHaveTextContent('Create your profile in Settings to use voice.');
+    expect(link.parentElement).toHaveTextContent('Create your profile to use voice.');
     expect(getProfile()).toBeNull();
   });
 });
@@ -183,8 +183,8 @@ describe('a voice call', () => {
     await engine({ status: 'customer-speaking', customerSpeaking: true });
     await user.click(screen.getByRole('button', { name: "Stop Maya Okafor's voice" }));
     expect(fakeVoice.actions.stopSpeaking).toHaveBeenCalled();
-    // The customer's mouth moves while the voice plays.
-    expect(document.querySelector('svg.ill-customer')).toHaveAttribute('data-speaking', 'true');
+    // The presence stirs while the voice plays.
+    expect(document.querySelector('[data-sig="presence"]')).toHaveAttribute('data-typing');
   });
 
   it('says in words what is happening, and shows what is being heard as it is said', async () => {
