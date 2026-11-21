@@ -963,7 +963,11 @@ test.describe('a spoken call', () => {
     expect(late.elements.everPlayed).toBe(1);
     expect(late.elements.maxPlaying).toBeLessThanOrEqual(1);
     expect(late.listeners).toEqual(early!.listeners);
-    expect(late.timers.intervals).toBeLessThanOrEqual(early!.timers.intervals + 1);
+    // A timer that belongs to the voice that has just finished may still be winding down at the instant
+    // of sampling, so the count is read until it settles: it is the settled count that must not grow.
+    await expect
+      .poll(async () => (await mediaState(page)).timers.intervals, { timeout: 5_000 })
+      .toBeLessThanOrEqual(early!.timers.intervals + 1);
     const growthMB = lateHeap - earlyHeap;
     expect(growthMB).toBeLessThan(Math.max(2, earlyHeap * 0.1));
 
