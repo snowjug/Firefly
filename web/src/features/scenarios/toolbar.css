@@ -2,9 +2,11 @@
 
 .scn-tools {
   display: grid;
+  /* The minimums are in rem, so they grow with the text. Capped at a share of the row, they can
+     never add up to more than the row when the text is enlarged to 200 percent. */
   grid-template-columns:
-    minmax(14rem, 1.4fr) minmax(12rem, 1.2fr) minmax(9rem, 0.8fr)
-    minmax(9rem, 0.8fr);
+    minmax(min(14rem, 28%), 1.4fr) minmax(min(12rem, 24%), 1.2fr) minmax(min(9rem, 20%), 0.8fr)
+    minmax(min(9rem, 20%), 0.8fr);
   align-items: end;
   gap: var(--sp-3) var(--sp-4);
 }

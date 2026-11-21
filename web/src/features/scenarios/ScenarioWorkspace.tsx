@@ -101,7 +101,7 @@ export function ScenarioWorkspace() {
 
   const wide = useMediaQuery(WIDE_QUERY);
   const online = useOnline();
-  const { search, address, settled, replace } = useWorkspaceSearch();
+  const { search, address, settled, replace, tidy } = useWorkspaceSearch();
   const loaded = useApi((signal) => api.scenarios(signal), []);
   const scenarios = loaded.data;
   const activeCall = useActiveCall();
@@ -140,8 +140,8 @@ export function ScenarioWorkspace() {
       : null;
   useEffect(() => {
     if (wanted === null || !settled || normaliseSearch(address) === wanted) return;
-    replace(wanted);
-  }, [wanted, address, settled, replace]);
+    tidy(wanted);
+  }, [wanted, address, settled, tidy]);
 
   const go = (nextFilters: Filters, nextId: string | null, nextConfig: CallConfig | null) => {
     const scenario = nextId ? scenarios?.find((item) => item.id === nextId) : undefined;
@@ -286,7 +286,9 @@ export function ScenarioWorkspace() {
         </>
       )}
 
-      {!wide && selected && !sheetOpen ? (
+      {/* It stays in the page while the sheet it opens is showing, so closing the sheet can give
+          focus back to this very button instead of losing it to the top of the page. */}
+      {!wide && selected ? (
         <div className="scn-selected">
           <p className="scn-selected__text">
             <span className="scn-selected__label">Selected</span>

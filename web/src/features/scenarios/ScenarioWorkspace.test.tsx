@@ -627,6 +627,23 @@ describe('on a narrow screen', () => {
     expect(await screen.findByRole('dialog', { name: secondTitle })).toBeInTheDocument();
   });
 
+  it('gives focus back to the "Review and set up" button when its sheet closes', async () => {
+    const user = userEvent.setup();
+    renderApp('/scenarios');
+    const first = await rowFor(firstTitle);
+    first.focus();
+    await user.keyboard('{ArrowDown}');
+    const review = await screen.findByRole('button', { name: 'Review and set up' });
+    review.focus();
+    await user.keyboard('{Enter}');
+    await screen.findByRole('dialog', { name: secondTitle });
+    await user.click(screen.getByRole('button', { name: 'Back to scenarios' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // The same button, not a new one: keyboard and screen-reader users stay where they were.
+    expect(screen.getByRole('button', { name: 'Review and set up' })).toBe(review);
+    expect(review).toHaveFocus();
+  });
+
   it('starts with the sheet open when the address names a scenario', async () => {
     renderApp(`/scenarios?scenario=${SAMPLE.challenge}&difficulty=starter`);
     const sheet = await screen.findByRole('dialog', { name: scenarioById(SAMPLE.challenge).title });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { normaliseSearch } from './workspace-url.ts';
 
@@ -34,6 +34,11 @@ export function useWorkspaceSearch() {
   const navigate = useNavigate();
   const [pending, setPending] = useState<Pending | null>(null);
 
+  // Choices made so far: counted the moment each is made (`made`), and as the last render knew
+  // them (`drawn`). They differ while a choice has been made but not yet drawn.
+  const made = useRef(0);
+  const [drawn, setDrawn] = useState(0);
+
   const here = normaliseSearch(address);
   const waiting =
     pending !== null && here !== normaliseSearch(pending.search) && isWaiting(pending, here);
@@ -47,6 +52,8 @@ export function useWorkspaceSearch() {
 
   const replace = useCallback(
     (search: string) => {
+      made.current += 1;
+      setDrawn(made.current);
       setPending((current) => ({
         search,
         from: current?.from ?? normaliseSearch(address),
@@ -57,6 +64,19 @@ export function useWorkspaceSearch() {
     [navigate, address],
   );
 
+  /**
+   * Moves the address to a tidied form, unless a choice has been made since the render that worked
+   * that form out. An effect runs a little after its render, and a choice can land in between (the
+   * effect's own view of `settled` and `address` cannot know); applying the tidied form then would
+   * undo the choice.
+   */
+  const tidy = useCallback(
+    (search: string) => {
+      if (made.current === drawn) replace(search);
+    },
+    [drawn, replace],
+  );
+
   return {
     /** What to show: the latest choice while the address catches up, else the address. */
     search: waiting ? pending.search : address,
@@ -65,5 +85,6 @@ export function useWorkspaceSearch() {
     /** The address has caught up with every choice. */
     settled: !waiting,
     replace,
+    tidy,
   };
 }
