@@ -1,0 +1,304 @@
+{
+  "source": "https://github.com/affaan-m/ECC",
+  "commit": "4adeee6732a12d1540f49a4d50a38ce8c97f9a53",
+  "version": "2.2.3",
+  "license": "MIT (see .github/ecc/LICENSE)",
+  "method": "Selected skill directories copied unmodified from the pinned commit into .github/skills/ (the location GitHub Copilot CLI discovers). The managed installer was dry-run first and rejected: its plan for --skills pulled in 474 operations (rules for every language, agents, commands, platform configs).",
+  "hooks": "Not installed. ECC hooks are not adapted for Copilot CLI.",
+  "skillCount": 29,
+  "skills": [
+    {
+      "name": "accessibility",
+      "files": [
+        {
+          "path": ".github/skills/accessibility/SKILL.md",
+          "sha256": "09910fdadf0d7e6ce8a40708f02909491b22a1964aa5f71f7fa3258921c6d300"
+        }
+      ]
+    },
+    {
+      "name": "benchmark",
+      "files": [
+        {
+          "path": ".github/skills/benchmark/SKILL.md",
+          "sha256": "58e34c3ccf60ee5155e3db74357b73770015a7aad3594649b6758ba8375ab6ff"
+        }
+      ]
+    },
+    {
+      "name": "blueprint",
+      "files": [
+        {
+          "path": ".github/skills/blueprint/SKILL.md",
+          "sha256": "878eae8ed0ea4d46d21c8f88d471f6ffce7b0815202a43501060a163e7f446f3"
+        }
+      ]
+    },
+    {
+      "name": "browser-qa",
+      "files": [
+        {
+          "path": ".github/skills/browser-qa/SKILL.md",
+          "sha256": "6226f5fb711aca989a3c7fec9e0eeab15049741b54dc5bbe4165fc95a1e1d967"
+        }
+      ]
+    },
+    {
+      "name": "change-impact",
+      "files": [
+        {
+          "path": ".github/skills/change-impact/SKILL.md",
+          "sha256": "b8d8a11417af8b84e93983a8eb682e3b9a16d04f926778eb635c96e90019bf18"
+        }
+      ]
+    },
+    {
+      "name": "click-path-audit",
+      "files": [
+        {
+          "path": ".github/skills/click-path-audit/SKILL.md",
+          "sha256": "662fc5d02483bcd8ff799d6d3109a38da673182341cfc14445e9076fcd920162"
+        }
+      ]
+    },
+    {
+      "name": "codebase-onboarding",
+      "files": [
+        {
+          "path": ".github/skills/codebase-onboarding/SKILL.md",
+          "sha256": "ef88873a4b0d0fe155c0a196ffecd5c7b5e28edd00fbbdb5c1fd2ca8fd0eb6f0"
+        }
+      ]
+    },
+    {
+      "name": "configure-ecc",
+      "files": [
+        {
+          "path": ".github/skills/configure-ecc/SKILL.md",
+          "sha256": "ad87612e3cd745332625cd707179f4e98dc78da99183640f985637022ec9d650"
+        }
+      ]
+    },
+    {
+      "name": "conventional-commit-review",
+      "files": [
+        {
+          "path": ".github/skills/conventional-commit-review/SKILL.md",
+          "sha256": "c81397a4bfc2ec66986aae7a4dff5a02f78c519bc9774a80778fa9055e7fa2fe"
+        }
+      ]
+    },
+    {
+      "name": "delivery-gate",
+      "files": [
+        {
+          "path": ".github/skills/delivery-gate/hooks/quality-gate.py",
+          "sha256": "574f762eedfb6f3d02b10978818066a16eb877a5ac6e205bea3cf5f99d37f126"
+        },
+        {
+          "path": ".github/skills/delivery-gate/SKILL.md",
+          "sha256": "0d97c5b171392756d72a48ddd689953cd01ed7b84dbf9a4ac409dc35caa09f40"
+        }
+      ]
+    },
+    {
+      "name": "design-system",
+      "files": [
+        {
+          "path": ".github/skills/design-system/SKILL.md",
+          "sha256": "1969e4cb6cd13cdafff5f84353047d6e55cebc24e1a595ec48e6e2c666f3d8b1"
+        }
+      ]
+    },
+    {
+      "name": "docs-governance",
+      "files": [
+        {
+          "path": ".github/skills/docs-governance/references/artifact-role-contract.md",
+          "sha256": "ea861b28882416f6028382f663a98bf4e9faa3588080eaf50a94f95c3198ae43"
+        },
+        {
+          "path": ".github/skills/docs-governance/scripts/audit-docs.py",
+          "sha256": "d2b61d11d2576f377e79defaf41dce4cde43b816d78f1e36bed8ae5c57026375"
+        },
+        {
+          "path": ".github/skills/docs-governance/scripts/markdown_links.py",
+          "sha256": "34c5be8e703b076dc58d98bda7f05e4fb8d04ac71af7faf87af465fdef53da34"
+        },
+        {
+          "path": ".github/skills/docs-governance/scripts/module_audit.py",
+          "sha256": "9404f0740bb1d320626d03cc06bec0a8e9ada96f659c239ba87204e5dcb3ee47"
+        },
+        {
+          "path": ".github/skills/docs-governance/SKILL.md",
+          "sha256": "46f1a9fb999db9dfb8eb952b495b1a83723afaadb0ee8e43b98f813bc5ba5ab0"
+        }
+      ]
+    },
+    {
+      "name": "documentation-lookup",
+      "files": [
+        {
+          "path": ".github/skills/documentation-lookup/SKILL.md",
+          "sha256": "81ad2b5b4acbe02259f4b6cbfd9111d81d5cfe51025051b6048959c45f6516c1"
+        }
+      ]
+    },
+    {
+      "name": "e2e-testing",
+      "files": [
+        {
+          "path": ".github/skills/e2e-testing/SKILL.md",
+          "sha256": "b0e00e7e17cb259101139900816c5528aed18dd10bcf5f9cb42cfc35baf8a755"
+        }
+      ]
+    },
+    {
+      "name": "ecc-guide",
+      "files": [
+        {
+          "path": ".github/skills/ecc-guide/SKILL.md",
+          "sha256": "472d72a270cbd7f4eaf7fc73a1313f40a4995575c5e2d2ff4f91c280f5ee5df9"
+        }
+      ]
+    },
+    {
+      "name": "error-handling",
+      "files": [
+        {
+          "path": ".github/skills/error-handling/SKILL.md",
+          "sha256": "e8eec6756c950b570486493e64e3bf14c12baf6bf0858bf3928097fe2bfeaf79"
+        }
+      ]
+    },
+    {
+      "name": "frontend-a11y",
+      "files": [
+        {
+          "path": ".github/skills/frontend-a11y/SKILL.md",
+          "sha256": "e00991a3f4d47fcf1529dd74a080afcf46137dc5061e70dc6e3da7b27f2ae3f3"
+        }
+      ]
+    },
+    {
+      "name": "frontend-design-direction",
+      "files": [
+        {
+          "path": ".github/skills/frontend-design-direction/scripts/check-evidence.js",
+          "sha256": "f1cefbb0c2e15ea42b82f1b11d063c54cf949acc12b5574046025c62549b6db6"
+        },
+        {
+          "path": ".github/skills/frontend-design-direction/SKILL.md",
+          "sha256": "71a40f7bc4a28da01b54527fe5590f6055c93adc630e6ceee8c892b35c980893"
+        }
+      ]
+    },
+    {
+      "name": "frontend-patterns",
+      "files": [
+        {
+          "path": ".github/skills/frontend-patterns/SKILL.md",
+          "sha256": "a5b971eb9e74cd763c7e3308bfd888e0d9cf69f8b88477659889d77182479740"
+        }
+      ]
+    },
+    {
+      "name": "git-workflow",
+      "files": [
+        {
+          "path": ".github/skills/git-workflow/SKILL.md",
+          "sha256": "7094ab94802d7e839dc33c6ea230020327260518b1b1ce62b42d56d051c1d7c5"
+        }
+      ]
+    },
+    {
+      "name": "github-ops",
+      "files": [
+        {
+          "path": ".github/skills/github-ops/references/ecc-release-checklist.md",
+          "sha256": "abeda37b5364854c0b3610227d3029706d6f42ec287573397abe795f4af8a463"
+        },
+        {
+          "path": ".github/skills/github-ops/SKILL.md",
+          "sha256": "281e19fbf138c8d7ac7379864825721aa6f6efcf4008e976a6ea34b3c96e2b54"
+        }
+      ]
+    },
+    {
+      "name": "hexagonal-architecture",
+      "files": [
+        {
+          "path": ".github/skills/hexagonal-architecture/SKILL.md",
+          "sha256": "1579f70e4cd5a2dde39d29a2055d18b39f06b063a308d3b43a498900c99495b7"
+        }
+      ]
+    },
+    {
+      "name": "make-interfaces-feel-better",
+      "files": [
+        {
+          "path": ".github/skills/make-interfaces-feel-better/SKILL.md",
+          "sha256": "aff91aef917cba9c65681ae77197cee93ce9b697ee8916ea684ef8537c99fb52"
+        }
+      ]
+    },
+    {
+      "name": "motion-foundations",
+      "files": [
+        {
+          "path": ".github/skills/motion-foundations/SKILL.md",
+          "sha256": "ac0dd6de088e8cf2bff57230b365469e893c5f3a9578815a7f113689d0401972"
+        }
+      ]
+    },
+    {
+      "name": "react-patterns",
+      "files": [
+        {
+          "path": ".github/skills/react-patterns/SKILL.md",
+          "sha256": "f3208d44a5d553038c42e046cec4dc16e4a3d90a9dbf931f883a2e21919a64a9"
+        }
+      ]
+    },
+    {
+      "name": "react-performance",
+      "files": [
+        {
+          "path": ".github/skills/react-performance/SKILL.md",
+          "sha256": "ac76e8694d4f802a7bccc3c07a73ac68ace6d82a65ea10f10d8b7384dda61a8f"
+        }
+      ]
+    },
+    {
+      "name": "react-testing",
+      "files": [
+        {
+          "path": ".github/skills/react-testing/SKILL.md",
+          "sha256": "51c18b4e28285bb876ef469e47c6f53108b5a9f900950a60e897c3c24826a65e"
+        }
+      ]
+    },
+    {
+      "name": "security-review",
+      "files": [
+        {
+          "path": ".github/skills/security-review/cloud-infrastructure-security.md",
+          "sha256": "7d9a83852475a9396e04c59c73df84ac24ee0f41322016de7c11c62138c2a8ca"
+        },
+        {
+          "path": ".github/skills/security-review/SKILL.md",
+          "sha256": "58fe0f172e73c3f870cb2e65b9dc171316643808e95e8c1a2b6ea59fc3291760"
+        }
+      ]
+    },
+    {
+      "name": "verification-loop",
+      "files": [
+        {
+          "path": ".github/skills/verification-loop/SKILL.md",
+          "sha256": "9ee288d426660b0c785f534a003a4960fb4d8083a21302d8a4fd9b035b2edbb1"
+        }
+      ]
+    }
+  ]
+}

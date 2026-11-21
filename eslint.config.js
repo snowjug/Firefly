@@ -15,6 +15,9 @@ export default defineConfig([
     'node_modules',
     'scripts/_tmp',
     'scripts/scratch-serve.ts',
+    // Vendored third-party agent skills (ECC, MIT): kept exactly as published.
+    '.github/skills',
+    '.github/ecc',
   ]),
   js.configs.recommended,
   tseslint.configs.recommended,
