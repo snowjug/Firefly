@@ -263,7 +263,7 @@ test.describe('long transcripts', () => {
 
       const opened = Date.now();
       await page.goto(`/calls/${session.id}?input=text`);
-      await page.getByRole('button', { name: 'Resume as a text-only call' }).click();
+      await page.getByRole('button', { name: 'Resume with text' }).click();
       await page
         .locator('.cw-turn')
         .nth(turns - 1)
@@ -291,7 +291,7 @@ test.describe('long transcripts', () => {
       // A new turn arrives.
       const beforeSend = await metrics(cdp);
       await page
-        .getByRole('textbox', { name: 'Type a reply' })
+        .getByRole('textbox', { name: 'Your reply' })
         .fill('Thanks, I have noted that and will check it now.');
       await page.getByRole('button', { name: 'Send' }).click();
       await page
@@ -409,7 +409,7 @@ test('every control on a 200-turn call answers quickly, with the CPU slowed four
   await page.goto(`/calls/${session.id}`);
   await page
     .getByRole('button', {
-      name: spoken ? 'Allow microphone and resume' : 'Resume as a text-only call',
+      name: spoken ? 'Resume voice call' : 'Resume with text',
     })
     .click();
   await page.locator('.cw-turn').nth(199).waitFor();
@@ -430,7 +430,7 @@ test('every control on a 200-turn call answers quickly, with the CPU slowed four
   await press(/^Mute|^Unmute/);
   await press(/^Pause$/);
   await press(/^Resume$/);
-  await press(/^Voice settings$/);
+  await press(/^Settings$/);
   if (await page.getByRole('dialog').isVisible()) {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(450);
@@ -439,8 +439,10 @@ test('every control on a 200-turn call answers quickly, with the CPU slowed four
     await press(/^End call$/);
     await press(/^Continue call$/);
   }
+  // A spoken call has no reply box until the person chooses to type.
+  if (spoken) await press(/^Text$/);
   await page
-    .getByRole('textbox', { name: 'Type a reply' })
+    .getByRole('textbox', { name: 'Your reply' })
     .fill('Thank you, I will look into that now.');
   await press(/^Send$/);
   await page.locator('.cw-turn').nth(201).waitFor();
@@ -560,14 +562,24 @@ test('the wait after End and review never freezes the page, never animates under
 
 // ---- The microphone, the audio and everything else a spoken call opens -------------------------
 
-const LOOP_WAV = join(process.cwd(), 'node_modules', '.cache', 'firefly-perf', 'speech-loop.wav');
+const LOOP_WAV = join(
+  process.cwd(),
+  'node_modules',
+  '.cache',
+  'firefly-perf',
+  'speech-loop-3s.wav',
+);
 
-/** A 1.9 s loop: half a second of speech-like tone, then silence, so every pass hears one utterance. */
+/**
+ * A 3.2 s loop: half a second of speech-like tone, then silence, so every pass hears one utterance.
+ * The silence has to be longer than the 1.4 s of quiet that ends an utterance (the call's
+ * `endpointSilenceMs`), or the call would hear one endless utterance and end it only at its limit.
+ */
 function writeSpeechLoop(file: string): void {
   if (existsSync(file)) return;
   mkdirSync(join(file, '..'), { recursive: true });
   const rate = 48_000;
-  const seconds = 1.9;
+  const seconds = 3.2;
   const count = Math.round(rate * seconds);
   const wav = Buffer.alloc(44 + count * 2);
   wav.write('RIFF', 0);
@@ -887,22 +899,21 @@ test.describe('a spoken call', () => {
   async function beginSpoken(page: Page, context: BrowserContext): Promise<Session> {
     await watchMedia(context);
     const session = await createSession(page.request);
-    await page.goto(`/calls/${session.id}`);
-    await page.getByRole('button', { name: 'Allow microphone and start' }).click();
+    await page.goto(`/calls/${session.id}?input=voice`);
+    await page.getByRole('button', { name: 'Start voice call' }).click();
     return session;
   }
 
-  /** One spoken turn: wait for the words to be heard and answered, then cut the customer off or let them finish. */
+  /**
+   * One spoken turn: wait for the words to be heard and answered, then for the customer to finish
+   * speaking. There is no speaking over the customer, so the microphone opens when the voice ends.
+   */
   async function spokenTurn(page: Page, number: number): Promise<void> {
-    await expect(page.locator('.cw-turn--trainee')).toHaveCount(number, { timeout: 40_000 });
+    await expect(page.locator('.cw-turn--you')).toHaveCount(number, { timeout: 40_000 });
     await expect(page.locator('.cw-turn--customer')).toHaveCount(number + 1, { timeout: 40_000 });
-    const interrupt = page.getByRole('button', { name: 'Interrupt' });
-    if (number % 10 === 0) {
-      // Let the customer finish this one, to cover the end of a reply as well as an interruption.
-      await expect(interrupt).toBeHidden({ timeout: 40_000 });
-    } else {
-      await interrupt.click({ timeout: 40_000 });
-    }
+    await expect(page.locator('.cw-status[data-status="customer-speaking"]')).toHaveCount(0, {
+      timeout: 40_000,
+    });
   }
 
   test(`${SPOKEN_TURNS} spoken turns, then pause, resume and end, leave nothing open`, async ({
@@ -1020,7 +1031,7 @@ test.describe('a spoken call', () => {
     const baseline = await mediaState(page);
     await page.getByRole('button', { name: 'Start voice call' }).click();
     await page.waitForURL(/\/calls\//);
-    await page.getByRole('button', { name: 'Allow microphone and start' }).click();
+    await page.getByRole('button', { name: 'Start voice call' }).click();
     await expect
       .poll(async () => (await mediaState(page)).tracks.live, { timeout: 15_000 })
       .toBe(1);
@@ -1034,8 +1045,8 @@ test.describe('a spoken call', () => {
 
     // Out of the app: the page is left for another document while the microphone is open.
     const second = await createSession(page.request);
-    await page.goto(`/calls/${second.id}`);
-    await page.getByRole('button', { name: 'Allow microphone and start' }).click();
+    await page.goto(`/calls/${second.id}?input=voice`);
+    await page.getByRole('button', { name: 'Start voice call' }).click();
     await expect
       .poll(async () => (await mediaState(page)).tracks.live, { timeout: 15_000 })
       .toBe(1);

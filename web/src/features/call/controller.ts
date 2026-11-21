@@ -1337,10 +1337,23 @@ export function createCallController(
     }
   }
 
+  // ---- leaving the page ------------------------------------------------------------------
+
+  // Nothing is recorded out of sight. When the page is hidden a spoken call is paused, which lets go
+  // of the microphone and stops the customer's voice; coming back does not open the microphone
+  // again, Resume does. A typed call has no microphone, so there is nothing to pause.
+  function onVisibility(): void {
+    if (typeof document === 'undefined' || !document.hidden) return;
+    if (machine.begun && machine.voice && !machine.paused) dispatch({ type: 'toggle-pause' });
+  }
+
   // ---- lifecycle -------------------------------------------------------------------------
 
   function dispose(): void {
     if (typeof window !== 'undefined') window.removeEventListener('online', onOnline);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibility);
+    }
     loading?.controller.abort();
     loading = null;
     transcriber.dispose();
@@ -1398,6 +1411,9 @@ export function createCallController(
       attached = true;
       features = detectFeatures();
       if (typeof window !== 'undefined') window.addEventListener('online', onOnline);
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', onVisibility);
+      }
       void load();
     },
     detach() {

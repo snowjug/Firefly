@@ -15,7 +15,7 @@ import { createTurnGate, gatePlayback, guardCapture } from './turn-taking.ts';
 
 // DECISION: Firefly does not offer barge-in (the trainee talking over the customer and the customer's
 // voice stopping by itself). It offers controlled turn-taking: the customer speaks, the trainee can
-// press "Stop response" at any time, and the microphone opens after the customer has finished.
+// press "Stop customer audio" at any time, and the microphone opens after the customer has finished.
 //
 // WHY: a microphone next to speakers hears the speakers. To stop the customer when the trainee
 // speaks, the detector must tell the trainee from the customer's own voice coming back. These tests

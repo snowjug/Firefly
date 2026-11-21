@@ -260,7 +260,7 @@ describe('a gated playback', () => {
     }
   });
 
-  it('hands the turn back on "Stop response", and returns what stopping said', () => {
+  it('hands the turn back on "Stop customer audio", and returns what stopping said', () => {
     const time = clock();
     const { playback, stop } = fakePlayback();
     const gate = createTurnGate({ now: time.now });

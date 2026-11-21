@@ -6,7 +6,7 @@ import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 // and the browser's own voices). The call engine only ever talks to these.
 //
 // Turn-taking is controlled: the customer speaks, the trainee can stop the customer at any time
-// ("Stop response"), and the trainee speaks after the customer has finished or been stopped. Firefly
+// ("Stop customer audio"), and the trainee speaks after the customer has finished or been stopped. Firefly
 // does not let the trainee talk over the customer and have the voice stop by itself ("barge-in"):
 // a microphone cannot tell the customer's own voice, coming back out of the speakers, from the
 // trainee's, and a voice that stops on its own echo is worse than one that waits. See ../turn-taking.ts.

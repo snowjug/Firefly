@@ -231,6 +231,19 @@ function violations(state: MachineState): string[] {
   bad(stage === 'paused' && !state.paused, 'paused stage');
   bad(stage === 'muted' && !state.muted, 'muted stage');
   bad(stage === 'retrying' && !((state.exchange?.attempt ?? 0) > 1), 'retrying stage');
+  // The Retry for a message that did not send never goes missing: while the call is under way and
+  // nothing else is asking for attention, the notice that answers the failed message is showing.
+  bad(
+    state.exchange?.status === 'failed' &&
+      state.begun &&
+      state.phase !== 'idle' &&
+      state.phase !== 'ending' &&
+      state.phase !== 'completed' &&
+      !state.limitReached &&
+      !state.sessionEnded &&
+      state.problem === null,
+    'a failed message with nothing to retry it',
+  );
   return out;
 }
 
@@ -1135,6 +1148,34 @@ describe('sending', () => {
     expect(autoListens(state)).toBe(false);
     expect(state.timer).toBeNull();
     expect(reduce(state, { type: 'retry-send' }).phase).toBe('processing');
+  });
+
+  it('brings back the notice for a message that did not send when another notice has taken its place and gone', () => {
+    const failed = reduce(sending(), {
+      type: 'send-failed',
+      id: 't1',
+      attempt: 1,
+      failure: { kind: 'offline', saved: false },
+    });
+    // Ending the call fails as well, and its notice takes the one place a notice can be shown.
+    const endFailed = run(
+      failed,
+      { type: 'end-requested' },
+      { type: 'end-failed', failure: { kind: 'offline' } },
+    );
+    expect(endFailed.exchange?.status).toBe('failed');
+    expect(endFailed.problem).toEqual({ code: 'offline', context: { during: 'end' } });
+    expectValid(endFailed);
+    // Choosing to carry on puts that notice away. The message is still not sent, so its Retry returns.
+    const carriedOn = reduce(endFailed, { type: 'dismiss-problem' });
+    expect(carriedOn.problem).toEqual({ code: 'reply-failed', context: { saved: false } });
+    expect(describeProblem(carriedOn.problem!.code, carriedOn.problem!.context).retry).toBe('send');
+    expectValid(carriedOn);
+    expect(reduce(carriedOn, { type: 'retry-send' }).exchange).toMatchObject({
+      id: 't1',
+      status: 'sending',
+      attempt: 2,
+    });
   });
 
   it('refuses to begin when the session has already ended', () => {

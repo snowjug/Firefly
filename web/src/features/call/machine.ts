@@ -1263,9 +1263,25 @@ function withTimer(previous: MachineState, next: MachineState): MachineState {
   return { ...next, timerSeq: id, timer: { id, kind: wanted.kind, ms: wanted.ms } };
 }
 
+/**
+ * A message that did not send always has its notice, and so its Retry. Only one notice can be shown
+ * at a time, so another (a failed attempt to end, a lost microphone) can take the place and then
+ * be put away, which would leave "Not sent" with nothing to answer it. Whenever the call is under
+ * way, the message has failed and no notice is showing, the notice for the message comes back.
+ */
+function keepRetry(state: MachineState): MachineState {
+  const exchange = state.exchange;
+  if (exchange?.status !== 'failed' || state.problem !== null) return state;
+  if (!state.begun || state.limitReached || state.sessionEnded) return state;
+  if (state.phase === 'idle' || state.phase === 'ending' || state.phase === 'completed') {
+    return state;
+  }
+  return { ...state, problem: problem('reply-failed', { saved: exchange.saved }) };
+}
+
 /** The next state. Never throws; returns `state` itself when the event does nothing. */
 export function reduce(state: MachineState, event: MachineEvent): MachineState {
-  const next = step(state, event);
+  const next = keepRetry(step(state, event));
   return next === state ? state : withTimer(state, next);
 }
 

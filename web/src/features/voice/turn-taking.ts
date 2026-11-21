@@ -10,7 +10,7 @@ import type {
 
 // Controlled turn-taking, as a small piece of logic that does not depend on the call machine. Firefly
 // does not let the trainee talk over the customer and have the customer's voice stop by itself
-// ("barge-in"): the customer speaks, the trainee can press "Stop response" at any time, and the
+// ("barge-in"): the customer speaks, the trainee can press "Stop customer audio" at any time, and the
 // microphone opens after the customer's voice has ended, with a short settle in between. A
 // microphone next to speakers hears the customer's own voice, and a detector cannot tell that echo
 // from the trainee: see barge-in.test.ts, which shows the false triggers. So nothing here records
@@ -80,7 +80,7 @@ export function guardCapture(capture: Capture, gate: TurnGate): Capture {
 
 /**
  * A playback that tells the gate when the customer's voice is wanted and when it is over, in every
- * way it can end: finished, failed, blocked by the browser, or stopped ("Stop response"). Stopping
+ * way it can end: finished, failed, blocked by the browser, or stopped ("Stop customer audio"). Stopping
  * returns what `stop` of the wrapped job returns, so the transcript can say the customer was cut off.
  */
 export function gatePlayback(playback: Playback, gate: TurnGate): Playback {

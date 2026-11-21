@@ -190,6 +190,41 @@ describe('pause', () => {
     expect(h.snap().hint).toMatch(/paused the call/);
     expect(h.server.transcribeSignals[0]?.aborted).toBe(true);
   });
+
+  it('pauses by itself when the page is hidden, so the microphone is never open out of sight', async () => {
+    await h.mount();
+    await h.openCall();
+    expect(h.env.mic.openTracks()).toHaveLength(1);
+
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    try {
+      h.do(() => document.dispatchEvent(new Event('visibilitychange')));
+      expect(h.snap()).toMatchObject({ paused: true, phase: 'ready-for-next-turn' });
+      expect(h.env.mic.openTracks()).toHaveLength(0);
+      expect(h.env.audio.listeningWorklets()).toHaveLength(0);
+
+      // Coming back does not open the microphone: that is for the trainee to do with Resume.
+      hidden.mockReturnValue(false);
+      h.do(() => document.dispatchEvent(new Event('visibilitychange')));
+      await advance(30_000);
+      expect(h.snap().paused).toBe(true);
+      expect(h.env.mic.openTracks()).toHaveLength(0);
+    } finally {
+      hidden.mockRestore();
+    }
+  });
+
+  it('leaves a typed call alone when the page is hidden', async () => {
+    await h.mount();
+    await h.begin(false);
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    try {
+      h.do(() => document.dispatchEvent(new Event('visibilitychange')));
+      expect(h.snap().paused).toBe(false);
+    } finally {
+      hidden.mockRestore();
+    }
+  });
 });
 
 describe('interrupting the customer', () => {
