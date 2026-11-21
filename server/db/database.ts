@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 // SQLite persistence using Node's built-in module. The schema is versioned with PRAGMA
 // user_version; add a migration by appending to MIGRATIONS (never edit an applied one).
 
-const MIGRATIONS: { version: number; sql: string }[] = [
+export const MIGRATIONS: { version: number; sql: string }[] = [
   {
     version: 1,
     sql: `
@@ -99,6 +99,12 @@ const MIGRATIONS: { version: number; sql: string }[] = [
         UNIQUE (session_id, reviewer)
       );
     `,
+  },
+  {
+    // How a trainee turn arrived (typed or recognised from speech). Turns stored before this
+    // existed were all typed.
+    version: 2,
+    sql: `ALTER TABLE turns ADD COLUMN input_mode TEXT NOT NULL DEFAULT 'text';`,
   },
 ];
 

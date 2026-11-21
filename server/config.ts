@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import pkg from '../package.json' with { type: 'json' };
 import { parseLogLevel, type LogLevel } from './log.ts';
 import { loadProviderConfig, type LoadedProviderConfig } from './providers/types.ts';
+import { loadSpeechConfig, type LoadedSpeechConfig } from './speech/types.ts';
 
 export interface AppConfig {
   port: number;
@@ -14,6 +15,7 @@ export interface AppConfig {
   devDiagnostics: boolean;
   testHooks: boolean;
   provider: LoadedProviderConfig;
+  speech: LoadedSpeechConfig;
 }
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -35,5 +37,6 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     devDiagnostics: flag(env.FIREFLY_DEV_DIAGNOSTICS),
     testHooks: flag(env.FIREFLY_TEST_HOOKS),
     provider: loadProviderConfig(env),
+    speech: loadSpeechConfig(env),
   };
 }

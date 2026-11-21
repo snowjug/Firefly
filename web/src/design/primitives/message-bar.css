@@ -1,0 +1,103 @@
+.ff-message {
+  --_fg: var(--status-info-fg);
+  --_bg: var(--status-info-bg);
+  --_bd: var(--status-info-border);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'icon body';
+  align-items: start;
+  gap: var(--sp-1) var(--sp-3);
+  box-sizing: border-box;
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--_bd);
+  border-radius: var(--r-lg);
+  background: var(--_bg);
+  color: var(--fg-1);
+}
+.ff-message--actions {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'icon body actions';
+}
+.ff-message--dismiss {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'icon body dismiss';
+}
+.ff-message--actions.ff-message--dismiss {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: 'icon body actions dismiss';
+}
+.ff-message--success {
+  --_fg: var(--status-success-fg);
+  --_bg: var(--status-success-bg);
+  --_bd: var(--status-success-border);
+}
+.ff-message--warning {
+  --_fg: var(--status-warning-fg);
+  --_bg: var(--status-warning-bg);
+  --_bd: var(--status-warning-border);
+}
+.ff-message--error {
+  --_fg: var(--status-danger-fg);
+  --_bg: var(--status-danger-bg);
+  --_bd: var(--status-danger-border);
+}
+
+.ff-message__icon {
+  grid-area: icon;
+  margin-block-start: 0.0625rem;
+  color: var(--_fg);
+}
+.ff-message__body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.ff-message__title {
+  font-weight: var(--fw-semibold);
+}
+.ff-message__text {
+  color: var(--fg-1);
+}
+.ff-message__actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ff-message__dismiss {
+  grid-area: dismiss;
+  margin-block: calc(var(--sp-1) * -1);
+}
+
+/* Actions drop under the text where there is no room beside it. */
+@media (max-width: 40em) {
+  .ff-message--actions {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'icon body'
+      '. actions';
+  }
+  .ff-message--actions.ff-message--dismiss {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'icon body dismiss'
+      '. actions actions';
+  }
+  .ff-message__actions {
+    margin-block-start: var(--sp-1);
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-message {
+    border-color: ButtonText;
+  }
+  .ff-message__icon {
+    color: CanvasText;
+  }
+}

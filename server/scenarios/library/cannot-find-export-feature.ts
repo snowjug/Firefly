@@ -28,6 +28,7 @@ const scenario = {
 
   persona: {
     name: 'Carmen Fraser',
+    speaker: 'female',
     role: 'Accounts assistant',
     organisation: 'Tailspin Print Works',
     background:

@@ -30,6 +30,7 @@ const scenario = {
 
   persona: {
     name: 'Daniel Osei',
+    speaker: 'male',
     role: 'Project lead',
     organisation: 'Proseware Consulting',
     background:

@@ -1,0 +1,122 @@
+import { describe, expect, it } from 'vitest';
+import { voiceDirection } from './voices.ts';
+import { createMockSpeechProvider, MOCK_MIN_AUDIO_MS, MOCK_UTTERANCES } from './mock.ts';
+import { SPEECH_LIMITS } from './types.ts';
+import { encodeWav, validateWav } from './wav.ts';
+
+const clip = (ms: number) => ({
+  audio: encodeWav(Buffer.alloc((ms / 1000) * 32000)),
+  language: 'en-GB' as const,
+  durationMs: ms,
+});
+const direction = voiceDirection({ speaker: 'female', language: 'en-GB', mood: 'calm' });
+
+describe('demo speech: what it says about itself', () => {
+  it('is labelled as a scripted demonstration, can do both jobs, and claims no expressive styles', () => {
+    const provider = createMockSpeechProvider();
+    expect(provider).toMatchObject({ kind: 'mock', label: 'Demo speech (scripted)', demo: true });
+    expect(provider.capabilities()).toEqual({
+      provider: 'mock',
+      label: 'Demo speech (scripted)',
+      demo: true,
+      transcribe: true,
+      synthesize: true,
+      expressiveStyles: false,
+      notice: null,
+      limits: { maxAudioBytes: 1_500_000, maxAudioSeconds: 30, sampleRate: 16000 },
+    });
+    expect(provider.capabilities().limits).toEqual(SPEECH_LIMITS);
+  });
+});
+
+describe('demo speech: transcription', () => {
+  it('does not understand audio: it reads the next scripted line, in order, and starts again at the end', async () => {
+    const provider = createMockSpeechProvider();
+    const said: string[] = [];
+    for (let i = 0; i < MOCK_UTTERANCES.length + 2; i++) {
+      const result = await provider.transcribe(clip(1000));
+      expect(result.status).toBe('recognised');
+      said.push(result.text);
+    }
+    expect(said.slice(0, MOCK_UTTERANCES.length)).toEqual([...MOCK_UTTERANCES]);
+    expect(said.slice(MOCK_UTTERANCES.length)).toEqual(MOCK_UTTERANCES.slice(0, 2));
+  });
+
+  it('gives the same answer whatever the audio holds, and reports the length of the clip', async () => {
+    const a = await createMockSpeechProvider().transcribe(clip(2000));
+    const loud = { ...clip(2000), audio: Buffer.alloc(64044, 0x7f) };
+    const b = await createMockSpeechProvider().transcribe(loud);
+    expect(a).toEqual(b);
+    expect(a.durationMs).toBe(2000);
+  });
+
+  it('hears nothing in a clip shorter than 150 ms, without using up a line', async () => {
+    const provider = createMockSpeechProvider();
+    expect(MOCK_MIN_AUDIO_MS).toBe(150);
+    expect(await provider.transcribe(clip(149))).toEqual({
+      status: 'no-speech',
+      text: '',
+      durationMs: 149,
+    });
+    expect((await provider.transcribe(clip(150))).text).toBe(MOCK_UTTERANCES[0]);
+    expect((await provider.transcribe(clip(50))).status).toBe('no-speech');
+    expect((await provider.transcribe(clip(300))).text).toBe(MOCK_UTTERANCES[1]);
+  });
+
+  it('keeps its own place for each provider it creates', async () => {
+    const first = createMockSpeechProvider();
+    const second = createMockSpeechProvider();
+    await first.transcribe(clip(500));
+    expect((await second.transcribe(clip(500))).text).toBe(MOCK_UTTERANCES[0]);
+  });
+
+  it('says only plain things a support engineer might say, with no contact details', () => {
+    expect(MOCK_UTTERANCES.length).toBeGreaterThanOrEqual(6);
+    for (const line of MOCK_UTTERANCES) {
+      expect(line).not.toMatch(/@|https?:|\d{4}/);
+      expect(line.length).toBeLessThan(200);
+    }
+  });
+});
+
+describe('demo speech: the customer "voice"', () => {
+  const speak = (text: string) => createMockSpeechProvider().synthesize({ text, direction });
+
+  it('returns a valid 16-bit mono WAV, labelled as the mock voice with no style', async () => {
+    const spoken = await speak('Hello, I cannot sign in to my account.');
+    expect(spoken).toMatchObject({ contentType: 'audio/wav', voice: 'mock', style: 'none' });
+    const checked = validateWav(spoken.audio);
+    expect(checked.ok).toBe(true);
+  });
+
+  it('lasts about as long as the line, between half a second and eight seconds', async () => {
+    const seconds = async (text: string) => {
+      const checked = validateWav((await speak(text)).audio);
+      return checked.ok ? checked.durationMs / 1000 : Number.NaN;
+    };
+    expect(await seconds('')).toBe(0.5);
+    expect(await seconds('Hi.')).toBe(0.5);
+    expect(await seconds('x'.repeat(75))).toBe(5);
+    expect(await seconds('x'.repeat(30))).toBe(2);
+    expect(await seconds('x'.repeat(5000))).toBe(8);
+    expect(await seconds('x'.repeat(150))).toBe(8);
+  });
+
+  it('is soft: quiet, never silent, and the same every time for the same line', async () => {
+    const a = (await speak('Please help me with this problem today.')).audio;
+    const b = (await speak('Please help me with this problem today.')).audio;
+    const c = (await speak('A different line entirely, this time.')).audio;
+    expect(a.equals(b)).toBe(true);
+    expect(a.equals(c)).toBe(false);
+    let peak = 0;
+    for (let i = 44; i < a.length; i += 2) peak = Math.max(peak, Math.abs(a.readInt16LE(i)));
+    expect(peak).toBeGreaterThan(50);
+    expect(peak).toBeLessThan(6000);
+  });
+
+  it('fades in and out so there are no clicks', async () => {
+    const audio = (await speak('Hello there, how are you today my friend?')).audio;
+    expect(Math.abs(audio.readInt16LE(44))).toBeLessThan(10);
+    expect(Math.abs(audio.readInt16LE(audio.length - 2))).toBeLessThan(10);
+  });
+});

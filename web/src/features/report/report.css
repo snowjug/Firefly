@@ -1,0 +1,933 @@
+/* The coaching report: the page frame, the header and summary, the score table, strengths and
+   opportunities, skill details, discovery review, next practice, actions and the About section.
+   The transcript, the temperature chart and the evaluating and failed states have their own
+   stylesheets. Tokens only: no raw colours. Every class is prefixed rp-. */
+
+/* ---- Frame -------------------------------------------------------------------------------- */
+.rp-page {
+  padding-block: var(--sp-6) var(--sp-16);
+}
+.rp-layout {
+  display: block;
+}
+.rp-main {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+@media (min-width: 64em) {
+  /* The navigation sits left of the header and the report, though it comes after the header in the
+     page, so a keyboard reaches the title and its actions first. */
+  .rp-layout {
+    display: grid;
+    grid-template-columns: 13.5rem minmax(0, 56rem);
+    grid-template-areas:
+      'nav head'
+      'nav body';
+    justify-content: center;
+    align-items: start;
+    column-gap: var(--sp-10);
+  }
+  .rp-header {
+    grid-area: head;
+  }
+  .rp-nav {
+    grid-area: nav;
+  }
+  .rp-main {
+    grid-area: body;
+  }
+}
+
+/* Shown on paper only. */
+.rp-print-head {
+  display: none;
+}
+
+/* ---- On this page (wide) and Jump to (narrow) --------------------------------------------- */
+.rp-nav {
+  display: none;
+}
+@media (min-width: 64em) {
+  .rp-nav {
+    display: block;
+    position: sticky;
+    inset-block-start: calc(var(--header-h) + var(--sp-6));
+    max-block-size: calc(100vh - var(--header-h) - var(--sp-12));
+    overflow-y: auto;
+    padding-block-end: var(--sp-4);
+  }
+}
+.rp-nav__title {
+  margin-block-end: var(--sp-2);
+  padding-inline-start: var(--sp-3);
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.rp-nav__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-inline-start: var(--stroke-w) solid var(--stroke-2);
+}
+.rp-nav__link {
+  display: block;
+  margin-inline-start: calc(var(--stroke-w-thick) * -1);
+  padding: var(--sp-1h) var(--sp-3);
+  border-inline-start: var(--stroke-w-thick) solid transparent;
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  text-decoration: none;
+}
+.rp-nav__link:hover {
+  background: var(--bg-hover);
+  color: var(--fg-1);
+  text-decoration: none;
+}
+.rp-nav__link[aria-current='location'] {
+  border-inline-start-color: var(--brand);
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+
+.rp-jump {
+  margin-block: var(--sp-2) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-1);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+}
+@media (min-width: 64em) {
+  .rp-jump {
+    display: none;
+  }
+}
+.rp-jump__summary,
+.rp-skill__summary {
+  list-style: none;
+}
+.rp-jump__summary::-webkit-details-marker,
+.rp-skill__summary::-webkit-details-marker {
+  display: none;
+}
+.rp-jump__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--target);
+  padding-inline: var(--sp-4);
+  border-radius: var(--r-xl);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+.rp-jump__summary::after {
+  content: '';
+  flex: none;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  margin-block-end: 0.25rem;
+  border-inline-end: var(--stroke-w-thick) solid currentColor;
+  border-block-end: var(--stroke-w-thick) solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--dur-fast) var(--ease-easy);
+}
+.rp-jump[open] > .rp-jump__summary::after {
+  margin-block: 0.25rem 0;
+  transform: rotate(-135deg);
+}
+.rp-jump__summary:hover {
+  background: var(--bg-hover);
+}
+.rp-jump__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+  gap: var(--sp-1);
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-3);
+  list-style: none;
+}
+.rp-jump__link {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--target);
+  padding-inline: var(--sp-2);
+  border-radius: var(--r-md);
+  text-decoration: none;
+}
+.rp-jump__link:hover {
+  background: var(--bg-hover);
+}
+
+/* ---- Header ------------------------------------------------------------------------------- */
+.rp-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.rp-header__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-6);
+}
+.rp-header__titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.rp-header__scenario {
+  color: var(--fg-2);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+}
+.rp-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.rp-meta {
+  display: grid;
+  /* Up to four columns, fewer as the space shrinks, whatever the window: larger text takes room. */
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(max(8.5rem, calc((100% - 3 * var(--sp-4)) / 4)), 1fr)
+  );
+  gap: var(--sp-4);
+  margin: 0;
+  padding: var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-quiet);
+}
+@media (min-width: 40em) {
+  .rp-meta {
+    padding: var(--sp-5);
+  }
+}
+.rp-meta__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.rp-meta__strong {
+  display: block;
+  font-weight: var(--fw-semibold);
+}
+.rp-meta__line {
+  display: block;
+  color: var(--fg-2);
+}
+
+/* ---- Sections ----------------------------------------------------------------------------- */
+.rp-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+  padding-block: var(--sp-8);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.rp-section--first {
+  padding-block-start: var(--sp-6);
+  border-block-start: 0;
+}
+.rp-section__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.rp-section__title {
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+}
+.rp-section__lead {
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+}
+.rp-subtitle {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-empty {
+  max-inline-size: var(--read-max);
+  padding: var(--sp-4);
+  border: var(--stroke-w) dashed var(--stroke-accessible);
+  border-radius: var(--r-xl);
+  color: var(--fg-1);
+}
+
+/* A small label above the text it names. */
+.rp-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.rp-field__label {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.rp-field__text {
+  min-inline-size: 0;
+  max-inline-size: var(--read-max);
+}
+
+/* Labelled values in a grid: "Suggested difficulty", "Written by". */
+.rp-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), max-content));
+  gap: var(--sp-3) var(--sp-8);
+  margin: 0;
+}
+.rp-facts__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.rp-facts__item dt {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+@media (min-width: 40em) {
+  .rp-facts--stacked {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .rp-facts--stacked .rp-facts__item {
+    flex-direction: row;
+    gap: var(--sp-4);
+    padding-block: var(--sp-2);
+    border-block-end: var(--stroke-w) solid var(--stroke-3);
+  }
+  .rp-facts--stacked .rp-facts__item dt {
+    flex: 0 0 14rem;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    font-weight: var(--fw-regular);
+    color: var(--fg-2);
+  }
+}
+
+/* ---- Summary ------------------------------------------------------------------------------ */
+.rp-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+@media (min-width: 48em) {
+  .rp-summary {
+    grid-template-columns: minmax(0, 1fr) 13.5rem;
+    gap: var(--sp-8);
+  }
+}
+.rp-summary__text {
+  max-inline-size: var(--read-max);
+}
+.rp-overall {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+}
+.rp-overall__score {
+  color: var(--fg-2);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+}
+.rp-overall__number {
+  color: var(--fg-1);
+  font-size: var(--fs-title3);
+  line-height: var(--lh-title3);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.rp-overall__none {
+  font-weight: var(--fw-semibold);
+}
+.rp-focus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-3);
+}
+.rp-aid {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--ai-border);
+  border-radius: var(--r-xl);
+  background: var(--ai-bg);
+}
+.rp-aid__text {
+  max-inline-size: var(--read-max);
+}
+
+/* ---- Quotes: the trainee's words, set apart as evidence ----------------------------------- */
+.rp-quote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-inline-start: 3px solid var(--stroke-accessible);
+  border-radius: 0 var(--r-lg) var(--r-lg) 0;
+  background: var(--bg-quiet);
+  overflow-wrap: anywhere;
+}
+.rp-quote__text {
+  margin: 0;
+}
+.rp-quote__foot,
+.rp-turnref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-4);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-quote__who {
+  font-weight: var(--fw-semibold);
+}
+.rp-turnlink {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+}
+.rp-quotes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* ---- Scores ------------------------------------------------------------------------------- */
+/* The table stacks into one block per skill when the space it has is small, whatever the window:
+   larger text makes a wide window a narrow one. The threshold is in rem so it grows with the text. */
+.rp-scores-box {
+  container: rp-scores / inline-size;
+}
+.rp-scores {
+  inline-size: 100%;
+}
+.rp-scores__caption {
+  padding-block-end: var(--sp-2);
+  color: var(--fg-2);
+  text-align: start;
+}
+.rp-scores th,
+.rp-scores td {
+  padding: var(--sp-3);
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+  text-align: start;
+  vertical-align: middle;
+}
+.rp-scores thead th {
+  border-block-end-color: var(--stroke-1);
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.rp-scores__skill {
+  font-weight: var(--fw-semibold);
+}
+.rp-scores__link a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+}
+.rp-level {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1h);
+}
+.rp-level--ok .rp-level__icon {
+  color: var(--status-success-fg);
+}
+.rp-level--limited .rp-level__icon {
+  color: var(--status-warning-fg);
+}
+.rp-level--none .rp-level__icon {
+  color: var(--fg-2);
+}
+/* Narrow: each skill is one block (name and link, the score, the evidence), still a table to
+   assistive technology; the header row stays for it but is not drawn. */
+@container rp-scores (max-width: 36rem) {
+  .rp-scores,
+  .rp-scores tbody,
+  .rp-scores caption {
+    display: block;
+  }
+  .rp-scores thead {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .rp-scores tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--sp-1) var(--sp-3);
+    padding-block: var(--sp-3);
+    border-block-end: var(--stroke-w) solid var(--stroke-2);
+  }
+  .rp-scores th,
+  .rp-scores td {
+    padding: 0;
+    border: 0;
+  }
+  .rp-scores__skill {
+    grid-column: 1;
+  }
+  .rp-scores__link {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .rp-scores__score,
+  .rp-scores__evidence {
+    grid-column: 1 / -1;
+  }
+  .rp-scores__evidence {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+  .rp-scores__evidence::before {
+    content: 'Evidence';
+    content: 'Evidence' / '';
+    color: var(--fg-3);
+    font-size: var(--fs-caption);
+    line-height: var(--lh-caption);
+  }
+}
+
+/* ---- Strengths and opportunities ---------------------------------------------------------- */
+.rp-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+  padding: var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+}
+@media (max-width: 30em) {
+  .rp-item {
+    padding: var(--sp-4);
+  }
+}
+.rp-item__skill {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.rp-item__title {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+/* The wording to try: a calm green panel, distinct from the quote and from the risk. */
+.rp-suggestion {
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--status-success-border);
+  border-radius: var(--r-lg);
+  background: var(--status-success-bg);
+  color: var(--fg-1);
+  overflow-wrap: anywhere;
+}
+.rp-gap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.rp-gap__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--stroke-w) dashed var(--stroke-accessible);
+  border-radius: var(--r-md);
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Skill details ------------------------------------------------------------------------ */
+.rp-skills {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.rp-skill {
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+}
+.rp-skill[open] {
+  border-color: var(--stroke-1);
+}
+.rp-skill__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name chevron'
+    'score chevron';
+  align-items: center;
+  gap: var(--sp-1) var(--sp-4);
+  min-block-size: var(--target);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-xl);
+  cursor: pointer;
+}
+@media (min-width: 40em) {
+  .rp-skill__summary {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: 'name score chevron';
+    gap: var(--sp-4);
+  }
+}
+.rp-skill__summary:hover {
+  background: var(--bg-hover);
+}
+.rp-skill__name {
+  grid-area: name;
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-skill__score {
+  grid-area: score;
+}
+.rp-skill__chevron {
+  grid-area: chevron;
+  color: var(--fg-2);
+  transition: transform var(--dur-fast) var(--ease-easy);
+}
+.rp-skill[open] .rp-skill__chevron {
+  transform: rotate(180deg);
+}
+.rp-skill__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-4) var(--sp-5);
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
+}
+.rp-skill__rubric {
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+}
+.rp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---- Discovery review --------------------------------------------------------------------- */
+.rp-discovery__total {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-block-start: var(--sp-2);
+}
+.rp-facts-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+  padding: var(--sp-4) var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+}
+@media (max-width: 30em) {
+  .rp-fact {
+    padding: var(--sp-4);
+  }
+}
+.rp-fact__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+}
+.rp-fact__title {
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-fact__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* ---- Next practice ------------------------------------------------------------------------ */
+.rp-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-5) var(--sp-8);
+  padding: var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-quiet);
+}
+.rp-next__body {
+  display: flex;
+  flex: 1 1 22rem;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+  max-inline-size: var(--read-max);
+}
+.rp-next__skill {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+}
+.rp-next__what {
+  margin-block-start: calc(var(--sp-1) * -1);
+}
+
+/* ---- Actions ------------------------------------------------------------------------------ */
+.rp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+}
+.rp-actions--danger {
+  padding-block-start: var(--sp-4);
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
+}
+
+/* ---- About -------------------------------------------------------------------------------- */
+.rp-about__note,
+.rp-disclaimers {
+  max-inline-size: var(--read-max);
+}
+.rp-disclaimers {
+  margin: 0;
+  padding-inline-start: var(--sp-5);
+  list-style: disc;
+}
+.rp-disclaimers li + li {
+  margin-block-start: var(--sp-1);
+}
+
+/* ---- Reveal: the report fades in once, when it has just been made ------------------------- */
+@keyframes rp-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rp-reveal .rp-header,
+  .rp-reveal .rp-main > * {
+    animation: rp-reveal var(--dur-slow) var(--ease-decelerate) both;
+  }
+  .rp-reveal .rp-main > :nth-child(1) {
+    animation-delay: 40ms;
+  }
+  .rp-reveal .rp-main > :nth-child(2) {
+    animation-delay: 80ms;
+  }
+  .rp-reveal .rp-main > :nth-child(n + 3) {
+    animation-delay: 120ms;
+  }
+}
+
+/* ---- Forced colours: system colours and borders, no shadows or tints ---------------------- */
+@media (forced-colors: active) {
+  .rp-nav__link[aria-current='location'] {
+    border-inline-start-color: Highlight;
+  }
+  .rp-meta,
+  .rp-overall,
+  .rp-aid,
+  .rp-item,
+  .rp-fact,
+  .rp-next,
+  .rp-skill,
+  .rp-jump,
+  .rp-empty,
+  .rp-suggestion {
+    border-color: CanvasText;
+  }
+  .rp-quote {
+    border-inline-start-color: CanvasText;
+  }
+  .rp-scores th,
+  .rp-scores td {
+    border-block-end-color: CanvasText;
+  }
+  .rp-level__icon {
+    color: CanvasText;
+  }
+}
+
+/* ---- Print: the report on paper, black on white -------------------------------------------- */
+@media print {
+  @page {
+    margin: 14mm 12mm;
+  }
+  /* The app around the report: its header, footer and skip link. */
+  body:has(.rp-page) .ff-header,
+  body:has(.rp-page) .ff-footer,
+  body:has(.rp-page) .skip-link,
+  body:has(.rp-page) .ff-offline {
+    display: none !important;
+  }
+  .rp-page {
+    padding: 0;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .rp-layout {
+    display: block;
+  }
+  .rp-print-head {
+    display: block;
+    margin-block-end: var(--sp-4);
+    padding-block-end: var(--sp-2);
+    border-block-end: var(--stroke-w) solid CanvasText;
+    font-size: var(--fs-compact);
+  }
+  .rp-print-head__brand {
+    font-size: var(--fs-subtitle2);
+    font-weight: var(--fw-semibold);
+  }
+  /* Controls and navigation mean nothing on paper. */
+  .rp-nav,
+  .rp-jump,
+  .rp-header__actions,
+  .rp-next__cta,
+  .rp-turnlink,
+  #actions {
+    display: none !important;
+  }
+  .rp-section {
+    padding-block: var(--sp-4);
+    border-block-start-color: CanvasText;
+  }
+  .rp-section__head,
+  .rp-section__title,
+  .rp-subtitle,
+  .rp-skill__summary {
+    break-after: avoid;
+  }
+  .rp-item,
+  .rp-fact,
+  .rp-quote,
+  .rp-field,
+  .rp-meta,
+  .rp-aid,
+  .rp-next,
+  .rp-scores tr,
+  .rp-suggestion {
+    break-inside: avoid;
+  }
+  /* A skill's detail may run over a page; what is inside it keeps together. */
+  .rp-skill {
+    break-inside: auto;
+  }
+  .rp-meta,
+  .rp-aid,
+  .rp-quote,
+  .rp-suggestion,
+  .rp-next,
+  .rp-overall,
+  .rp-empty {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .rp-quote {
+    border-inline-start-color: CanvasText;
+  }
+  /* Details are opened for paper; the arrow that says they could be closed is not needed. */
+  .rp-skill__chevron {
+    display: none;
+  }
+  /* Browsers leave backgrounds out of a printout, which would empty the score bars. Their numbers and
+     words are still there; this keeps the bar as well (a workaround for the shared ScoreBar). */
+  .rp-page .ff-scorebar__fill,
+  .rp-page .ff-scorebar__segment {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .rp-page .ff-scorebar__fill {
+    background: CanvasText;
+  }
+  /* Links shown as text, and the table's link column is empty on paper, so it goes. */
+  a,
+  .rp-scores__link a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .rp-scores__link,
+  .rp-scores thead th:last-child {
+    display: none;
+  }
+  .rp-reveal .rp-header,
+  .rp-reveal .rp-main > * {
+    animation: none;
+  }
+}

@@ -1,0 +1,318 @@
+/* Headers: the sticky acrylic bar of the public pages and of the app. Below 48em the links collapse
+   into a disclosure panel; the primary action stays in the bar. */
+
+.ff-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-header);
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-filter);
+  backdrop-filter: var(--acrylic-filter);
+  border-block-end: var(--stroke-w) solid var(--acrylic-border);
+}
+.ff-header__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--header-h);
+}
+
+/* ---- Navigation links --------------------------------------------------------------------- */
+.ff-header__links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ff-navlink {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-block-size: 3rem;
+  padding-inline: var(--sp-3);
+  border-radius: var(--r-md);
+  color: var(--fg-1);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  text-decoration: none;
+}
+.ff-navlink:hover {
+  background: var(--bg-hover);
+  color: var(--fg-1);
+  text-decoration: none;
+}
+.ff-navlink:active {
+  background: var(--bg-pressed);
+}
+/* The current page carries a line as well as a heavier colour. */
+.ff-navlink[aria-current='page'] {
+  font-weight: var(--fw-semibold);
+}
+.ff-navlink[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  inset-inline: var(--sp-3);
+  inset-block-end: var(--sp-1);
+  block-size: 0.1875rem;
+  border-radius: var(--r-pill);
+  background: var(--brand);
+}
+
+/* ---- Public header ------------------------------------------------------------------------ */
+.ff-header__nav {
+  display: none;
+}
+.ff-header__nav[data-open] {
+  display: block;
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 100%;
+  padding: var(--sp-2) var(--gutter) var(--sp-4);
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-canvas);
+  box-shadow: var(--shadow-16);
+}
+.ff-header .ff-header__menu {
+  margin-inline-start: auto;
+}
+.ff-header__menu-label {
+  display: inline;
+}
+.ff-header__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-2);
+}
+/* The bar wraps rather than overflows: with a wide font or enlarged text the main action drops to a
+   second row, and the links wrap as whole links, so nothing is pushed past the edge of the window. */
+.ff-header--public .ff-header__bar {
+  flex-wrap: wrap;
+  row-gap: var(--sp-1);
+  padding-block: var(--sp-1);
+}
+
+/* ---- App header --------------------------------------------------------------------------- */
+.ff-header__rule {
+  flex: none;
+  inline-size: var(--stroke-w);
+  block-size: 1.25rem;
+  background: var(--stroke-1);
+}
+.ff-header__section {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+  color: var(--fg-1);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.ff-header__grow {
+  flex: 1 1 auto;
+}
+.ff-header__title {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.ff-header__parent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-block-size: var(--target-min);
+  color: var(--fg-2);
+  font-weight: var(--fw-regular);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ff-header__parent:hover {
+  color: var(--fg-1);
+  text-decoration: underline;
+}
+.ff-header__back {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-1);
+  min-block-size: var(--target);
+  padding-inline: var(--sp-2) var(--sp-3);
+  margin-inline-start: calc(var(--sp-2) * -1);
+  border-radius: var(--r-md);
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+}
+.ff-header__back:hover {
+  background: var(--bg-hover);
+  color: var(--fg-1);
+  text-decoration: none;
+}
+.ff-header__status {
+  display: none;
+  flex: none;
+}
+.ff-header__more {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-1);
+  min-block-size: var(--target);
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--fg-2);
+}
+.ff-header__more:hover {
+  background: var(--bg-hover);
+}
+.ff-header__panel {
+  display: none;
+}
+.ff-header__panel[data-open] {
+  display: block;
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 100%;
+  padding: var(--sp-3) var(--gutter) var(--sp-4);
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-canvas);
+  box-shadow: var(--shadow-16);
+}
+.ff-header__note {
+  margin-block-end: var(--sp-2);
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.ff-header__note strong {
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Narrow: the app header is a compact bar ---------------------------------------------- */
+@media (max-width: 47.99em) {
+  /* In the dropdown the link text lines up with the text above it; its hover fill still pads it. */
+  .ff-header__links .ff-navlink {
+    margin-inline: calc(var(--sp-3) * -1);
+  }
+  .ff-header--app .ff-header__brand--has-back {
+    display: none;
+  }
+  .ff-header--app .ff-wordmark__text {
+    display: none;
+  }
+  .ff-header--app .ff-header__rule,
+  .ff-header--app .ff-header__parent,
+  .ff-header--app .ff-header__parent-separator {
+    display: none;
+  }
+  .ff-header--app .ff-header__title {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+  }
+}
+@media (max-width: 30em) {
+  .ff-header__menu-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ff-header--public .ff-wordmark__text {
+    font-size: var(--fs-subtitle2);
+  }
+  .ff-header__bar {
+    gap: var(--sp-2);
+  }
+}
+/* On the narrowest screens the main action reads "Start"; "simulation" is still part of its name. */
+@media (max-width: 22em) {
+  .ff-header__cta-rest {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* ---- Wide ---------------------------------------------------------------------------------- */
+@media (min-width: 48em) {
+  .ff-header__bar {
+    gap: var(--sp-4);
+  }
+  .ff-header .ff-header__menu {
+    display: none;
+  }
+  .ff-header__nav,
+  .ff-header__nav[data-open] {
+    display: block;
+    position: static;
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .ff-header__links {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--sp-1);
+  }
+  .ff-navlink {
+    min-block-size: var(--target);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    white-space: nowrap;
+  }
+  .ff-header__status {
+    display: inline-flex;
+  }
+  .ff-header__more {
+    display: none;
+  }
+  /* The panel dissolves: its navigation joins the bar. */
+  .ff-header__panel,
+  .ff-header__panel[data-open] {
+    display: contents;
+  }
+  .ff-header__note {
+    display: none;
+  }
+  .ff-header--app .ff-header__links {
+    gap: var(--sp-1);
+  }
+  .ff-header__back {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-header {
+    border-block-end-color: CanvasText;
+  }
+  .ff-navlink[aria-current='page']::after {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .ff-header__rule {
+    background: CanvasText;
+  }
+}
+
+/* A printed report carries no navigation. */
+@media print {
+  .ff-header {
+    display: none;
+  }
+}

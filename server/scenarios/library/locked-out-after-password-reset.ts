@@ -26,6 +26,7 @@ const scenario = {
 
   persona: {
     name: 'Maya Okafor',
+    speaker: 'female',
     role: 'Front-desk coordinator',
     organisation: 'Fabrikam Dental Group',
     background:

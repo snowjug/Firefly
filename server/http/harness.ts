@@ -9,14 +9,13 @@ import { openDatabase } from '../db/database.ts';
 import type { EvaluationInput } from '../engine/types.ts';
 import { createFailureHooks } from '../hooks.ts';
 import { createApp } from '../http/app.ts';
-import { silentLogger } from '../log.ts';
+import { silentLogger, type Logger } from '../log.ts';
 import { createMockProvider } from '../providers/mock.ts';
 import type { ModelProvider } from '../providers/types.ts';
 import exemplar from '../scenarios/library/locked-out-after-password-reset.ts';
-import { createDemoService } from '../services/demo.ts';
-import { InsightsService } from '../services/insights.ts';
-import { RewardsService } from '../services/rewards.ts';
 import { SessionService, type EvaluatorFns } from '../services/sessions.ts';
+import { createNoneSpeechProvider } from '../speech/index.ts';
+import type { SpeechProvider } from '../speech/types.ts';
 
 // Test harness: the real services and HTTP app on an in-memory database and an ephemeral port.
 
@@ -123,8 +122,6 @@ export const fakeEvaluators: EvaluatorFns = {
 export interface TestApp {
   baseUrl: string;
   service: SessionService;
-  insights: InsightsService;
-  rewards: RewardsService;
   hooks: ReturnType<typeof createFailureHooks>;
   repo: ReturnType<typeof createRepository>;
   close(): Promise<void>;
@@ -149,41 +146,26 @@ export interface TestResponse {
 export async function createTestApp(
   options: {
     provider?: ModelProvider;
+    /** The speech provider. Speech is off (`none`) unless a test passes one. */
+    speech?: SpeechProvider;
     library?: ScenarioDefinition[];
     evaluators?: EvaluatorFns;
     testHooks?: boolean;
     devDiagnostics?: boolean;
+    /** Where the server writes its log lines. Silent unless a test wants to read them. */
+    log?: Logger;
   } = {},
 ): Promise<TestApp> {
   const db = openDatabase(':memory:');
   const repo = createRepository(db);
   const hooks = createFailureHooks(options.testHooks ?? true);
   const provider = options.provider ?? createMockProvider({ delayMs: 0 });
+  const speech = options.speech ?? createNoneSpeechProvider();
   const library = options.library ?? [ScenarioDefinitionSchema.parse(exemplar)];
   const evaluators = options.evaluators ?? fakeEvaluators;
-  const log = silentLogger;
+  const log = options.log ?? silentLogger;
 
   const service = new SessionService({ db, repo, provider, library, evaluators, log, hooks });
-  const insights = new InsightsService(repo);
-  const rewards = new RewardsService(repo, () => service.listScenarios());
-  const sampleService = new SessionService({
-    db,
-    repo,
-    provider: createMockProvider({ delayMs: 0 }),
-    library,
-    evaluators,
-    log,
-    hooks: createFailureHooks(false),
-  });
-  const demo = createDemoService({
-    repo,
-    sampleService,
-    insights,
-    provider,
-    spotlightScenarioId: null,
-    scenarioExists: (id) => library.some((s) => s.id === id),
-    log,
-  });
   const config: AppConfig = {
     port: 0,
     host: '127.0.0.1',
@@ -194,8 +176,9 @@ export async function createTestApp(
     devDiagnostics: options.devDiagnostics ?? false,
     testHooks: options.testHooks ?? true,
     provider: { config: { kind: 'mock', mockDelayMs: 0 }, problem: null },
+    speech: { config: { kind: 'none' }, problem: null },
   };
-  const app = createApp({ config, service, insights, rewards, demo, provider, repo, hooks, log });
+  const app = createApp({ config, service, provider, speech, repo, hooks, log });
   const server: Server = createServer((req, res) => {
     void app.handler(req, res);
   });
@@ -240,8 +223,6 @@ export async function createTestApp(
   return {
     baseUrl,
     service,
-    insights,
-    rewards,
     hooks,
     repo,
     client,

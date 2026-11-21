@@ -1,7 +1,7 @@
-import type { CalibrationMetrics, CalibrationSource } from './calibration.ts';
 import type { CoachingReport } from './report.ts';
 import type { RedactionKind } from './text.ts';
 import type { ScenarioOverrides } from './scenario.ts';
+import type { InputMode, SpeechCapabilitiesDTO } from './speech.ts';
 import type {
   BusinessImpact,
   CallStage,
@@ -39,6 +39,11 @@ export type ApiErrorCode =
   | 'provider_rate_limited'
   | 'provider_bad_output'
   | 'provider_content_filtered'
+  | 'speech_unavailable'
+  | 'speech_failed'
+  | 'speech_timeout'
+  | 'speech_rate_limited'
+  | 'unsupported_media'
   | 'evaluation_failed'
   | 'internal';
 
@@ -49,6 +54,8 @@ export interface ApiErrorBody {
 export interface AppConfigDTO {
   app: { name: string; version: string };
   provider: { kind: ProviderKind; label: string; demo: boolean; notice: string | null };
+  /** What the server's speech provider can do. The browser's own speech features are separate. */
+  speech: SpeechCapabilitiesDTO;
   limits: { maxMessageChars: number; maxTraineeTurns: number };
   features: { devDiagnostics: boolean; testHooks: boolean };
 }
@@ -71,10 +78,14 @@ export interface PublicScenarioDTO {
   difficulty: Difficulty;
   persona: { name: string; role: string; organisation: string };
   brief: { situation: string; goal: string; groundRules: string[] };
+  /**
+   * What the trainee is told about the call stage, by stage (empty for a first contact). A call's
+   * brief is `brief.situation` followed by the text for the stage chosen for the call.
+   */
+  stageBriefs: Record<CallStage, string>;
   expectedDiscoveryAreas: string[];
   coachingFocus: DimensionId[];
   curveballOptions: CurveballType[];
-  spotlight: boolean;
   synthetic: true;
 }
 
@@ -93,6 +104,8 @@ export interface TurnDTO {
   text: string;
   createdAt: string;
   source: 'opening' | 'live' | 'demo' | 'trainee';
+  /** How a trainee turn arrived. Customer turns are always `text`. */
+  inputMode: InputMode;
   markers?: TurnMarker[]; // only present once the call is completed
 }
 
@@ -143,7 +156,6 @@ export interface SessionSummaryDTO {
   mode: PracticeMode;
   providerKind: ProviderKind;
   providerLabel: string;
-  isSample: boolean;
   status: SessionStatus;
   startedAt: string;
   endedAt: string | null;
@@ -152,7 +164,6 @@ export interface SessionSummaryDTO {
   completion: 'completed' | 'ended-early' | null;
   overallScore: number | null;
   dimensionScores: Partial<Record<DimensionId, number>> | null;
-  mentorReviewed: boolean;
 }
 
 export interface SessionDTO extends SessionSummaryDTO {
@@ -186,6 +197,8 @@ export interface TranscriptDTO {
 export interface SendMessageRequest {
   text: string;
   clientMessageId: string; // client-generated unique id; resending the same id never duplicates
+  /** `voice` when the text was recognised from the trainee's speech. Defaults to `text`. */
+  inputMode?: InputMode;
 }
 
 export interface SendMessageResponse {
@@ -200,158 +213,9 @@ export interface EndSessionRequest {
   reason?: 'finished' | 'ended-early';
 }
 
-// ---- History, progress, calibration, demo --------------------------------------------------
+// ---- History -------------------------------------------------------------------------------
 
 export interface SessionListDTO {
   sessions: SessionSummaryDTO[];
   total: number;
-}
-
-export interface DimensionTrendDTO {
-  dimension: DimensionId;
-  points: { sessionId: string; at: string; score: number }[];
-  average: number | null;
-  latest: number | null;
-  change: 'up' | 'steady' | 'down' | 'not-enough-data';
-}
-
-export interface ProgressDTO {
-  totalSessions: number;
-  completedSessions: number;
-  dimensionTrends: DimensionTrendDTO[];
-  strongest: DimensionId | null;
-  focus: DimensionId | null;
-  focusReason: string | null;
-  repeatedOpportunities: { dimension: DimensionId; sessions: number; message: string }[];
-  recentChange: 'improving' | 'steady' | 'declining' | 'not-enough-data';
-  note: string;
-}
-
-export interface MentorScoreRequest {
-  reviewer: string;
-  scores: Record<DimensionId, number>;
-  notes?: string;
-}
-
-export interface CalibrationRecordDTO {
-  id: number;
-  sessionId: string;
-  scenarioTitle: string;
-  reviewer: string;
-  source: CalibrationSource;
-  evaluatorVersion: string;
-  rubricVersion: string;
-  ai: Record<DimensionId, number>;
-  mentor: Record<DimensionId, number>;
-  notes: string | null;
-  createdAt: string;
-}
-
-/**
- * A completed session that is waiting for a mentor. It leaves out the AI's scores, so the queue
- * (and the response that carries it) cannot reveal them before a mentor has scored the call.
- */
-export type ReviewableSessionDTO = Omit<SessionSummaryDTO, 'overallScore' | 'dimensionScores'>;
-
-export interface CalibrationDTO {
-  metrics: CalibrationMetrics;
-  records: CalibrationRecordDTO[];
-  includesSamples: boolean;
-  reviewable: ReviewableSessionDTO[]; // completed sessions without a mentor review yet
-}
-
-export interface DemoStatusDTO {
-  spotlightScenarioId: string | null;
-  practiceSessions: number;
-  sampleSessions: number;
-  provider: { kind: ProviderKind; label: string; demo: boolean };
-}
-
-// ---- Rewards ------------------------------------------------------------------------------
-// Worked out from saved practice on every request. Nothing here is stored, ranked or compared.
-
-export type RewardRuleId =
-  | 'complete-scenario'
-  | 'hidden-fact'
-  | 'owner-and-update'
-  | 'skill-improvement'
-  | 'new-scenario-family'
-  | 'practice-day'
-  | 'mentor-confirmed';
-
-export interface RewardRuleDTO {
-  id: RewardRuleId;
-  title: string;
-  points: number;
-  detail: string;
-  safeguard: string;
-}
-
-export interface LedgerEntryDTO {
-  id: string;
-  ruleId: RewardRuleId;
-  points: number;
-  at: string;
-  sessionId: string | null;
-  scenarioTitle: string | null;
-  title: string; // e.g. "Completed a full scenario"
-  reason: string; // one plain sentence saying why it was awarded
-  evidence: { turnIndex: number | null; quote: string | null } | null;
-}
-
-export type BadgeId =
-  | 'first-practice'
-  | 'scope-detective'
-  | 'de-escalator'
-  | 'ownership-builder'
-  | 'scenario-explorer'
-  | 'consistency-streak';
-
-export interface BadgeDTO {
-  id: BadgeId;
-  title: string;
-  criteria: string;
-  earned: boolean;
-  earnedAt: string | null;
-  earnedInSessionId: string | null;
-  progress: { current: number; target: number; unit: string };
-}
-
-export type RewardLevelId = 'foundation' | 'builder' | 'practitioner' | 'confident-handler';
-
-export interface RewardLevelDTO {
-  id: RewardLevelId;
-  index: number;
-  name: string;
-  minPoints: number;
-  minFamilies: number;
-}
-
-export type ChallengeId = 'try-new-family' | 'find-every-fact' | 'lift-a-skill' | 'practise-again';
-
-export interface ChallengeDTO {
-  id: ChallengeId;
-  title: string;
-  detail: string;
-  reward: string;
-  progress: { current: number; target: number };
-  status: 'active' | 'completed';
-  scenarioId: string | null;
-  // Set when the challenge is only met at one difficulty (a skill is compared with your own recent
-  // calls at the same difficulty), so a screen can start the suggested scenario at that difficulty.
-  difficulty?: Difficulty | null;
-}
-
-export interface RewardsDTO {
-  points: number;
-  level: RewardLevelDTO;
-  nextLevel: (RewardLevelDTO & { pointsToGo: number; familiesToGo: number }) | null;
-  levels: RewardLevelDTO[];
-  families: { practised: IssueType[]; total: number };
-  streak: { current: number; best: number; activeDays: number; practisedToday: boolean };
-  badges: BadgeDTO[];
-  challenges: ChallengeDTO[];
-  ledger: LedgerEntryDTO[]; // newest first, at most 200 (totals always use all entries)
-  rules: RewardRuleDTO[]; // the seven rules: title, points, plain detail and the safeguard
-  note: string; // private to this browser profile, coaching not assessment, never compared
 }

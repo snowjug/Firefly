@@ -14,12 +14,19 @@ export function formatClock(totalSeconds: number): string {
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
-const dateFormat = new Intl.DateTimeFormat(undefined, {
+// The interface is written in British English, so dates and times are too, whatever the browser's
+// own locale (which also keeps the output the same on every machine, including the test runners).
+const LOCALE = 'en-GB';
+const dateFormat = new Intl.DateTimeFormat(LOCALE, {
   day: 'numeric',
   month: 'short',
   year: 'numeric',
 });
-const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+const timeFormat = new Intl.DateTimeFormat(LOCALE, {
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
 
 export function formatDate(iso: string): string {
   return dateFormat.format(new Date(iso));

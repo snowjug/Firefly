@@ -7,14 +7,14 @@
 //
 // Options:
 //   --w 1440 --h 900   viewport size          --dpr 1       device scale factor
-//   --scheme dark      colour scheme (light|dark)
-//   --theme dark       also set the in-app theme preference (light|dark|system)
+//   --scheme dark      colour scheme (light|dark; the interface is light only, so this only matters
+//                      for checking that it does not change)
 //   --reduced          emulate prefers-reduced-motion
+//   --forced           emulate forced-colors: active
 //   --full             capture the full scrollable page
 //   --wait "selector"  wait for a selector before capturing
 //   --click "selector" click an element (repeatable), then wait for the UI to settle
 //   --delay 300        extra settle time in ms (default 400)
-//   --samples          load the labelled sample sessions first (POST /api/demo/samples)
 //   --new-session id[:difficulty]  create a call first; "{id}" in --url is replaced by its session id
 //   --say "text"       send a trainee message to that call (repeatable, in order)
 //   --end              end that call and wait for the report
@@ -51,14 +51,10 @@ try {
   const context = await browser.newContext({
     viewport: { width: Number(opts.w ?? 1440), height: Number(opts.h ?? 900) },
     deviceScaleFactor: Number(opts.dpr ?? 1),
-    colorScheme: opts.scheme === 'light' ? 'light' : 'dark',
+    colorScheme: opts.scheme === 'dark' ? 'dark' : 'light',
     reducedMotion: opts.reduced ? 'reduce' : 'no-preference',
+    forcedColors: opts.forced ? 'active' : 'none',
   });
-  if (opts.theme) {
-    await context.addInitScript((theme) => {
-      localStorage.setItem('firefly.theme', theme);
-    }, String(opts.theme));
-  }
 
   let url = String(opts.url);
   const base = new URL(url.replace('{id}', 'x')).origin;
@@ -71,7 +67,6 @@ try {
     return response.json();
   };
 
-  if (opts.samples) await post('/api/demo/samples', {});
   if (opts['new-session']) {
     const [scenarioId, difficulty] = String(opts['new-session']).split(':');
     const created = await post('/api/sessions', {

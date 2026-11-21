@@ -1,0 +1,84 @@
+.ff-spinner {
+  --_size: 2rem;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  color: var(--brand);
+  vertical-align: middle;
+}
+.ff-spinner--current {
+  color: inherit;
+}
+.ff-spinner--tiny {
+  --_size: 1rem;
+}
+.ff-spinner--small {
+  --_size: 1.25rem;
+}
+.ff-spinner--medium {
+  --_size: 2rem;
+}
+.ff-spinner--large {
+  --_size: 3rem;
+}
+.ff-spinner--below {
+  flex-direction: column;
+  text-align: center;
+}
+.ff-spinner--after {
+  flex-direction: row;
+}
+
+.ff-spinner__svg {
+  inline-size: var(--_size);
+  block-size: var(--_size);
+  animation: ff-spin 0.9s linear infinite;
+}
+.ff-spinner__track,
+.ff-spinner__arc {
+  stroke-width: 2.5;
+}
+.ff-spinner__track {
+  stroke: currentColor;
+  opacity: 0.2;
+}
+.ff-spinner__arc {
+  stroke: currentColor;
+  stroke-linecap: round;
+  /* Three quarters of the ring, so a still spinner (reduced motion) still reads as a loader. */
+  stroke-dasharray: 42.4 56.5;
+}
+.ff-spinner__label {
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+@keyframes ff-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-spinner__track {
+    stroke: GrayText;
+    opacity: 1;
+  }
+  .ff-spinner__arc {
+    stroke: Highlight;
+  }
+  .ff-spinner__label {
+    color: CanvasText;
+  }
+  /* Inside a button the spinner takes the button's own text colour, which is what shows on it. */
+  .ff-spinner--current .ff-spinner__track {
+    stroke: currentColor;
+    opacity: 0.35;
+  }
+  .ff-spinner--current .ff-spinner__arc {
+    stroke: currentColor;
+  }
+}

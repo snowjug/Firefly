@@ -1,0 +1,82 @@
+/* The scenario as the trainee may know it: the head (issue, title, customer, summary) and the
+   sections that follow it. Shared by the workspace pane and its mobile sheet. */
+
+.scn-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-inline-size: 0;
+}
+.scn-detail__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+}
+.scn-detail__kicker {
+  color: var(--fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.scn-detail__title {
+  margin-block-start: calc(var(--sp-2) * -1);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.scn-detail__summary {
+  max-inline-size: 42rem;
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: 1.375rem;
+}
+
+.scn-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1h);
+  min-inline-size: 0;
+}
+.scn-detail__heading {
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+.scn-detail__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-inline-size: 42rem;
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: 1.375rem;
+}
+.scn-detail__rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.scn-detail__rules li {
+  position: relative;
+  padding-inline-start: var(--sp-4);
+}
+.scn-detail__rules li::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: var(--sp-1);
+  inset-block-start: 0.6em;
+  inline-size: 0.3125rem;
+  block-size: 0.3125rem;
+  border-radius: var(--r-pill);
+  background: var(--fg-3);
+}
+
+@media (forced-colors: active) {
+  .scn-detail__rules li::before {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+}

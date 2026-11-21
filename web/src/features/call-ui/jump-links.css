@@ -1,0 +1,7 @@
+/* The "Jump to" links reuse the page's skip-link look: hidden until focused, one at a time. */
+
+.cw-jump__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

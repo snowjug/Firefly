@@ -1,0 +1,186 @@
+/* The temperature chart. It is drawn by its own chunk, so these styles load with it. Everything here
+   is colour, stroke and type for the SVG; the layout is computed in journey-model.ts. */
+
+.rp-chart {
+  inline-size: 100%;
+  min-inline-size: 0;
+  margin-block: var(--sp-1);
+}
+.rp-chart__svg {
+  display: block;
+  max-inline-size: 100%;
+}
+
+/* Five bands, hot at the top. A faint tint of each state, and its name and icon on the left. */
+.rp-chart__stripe {
+  fill: var(--bg-canvas);
+}
+.rp-chart__stripe--calm {
+  fill: var(--state-calm-bg);
+}
+.rp-chart__stripe--concerned {
+  fill: var(--state-concerned-bg);
+}
+.rp-chart__stripe--frustrated {
+  fill: var(--state-frustrated-bg);
+}
+.rp-chart__stripe--angry {
+  fill: var(--state-angry-bg);
+}
+.rp-chart__stripe--escalating {
+  fill: var(--state-escalating-bg);
+}
+.rp-chart__bandicon--calm {
+  color: var(--state-calm-fg);
+}
+.rp-chart__bandicon--concerned {
+  color: var(--state-concerned-fg);
+}
+.rp-chart__bandicon--frustrated {
+  color: var(--state-frustrated-fg);
+}
+.rp-chart__bandicon--angry {
+  color: var(--state-angry-fg);
+}
+.rp-chart__bandicon--escalating {
+  color: var(--state-escalating-fg);
+}
+.rp-chart__rule {
+  stroke: var(--stroke-1);
+  stroke-width: 1;
+}
+.rp-chart__axis,
+.rp-chart__tick {
+  stroke: var(--stroke-accessible);
+  stroke-width: 1;
+}
+
+.rp-chart__label,
+.rp-chart__tick-label,
+.rp-chart__axis-title,
+.rp-chart__note {
+  fill: var(--fg-2);
+  font-family: inherit;
+  font-size: 12px;
+}
+.rp-chart__label {
+  fill: var(--fg-1);
+}
+.rp-chart__note {
+  fill: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+
+.rp-chart__line {
+  fill: none;
+  stroke: var(--fg-2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* A marker takes the colour of the band the customer was in; its shape says what kind of point it is. */
+.rp-chart__marker {
+  color: var(--fg-2);
+}
+.rp-chart__marker--calm {
+  color: var(--state-calm-fg);
+}
+.rp-chart__marker--concerned {
+  color: var(--state-concerned-fg);
+}
+.rp-chart__marker--frustrated {
+  color: var(--state-frustrated-fg);
+}
+.rp-chart__marker--angry {
+  color: var(--state-angry-fg);
+}
+.rp-chart__marker--escalating {
+  color: var(--state-escalating-fg);
+}
+
+.rp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-5);
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1h);
+}
+
+@media (forced-colors: active) {
+  .rp-chart__stripe,
+  .rp-chart__stripe--calm,
+  .rp-chart__stripe--concerned,
+  .rp-chart__stripe--frustrated,
+  .rp-chart__stripe--angry,
+  .rp-chart__stripe--escalating {
+    fill: Canvas;
+  }
+  .rp-chart__rule,
+  .rp-chart__axis,
+  .rp-chart__tick {
+    stroke: GrayText;
+  }
+  .rp-chart__label,
+  .rp-chart__tick-label,
+  .rp-chart__axis-title,
+  .rp-chart__note {
+    fill: CanvasText;
+  }
+  .rp-chart__line {
+    stroke: CanvasText;
+  }
+  .rp-chart__marker,
+  .rp-chart__marker--calm,
+  .rp-chart__marker--concerned,
+  .rp-chart__marker--frustrated,
+  .rp-chart__marker--angry,
+  .rp-chart__marker--escalating,
+  .rp-chart__bandicon--calm,
+  .rp-chart__bandicon--concerned,
+  .rp-chart__bandicon--frustrated,
+  .rp-chart__bandicon--angry,
+  .rp-chart__bandicon--escalating {
+    color: CanvasText;
+  }
+}
+
+@media print {
+  .rp-chart__svg {
+    inline-size: 100%;
+    block-size: auto;
+  }
+  .rp-chart__stripe,
+  .rp-chart__stripe--calm,
+  .rp-chart__stripe--concerned,
+  .rp-chart__stripe--frustrated,
+  .rp-chart__stripe--angry,
+  .rp-chart__stripe--escalating {
+    fill: Canvas;
+  }
+  .rp-chart__rule,
+  .rp-chart__axis,
+  .rp-chart__tick {
+    stroke: CanvasText;
+  }
+  .rp-chart__label,
+  .rp-chart__tick-label,
+  .rp-chart__axis-title,
+  .rp-chart__note {
+    fill: CanvasText;
+  }
+  .rp-chart__line {
+    stroke: CanvasText;
+  }
+  .rp-chart {
+    break-inside: avoid;
+  }
+}

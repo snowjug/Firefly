@@ -18,24 +18,28 @@ import {
   type EvaluationDraft,
 } from '#shared/domain/report.ts';
 import { ScenarioOverridesSchema, type ScenarioDefinition } from '#shared/domain/scenario.ts';
+import { INPUT_MODES } from '#shared/domain/speech.ts';
 import { startingState } from '#shared/domain/state.ts';
 import { MAX_MESSAGE_CHARS, redactSensitive } from '#shared/domain/text.ts';
 import {
-  DIMENSION_IDS,
   PRACTICE_MODES,
   type DimensionId,
   type EvaluationPhase,
   type SessionStatus,
+  type TemperatureBandId,
 } from '#shared/domain/vocab.ts';
 import { classifyTurnRules } from '../engine/classifier.ts';
 import { processTraineeTurn } from '../engine/pipeline.ts';
 import { createInitialRuntime, openingMessage, publicState } from '../engine/session.ts';
 import type { EvaluationInput, TranscriptTurn } from '../engine/types.ts';
 import { RUBRIC_VERSION } from '../engine/types.ts';
-import { AppError, conflict, isAbortError, notFound } from '../errors.ts';
+import { AppError, badRequest, conflict, isAbortError, notFound } from '../errors.ts';
 import type { FailureHooks } from '../hooks.ts';
 import { shortId, type Logger } from '../log.ts';
 import { ProviderError, type ModelProvider } from '../providers/types.ts';
+import { moodAtTurn, speakerFor } from '../speech/direction.ts';
+import { SpeechError } from '../speech/types.ts';
+import type { Speaker } from '../speech/voices.ts';
 import type { Repository, SessionRow, TurnRow } from '../db/repository.ts';
 import { transaction } from '../db/database.ts';
 import type { DatabaseSync } from 'node:sqlite';
@@ -79,26 +83,11 @@ export const SendMessageSchema = z.object({
     .min(1, 'Type a message before sending.')
     .max(LIMITS.maxMessageChars, `Messages can be up to ${LIMITS.maxMessageChars} characters.`),
   clientMessageId: z.string().regex(idPattern),
+  inputMode: z.enum(INPUT_MODES).default('text'),
 });
 
 export const EndSessionSchema = z.object({
   reason: z.enum(['finished', 'ended-early']).optional(),
-});
-
-export const MentorScoreSchema = z.object({
-  reviewer: z
-    .string()
-    .trim()
-    .min(1)
-    .max(40)
-    .regex(/^[\p{L}\p{N} .,'@_-]+$/u, 'Use letters, numbers and simple punctuation only.'),
-  scores: z.object(
-    Object.fromEntries(DIMENSION_IDS.map((d) => [d, z.number().int().min(1).max(5)])) as Record<
-      DimensionId,
-      z.ZodNumber
-    >,
-  ),
-  notes: z.string().trim().max(500).optional(),
 });
 
 const PROVIDER_STATUS: Record<string, number> = {
@@ -110,10 +99,22 @@ const PROVIDER_STATUS: Record<string, number> = {
   provider_content_filtered: 422,
 };
 
+const SPEECH_STATUS: Record<SpeechError['code'], number> = {
+  speech_unavailable: 503,
+  speech_failed: 502,
+  speech_timeout: 504,
+  speech_rate_limited: 429,
+};
+
 export function toAppError(error: unknown): AppError {
   if (error instanceof AppError) return error;
   if (error instanceof ProviderError) {
     return new AppError(PROVIDER_STATUS[error.code] ?? 502, error.code, error.message, {
+      retryable: error.retryable,
+    });
+  }
+  if (error instanceof SpeechError) {
+    return new AppError(SPEECH_STATUS[error.code], error.code, error.message, {
       retryable: error.retryable,
     });
   }
@@ -150,11 +151,7 @@ export class SessionService {
 
   // ---- sessions ---------------------------------------------------------------------------
 
-  createSession(
-    profileId: string,
-    request: CreateSessionRequest,
-    options: { isSample?: boolean; startedAt?: string } = {},
-  ): SessionDTO {
+  createSession(profileId: string, request: CreateSessionRequest): SessionDTO {
     const { repo, provider, log } = this.deps;
     const base = this.deps.library.find((s) => s.id === request.scenarioId && s.enabled);
     if (!base) throw notFound('That scenario');
@@ -167,7 +164,7 @@ export class SessionService {
     const seed = randomInt(1, 2 ** 31 - 1);
     const scenario = applyConfig(base, request.overrides ?? {}, { mode: request.mode, seed });
     const runtime = createInitialRuntime(scenario);
-    const startedAt = options.startedAt ?? new Date().toISOString();
+    const startedAt = new Date().toISOString();
     const id = randomUUID();
     const row: SessionRow = {
       id,
@@ -180,7 +177,7 @@ export class SessionService {
       providerKind: provider.kind,
       providerLabel: provider.label,
       promptVersions: provider.prompts,
-      isSample: options.isSample ?? false,
+      isSample: false,
       status: 'active',
       evaluationPhase: null,
       evaluationError: null,
@@ -200,6 +197,7 @@ export class SessionService {
         role: 'customer',
         text: openingMessage(scenario),
         source: 'opening',
+        inputMode: 'text',
         clientMessageId: null,
         classification: null,
         createdAt: startedAt,
@@ -220,7 +218,7 @@ export class SessionService {
     return this.loadDTO(row);
   }
 
-  /** Only the conversation: no report, scores, markers or state, so a mentor can review it blind. */
+  /** Only the conversation: no report, scores, markers or state. */
   getTranscript(profileId: string, id: string): TranscriptDTO {
     const { repo } = this.deps;
     const row = repo.getSession(id, profileId);
@@ -240,23 +238,45 @@ export class SessionService {
     };
   }
 
+  /**
+   * The stored words of one customer turn and how they should sound: which speaker, and how hot the
+   * customer was when they said it. It is the only source of text for speech, so the browser can
+   * never supply words to be spoken.
+   */
+  getSpeakableTurn(
+    profileId: string,
+    sessionId: string,
+    turnIndex: number,
+  ): { text: string; speaker: Speaker; mood: TemperatureBandId } {
+    const { repo } = this.deps;
+    const session = repo.getSession(sessionId, profileId);
+    if (!session) throw notFound('That session');
+    const turn = repo.getTurns(sessionId).find((t) => t.idx === turnIndex);
+    if (!turn) throw notFound('That turn');
+    if (turn.role !== 'customer') throw badRequest("Only the customer's turns can be spoken.");
+    return {
+      text: turn.text,
+      speaker: speakerFor(session.scenario.persona),
+      mood: moodAtTurn(session.scenario, repo.getStateEvents(sessionId), turnIndex),
+    };
+  }
+
   listSessions(
     profileId: string,
     filters: {
       status?: SessionStatus;
       difficulty?: string;
       scenarioId?: string;
-      includeSamples?: boolean;
       limit?: number;
       offset?: number;
     },
   ): SessionListDTO {
     const { repo } = this.deps;
-    const { rows, total } = repo.listSessions(profileId, filters);
+    // Rows loaded by an earlier version's sample-data tool are never listed.
+    const { rows, total } = repo.listSessions(profileId, { ...filters, includeSamples: false });
     const counts = repo.traineeTurnCounts(rows.map((r) => r.id));
-    const reviewed = repo.sessionIdsWithMentorReview(profileId);
     return {
-      sessions: rows.map((r) => toSummary(r, counts.get(r.id) ?? 0, reviewed.has(r.id))),
+      sessions: rows.map((r) => toSummary(r, counts.get(r.id) ?? 0)),
       total,
     };
   }
@@ -338,6 +358,7 @@ export class SessionService {
           role: 'trainee',
           text: cleaned.text,
           source: 'trainee',
+          inputMode: request.inputMode ?? 'text',
           clientMessageId: request.clientMessageId,
           classification,
           createdAt: new Date().toISOString(),
@@ -384,6 +405,7 @@ export class SessionService {
         role: 'customer',
         text: result.customerText,
         source: result.customerSource,
+        inputMode: 'text',
         clientMessageId: null,
         classification: null,
         createdAt: new Date().toISOString(),
@@ -432,7 +454,14 @@ export class SessionService {
   }
 
   private turnDTO(t: TurnRow) {
-    return { index: t.idx, role: t.role, text: t.text, createdAt: t.createdAt, source: t.source };
+    return {
+      index: t.idx,
+      role: t.role,
+      text: t.text,
+      createdAt: t.createdAt,
+      source: t.source,
+      inputMode: t.inputMode,
+    };
   }
 
   private responseFor(
@@ -672,11 +701,10 @@ export class SessionService {
     const turns = repo.getTurns(row.id);
     const events = row.status === 'completed' ? repo.getStateEvents(row.id) : [];
     const stored = row.status === 'completed' ? repo.getEvaluation(row.id)?.report : null;
-    const reviewed = repo.sessionIdsWithMentorReview(row.profileId).has(row.id);
-    return toSessionDTO(row, turns, events, stored, reviewed);
+    return toSessionDTO(row, turns, events, stored);
   }
 
-  /** Wait for any running evaluation (used by tests and the sample loader). */
+  /** Wait for any running evaluation (used by tests). */
   async settle(id: string): Promise<void> {
     await this.evalJobs.get(id);
   }

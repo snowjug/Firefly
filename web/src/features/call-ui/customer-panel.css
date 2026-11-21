@@ -1,0 +1,70 @@
+/* Who is on the line: the customer card, then their state and the temperature trace. */
+
+.cw-person {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+.cw-person__card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+.cw-person__avatar {
+  margin: var(--sp-1);
+}
+/* The design system's speaking ring pulses; on this screen it stays still, and the word says it. */
+.cw-person .ff-avatar--speaking {
+  animation: none;
+}
+.cw-person__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+}
+.cw-person__name {
+  color: var(--fg-1);
+  font-family: var(--font-display);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+}
+.cw-person__role {
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.cw-person__org {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.cw-person__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  margin-block-start: var(--sp-1);
+}
+.cw-person__speaking {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--voice-customer);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+}
+
+/* A short window (a laptop with its toolbars) trades some size for seeing everything at once. */
+@media (min-width: 64em) and (max-height: 60em) {
+  .cw-person {
+    gap: var(--sp-3);
+  }
+  .cw-person .ff-avatar {
+    --_size: 3.5rem;
+  }
+}

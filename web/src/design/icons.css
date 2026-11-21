@@ -1,0 +1,14 @@
+/* Icons: inline SVG drawn on a 24 px grid with a 1.5 stroke in the current text colour. */
+
+.ff-icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+/* In forced colours the strokes follow the text colour the system chose for the element. */
+@media (forced-colors: active) {
+  .ff-icon {
+    forced-color-adjust: auto;
+  }
+}

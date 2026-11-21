@@ -1,0 +1,49 @@
+.ff-surface {
+  box-sizing: border-box;
+  min-inline-size: 0;
+  border: var(--stroke-w) solid transparent;
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+}
+.ff-surface--flat {
+  background: var(--bg-subtle);
+}
+.ff-surface--outlined {
+  border-color: var(--stroke-2);
+}
+.ff-surface--elevated {
+  border-color: var(--stroke-3);
+  box-shadow: var(--shadow-4);
+}
+
+.ff-surface--pad-none {
+  padding: 0;
+}
+.ff-surface--pad-sm {
+  padding: var(--sp-3);
+}
+.ff-surface--pad-md {
+  padding: var(--sp-4);
+}
+.ff-surface--pad-lg {
+  padding: var(--sp-6);
+}
+.ff-surface--pad-xl {
+  padding: var(--sp-8);
+}
+@media (max-width: 40em) {
+  .ff-surface--pad-lg {
+    padding: var(--sp-4);
+  }
+  .ff-surface--pad-xl {
+    padding: var(--sp-6);
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-surface {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+}

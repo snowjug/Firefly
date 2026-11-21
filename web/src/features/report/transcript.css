@@ -1,0 +1,211 @@
+/* The transcript review: the find and filter controls, one row per turn, markers, the highlights
+   and the "Back to" control. Highlights are drawn over the words, never into them. */
+
+/* ---- Controls ----------------------------------------------------------------------------- */
+.rp-tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-block: var(--sp-3);
+  background: var(--bg-canvas);
+  border-block-end: var(--stroke-w) solid var(--stroke-3);
+}
+@media (min-width: 40em) {
+  .rp-tools {
+    position: sticky;
+    inset-block-start: var(--header-h);
+    z-index: var(--z-sticky);
+  }
+}
+.rp-find {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+}
+.rp-find__box {
+  flex: 1 1 16rem;
+  min-inline-size: 0;
+  max-inline-size: 26rem;
+}
+.rp-find__nav {
+  display: flex;
+  gap: var(--sp-1);
+}
+.rp-find__count {
+  min-inline-size: 7rem;
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.rp-shown {
+  margin-block-start: calc(var(--sp-2) * -1);
+}
+
+/* ---- Turns -------------------------------------------------------------------------------- */
+.rp-turns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-inline-start: 3px solid var(--stroke-1);
+  border-radius: 0 var(--r-lg) var(--r-lg) 0;
+  /* A turn that is jumped to is not hidden by the header and the find bar above it. */
+  scroll-margin-block: calc(var(--header-h) + 9rem) var(--sp-16);
+  /* A long call stays smooth: the browser skips the layout and painting of turns far off screen. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 7rem;
+}
+.rp-turn--trainee {
+  border-inline-start-color: var(--stroke-accessible);
+  background: var(--bg-quiet);
+}
+.rp-turn--context {
+  opacity: 1;
+  border-inline-start-style: dotted;
+}
+.rp-turn__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-turn__number {
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.rp-turn__speaker {
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+.rp-turn__clock {
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+}
+.rp-turn__text {
+  max-inline-size: var(--read-max);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rp-turn__tags {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: var(--sp-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-marker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+}
+.rp-marker__text {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+/* The turn an evidence link led to: a heavier edge all round, a tint and a "Cited" tag. */
+.rp-turn--cited {
+  border: var(--stroke-w-thick) solid var(--brand);
+  border-radius: var(--r-lg);
+  background: var(--brand-tint);
+}
+
+/* ---- Highlights --------------------------------------------------------------------------- */
+.rp-mark {
+  padding-inline: 0.1em;
+  border-radius: var(--r-sm);
+  background: var(--state-concerned-border);
+  color: var(--fg-1);
+}
+.rp-mark--match {
+  background: var(--brand-tint-hover);
+}
+.rp-mark--current {
+  background: var(--brand-tint-pressed);
+  outline: var(--stroke-w-thick) solid var(--brand);
+  outline-offset: 0;
+}
+/* Words that are both the quoted evidence and a search match keep the evidence colour. */
+.rp-mark--quote {
+  background: var(--state-concerned-border);
+  box-shadow: inset 0 -2px 0 var(--status-warning-fg);
+}
+
+/* ---- Back to where you came from ---------------------------------------------------------- */
+.rp-back {
+  position: sticky;
+  inset-block-end: var(--sp-4);
+  display: flex;
+  justify-content: center;
+  padding-block-start: var(--sp-4);
+  pointer-events: none;
+}
+.rp-back__button {
+  pointer-events: auto;
+  box-shadow: var(--shadow-16);
+}
+
+@media (forced-colors: active) {
+  .rp-turn {
+    border-inline-start-color: CanvasText;
+  }
+  .rp-turn--cited {
+    border-color: Highlight;
+  }
+  .rp-mark {
+    forced-color-adjust: none;
+    background: Mark;
+    color: MarkText;
+  }
+  .rp-mark--current {
+    outline-color: Highlight;
+  }
+  .rp-tools {
+    border-block-end-color: CanvasText;
+  }
+}
+
+@media print {
+  .rp-tools,
+  .rp-back,
+  .rp-shown {
+    display: none !important;
+  }
+  .rp-turn {
+    content-visibility: visible;
+    break-inside: avoid;
+    padding-block: var(--sp-2);
+    border-inline-start-color: CanvasText;
+    background: Canvas;
+  }
+  .rp-turn--cited {
+    border: 0;
+    border-inline-start: 3px solid CanvasText;
+    background: Canvas;
+  }
+  .rp-turn__text,
+  .rp-marker__text,
+  .rp-turn__clock {
+    color: CanvasText;
+  }
+  .rp-mark {
+    background: Canvas;
+    color: CanvasText;
+    text-decoration: underline;
+  }
+}

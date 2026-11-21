@@ -1,0 +1,191 @@
+/* The call setup: one row per setting, each with the sentence that says what the current choice
+   means under it (so the control does not move while it is being used). Two columns when the
+   pane is wide enough, one in the phone sheet. */
+
+.scn-config {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-inline-size: 0;
+  padding-block-start: var(--sp-5);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.scn-config__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+}
+.scn-config__intro {
+  min-inline-size: 0;
+}
+.scn-config__title {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.scn-config__lead {
+  max-inline-size: 34rem;
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.scn-config__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5) var(--sp-6);
+}
+@container (min-width: 40rem) {
+  .scn-config__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .scn-cfg--full {
+    grid-column: 1 / -1;
+  }
+}
+
+.scn-cfg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+
+.scn-changed {
+  margin-inline-start: var(--sp-2);
+  vertical-align: middle;
+}
+
+/* ---- Segmented controls: the description sits under the options ---------------------------- */
+.scn-seg {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.scn-seg .ff-segmented__legend {
+  margin-block-end: var(--sp-1);
+}
+.scn-seg .ff-segmented__hint {
+  order: 2;
+  margin: var(--sp-2) 0 0;
+  color: var(--fg-2);
+}
+
+/* Four starting temperatures: two by two on a phone, one row where there is room for the longest
+   label. Each keeps the colour of its state beside its own icon shape and its word. */
+.scn-seg.scn-seg--mood .ff-segmented__track {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@container (min-width: 42rem) {
+  .scn-seg.scn-seg--mood .ff-segmented__track {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.scn-seg--mood .ff-segmented__item:nth-child(1) .ff-icon {
+  color: var(--state-calm-fg);
+}
+.scn-seg--mood .ff-segmented__item:nth-child(2) .ff-icon {
+  color: var(--state-concerned-fg);
+}
+.scn-seg--mood .ff-segmented__item:nth-child(3) .ff-icon {
+  color: var(--state-frustrated-fg);
+}
+.scn-seg--mood .ff-segmented__item:nth-child(4) .ff-icon {
+  color: var(--state-angry-fg);
+}
+
+/* Off, the long middle option, Choose. */
+.scn-seg.scn-seg--modes .ff-segmented__track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr) minmax(0, 1fr);
+}
+
+/* ---- Selects: label, control, then the description ---------------------------------------- */
+.scn-field .scn-select {
+  order: 1;
+}
+.scn-field .ff-field__hint {
+  order: 2;
+  margin-block-start: var(--sp-1);
+}
+.scn-field .ff-field__feedback {
+  order: 3;
+}
+
+/* ---- Choosing curveballs -------------------------------------------------------------------- */
+.scn-picks {
+  margin-block-start: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-xl);
+  background: var(--bg-quiet);
+  box-shadow: inset 0 0 0 var(--stroke-w) var(--stroke-2);
+}
+.scn-picks__legend {
+  padding: 0;
+  color: var(--fg-1);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+}
+.scn-picks__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: var(--sp-6);
+}
+@container (min-width: 40rem) {
+  .scn-picks__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.scn-picks__status {
+  margin-block: var(--sp-1) var(--sp-1);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-note {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+/* ---- The call preview ------------------------------------------------------------------------ */
+.scn-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-quiet);
+}
+.scn-preview__title {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+}
+.scn-preview__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1h);
+  max-inline-size: 42rem;
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: 1.375rem;
+}
+
+@media (forced-colors: active) {
+  .scn-picks {
+    border: var(--stroke-w) solid CanvasText;
+    box-shadow: none;
+  }
+  /* The state colours would sit on the highlight colour of the chosen option: let the text colour through. */
+  .scn-seg--mood .ff-segmented__item:nth-child(n) .ff-icon {
+    color: inherit;
+  }
+}

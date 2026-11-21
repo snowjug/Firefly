@@ -1,0 +1,139 @@
+/* Text controls: TextInput, TextArea, SearchBox and Select share one look. The border is the
+   accessible stroke (3:1 or better on white), because the edge is how a field is found. */
+
+.ff-input {
+  --_h: var(--ctl-md);
+  display: block;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: var(--_h);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: var(--stroke-w) solid var(--stroke-accessible);
+  border-radius: var(--r-md);
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  transition:
+    border-color var(--dur-faster) var(--ease-easy),
+    box-shadow var(--dur-faster) var(--ease-easy);
+}
+.ff-input--small {
+  --_h: var(--ctl-sm);
+  padding-block: var(--sp-1);
+}
+.ff-input::placeholder {
+  color: var(--fg-3);
+  opacity: 1;
+}
+.ff-input:hover:not(:disabled, [readonly]) {
+  border-color: var(--fg-1);
+}
+.ff-input:focus {
+  border-color: var(--brand);
+}
+.ff-input[aria-invalid='true'] {
+  border-color: var(--status-danger-fg);
+  box-shadow: inset 0 0 0 1px var(--status-danger-fg);
+}
+.ff-input[aria-invalid='true']:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-inner);
+}
+.ff-input:disabled {
+  border-color: var(--stroke-2);
+  background: var(--bg-section);
+  color: var(--fg-disabled);
+  cursor: not-allowed;
+}
+.ff-input:disabled::placeholder {
+  color: var(--fg-disabled);
+}
+.ff-input[readonly] {
+  background: var(--bg-quiet);
+  border-color: var(--stroke-1);
+}
+
+.ff-input--multiline {
+  min-block-size: 6rem;
+  resize: vertical;
+}
+
+/* ---- Leading icon ---------------------------------------------------------------------- */
+.ff-input-wrap,
+.ff-search,
+.ff-select {
+  position: relative;
+  display: block;
+}
+.ff-input-wrap__icon,
+.ff-search__icon {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: var(--sp-3);
+  translate: 0 -50%;
+  color: var(--fg-2);
+  pointer-events: none;
+}
+.ff-input--lead,
+.ff-search__input {
+  padding-inline-start: var(--sp-10);
+}
+
+/* ---- Search ---------------------------------------------------------------------------- */
+.ff-search__input {
+  padding-inline-end: var(--sp-10);
+  appearance: none;
+}
+.ff-search__input::-webkit-search-cancel-button,
+.ff-search__input::-webkit-search-decoration {
+  appearance: none;
+  display: none;
+}
+.ff-search__clear {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: var(--sp-1);
+  translate: 0 -50%;
+}
+
+/* ---- Select ---------------------------------------------------------------------------- */
+.ff-select__native {
+  padding-inline-end: var(--sp-10);
+  appearance: none;
+  cursor: pointer;
+}
+.ff-select__native:disabled {
+  cursor: not-allowed;
+}
+.ff-select__chevron {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: var(--sp-3);
+  translate: 0 -50%;
+  color: var(--fg-2);
+  pointer-events: none;
+}
+.ff-select__native:disabled + .ff-select__chevron {
+  color: var(--fg-disabled);
+}
+
+@media (forced-colors: active) {
+  .ff-input {
+    border-color: ButtonText;
+  }
+  .ff-input:disabled {
+    border-color: GrayText;
+    color: GrayText;
+  }
+  .ff-input[aria-invalid='true'] {
+    border-width: 2px;
+  }
+  .ff-input-wrap__icon,
+  .ff-search__icon,
+  .ff-select__chevron {
+    color: ButtonText;
+  }
+}

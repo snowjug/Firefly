@@ -1,0 +1,84 @@
+import { expect, test } from '@playwright/test';
+
+// An optional smoke test against a REAL provider. It is skipped unless FIREFLY_E2E_REAL=1, and it
+// must never run in CI: the pipeline has no credentials and does not set that variable.
+//
+// How to run it: start Firefly yourself with real credentials (see docs/ai-providers.md), for
+// example the Azure OpenAI and Azure AI Speech settings in .env, build the web app, then:
+//
+//   npm run build
+//   npm start                                  (in one terminal, on its own port)
+//   $env:FIREFLY_E2E_REAL = '1'
+//   $env:E2E_BASE_URL = 'http://127.0.0.1:8787'
+//   npx playwright test e2e/real-provider.spec.ts
+//
+// What it checks, and no more: that the provider names the pages show (the brief's explainer, the
+// call's badge and pre-flight, the report) are the ones /api/config reports, that one typed
+// exchange with the real customer returns a non-empty reply, and that ending the call gives a
+// report. It does not judge the quality of anything the model writes. It never uses the microphone.
+//
+// It does not use the shared fixtures: the console may carry a provider's own warnings, and the
+// failure hooks and the mock speech script do not exist on a real server.
+
+const real = process.env.FIREFLY_E2E_REAL === '1';
+
+test.describe('a real provider (set FIREFLY_E2E_REAL=1 and start a server with real credentials)', () => {
+  test.skip(!real, 'Only run against a server the operator started with real credentials.');
+  test.setTimeout(240_000);
+
+  test('the provider names shown match /api/config, one exchange gets a reply, and the call gets a report', async ({
+    page,
+    request,
+  }) => {
+    const settings = (await (await request.get('/api/config')).json()) as {
+      provider: { label: string; demo: boolean };
+      speech: { label: string; transcribe: boolean; synthesize: boolean };
+    };
+    expect(settings.provider.label.length).toBeGreaterThan(0);
+
+    await test.step('the brief says who plays the customer and who handles speech', async () => {
+      await page.goto('/scenarios/locked-out-after-password-reset/brief');
+      const aside = page.getByRole('complementary', { name: 'Before you start' });
+      await expect(aside).toContainText(
+        settings.provider.demo ? 'Demo mode' : `Live model: ${settings.provider.label}`,
+      );
+      if (settings.speech.transcribe || settings.speech.synthesize) {
+        await expect(aside).toContainText(settings.speech.label);
+      }
+    });
+
+    await test.step('a typed call shows the same provider in the command bar', async () => {
+      await page.getByRole('button', { name: /^Start (a )?text(-only)? call$/ }).click();
+      await page.getByRole('button', { name: 'Start text-only call' }).click();
+      await expect(
+        page.getByText(settings.provider.demo ? 'Demo mode' : 'Live model', { exact: true }),
+      ).toBeVisible();
+    });
+
+    await test.step('one exchange with the customer gets a reply', async () => {
+      const log = page.getByRole('log', { name: 'Call transcript' });
+      await page
+        .getByRole('textbox', { name: 'Type a reply' })
+        .fill('Hello, my name is Sam. Can you tell me what is happening?');
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(log.getByRole('listitem')).toHaveCount(3, { timeout: 90_000 });
+      expect((await log.getByRole('listitem').last().innerText()).trim().length).toBeGreaterThan(
+        10,
+      );
+    });
+
+    await test.step('ending the call gives a report that names the evaluator', async () => {
+      await page.getByRole('button', { name: 'End call', exact: true }).click();
+      await page
+        .getByRole('dialog', { name: 'End the call?' })
+        .getByRole('button', { name: 'End and review' })
+        .click();
+      await expect(page.getByRole('region', { name: 'Overall coaching summary' })).toBeVisible({
+        timeout: 150_000,
+      });
+      await expect(page.getByRole('region', { name: 'About this report' })).toContainText(
+        settings.provider.demo ? 'Demo mode' : settings.provider.label,
+      );
+    });
+  });
+});

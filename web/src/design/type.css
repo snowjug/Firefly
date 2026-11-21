@@ -1,0 +1,95 @@
+/* Type: the named styles every screen uses. Sizes and line heights come from the tokens. */
+
+.t-display {
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  line-height: var(--lh-display);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.t-title1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-title1);
+  line-height: var(--lh-title1);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.t-title2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-title2);
+  line-height: var(--lh-title2);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.t-title3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-title3);
+  line-height: var(--lh-title3);
+  font-weight: var(--fw-semibold);
+}
+.t-subtitle1 {
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+}
+.t-subtitle2 {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.t-body {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.t-body-strong {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+/* Reading text: transcripts, report prose and anything a person reads for more than a line. */
+.t-reading {
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
+}
+.t-caption {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+/* A small label above a value or a group. Sentence case, never lighter than --fg-3. */
+.t-label {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-3);
+}
+.t-meta {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-3);
+}
+.t-numeric {
+  font-variant-numeric: tabular-nums;
+}
+/* A quotation taken from the transcript, shown as evidence. */
+.t-quote {
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
+  color: var(--fg-1);
+  font-style: italic;
+}
+.t-muted {
+  color: var(--fg-2);
+}
+.t-subtle {
+  color: var(--fg-3);
+}
+.t-mono {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* Prose blocks keep a readable line length. */
+.measure {
+  max-inline-size: var(--read-max);
+}

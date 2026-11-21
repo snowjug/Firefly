@@ -5,7 +5,8 @@ import type {
   TurnDTO,
   TurnMarker,
 } from '#shared/domain/api.ts';
-import { availableCurveballTypes } from '#shared/domain/config.ts';
+import { availableCurveballTypes, GENERIC_STAGE_FRAMES } from '#shared/domain/config.ts';
+import { CALL_STAGES, type CallStage } from '#shared/domain/vocab.ts';
 import { CoachingReportSchema, type CoachingReport } from '#shared/domain/report.ts';
 import type { ScenarioDefinition } from '#shared/domain/scenario.ts';
 import type { StateEvent } from '#shared/domain/state.ts';
@@ -37,19 +38,20 @@ export function toPublicScenario(def: ScenarioDefinition): PublicScenarioDTO {
       organisation: def.persona.organisation,
     },
     brief: def.brief,
+    stageBriefs: Object.fromEntries(
+      CALL_STAGES.map((stage) => [
+        stage,
+        (def.stageFrames[stage] ?? GENERIC_STAGE_FRAMES[stage]).brief,
+      ]),
+    ) as Record<CallStage, string>,
     expectedDiscoveryAreas: def.expectedDiscoveryAreas,
     coachingFocus: def.coachingFocus,
     curveballOptions: availableCurveballTypes(def),
-    spotlight: def.spotlight,
     synthetic: true,
   };
 }
 
-export function toSummary(
-  row: SessionRow,
-  traineeTurns: number,
-  mentorReviewed: boolean,
-): SessionSummaryDTO {
+export function toSummary(row: SessionRow, traineeTurns: number): SessionSummaryDTO {
   const cfg = row.scenario.config;
   const durationSeconds =
     row.endedAt === null
@@ -67,7 +69,6 @@ export function toSummary(
     mode: row.mode,
     providerKind: row.providerKind,
     providerLabel: row.providerLabel,
-    isSample: row.isSample,
     status: row.status,
     startedAt: row.startedAt,
     endedAt: row.endedAt,
@@ -76,7 +77,6 @@ export function toSummary(
     completion: row.completion,
     overallScore: row.overallScore,
     dimensionScores: row.dimensionScores,
-    mentorReviewed,
   };
 }
 
@@ -120,6 +120,7 @@ export function toTurnDTOs(row: SessionRow, turns: TurnRow[], events: StateEvent
     text: t.text,
     createdAt: t.createdAt,
     source: t.source,
+    inputMode: t.inputMode,
     ...(completed && markers.has(t.idx) ? { markers: markers.get(t.idx) } : {}),
   }));
 }
@@ -140,12 +141,11 @@ export function toSessionDTO(
   turns: TurnRow[],
   events: StateEvent[],
   storedReport: unknown,
-  mentorReviewed: boolean,
 ): SessionDTO {
   const traineeTurns = turns.filter((t) => t.role === 'trainee').length;
   const cfg = row.scenario.config;
   return {
-    ...toSummary(row, traineeTurns, mentorReviewed),
+    ...toSummary(row, traineeTurns),
     scenario: {
       scenarioId: row.scenarioId,
       title: row.scenarioTitle,

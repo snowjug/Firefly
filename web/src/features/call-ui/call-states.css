@@ -1,0 +1,129 @@
+/* Loading, failing and finished: the pages a call shows when there is no workspace to show. */
+
+.cw-page {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
+  padding: var(--gutter);
+  background: var(--bg-subtle);
+}
+.ff-surface.cw-page__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  inline-size: 100%;
+  max-inline-size: 36rem;
+  background: var(--bg-canvas);
+}
+.cw-page__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border-radius: var(--r-pill);
+  background: var(--bg-subtle);
+  color: var(--fg-2);
+}
+
+/* ---- The loading skeleton ------------------------------------------------------------------ */
+.cw-skel {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
+  background: var(--bg-subtle);
+}
+.cw-skel__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  box-sizing: border-box;
+  min-block-size: var(--header-h);
+  padding-inline: var(--gutter);
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-canvas);
+}
+.cw-skel__mark.ff-skeleton {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+}
+.cw-skel__title.ff-skeleton {
+  flex: 1 1 auto;
+  max-inline-size: 18rem;
+}
+.cw-skel__end.ff-skeleton {
+  flex: none;
+  inline-size: 6.5rem;
+  block-size: var(--target);
+  margin-inline-start: auto;
+}
+.cw-skel__body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--gutter);
+}
+.cw-skel__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  box-sizing: border-box;
+  padding: var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+}
+.cw-skel__stage,
+.cw-skel__context {
+  display: none;
+}
+.cw-skel__person {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.cw-skel__avatar.ff-skeleton {
+  inline-size: 4.5rem;
+  block-size: 4.5rem;
+}
+.cw-skel__lines {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.cw-skel__card.ff-skeleton {
+  block-size: 5rem;
+}
+.cw-skel__w30.ff-skeleton {
+  inline-size: 30%;
+}
+.cw-skel__w40.ff-skeleton {
+  inline-size: 40%;
+}
+.cw-skel__w60.ff-skeleton {
+  inline-size: 60%;
+}
+.cw-skel__w80.ff-skeleton {
+  inline-size: 80%;
+}
+@media (min-width: 64em) {
+  .cw-skel__body {
+    grid-template-columns: 22rem minmax(0, 1fr);
+  }
+  .cw-skel__stage {
+    display: flex;
+  }
+}
+@media (min-width: 80em) {
+  .cw-skel__body {
+    grid-template-columns: 24rem minmax(0, 1fr) 20rem;
+  }
+  .cw-skel__context {
+    display: flex;
+  }
+}

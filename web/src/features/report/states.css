@@ -1,0 +1,98 @@
+/* The states around the report: loading, unavailable, the evaluation under way, and the failure
+   that can be recovered from. The failed state also shows the transcript, styled by transcript.css. */
+
+.rp-state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding-block: var(--sp-8) var(--sp-16);
+}
+/* The failed state carries a whole transcript, so it is as wide as the report's own column. */
+.rp-state--wide {
+  max-inline-size: calc(56rem + 2 * var(--gutter));
+}
+.rp-state__lead {
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+}
+.rp-state__scenario {
+  margin-block-start: calc(var(--sp-3) * -1);
+  color: var(--fg-2);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+}
+.rp-state__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.rp-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+}
+.rp-state__note {
+  max-inline-size: var(--read-max);
+}
+.rp-state__para + .rp-state__para {
+  margin-block-start: var(--sp-1);
+}
+
+/* ---- The five steps ----------------------------------------------------------------------- */
+.rp-steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  overflow: hidden;
+}
+.rp-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--target);
+  padding: var(--sp-2) var(--sp-4);
+  border-block-end: var(--stroke-w) solid var(--stroke-3);
+}
+.rp-step:last-child {
+  border-block-end: 0;
+}
+.rp-step__status {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-step[data-status='done'] .rp-step__icon {
+  color: var(--status-success-fg);
+}
+.rp-step[data-status='current'] {
+  background: var(--brand-tint);
+}
+.rp-step[data-status='current'] .rp-step__title,
+.rp-step[data-status='current'] .rp-step__status {
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+.rp-step[data-status='waiting'] .rp-step__icon {
+  color: var(--fg-3);
+}
+.rp-step[data-status='waiting'] .rp-step__title {
+  color: var(--fg-2);
+}
+
+@media (forced-colors: active) {
+  .rp-steps {
+    border-color: CanvasText;
+  }
+  .rp-step {
+    border-block-end-color: CanvasText;
+  }
+  .rp-step[data-status='current'] {
+    border-inline-start: 4px solid Highlight;
+  }
+}

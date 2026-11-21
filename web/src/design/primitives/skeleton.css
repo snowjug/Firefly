@@ -1,0 +1,53 @@
+.ff-skeleton {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--bg-section) 0%,
+    var(--bg-strong) 50%,
+    var(--bg-section) 100%
+  );
+  background-size: 200% 100%;
+  animation: ff-shimmer 1.6s var(--ease-easy) infinite;
+}
+.ff-skeleton--text {
+  block-size: 0.875rem;
+  border-radius: var(--r-md);
+}
+.ff-skeleton--rect {
+  block-size: 4rem;
+  border-radius: var(--r-xl);
+}
+.ff-skeleton--circle {
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border-radius: var(--r-pill);
+}
+.ff-skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+@keyframes ff-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* No shimmer: a still, flat grey. */
+@media (prefers-reduced-motion: reduce) {
+  .ff-skeleton {
+    background: var(--bg-section);
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-skeleton {
+    border: 1px solid GrayText;
+    background: Canvas;
+  }
+}

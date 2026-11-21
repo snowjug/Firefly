@@ -5,5 +5,3 @@ playwright-report
 test-results
 node_modules
 package-lock.json
-# Licence texts are reproduced exactly as published.
-web/public/fonts/LICENSES.md

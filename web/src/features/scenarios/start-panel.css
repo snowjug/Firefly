@@ -1,0 +1,28 @@
+/* "Before you start": the explainer, then the stacked actions (full width on every screen). */
+
+.brf-start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+.brf-start__title {
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+}
+.brf-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+/* In this narrow panel the message keeps its text wide and puts its action underneath. */
+.brf-start .ff-message--actions {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon body'
+    '. actions';
+}
+.brf-start .ff-message__actions {
+  margin-block-start: var(--sp-1);
+}

@@ -1,0 +1,92 @@
+.ff-progress {
+  --_h: 0.375rem;
+  --_fill: var(--brand);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1h);
+  min-inline-size: 0;
+}
+.ff-progress--small {
+  --_h: 0.25rem;
+}
+.ff-progress--large {
+  --_h: 0.625rem;
+}
+.ff-progress--success {
+  --_fill: var(--status-success-fg);
+}
+.ff-progress--warning {
+  --_fill: var(--status-warning-fg);
+}
+.ff-progress--danger {
+  --_fill: var(--status-danger-fg);
+}
+
+.ff-progress__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.ff-progress__label {
+  color: var(--fg-1);
+}
+.ff-progress__value {
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ff-progress__track {
+  position: relative;
+  overflow: hidden;
+  block-size: var(--_h);
+  border-radius: var(--r-pill);
+  background: var(--bg-strong);
+}
+.ff-progress__fill {
+  block-size: 100%;
+  border-radius: var(--r-pill);
+  background: var(--_fill);
+  transition: inline-size var(--dur-slow) var(--ease-decelerate);
+}
+
+/* Indeterminate: a segment slides along. Under reduced motion it is a still, striped bar. */
+.ff-progress--indeterminate .ff-progress__fill {
+  position: absolute;
+  inset-block: 0;
+  inline-size: 40%;
+  animation: ff-progress-slide 1.4s var(--ease-easy) infinite;
+}
+@keyframes ff-progress-slide {
+  from {
+    inset-inline-start: -40%;
+  }
+  to {
+    inset-inline-start: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ff-progress--indeterminate .ff-progress__fill {
+    inset-inline-start: 0;
+    inline-size: 100%;
+    animation: none;
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--_fill) 0 0.375rem,
+      var(--bg-strong) 0.375rem 0.75rem
+    );
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-progress__track {
+    border: 1px solid ButtonText;
+    background: Canvas;
+  }
+  .ff-progress__fill {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}

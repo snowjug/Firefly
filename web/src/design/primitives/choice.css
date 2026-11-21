@@ -1,0 +1,189 @@
+/* Checkbox and Switch: the native input covers the whole row, so the row is the target. */
+
+.ff-choice {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  min-block-size: var(--target);
+  padding-block: var(--sp-2h);
+  min-inline-size: 0;
+}
+.ff-choice--reverse {
+  flex-direction: row-reverse;
+  justify-content: space-between;
+}
+.ff-choice__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.ff-choice__input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.ff-choice__input:disabled {
+  cursor: not-allowed;
+}
+
+.ff-choice__text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.ff-choice__label {
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  cursor: inherit;
+}
+.ff-choice__description {
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.ff-choice--disabled .ff-choice__label,
+.ff-choice--disabled .ff-choice__description {
+  color: var(--fg-disabled);
+}
+
+/* ---- Checkbox -------------------------------------------------------------------------- */
+.ff-choice__box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  margin-block-start: 0.0625rem;
+  border: var(--stroke-w) solid var(--stroke-accessible);
+  border-radius: var(--r-md);
+  background: var(--bg-canvas);
+  color: transparent;
+  transition:
+    background-color var(--dur-faster) var(--ease-easy),
+    border-color var(--dur-faster) var(--ease-easy);
+}
+.ff-choice:hover .ff-choice__input:not(:disabled) + .ff-choice__box {
+  border-color: var(--fg-1);
+}
+.ff-choice__input:checked + .ff-choice__box,
+.ff-choice__input:indeterminate + .ff-choice__box {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--fg-on-brand);
+}
+.ff-choice:hover .ff-choice__input:checked:not(:disabled) + .ff-choice__box,
+.ff-choice:hover .ff-choice__input:indeterminate:not(:disabled) + .ff-choice__box {
+  border-color: var(--brand-hover);
+  background: var(--brand-hover);
+}
+.ff-choice__input:focus-visible + .ff-choice__box {
+  outline: var(--stroke-w-thick) solid var(--focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-inner);
+}
+.ff-choice__input[aria-invalid='true'] + .ff-choice__box {
+  border-color: var(--status-danger-fg);
+}
+.ff-choice__input:disabled + .ff-choice__box {
+  border-color: var(--stroke-2);
+  background: var(--bg-section);
+}
+.ff-choice__input:disabled:checked + .ff-choice__box {
+  color: var(--fg-disabled);
+}
+
+/* ---- Switch ---------------------------------------------------------------------------- */
+.ff-choice__track {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  inline-size: 2.5rem;
+  block-size: 1.375rem;
+  margin-block-start: 0.0625rem;
+  border: var(--stroke-w) solid var(--stroke-accessible);
+  border-radius: var(--r-pill);
+  background: var(--bg-canvas);
+  transition:
+    background-color var(--dur-faster) var(--ease-easy),
+    border-color var(--dur-faster) var(--ease-easy);
+}
+.ff-choice__thumb {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 0.1875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1rem;
+  block-size: 1rem;
+  translate: 0 -50%;
+  border-radius: var(--r-pill);
+  background: var(--fg-2);
+  color: transparent;
+  transition:
+    inset-inline-start var(--dur-fast) var(--ease-decelerate),
+    background-color var(--dur-faster) var(--ease-easy);
+}
+.ff-choice:hover .ff-choice__input:not(:disabled) + .ff-choice__track {
+  border-color: var(--fg-1);
+}
+.ff-choice__input:checked + .ff-choice__track {
+  border-color: var(--brand);
+  background: var(--brand);
+}
+.ff-choice__input:checked + .ff-choice__track .ff-choice__thumb {
+  inset-inline-start: calc(100% - 1rem - 0.1875rem);
+  background: var(--bg-canvas);
+  color: var(--brand);
+}
+.ff-choice:hover .ff-choice__input:checked:not(:disabled) + .ff-choice__track {
+  border-color: var(--brand-hover);
+  background: var(--brand-hover);
+}
+.ff-choice__input:focus-visible + .ff-choice__track {
+  outline: var(--stroke-w-thick) solid var(--focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-inner);
+}
+.ff-choice__input:disabled + .ff-choice__track {
+  border-color: var(--stroke-2);
+  background: var(--bg-section);
+}
+.ff-choice__input:disabled + .ff-choice__track .ff-choice__thumb {
+  background: var(--fg-disabled);
+}
+
+@media (forced-colors: active) {
+  .ff-choice__box,
+  .ff-choice__track {
+    border-color: ButtonText;
+  }
+  .ff-choice__input:checked + .ff-choice__box,
+  .ff-choice__input:indeterminate + .ff-choice__box,
+  .ff-choice__input:checked + .ff-choice__track {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .ff-choice__thumb {
+    forced-color-adjust: none;
+    background: ButtonText;
+  }
+  .ff-choice__input:checked + .ff-choice__track .ff-choice__thumb {
+    background: HighlightText;
+    color: Highlight;
+  }
+  .ff-choice__input:disabled + .ff-choice__box,
+  .ff-choice__input:disabled + .ff-choice__track {
+    border-color: GrayText;
+  }
+}

@@ -1,0 +1,129 @@
+/* The call workspace: the command bar, then three columns (80em and up), two (64em) or one, with the
+   voice dock at the bottom of the narrow one. The page itself does not scroll: the transcript, the
+   stage and the context each scroll inside their own panel. */
+
+.cw-root {
+  display: flex;
+  flex-direction: column;
+  /* The visible height, which a script narrows while the on-screen keyboard is open. */
+  block-size: var(--cw-vh, 100dvh);
+  /* A zoomed or very short window scrolls the page instead of squashing the panels. */
+  min-block-size: 30rem;
+  background: var(--bg-subtle);
+  /* Focus and anchors land clear of the sticky bar. */
+  scroll-padding-block-start: calc(var(--header-h) + var(--sp-4));
+}
+
+.cw-body {
+  display: grid;
+  flex: 1 1 0px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--sp-4);
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: calc(var(--page-max-wide) + 2 * var(--gutter));
+  min-block-size: 0;
+  margin-inline: auto;
+  padding: var(--sp-4) var(--gutter);
+}
+@media (min-width: 64em) {
+  .cw-body {
+    grid-template-columns: minmax(20rem, 22rem) minmax(0, 1fr);
+  }
+}
+@media (min-width: 80em) {
+  .cw-body {
+    grid-template-columns: minmax(22rem, 24rem) minmax(0, 1fr) minmax(17rem, 20rem);
+  }
+}
+
+/* ---- The transcript panel ------------------------------------------------------------------ */
+.cw-transcript {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  min-inline-size: 0;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  overflow: hidden;
+}
+.cw-transcript__head {
+  flex: none;
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
+  border-block-end: var(--stroke-w) solid var(--stroke-3);
+}
+.cw-transcript__title {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.cw-transcript__note {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+/* ---- Below 64em: the transcript fills the screen, the dock is at the bottom ------------------ */
+@media (max-width: 63.99em) {
+  .cw-body {
+    padding: 0;
+    gap: 0;
+  }
+  .cw-transcript {
+    border-width: 0;
+    border-radius: 0;
+  }
+  .cw-transcript__head {
+    padding: var(--sp-2) var(--sp-4);
+  }
+  .cw-transcript__title {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+  }
+}
+
+/* A short phone screen needs every line for the conversation: the note stays for assistive technology. */
+@media (max-width: 63.99em) and (max-height: 40em) {
+  .cw-transcript__note {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* The dock: acrylic and tied to the bottom of the screen, clear of the safe area. */
+.cw-dock {
+  position: relative;
+  z-index: var(--z-sticky);
+  flex: none;
+  box-sizing: border-box;
+  max-block-size: 60dvh;
+  padding: var(--sp-2) var(--sp-3) calc(var(--sp-2) + env(safe-area-inset-bottom, 0px));
+  border-block-start: var(--stroke-w) solid var(--acrylic-border);
+  background: var(--acrylic-bg);
+  -webkit-backdrop-filter: var(--acrylic-filter);
+  backdrop-filter: var(--acrylic-filter);
+  box-shadow: 0 -2px 8px color-mix(in srgb, var(--fg-1) 10%, transparent);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* A short screen cannot spare the dock: it scrolls away with the page and the bar stays. */
+@media (max-height: 30em) {
+  .cw-dock {
+    max-block-size: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .cw-transcript,
+  .cw-dock {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+}

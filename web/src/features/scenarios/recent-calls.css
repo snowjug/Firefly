@@ -1,0 +1,70 @@
+/* The call in progress banner and the recent calls list. A convenience list: no totals, no charts. */
+
+.ff-message.rc-banner {
+  align-items: center;
+}
+
+.rc-list {
+  display: flex;
+  flex-direction: column;
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.rc-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: 'main status action';
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding-block: var(--sp-3);
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+}
+.rc-row__main {
+  grid-area: main;
+  min-inline-size: 0;
+}
+.rc-row .ff-badge {
+  grid-area: status;
+}
+.rc-row__action {
+  grid-area: action;
+}
+.rc-row__title {
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+.rc-row__facts {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+@media (max-width: 40em) {
+  .rc-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'main status'
+      'action action';
+  }
+  .rc-row__action {
+    justify-self: stretch;
+    min-block-size: var(--target);
+  }
+}
+
+.rc-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding-block: var(--sp-8);
+  text-align: center;
+}
+.rc-state__title {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rc-state__text {
+  color: var(--fg-2);
+}

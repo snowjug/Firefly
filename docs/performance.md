@@ -1,204 +1,309 @@
 # Performance
 
-Firefly's interface is spatial and animated, so speed is a design constraint, not an afterthought. This
-page says what is budgeted and enforced, how the animated field adapts to the device, how the interface
-was measured, what the numbers were, and what has **not** been measured.
+What Firefly measures about its own speed and its use of the microphone and audio, the limits it
+enforces, what was found and changed, and how to repeat every number. Every number here was taken on
+one machine in one sitting (see below). They show how two builds compare when measured back to back;
+they say nothing about other hardware, and nothing here is a claim about a machine that was not tested.
 
-> The measurements come from **one laptop and one browser**. They compare the redesigned interface with
-> the one it replaced, on the same machine, in the same sitting. They are not a promise about any other
-> device, and nobody has measured a phone.
+## The machine and the sitting
+
+|           |                                                                          |
+| --------- | ------------------------------------------------------------------------ |
+| Date      | 21 November 2026                                                         |
+| Processor | 11th Gen Intel Core i7-1185G7 at 3.00 GHz, 4 cores, 8 logical processors |
+| Memory    | 31.3 GB                                                                  |
+| System    | Windows 11 Enterprise, version 10.0.26300                                |
+| Browser   | Microsoft Edge 158.0.4370.33 (Chromium 158.0.8127.18)                    |
+| Tools     | Node 26.13.1, Playwright 1.65, Vite 8                                    |
+
+Other programs (other people's browsers and test runs) were using the same machine during the
+sitting, so single timings carry noise. Where a number comes from several runs it is the median with
+the lowest and highest in brackets. "CPU x4" means Chrome's CPU throttling at four times slower
+(`Emulation.setCPUThrottlingRate`): a rough stand-in for a modest office laptop, not a measurement of
+one. The network is the loopback, so transfer times are not representative.
+
+## What is measured, and why
+
+| Measure                                                                                        | Why                                                                       |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| First-load JavaScript and CSS, gzip                                                            | The code that must arrive before any page can draw.                       |
+| First and largest contentful paint, layout shift, long tasks (50 ms or more)                   | How the first view feels, and whether the main thread is blocked.         |
+| DOM nodes and JavaScript heap                                                                  | Cost that grows with a long call, and leaks.                              |
+| Script time while a long transcript sits idle, scrolls, or gets a new turn                     | A call can run for many minutes; the page must not slow down as it grows. |
+| Time from a click to the next paint (Event Timing)                                             | Whether a control feels instant.                                          |
+| Microphone tracks, audio contexts, audio nodes, object URLs, audio elements, timers, listeners | A spoken call opens real resources and must give every one of them back.  |
 
 ## Budgets
 
-`npm run check:budgets` runs after `npm run build` (it is part of `npm run check` and of CI) and fails if
-the production build in `dist/web` grows past `scripts/budgets.json`. Sizes are gzip, because that is
-what the network carries. It also fails if a source map reaches the build. Raising a limit is a decision:
-it shows up in review and needs a reason in the commit message.
+`scripts/budgets.json` holds the limits and `scripts/check-budgets.mjs` enforces them on the production
+build (`npm run build`, then `npm run check:budgets`). Sizes are gzip at its highest level, the unit a
+compressing host sends. To read another build, set `FIREFLY_BUILD_DIR` (relative to the repository
+root). Raising a limit is a decision: say why in the commit.
 
-| Budget                                             | Limit  | Now      | Before the redesign |
-| -------------------------------------------------- | ------ | -------- | ------------------- |
-| First-load JavaScript (entry and preloaded chunks) | 125 kB | 119.4 kB | 93.1 kB             |
-| First-load CSS                                     | 22 kB  | 12.9 kB  | 8.4 kB              |
-| Largest page chunk                                 | 70 kB  | 22.8 kB  | 20.7 kB             |
-| Largest CSS file                                   | 26 kB  | 8.5 kB   | not recorded        |
-| Fonts on the critical path (preloaded)             | 110 kB | 69.3 kB  | none: no web fonts  |
-| All fonts                                          | 150 kB | 119.1 kB | none                |
+| Limit (gzip)                                               | Budget | Measured 21 Nov 2026 | Before this work |
+| ---------------------------------------------------------- | ------ | -------------------- | ---------------- |
+| First-load JavaScript (entry and the chunk loaded with it) | 110 kB | 109.4 kB             | 114.8 kB         |
+| First-load CSS                                             | 8 kB   | 7.1 kB               | 10.5 kB          |
+| Largest lazy JavaScript chunk (the call page)              | 38 kB  | 34.8 kB              | 34.4 kB          |
+| Largest CSS file (the call page)                           | 6 kB   | 5.5 kB               | 5.8 kB           |
 
-The redesign costs about 26 kB of first-load JavaScript (the data router, the shell, the instrument and
-the view transitions), 4.5 kB of CSS and, the biggest single addition, 69 kB of fonts: two faces are
-preloaded (Newsreader, for headings, and Hanken Grotesk, for text). The monospaced pair and the italic
-load only when a page uses them. Text uses `font-display: swap` over fallback faces sized to match
-Georgia, Arial and Courier New, so it does not jump when a font arrives.
+The first-load JavaScript limit is the product target, not the measured value plus headroom, so that
+the mistake that cost 5.4 kB cannot come back unnoticed. The others are the measured value plus about
+8 percent. The check also fails the build if it contains a source map, a font file, any page other than
+`index.html` (the component galleries and development pages never ship), or the string `ZodError` in
+any script (the web app must never ship zod). Each of those was checked by feeding the script a build
+with one added.
 
-## What keeps a page light
+### What was in the first load, and what changed
 
-- **One chunk per page.** Every route is its own lazily loaded chunk. The router fetches a page's code
-  before it commits the navigation, so the page for the opening address is ready before the first render
-  and there is no empty frame to flash.
-- **The field is separate.** The animated field is its own small chunk (about 7.4 kB gzip), requested
-  when the browser is idle; until then the page shows the still gradient the field is drawn over. The
-  field draws one still frame, never a loop, in reduced motion, in a hidden tab and while ambient motion
-  is paused, and on the lowest tier it is only the gradient. The first-run tour is a chunk of its own.
-- **No raster images.** The instrument is SVG and the field is a canvas. There is no UI, animation, chart
-  or icon library, and the only web fonts are the five font files described above.
-- **A pointer move costs no render.** The mission atlas follows the pointer from one handler that runs
-  once per frame: it reads the plate's rectangle when the pointer arrives and again only after a scroll or
-  a resize, and it moves the light and the two rulers with `transform` on three small elements.
-- **Reserved space.** Loading states take the room their content will take, so little moves when data
-  arrives (see layout shift below).
+Source maps from a throwaway build (never the production configuration) were used to attribute each
+chunk's bytes to its sources. Before the change the first load was two files:
 
-## Effects tiers
+- the entry, 226 kB raw / 70.1 kB gzip: React DOM and its scheduler (about 205 kB raw) and the app
+  shell, router, config and API client (about 20 kB);
+- a shared chunk named `design`, 137.5 kB raw / 44.7 kB gzip: React Router (94 kB raw), React (7.6 kB),
+  the whole icon set (9.6 kB), every design primitive (18.6 kB) and the shared vocabulary module
+  (5.9 kB, pulled in by the score bar).
 
-Decoration is a budget, not a given. A **tier** (`high`, `medium` or `low`) decides how much is drawn.
+The app shell imported its buttons, links and message bar from the design barrel
+(`web/src/design/index.ts`). The barrel re-exports every primitive and each primitive imports its own
+stylesheet, so the bundler treats all of them as needed by the entry: the dialog, the form fields, the
+tabs, the score bar, the vocabulary and their CSS were all downloaded before the first page drew. The
+shell and the router now import the one primitive they need from its own file.
 
-| Tier     | The field                                                                     | Glass blur and decorative loops | Pointer effects                                        |
-| -------- | ----------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------ |
-| `high`   | 90 strands of 28 points, up to 5 lights, a canvas up to 1.5 pixels per pixel  | On                              | The atlas light, and the field's lens (a fine pointer) |
-| `medium` | 60 strands of 22 points, up to 3 lights, a canvas up to 1.25 pixels per pixel | On                              | The atlas light, but no lens in the field              |
-| `low`    | None: the still gradient only                                                 | Off                             | None                                                   |
+|                             | Before                               | After                                                                         |
+| --------------------------- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| First-load JavaScript       | 114.8 kB                             | 109.4 kB                                                                      |
+| First-load CSS              | 10.5 kB                              | 7.1 kB                                                                        |
+| Entry chunk                 | 226.0 kB raw, 70.1 kB gzip           | unchanged                                                                     |
+| Chunk loaded with the entry | `design`: 137.5 kB raw, 44.7 kB gzip | 120.5 kB raw, 39.3 kB gzip                                                    |
+| Page-only primitives        | in the first load                    | their own chunk, 16.9 kB raw, 6.0 kB gzip, fetched with a page that uses them |
+| Report chunk                | 15.3 kB gzip                         | 15.2 kB gzip                                                                  |
+| Call chunk                  | 34.4 kB gzip                         | 34.8 kB gzip (other changes to the call screen landed meanwhile)              |
 
-**Where a tier comes from.** The first guess uses what the browser reports: data saver asks for `low`,
-two cores or 2 GB or less is `low`, four cores or 4 GB or less or a touch screen as the main pointer is
-`medium`, and anything else is `high`. Anything the browser does not report counts as no evidence, not as
-a weak device. Then a **frame monitor** watches the gaps between animation frames in windows of 1.5 s:
-a median above 22 ms steps down one tier, above 40 ms goes straight to `low`. It never steps back up
-(so it cannot flap), ignores windows in which the page was hidden or suspended, and stops itself after
-five steady windows. The field also watches its own cost and steps down when its drawing averages above
-6 ms a frame. Tiers change how much decoration is drawn, never what the app does.
+React DOM (about 62 kB), React Router (about 31 kB) and React (about 3 kB) are 96 kB of the 109.4 kB,
+so the first load cannot get much smaller while those three stay. The journey chart is its own
+chunk (1.2 kB gzip). There are no web fonts and no source maps in the build. A test
+(`web/src/app/entry-imports.test.ts`) fails if the entry imports from the barrel again.
 
-`?perf=high`, `?perf=medium` or `?perf=low` in the address pins a tier and turns the monitor off, so each
-can be tried on any machine. `?worldstats=1` makes the field report its own cost per frame in
-`window.__fireflyWorld`.
+The A/B check that the change altered no styling: the nine main views (landing, responsible AI, about,
+scenarios, scenarios with one chosen, brief, call, report, not found) at 1440 and 375 px wide were
+captured from the old and the new build and compared pixel by pixel: no pixel differed, in the first
+screen of each.
 
-## How it was measured
+Not done: the Node server (`server/http/static.ts`) sends files uncompressed. The first load is about
+355 kB raw there, and the probe below reports the transferred size. A host or proxy that compresses
+brings it to the gzip figures above; compressing in the server itself would be a server change.
 
-[`scripts/perf-probe.mjs`](../scripts/perf-probe.mjs) opens a page in a fresh browser (Microsoft Edge,
-driven by Playwright and the DevTools protocol) and records first and largest contentful paint, layout
-shift, long tasks (50 ms or more) and, from `requestAnimationFrame`, the time between frames for three
-seconds untouched and for three and a half seconds while the pointer sweeps across the page. A frame at
-60 Hz takes 16.7 ms. Each figure below is the **median of three runs**.
+## Long transcripts
 
-| What          | Detail                                                                                                                                                                                                                                                                                                                             |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Machine       | 11th Gen Intel Core i7-1185G7 (4 cores, 8 threads), 31 GB of memory, Intel Iris Xe Graphics (through Direct3D 11), Windows. Other applications were running.                                                                                                                                                                       |
-| Browser       | Microsoft Edge 158, a 1440 x 900 window, dark theme, device pixel ratio 1                                                                                                                                                                                                                                                          |
-| Builds        | The redesign and the interface it replaced (`main` at `1a1c946`), each as a production build served by Firefly's own server on the loopback in demo mode                                                                                                                                                                           |
-| Data          | In-memory databases. Each run is a new anonymous learner, so most pages show a first-time learner with no calls. The call page run starts one call with two messages. "With history" runs use one profile with eight practice calls (seven finished, one open) that was created in each server beforehand with a throwaway script. |
-| CPU slow-down | "4x" uses the DevTools CPU throttle, a rough stand-in for a slower processor. It is not a real device.                                                                                                                                                                                                                             |
-| Network       | The loopback, with no throttling, so transfer times mean nothing. Bytes transferred are reported instead.                                                                                                                                                                                                                          |
+A real call is capped at 60 trainee messages, at most 121 turns. The 200 and 500 turn calls below are
+invented: the page is served a longer copy of a real session (route interception in
+`e2e/perf.spec.ts`), so they test the interface beyond what a call can reach and are labelled
+synthetic wherever they appear.
 
-### With the graphics card
+**The defect.** Every change to the call's snapshot (the clock once a second, the microphone level up to
+fifteen times a second while listening) drew every turn of the transcript again, because the retry
+callback handed to each row was a new function each time. A unit test
+(`web/src/features/call-ui/Transcript.test.tsx`) counts the rows drawn: before, ten such updates drew
+330 customer rows of a 60-turn call instead of 30, and a new turn drew 31 rows; now none, and at most 2
+(the new turn, and the one that stopped being among the newest).
 
-At full CPU speed, with each page's effects tier left to choose itself (it stayed on `high` in every run).
-In every cell the redesign comes first and the previous interface second. "First run" is a learner with
-no calls; "with history" is the profile with eight.
+Call page, CPU x1 (before: the same measurement on the build before the change; after:
+`e2e/perf.spec.ts`):
 
-| Page                   | First paint   | Largest paint  | Layout shift  | Long tasks | Frames over 20 ms, pointer moving |
-| ---------------------- | ------------- | -------------- | ------------- | ---------- | --------------------------------- |
-| Home, first run        | 720 / 860 ms  | 770 / 1770 ms  | 0.037 / 0.000 | 0 / 0      | 0% / 0%                           |
-| Home, with history     | 1040 / 780 ms | 1140 / 1010 ms | 0.059 / 0.005 | 2 / 0      | 0% / 0%                           |
-| Missions               | 880 / 720 ms  | 1020 / 960 ms  | 0.007 / 0.000 | 2 / 0      | 0% / 0%                           |
-| Call                   | 420 / 1800 ms | 650 / 1800 ms  | 0.000 / 0.000 | 1 / 1      | 0% / 0%                           |
-| Progress, first run    | 730 / 520 ms  | 840 / 800 ms   | 0.027 / 0.000 | 2 / 0      | 0% / 0%                           |
-| Progress, with history | 880 / 790 ms  | 880 / 1120 ms  | 0.018 / 0.000 | 3 / 0      | 1% / 0%                           |
-| Report, with history   | 800 / 560 ms  | 970 / 1910 ms  | 0.000 / 0.000 | 2 / 1      | 0% / 0%                           |
+| Turns           | DOM elements | Script time idle, ms per second, before / after | New turn, script ms, before / after | Scroll frame, 95th percentile |
+| --------------- | ------------ | ----------------------------------------------- | ----------------------------------- | ----------------------------- |
+| 60              | 837          | 2 / 2.1                                         | 14 / 19                             | 16.7 ms, both                 |
+| 200 (synthetic) | 2,237        | 5 / 3.4                                         | 22 / 18                             | 16.7 ms, both                 |
+| 500 (synthetic) | 5,237        | 10 / 2.7                                        | 30 / 20                             | 16.7 ms, both                 |
 
-With the CPU four times slower:
+The idle cost used to grow with the call (2, 5, 10 ms per second) and no longer does. At CPU x4 the
+same measurement gave 77 ms per second before and 5 ms after at 500 turns (20 and 11 at 60 turns), and
+the 95th-percentile scroll frame at 500 turns went from 82.9 to 66.4 ms. New-turn script time at CPU x4
+was within the noise (257 before, 160 after at 500 turns). Opening the call page with 500 turns took
+about 0.6 s at CPU x1 and about 3.4 to 4.2 s at CPU x4, which is the cost of drawing 500 rows once; at
+the real maximum of 121 turns it is close to the 200-turn figure (about 2.4 s at CPU x4).
 
-| Page                   | First paint    | Largest paint  | Layout shift  | Long tasks (time)      | Frames over 20 ms, pointer moving |
-| ---------------------- | -------------- | -------------- | ------------- | ---------------------- | --------------------------------- |
-| Home, first run        | 1680 / 2300 ms | 1850 / 2750 ms | 0.037 / 0.005 | 7 (1.1 s) / 7 (1.0 s)  | 0% / 2%                           |
-| Home, with history     | 1980 / 2280 ms | 2220 / 2780 ms | 0.059 / 0.005 | 8 (1.2 s) / 8 (1.1 s)  | 0% / 1%                           |
-| Missions               | 1660 / 2180 ms | 2140 / 2720 ms | 0.007 / 0.000 | 7 (1.3 s) / 4 (0.8 s)  | 5% / 0%                           |
-| Call                   | 1230 / 1310 ms | 1810 / 3250 ms | 0.000 / 0.000 | 8 (1.1 s) / 51 (5.7 s) | 0% / 89%                          |
-| Progress, first run    | 1760 / 2100 ms | 2140 / 2340 ms | 0.027 / 0.000 | 9 (1.3 s) / 5 (0.9 s)  | 0% / 0%                           |
-| Progress, with history | 1770 / 1940 ms | 1770 / 2620 ms | 0.023 / 0.010 | 8 (1.6 s) / 6 (0.8 s)  | 1% / 0%                           |
-| Report, with history   | 1870 / 1900 ms | 2650 / 4900 ms | 0.000 / 0.000 | 10 (2.1 s) / 8 (2.7 s) | 0% / 2%                           |
+The older turns were already skipped by the browser (`content-visibility: auto` with
+`contain-intrinsic-size`); "Jump to latest" and following the newest turn were already in place.
 
-The cost, from the same runs (four times slower CPU, redesign / previous): script time 1.8 to 2.6 s
-against 0.8 to 1.2 s (for example 2.3 / 1.1 s on the first-run Home, 2.6 / 1.0 s on Missions and
-2.2 / 1.2 s on Call), and bytes transferred 688 to 809 kB against 378 to 578 kB.
+Report page: the turns now also use `content-visibility: auto` (and are laid out in full for
+printing). At CPU x1 the report was already smooth at every length (16.7 ms frames), so the change shows
+no gain there; at CPU x4 the 95th-percentile scroll frame at 500 turns was 49.6 ms before and 33.3 ms
+after, but the 60-turn figures moved the other way (16.7 before, 32.9 after), so treat that as noise.
 
-**What this says.** On this machine, with its graphics card, the redesign kept almost every frame under
-20 ms on every page it measured, at the highest tier, even with the CPU four times slower. The
-exceptions were the mission atlas (4 to 6% of frames over 20 ms while the pointer moved under the
-slow-down) and the first seconds of a page loading under the slow-down (up to 5% of frames on the Report
-page, where one of the three runs stepped down to `medium`). At full speed its largest paint is earlier
-than the previous interface's, or within about 0.13 s of it, on every page; its first paint is earlier on
-the first-run Home and on the call and 0.1 to 0.3 s later on the others. With the CPU four times slower,
-first and largest paint are earlier on every page. It does more work to get there: roughly twice the
-script time, more time in long tasks on Missions and Progress, and about 1.4 to 1.9 times the bytes. The
-previous Call page fared worst, with 51 long tasks and 89% of frames over 20 ms under the slow-down, and
-its Report page painted its largest element at 4.9 s against 2.6 s.
+| Turns           | Open, ms | DOM nodes | Typing in "Find in transcript" |
+| --------------- | -------- | --------- | ------------------------------ |
+| 60              | 617      | 1,634     | no long task                   |
+| 200 (synthetic) | 641      | 2,614     | no long task                   |
+| 500 (synthetic) | 429      | 4,714     | no long task                   |
 
-Layout shift is small (0 to 0.059, where 0.1 is the usual threshold for "good") but it is not zero, and
-the previous interface was steadier: it comes from placeholders being replaced by content. Home with
-history is the largest: when the last call, the totals and the open call arrive, the hero grows and pushes
-the lower part of the page down.
+Search is already deferred (`useDeferredValue`). At every length, stepping through six matches with
+"Next match" scrolled each match into view, so skipped turns do not break it. The report shows a layout
+shift of 0.063, below the 0.1 threshold: the footer sits at the bottom of the screen under the short
+loading view and leaves the screen when the report arrives. It was not changed.
 
-The spread between runs is real. The previous Call page's first paint ranged from 0.7 to 1.8 s at full
-speed, so treat differences of a few hundred milliseconds as noise.
+## The wait after End and review
 
-### The field's own cost
+Measured with the demo engine made to take longer (the session is served as "still being evaluated"
+for four polls, then as it is), under `prefers-reduced-motion: reduce`:
 
-With `?worldstats=1` the field reports what its own script and drawing calls cost per frame (a single
-run per page, with the pointer moving; it does not include the time the graphics card or the compositor
-spends putting those pixels on screen). At full speed that was 0.5 to 0.6 ms a frame on average at
-`high` (95th percentile 0.7 to 0.8 ms) and 0.4 ms at `medium`. With the CPU four times slower it was 3.3 to
-4.1 ms at `high` (95th percentile 6.2 to 9.0 ms) and 2.4 to 2.9 ms at `medium`. The field steps down by
-itself when its own work averages above 6 ms, which none of these runs reached.
+- five polls until the report appeared, one every 800 ms (3 s in a background tab; covered by
+  `ReportPage.test.tsx`), and none in the three seconds after leaving the page by a link in the app;
+- no animation running without end (none under reduced motion, because the global rule makes every
+  animation run once);
+- one long task, 57 ms, during the wait: no task of 100 ms or more;
+- the chart code is its own chunk, and the polling timer and request are cleared when the page is left.
 
-### With no graphics card
+The polling interval is fixed at 800 ms in the foreground; it does not back off. Each poll is a small
+request, but a slow live evaluation (the page says the wait is longer than usual after 40 s) means
+dozens of polls; a gentle back-off would be a change to `useReportSession.ts`, not made.
 
-To see what a machine with no hardware acceleration does, the same pages were opened with the software
-renderer (`--software`, which draws with SwiftShader on the CPU). In every one of the redesign's 12 runs
-the frame monitor had stepped the tier down to `low` by the end, about eight seconds after the page
-opened, and the first seconds were rough: in the three seconds after load the call page drew only 12
-frames. Pinned to `high` instead (`?perf=high`), Home ran at about 8 frames a second: a mean of 126 ms a
-frame, with every frame over 20 ms. That is the reason for the monitor.
+## The microphone, the audio and what a call opens
 
-| Page     | First paint    | Tier at the end | Frame time, pointer moving (mean) | Frames over 20 ms |
-| -------- | -------------- | --------------- | --------------------------------- | ----------------- |
-| Home     | 2750 / 2410 ms | `low`           | 16.6 / 41.1 ms                    | 0% / 100%         |
-| Missions | 3160 / 2070 ms | `low`           | 43.5 / 46.4 ms                    | 39% / 53%         |
-| Call     | 3240 / 4730 ms | `low`           | 18.6 / 736 ms                     | 3% / 100%         |
+Two kinds of proof. The unit tests with the fakes in `web/src/features/voice/testing` (666 tests in the
+call and voice folders) already show, for 100 exchanges and for ending, pausing, replacing and leaving a
+call at every phase, that no track, context, node, listener, URL or timer is left. The browser test
+(`e2e/perf.spec.ts`, "a spoken call") adds what fakes cannot: a real `AudioContext`, real
+`MediaStreamTrack`s, real object URLs and the real heap, in Edge with Chromium's fake microphone playing
+a generated tone and the server's mock speech provider.
 
-(Redesign first, previous interface second, median of three runs.) Once it had stepped down, Home and the
-call were close to smooth. Missions was not: the atlas is the heaviest page, and even at the lowest tier
-it averaged 44 ms a frame with the pointer moving, though the previous Missions page was no better. The
-previous call page was close to unusable without a graphics card: 7 frames in 3.5 s while the pointer
-moved, against 176 for the redesign. Software rendering is slow to a first paint for both interfaces.
+Results, 30 spoken turns (every tenth reply heard to the end, the rest interrupted), then pause, resume
+and End and review:
 
-## What has not been measured
+| What                                                              | After turn 5  | After turn 30      | After pause | After End and review                 |
+| ----------------------------------------------------------------- | ------------- | ------------------ | ----------- | ------------------------------------ |
+| Microphone tracks live (opened in all)                            | 1 (1)         | 1 (1)              | 0           | 0 (2: pause and resume asked again)  |
+| Audio contexts alive (created in all)                             | 2 (2)         | 2 (2)              | 1           | 0 (3)                                |
+| Object URLs live (created / revoked)                              | 0 (7 / 7)     | 0 (32 / 32)        |             | 0 (32 / 32)                          |
+| Audio elements: ever played, at most playing at once, playing now | 1, 1, 0       | 1, 1, 0            |             | 1, 1, 0                              |
+| Capture worklets created / disconnected / port closed             | 1 / 0 / 0     | 1 / 0 / 0          |             | 2 / 2 / 2                            |
+| Listeners on window / document                                    | 5 / 1         | 5 / 1              |             | 7 / 1 (the report page adds its own) |
+| Repeating timers                                                  | 1 (the clock) | 1                  |             | 0                                    |
+| Heap after a full garbage collection                              | 4.58 MB       | 5.89 MB (+1.31 MB) |             |                                      |
+| DOM nodes                                                         | 637           | 1,768              |             |                                      |
 
-- **Any other device.** No phone, tablet, low-end laptop or machine without a hardware-accelerated canvas
-  (apart from the software-rendering run above) was measured, and neither were other graphics cards, a
-  high-density display (everything here is at a device pixel ratio of 1) or a second monitor.
-- **Other browsers.** Firefox and Safari were not measured.
-- **A real network.** The server was on the loopback.
-- **Long sessions.** Memory use over a long call, battery and heat were not measured.
-- **Real users.** There is no field data: Firefly has no telemetry and no analytics.
+The heap rule (growth under 10 percent or 2 MB, whichever is larger) holds: +1.31 MB. The increments
+shrink (+0.63, +0.25, +0.14, +0.12 and +0.17 MB per five turns) and the page holds 45 more DOM nodes per
+turn, which is the transcript growing; the counters above are flat. The same run with Playwright's trace
+recorder on showed more (+1.44 MB, 4,700 nodes) because the recorder keeps nodes alive.
 
-## Running it yourself
+Leaving the call without ending it: the browser's back button leaves no live track, no audio context, the
+same listeners as before the call and no repeating timer; leaving the page for another document and coming
+back loads the app afresh (it was not kept in the back/forward cache) with no live microphone.
 
-Build, then start Firefly in demo mode with a database that disappears when it stops:
+Found and changed:
 
-```bash
+- The capture worklet's `MessagePort` was never closed explicitly; it relied on the context closing.
+  `microphone.ts` now closes it on release (a unit test and the browser test check it).
+- The transcript redraw above (a cost, not a leak).
+
+Not as the brief assumed: at most one `AudioContext` is not true by design. A call holds two: one for
+the microphone (16 kHz, with the capture worklet) and one that only measures the customer's voice level.
+Routing the voice through the microphone's 16 kHz context would degrade the playback. The count is two
+for the whole call (a third appears only after a pause and resume, because pausing releases the
+microphone), never grows with turns, and is zero after the call ends.
+
+Left for the browser to do and not observable here: closing the tab (the browser ends capture itself);
+other browsers' back/forward cache. Browser speech synthesis is covered by the unit tests only (the
+server's speech provider was used in the browser test), and the browser's own speech recognition cannot
+be tested: Edge and Chrome return no words under automation.
+
+## Input latency
+
+200 synthetic turns, a spoken call with the fake microphone, click to next paint (Event Timing, which
+rounds to 8 ms). CPU x1, three runs, medians (range):
+
+| Control                           | ms           |
+| --------------------------------- | ------------ |
+| Mute                              | 52 (24-88)   |
+| Pause                             | 24 (24-40)   |
+| Resume                            | 56 (48-64)   |
+| Send                              | 40           |
+| End call (opens the dialog)       | 32 (24-48)   |
+| Continue call (closes it)         | 24 (24-32)   |
+| Voice settings (opens the dialog) | 104 (96-120) |
+
+CPU x4, three runs of the build before and the build after the transcript change, taken in turn so that
+the load on the machine was shared, medians (range), ms:
+
+| Control                           | Before        | After         |
+| --------------------------------- | ------------- | ------------- |
+| Mute                              | 212 (104-336) | 148 (72-304)  |
+| Pause                             | 128 (72-136)  | 64 (64-176)   |
+| Resume                            | 128 (88-168)  | 120 (112-184) |
+| Send                              | 256 (224-256) | 240 (152-336) |
+| End call (opens the dialog)       | 176 (112-256) | 192 (88-272)  |
+| Continue call (closes it)         | 168 (128-328) | 120 (80-232)  |
+| Voice settings (opens the dialog) | 304 (272-376) | 312 (264-432) |
+
+The target of under 100 ms at CPU x4 is not met. At CPU x1 every control is under 100 ms except the
+first opening of a dialog, which is about 100 ms. The transcript change helped the controls that do not
+open a dialog; the dialogs and Send are unchanged. A profile of End call showed the dialog's native
+`showModal()` (the browser's style and layout work for the whole page) as the largest single cost, and
+it did not depend on the length of the transcript (the first opening cost about the same at 3, 60 and
+200 turns). No handler does heavy work of its own: the remaining cost is that the whole call screen
+draws again on every change. Memoising its panels (they are given new objects and callbacks each draw)
+is the next step, in the call screen rather than in the engine.
+
+## The probe
+
+`scripts/perf-probe.mjs` measures the pages of a running Firefly. It starts and stops nothing.
+
+```
 npm run build
-FIREFLY_DB_PATH=:memory: FIREFLY_PROVIDER=mock FIREFLY_PORT=4470 npm start
+$env:FIREFLY_PROVIDER='mock'; $env:FIREFLY_SPEECH_PROVIDER='mock'; $env:FIREFLY_DB_PATH=':memory:'; npm start
+node scripts/perf-probe.mjs http://127.0.0.1:8787 --runs=3
+node scripts/perf-probe.mjs http://127.0.0.1:8787 --pages=call,report --throttle=4 --json
 ```
 
-In another terminal (in PowerShell, set `$env:PW_CHANNEL = 'msedge'` first if Edge is the browser you
-have; `PW_CHANNEL=chrome` or `PW_CHANNEL=none` choose Chrome or Playwright's own Chromium):
+Options: `--pages` (landing, scenarios, brief, call, report), `--runs`, `--throttle`, `--w`, `--h`,
+`--wait`, `--exchanges`, `--json`; `PW_CHANNEL=msedge` (the default) or `chrome`, or `none` for
+Playwright's Chromium. For the call and report pages it starts a call of its own through the API (30
+exchanges, 61 turns) as a new anonymous profile each, so run it against a server in demo mode with its
+own database. A run is a fresh browser context with a cold cache.
 
-```bash
-node scripts/perf-probe.mjs http://127.0.0.1:4470/home --runs=3
-node scripts/perf-probe.mjs "http://127.0.0.1:4470/calls/{call}" --runs=3 --throttle=4
-node scripts/perf-probe.mjs http://127.0.0.1:4470/home --runs=3 --software
+Sample, CPU x1, three runs, 21 November 2026, this machine (medians, range in brackets):
+
+```
+Page                FCP ms         LCP ms                  CLS  Long tasks      Long ms  DOM nodes  Heap MB  Requests  JS gzip kB  JS xfer kB  CSS gzip kB
+landing      236 (208-304)  568 (424-768)                0.000     0 (0-1)     0 (0-52)        650      2.3        11       121.4       384.6         14.1
+scenarios    176 (152-236)  392 (316-500)                0.000     0 (0-1)     0 (0-58)        726      2.9        17       125.8       397.2         14.3
+brief        208 (144-224)  388 (260-424)                0.032     0 (0-1)     0 (0-54)        233      2.3        15       123.7       388.9         12.3
+call         236 (168-264)    284 (0-548)                0.000     2 (0-2)  122 (0-125)        846      3.6        13       151.1       483.9         16.6
+report       212 (204-216)  596 (520-596)  0.000 (0.000-0.063)           1   51 (50-51)       2194      4.1        16       132.8       421.0         16.0
 ```
 
-`{call}` starts a practice call through the API and puts its id in the address. `--software` draws with
-the software renderer, as a machine with no graphics card would. To compare two builds, build the other
-revision into its own folder (`FIREFLY_OUT_DIR=../dist/other npx vite build` from `web/` writes
-`dist/other`) and serve it on another port with `FIREFLY_WEB_DIR=dist/other`. Run both in the same sitting
-and compare medians: numbers from different days or machines are not comparable.
+The first load transfers about 355 kB because the Node server does not compress; "JS gzip" is what
+`scripts/budgets.json` counts. The call page's largest contentful paint is read from the screen before
+the call starts, and one run recorded none (0).
+
+## Repeating each number
+
+| Number                                             | How                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Sizes and budgets                                  | `npm run build`, then `npm run check:budgets` (or `FIREFLY_BUILD_DIR=... node scripts/check-budgets.mjs`)                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| What is in a chunk                                 | build with `sourcemap: true` into another folder with a throwaway config, then `npx --yes source-map-explorer <folder>/assets/*.js`. On the measuring machine the package feed refused that package, so the attribution was computed with a short script of the same method                                                                                                                                                                                                                                                                                        |
+| Long transcripts, latency, the wait, the lifecycle | start the server as above with `FIREFLY_TEST_HOOKS=1` and `FIREFLY_SPEECH_PROVIDER=mock`, then `$env:E2E_PERF='1'; $env:E2E_BASE_URL='http://127.0.0.1:8787'; $env:PW_CHANNEL='msedge'; npx playwright test e2e/perf.spec.ts --project=desktop --output=scripts/_tmp/pw-perf`; each test prints `PERF {...}` lines. `E2E_PERF=1` switches on the timing tests (tagged `@perf`), which are left out of ordinary and CI runs because they depend on how fast the machine is; the media-lifecycle tests, which count tracks, contexts, URLs and listeners, always run |
+| Number of spoken turns, CPU slowdown               | `PERF_SPOKEN_TURNS=30`, `PERF_CPU_RATE=4`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Before and after                                   | build the earlier commit into another folder, serve it with `FIREFLY_WEB_DIR`, and run the same command against it in the same sitting                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| The probe                                          | as above                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+
+Two cautions for measuring. Playwright's trace recorder keeps the page's DOM nodes alive and adds script
+time, which showed up as extra heap and nodes in the lifecycle test, so `e2e/perf.spec.ts` turns
+tracing off for itself. Two Playwright runs in one folder delete each other's `test-results`, so give
+each run its own `--output`.
+
+## Not measured
+
+- Low-end machines, real slow CPUs, mobile devices and their browsers: only a four-times CPU throttle on
+  one laptop.
+- Chrome, Firefox and Safari (Edge only), and other versions of Edge.
+- Real Azure speech latency, real language-model latency, real network latency and transfer times.
+- The browser's own speech recognition and its speech synthesis in a real call.
+- The heap over calls longer than 30 spoken turns, and heap snapshots to prove the absence of a leak (the
+  counters above stayed flat, which is evidence, not proof).
+- Closing the tab, and the back/forward cache in other browsers.
+- Hidden-tab polling in a real browser (covered by a unit test).
+- A graphics-free machine (software rendering), forced colours and print performance.

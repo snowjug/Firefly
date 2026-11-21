@@ -1,0 +1,163 @@
+/* Layout: the page container, a few arrangements and a handful of utilities. Deliberately small:
+   anything specific to one screen belongs in that screen's own stylesheet. */
+
+/* ---- Page container ---------------------------------------------------------------------- */
+.l-page {
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: calc(var(--page-max) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.l-page--wide {
+  max-inline-size: calc(var(--page-max-wide) + 2 * var(--gutter));
+}
+.l-page--read {
+  max-inline-size: calc(var(--read-max) + 2 * var(--gutter));
+}
+
+/* A band of the page with air above and below. */
+.l-section {
+  padding-block: var(--sp-10);
+}
+.l-section--tight {
+  padding-block: var(--sp-6);
+}
+@media (min-width: 64em) {
+  .l-section {
+    padding-block: var(--sp-16);
+  }
+  .l-section--tight {
+    padding-block: var(--sp-8);
+  }
+}
+
+/* ---- Gap scale for the arrangements below (4 px grid) ------------------------------------ */
+.l-gap-1 {
+  --l-gap: var(--sp-1);
+}
+.l-gap-2 {
+  --l-gap: var(--sp-2);
+}
+.l-gap-3 {
+  --l-gap: var(--sp-3);
+}
+.l-gap-4 {
+  --l-gap: var(--sp-4);
+}
+.l-gap-6 {
+  --l-gap: var(--sp-6);
+}
+.l-gap-8 {
+  --l-gap: var(--sp-8);
+}
+.l-gap-10 {
+  --l-gap: var(--sp-10);
+}
+.l-gap-12 {
+  --l-gap: var(--sp-12);
+}
+
+/* ---- Stack: children one under another --------------------------------------------------- */
+.l-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--l-gap, var(--sp-4));
+  min-inline-size: 0;
+}
+
+/* ---- Cluster: children in a row that wraps ----------------------------------------------- */
+.l-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--l-gap, var(--sp-3));
+  min-inline-size: 0;
+}
+.l-cluster--start {
+  align-items: flex-start;
+}
+.l-cluster--end {
+  justify-content: flex-end;
+}
+.l-cluster--between {
+  justify-content: space-between;
+}
+
+/* ---- Grid: as many columns as fit, each at least --l-min wide ---------------------------- */
+.l-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--l-min, 16rem)), 1fr));
+  gap: var(--l-gap, var(--sp-4));
+}
+.l-grid--fit {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--l-min, 16rem)), 1fr));
+}
+
+/* ---- Split view: a list or navigation beside a detail pane ----------------------------------
+   One column below 64em (the detail follows the list); two from 64em. Children are
+   .l-split__list (fixed width, --l-split-list) and .l-split__detail (the rest). Use
+   .l-split--detail-first when the narrow order should lead with the detail. */
+.l-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--l-gap, var(--sp-6));
+  align-items: start;
+}
+.l-split__list,
+.l-split__detail {
+  min-inline-size: 0;
+}
+@media (min-width: 64em) {
+  .l-split {
+    grid-template-columns: minmax(18rem, var(--l-split-list, 26rem)) minmax(0, 1fr);
+  }
+  .l-split--detail-end {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, var(--l-split-list, 26rem));
+  }
+}
+.l-split--detail-first > .l-split__detail {
+  order: -1;
+}
+@media (min-width: 64em) {
+  .l-split--detail-first > .l-split__detail {
+    order: 0;
+  }
+}
+
+/* ---- Utilities --------------------------------------------------------------------------- */
+.u-nowrap {
+  white-space: nowrap;
+}
+.u-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.u-grow {
+  flex: 1 1 0;
+  min-inline-size: 0;
+}
+.u-center {
+  text-align: center;
+}
+/* A table or code block that may scroll sideways inside its own box (give it tabindex="0"). */
+.u-scroll-x {
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+/* Stays in view under the sticky header while the page scrolls past it. */
+.u-sticky {
+  position: sticky;
+  inset-block-start: calc(var(--header-h) + var(--sp-4));
+}
+@media (max-width: 47.99em) {
+  .u-hide-narrow {
+    display: none !important;
+  }
+}
+@media (min-width: 48em) {
+  .u-show-narrow {
+    display: none !important;
+  }
+}

@@ -1,0 +1,52 @@
+.ff-wordmark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--target-min);
+  color: var(--fg-1);
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+a.ff-wordmark:hover {
+  color: var(--fg-1);
+  text-decoration: none;
+}
+.ff-wordmark--sm {
+  gap: var(--sp-1h);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+}
+
+.ff-wordmark__mark {
+  flex: none;
+}
+.ff-wordmark__tile {
+  fill: var(--brand);
+}
+.ff-wordmark__bubble {
+  fill: none;
+  stroke: var(--fg-on-brand);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+.ff-wordmark__dot {
+  fill: var(--fg-on-brand);
+}
+
+@media (forced-colors: active) {
+  .ff-wordmark__tile {
+    fill: Highlight;
+  }
+  .ff-wordmark__bubble {
+    stroke: HighlightText;
+  }
+  .ff-wordmark__dot {
+    fill: HighlightText;
+  }
+}

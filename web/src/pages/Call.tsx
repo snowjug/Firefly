@@ -1,111 +1,94 @@
-import { useEffect, useState } from 'react';
-import { Link, Navigate, useLocation, useParams } from 'react-router';
-import type { SessionDTO } from '#shared/domain/api.ts';
-import { ActiveCall } from '../components/call/ActiveCall.tsx';
-import { CallNotice } from '../components/call/CallNotice.tsx';
-import { ConnectingView } from '../components/call/ConnectingView.tsx';
-import { EndingView } from '../components/call/EndingView.tsx';
-import { api, errorMessage, isApiError } from '../lib/api.ts';
-import { useApi, useDocumentTitle } from '../lib/hooks.ts';
-import '../styles/chamber-kit.css';
-import '../styles/chamber.css';
+import { useEffect, type ReactNode } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
+import type { AppConfigDTO } from '#shared/domain/api.ts';
+import { preferredLanguage } from '../features/call-ui/call-model.ts';
+import { CallWorkspace } from '../features/call-ui/CallWorkspace.tsx';
+import { CallLoadError, CallSkeleton, COULD_NOT_OPEN } from '../features/call-ui/CallStates.tsx';
+import { useCall } from '../features/call/useCall.ts';
+import { useAppConfig } from '../lib/config.tsx';
+import { api } from '../lib/api.ts';
+import { useDocumentTitle, useOnline } from '../lib/hooks.ts';
 
-/** After this long a call that is still opening says so, instead of looking like it is nearly there. */
-const SLOW_AFTER_MS = 6000;
+const reportPath = (sessionId: string) => `/sessions/${encodeURIComponent(sessionId)}/report`;
 
-/** Who is calling, when the page that began the call already knew. Used only to name the wait. */
-function hintedCustomer(state: unknown): { name: string; role?: string } | null {
-  if (typeof state !== 'object' || state === null) return null;
-  const customer = (state as { customer?: unknown }).customer;
-  if (typeof customer !== 'object' || customer === null) return null;
-  const { name, role } = customer as { name?: unknown; role?: unknown };
-  if (typeof name !== 'string' || name.trim() === '') return null;
-  return typeof role === 'string' && role !== '' ? { name, role } : { name };
-}
-
-function Opening({ name, role }: { name: string; role?: string }) {
-  const [slow, setSlow] = useState(false);
-  useDocumentTitle('Opening your call');
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSlow(true), SLOW_AFTER_MS);
-    return () => window.clearTimeout(timer);
-  }, []);
-  return (
-    <ConnectingView name={name} {...(role ? { role } : {})} phase={slow ? 'slow' : 'opening'} />
-  );
-}
-
-// The live call. It shows the conversation while the call is active, the wrap-up while the report
-// is being prepared, and hands over to the report once it exists.
+/**
+ * The call page: the call engine feeding the call screen. This file only joins the two. It waits for
+ * the server's settings (the call needs to know what speech the server offers), runs the engine for
+ * the session in the address, and opens the report once the call is over.
+ */
 export default function Call() {
   const { id = '' } = useParams();
-  const location = useLocation();
-  const loaded = useApi((signal) => api.getSession(id, signal), [id]);
-  const [override, setOverride] = useState<SessionDTO | null>(null);
-  const session = override?.id === id ? override : loaded.data;
-
-  if (!session) {
-    if (loaded.error) {
-      if (isApiError(loaded.error) && loaded.error.status === 404) {
-        return (
-          <div className="ch-page">
-            <CallNotice
-              title="We cannot find that call"
-              documentTitle="Call not found"
-              actions={
-                <>
-                  <Link className="ch-button" data-tone="primary" to="/scenarios">
-                    Choose a scenario
-                  </Link>
-                  <Link className="ch-link" to="/home">
-                    Back to home
-                  </Link>
-                </>
-              }
-            >
-              It may have been discarded, or it belongs to a different browser profile.
-            </CallNotice>
-          </div>
-        );
-      }
-      const retryable = !isApiError(loaded.error) || loaded.error.retryable;
-      return (
-        <div className="ch-page">
-          <CallNotice
-            title="We could not open this call"
-            documentTitle="Call"
-            tone="negative"
-            actions={
-              retryable ? (
-                <button
-                  type="button"
-                  className="ch-button"
-                  data-tone="primary"
-                  onClick={loaded.reload}
-                >
-                  Try again
-                </button>
-              ) : null
-            }
-          >
-            {errorMessage(loaded.error)}
-          </CallNotice>
-        </div>
-      );
-    }
-    const hinted = hintedCustomer(location.state);
+  const { config, error, reload } = useAppConfig();
+  if (error) {
     return (
-      <div className="ch-page">
-        <Opening name={hinted?.name ?? ''} role={hinted?.role} />
-      </div>
+      <Titled>
+        <CallLoadError problem={COULD_NOT_OPEN} onRetry={reload} />
+      </Titled>
     );
   }
+  if (!config) {
+    return (
+      <Titled>
+        <CallSkeleton />
+      </Titled>
+    );
+  }
+  return <CallSession key={id} sessionId={id} config={config} />;
+}
 
-  if (session.status === 'completed') {
-    return <Navigate to={`/sessions/${session.id}/report`} replace />;
-  }
-  if (session.status === 'completing' || session.status === 'evaluation_failed') {
-    return <EndingView key={session.status} session={session} />;
-  }
-  return <ActiveCall session={session} onEnded={setOverride} />;
+/** The page title while there is no call to name yet. */
+function Titled({ children }: { children: ReactNode }) {
+  useDocumentTitle('Call');
+  return children;
+}
+
+function CallSession({ sessionId, config }: { sessionId: string; config: AppConfigDTO }) {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const online = useOnline();
+  const { snapshot, actions } = useCall(sessionId, {
+    serverSpeech: config.speech,
+    language: preferredLanguage(
+      typeof navigator === 'undefined' ? [] : (navigator.languages ?? [navigator.language]),
+    ),
+    maxTraineeTurns: config.limits.maxTraineeTurns,
+  });
+  const { session } = snapshot;
+
+  useDocumentTitle(session ? `Call with ${session.scenario.persona.name}` : 'Call');
+
+  // A call that is over (or never was open) belongs to the report, not to this page. That includes a
+  // call that turned out to have ended somewhere else, such as in another tab: the report says what
+  // became of it, whether it was finished or deleted.
+  const over =
+    (session !== null && session.status !== 'active') ||
+    snapshot.phase === 'completed' ||
+    snapshot.problem?.code === 'session-ended';
+  useEffect(() => {
+    if (over) navigate(reportPath(sessionId), { replace: true });
+  }, [over, navigate, sessionId]);
+
+  // A call with no message in it has nothing to report. Leaving it closes the empty call; if that
+  // cannot be done (offline, busy) the person still leaves, and nothing is lost: there was nothing.
+  const discard = async () => {
+    try {
+      await api.deleteSession(sessionId);
+    } catch {
+      // An empty call that stays open is harmless.
+    }
+    navigate('/scenarios', { replace: true });
+  };
+
+  return (
+    <CallWorkspace
+      snapshot={snapshot}
+      actions={actions}
+      provider={{ demo: config.provider.demo, label: config.provider.label }}
+      maxMessageChars={config.limits.maxMessageChars}
+      online={online}
+      preferText={params.get('input') === 'text'}
+      onEnded={(endedId) => navigate(reportPath(endedId), { replace: true })}
+      onDiscard={discard}
+    />
+  );
 }

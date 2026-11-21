@@ -84,6 +84,14 @@ style.
 Use varied, realistic, respectful personas. Avoid stereotypes. A persona's `voice` should describe how
 they talk (pace, formality, habits), not their ethnicity or background.
 
+Give every persona a `speaker` (`'female'` or `'male'`). It only chooses which synthetic voice speaks
+for the customer in a spoken call, so pick the one that matches the name and role, and say nothing else
+through it. It is optional in the schema so that calls stored before it existed still load; a call
+without one gets a voice derived from the persona's name, which stays the same for the whole call. The
+voices themselves, and how the customer's mood changes them, are described in
+[speech-providers.md](speech-providers.md#voice-selection-and-mood-direction). Never describe a voice
+by accent, ethnicity or age in a scenario.
+
 ## Quality bar
 
 - A believable, specific situation with synthetic details. No generic "the system is down".
@@ -135,24 +143,23 @@ and does each line sound human?
   contact details or links; that no hidden fact leaks into an opening under any combination of settings; that
   every hidden fact can be discovered by a considerate conversation (by cue, or by topic when it has no
   cues) at every difficulty; and that irrelevant messages reveal nothing.
-- **The Missions atlas draws what the scenario sets.** A mission's mark comes from `difficulty`, `impact`,
-  `startingTemperature`, `callStage` and `estimatedMinutes` (one tick a minute, up to fifteen), it sits with the
-  other missions of its `issueType`, and **Find a signal** searches its title, summary, customer (name, role and
-  organisation) and tags. Keep `estimatedMinutes` honest and give the scenario useful tags. The mark shows public
-  settings only, never a hidden fact.
+- **The scenario workspace shows public fields only.** The list groups scenarios by `issueType` (gentlest first) and
+  each row shows the title, summary, difficulty, impact, starting temperature, communication style, `estimatedMinutes`
+  and tags. The search box looks in the title, summary, tags, the customer's name, role and organisation, and the
+  issue type's name, so give the scenario useful tags and keep `estimatedMinutes` honest. The call brief shows the
+  persona, the situation, the objective and the ground rules, and never a hidden fact.
 
 ## Adding a scenario to the library
 
 1. Create `server/scenarios/library/<id>.ts` and make `npm run validate:scenarios -- server/scenarios/library/<id>.ts` pass.
 2. Import it in `server/scenarios/index.ts` and add it to `LIBRARY_INPUT`. The list is ordered easiest first,
-   which is the order `GET /api/scenarios` returns. The Missions page does not depend on it: it groups the
-   missions by issue type and lists each group gentlest first.
-3. Add the scenario's public fields to `CATALOGUE` in `web/src/components/atlas/atlas.fixtures.ts`, in the same
-   position. The Missions tests stand on that fixture, and `web/src/components/atlas/atlas.fixtures.test.ts`
-   fails until it matches the registry (id, title, summary, tags, minutes, issue type, impact, starting
-   temperature, proficiency, style, call stage, difficulty, customer, coaching focus and spotlight).
-   `web/src/pages/Library.test.tsx` also counts the missions, so update its totals.
-4. Run `npm test`. The library tests above will tell you if a hidden fact cannot be found, leaks, or collides
-   with another scenario's persona name, and the atlas tests will tell you if the new mission cannot be placed
-   or labelled without touching its neighbours.
-5. Play it once in the app in demo mode, as a trainee would, starting from **Missions**.
+   which is the order `GET /api/scenarios` returns. The workspace does not depend on that order: it groups the
+   scenarios by issue type and lists each group gentlest first.
+3. Run `npm test`. The library tests above will tell you if a hidden fact cannot be found, leaks, or collides
+   with another scenario's persona name. Two web tests read the real library: the landing page's
+   `scenario-examples.test.ts` fails if a scenario it names changes title, difficulty, issue type or starting
+   temperature, and it checks that the sentence "between 7 and 15 minutes" still matches the shortest and
+   longest `estimatedMinutes`. If you add a scenario outside that range, update the landing copy and that
+   test together.
+4. Play it once in the app in demo mode, as a trainee would: choose it in **Scenarios**, read the call brief,
+   start a call (typed is fine) and end it to read the report.

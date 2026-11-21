@@ -1,0 +1,67 @@
+/* The hero: the promise and the way in on the left, one moment from a fictional call on the right. */
+
+.lp-hero {
+  background: var(--bg-quiet);
+}
+.lp-hero__inner {
+  display: grid;
+  align-items: center;
+  gap: var(--sp-10);
+  padding-block: var(--sp-10);
+}
+.lp-hero__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-5);
+  min-inline-size: 0;
+}
+.lp-hero__eyebrow {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-2);
+}
+.lp-hero__lead {
+  max-inline-size: 34rem;
+  margin: 0;
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  color: var(--fg-2);
+}
+.lp-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-block-start: var(--sp-1);
+}
+.lp-hero__note {
+  max-inline-size: 32rem;
+  margin: 0;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  color: var(--fg-2);
+}
+
+/* On a phone the two actions fill the row, so each is easy to hit. */
+@media (max-width: 30em) {
+  .lp-hero__actions {
+    inline-size: 100%;
+  }
+  .lp-hero__actions > * {
+    flex: 1 1 100%;
+  }
+}
+
+@media (min-width: 64em) {
+  .lp-hero__inner {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: var(--sp-12);
+    padding-block: var(--sp-16);
+  }
+}
+@media (min-width: 80em) {
+  .lp-hero__inner {
+    gap: var(--sp-16);
+  }
+}

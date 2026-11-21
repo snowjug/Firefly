@@ -1,0 +1,39 @@
+/* The voice settings dialog: two settings and a plain read-out. */
+
+.cw-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.cw-settings__facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-quiet);
+}
+.cw-settings__fact {
+  display: grid;
+  gap: var(--sp-0h);
+}
+.cw-settings__fact dt {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.cw-settings__fact dd {
+  margin: 0;
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.cw-settings__note {
+  display: block;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}

@@ -1,0 +1,233 @@
+/* The hero illustration: one moment in a fictional call, drawn with real text and a little inline SVG.
+   Tokens only. The one animation (the waveform settling) is switched on only for people who have not
+   asked for less motion, and it ends by itself after a few seconds. */
+
+.pv {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.pv__window {
+  overflow: hidden;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  box-shadow: var(--shadow-16);
+}
+
+/* ---- The customer ------------------------------------------------------------------------ */
+.pv__person {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+}
+.pv__avatar {
+  display: inline-flex;
+  flex: none;
+  border-radius: var(--r-pill);
+  /* A still ring with a gap: the customer is the one speaking. */
+  box-shadow:
+    0 0 0 2px var(--bg-canvas),
+    0 0 0 4px var(--voice-customer);
+}
+.pv__who {
+  flex: 1 1 9rem;
+  min-inline-size: 0;
+}
+.pv__name {
+  margin: 0;
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+}
+.pv__role {
+  margin: 0;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  color: var(--fg-2);
+}
+
+/* ---- Live status and waveform ------------------------------------------------------------- */
+.pv__voice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin-inline: var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-quiet);
+}
+.pv__wave {
+  flex: 1 1 8rem;
+  inline-size: 100%;
+  max-inline-size: 16rem;
+  block-size: auto;
+  color: var(--voice-customer);
+  fill: currentColor;
+}
+.pv__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-1);
+}
+
+/* ---- Transcript ---------------------------------------------------------------------------- */
+.pv__transcript {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+.pv__turns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pv__turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+}
+.pv__turn--you {
+  margin-inline: calc(var(--sp-3) * -1);
+  padding: var(--sp-2h) var(--sp-3);
+  border-radius: var(--r-lg);
+  background: var(--brand-tint);
+}
+.pv__meta {
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+.pv__speaker {
+  font-weight: var(--fw-semibold);
+  color: var(--fg-2);
+}
+.pv__text {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+.pv__marker {
+  margin: var(--sp-1) 0 0;
+}
+
+/* ---- Coaching preview ----------------------------------------------------------------------- */
+.pv__coaching {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-quiet);
+}
+.pv__coaching-label {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-0h) var(--sp-4);
+  margin: 0;
+}
+.pv__note {
+  font-weight: var(--fw-regular);
+}
+.pv__scores {
+  display: grid;
+  gap: var(--sp-2h);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pv__score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-4);
+}
+/* A fixed width keeps the bars in one column; on a narrow card the name takes its own line. */
+.pv__skill {
+  flex: 0 0 11.5rem;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+
+.pv__caption {
+  margin-block-start: var(--sp-3);
+}
+
+@media (max-width: 30em) {
+  .pv__person,
+  .pv__transcript,
+  .pv__coaching {
+    padding-inline: var(--sp-4);
+  }
+  .pv__voice {
+    margin-inline: var(--sp-4);
+  }
+}
+
+/* ---- Motion: the waveform settles for a few seconds, then rests ------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  .pv__bar {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: pv-settle 1100ms var(--ease-easy) 3 both;
+  }
+  .pv__bar:nth-child(4n + 2) {
+    animation-delay: 120ms;
+  }
+  .pv__bar:nth-child(4n + 3) {
+    animation-delay: 240ms;
+  }
+  .pv__bar:nth-child(4n) {
+    animation-delay: 360ms;
+  }
+  @keyframes pv-settle {
+    0%,
+    100% {
+      transform: scaleY(1);
+    }
+    45% {
+      transform: scaleY(0.45);
+    }
+  }
+}
+
+/* ---- Forced colours: edges instead of shadows ---------------------------------------------------- */
+@media (forced-colors: active) {
+  .pv__window,
+  .pv__voice {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .pv__avatar {
+    box-shadow: none;
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
+  }
+  .pv__turn--you {
+    border: var(--stroke-w) solid CanvasText;
+  }
+  .pv__wave {
+    color: CanvasText;
+  }
+}

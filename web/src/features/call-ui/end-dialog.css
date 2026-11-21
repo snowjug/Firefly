@@ -1,0 +1,52 @@
+/* The end-of-call dialog: three facts, a note for short calls, and what happens next. */
+
+.cw-end__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.cw-end__facts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-quiet);
+}
+.cw-end__fact {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.cw-end__fact + .cw-end__fact {
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
+}
+.cw-end__fact dt {
+  color: var(--fg-2);
+}
+.cw-end__fact dd {
+  margin: 0;
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+.cw-end__next {
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.cw-end__progress {
+  display: flex;
+  justify-content: center;
+  padding-block: var(--sp-4) var(--sp-6);
+}
+/* The heading takes the keyboard when ending starts, but it is not a control: no ring. */
+.cw-end__heading:focus-visible {
+  outline: none;
+  box-shadow: none;
+}

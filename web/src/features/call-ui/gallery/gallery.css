@@ -1,0 +1,43 @@
+/* The call screen gallery is a development tool. Its classes are prefixed cg- and never reach production. */
+
+.cg-index {
+  box-sizing: border-box;
+  max-inline-size: 64rem;
+  margin-inline: auto;
+  padding: var(--sp-8) var(--gutter) var(--sp-16);
+}
+.cg-index__intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-block-end: var(--sp-6);
+}
+.cg-index__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-block: var(--sp-5);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.cg-index__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cg-index__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-canvas);
+}
+.cg-index__name {
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}

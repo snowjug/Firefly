@@ -1,0 +1,37 @@
+/* A problem notice: the design system's message bar, tightened to sit above the composer or in the
+   place of the voice controls. The actions always go under the words, because the advice is long
+   and deserves the width. */
+
+.cw-problem.ff-message--actions {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon body'
+    '. actions';
+}
+.cw-problem.ff-message--actions.ff-message--dismiss {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon body dismiss'
+    '. actions actions';
+}
+.cw-problem .ff-message__actions {
+  margin-block-start: var(--sp-2);
+}
+.cw-problem p + p {
+  margin-block-start: var(--sp-0h);
+}
+.cw-problem__kept {
+  color: var(--fg-2);
+}
+.cw-problem--inline {
+  margin: var(--sp-2) var(--sp-5) 0;
+}
+.cw-problem--panel {
+  inline-size: 100%;
+}
+
+@media (max-width: 40em) {
+  .cw-problem--inline {
+    margin-inline: var(--sp-3);
+  }
+}

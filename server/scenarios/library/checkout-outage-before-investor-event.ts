@@ -29,6 +29,7 @@ const scenario = {
 
   persona: {
     name: 'Declan Hartley',
+    speaker: 'male',
     role: 'Head of Digital',
     organisation: 'Wingtip Outdoor Supply',
     background:

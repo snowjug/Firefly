@@ -1,43 +1,17 @@
+// The design system's global stylesheets load first, so every component stylesheet that follows can
+// rely on the tokens and the base rules being there and can override them by specificity alone.
+import './design/styles.ts';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App, createAppRouter, preloadPage } from './App.tsx';
-import { AppErrorBoundary } from './components/AppErrorBoundary.tsx';
-import { ConfigProvider } from './lib/config.tsx';
-import { AmbientProvider } from './lib/motion/ambient.tsx';
-import { installViewTransitionSkip } from './lib/motion/transitions.ts';
-import { PerfTierProvider } from './lib/PerfTierProvider.tsx';
-import { ThemeProvider } from './lib/theme.tsx';
-import { ToastProvider } from './lib/toast.tsx';
-import './styles/index.css';
+import { App, AppProviders, createAppRouter } from './App.tsx';
 
-// The longest the first render waits for the opening page. After that it starts anyway and the
-// router shows a loading placeholder, so a slow connection still sees something happening.
-const FIRST_RENDER_WAIT_MS = 1500;
+const root = document.getElementById('root');
+if (!root) throw new Error('The page has no #root element.');
 
-function start() {
-  // A route animation must never get in the way: the first press or key skips it.
-  installViewTransitionSkip();
-  const router = createAppRouter();
-  createRoot(document.getElementById('root') as HTMLElement).render(
-    <StrictMode>
-      <ThemeProvider>
-        <AmbientProvider>
-          <PerfTierProvider>
-            <ConfigProvider>
-              <ToastProvider>
-                <AppErrorBoundary>
-                  <App router={router} />
-                </AppErrorBoundary>
-              </ToastProvider>
-            </ConfigProvider>
-          </PerfTierProvider>
-        </AmbientProvider>
-      </ThemeProvider>
-    </StrictMode>,
-  );
-}
-
-void Promise.race([
-  preloadPage(window.location.pathname),
-  new Promise<void>((resolve) => setTimeout(resolve, FIRST_RENDER_WAIT_MS)),
-]).then(start);
+createRoot(root).render(
+  <StrictMode>
+    <AppProviders>
+      <App router={createAppRouter()} />
+    </AppProviders>
+  </StrictMode>,
+);

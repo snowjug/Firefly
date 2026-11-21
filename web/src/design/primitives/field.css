@@ -1,0 +1,44 @@
+/* Field: the label, hint and error around one text control. */
+
+.ff-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.ff-field__label {
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+.ff-field--disabled .ff-field__label {
+  color: var(--fg-3);
+}
+.ff-field__required {
+  color: var(--status-danger-fg);
+}
+.ff-field__hint {
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.ff-field__error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-1h);
+  margin-block-start: var(--sp-0h);
+  color: var(--status-danger-fg);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.ff-field__error .ff-icon {
+  margin-block-start: 0.15rem;
+}
+
+@media (forced-colors: active) {
+  .ff-field__error,
+  .ff-field__required {
+    color: CanvasText;
+  }
+}

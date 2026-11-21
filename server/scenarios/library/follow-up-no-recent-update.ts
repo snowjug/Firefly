@@ -29,6 +29,7 @@ const scenario = {
 
   persona: {
     name: 'Linh Tran',
+    speaker: 'female',
     role: 'Clinic administrator',
     organisation: 'Lucerne Community Physiotherapy',
     background:

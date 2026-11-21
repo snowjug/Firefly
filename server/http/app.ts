@@ -5,33 +5,40 @@ import type {
   AppConfigDTO,
   ApiErrorBody,
   CreateSessionRequest,
-  MentorScoreRequest,
   SendMessageRequest,
 } from '#shared/domain/api.ts';
+import {
+  DEFAULT_SPEECH_LANGUAGE,
+  SPEECH_LANGUAGES,
+  SPEECH_RESPONSE_HEADERS,
+  type TranscribeResponse,
+} from '#shared/domain/speech.ts';
 import { DIFFICULTIES, SESSION_STATUSES } from '#shared/domain/vocab.ts';
 import { LATEST_SCHEMA_VERSION } from '../db/database.ts';
-import { AppError } from '../errors.ts';
-import type { FailureHooks, FailureTarget } from '../hooks.ts';
+import { AppError, isAbortError } from '../errors.ts';
+import { FAILURE_TARGETS, type FailureHooks } from '../hooks.ts';
 import type { AppConfig } from '../config.ts';
 import type { Logger } from '../log.ts';
 import { shortId } from '../log.ts';
 import type { ModelProvider } from '../providers/types.ts';
 import type { Repository } from '../db/repository.ts';
-import type { DemoService } from '../services/demo.ts';
-import type { InsightsService } from '../services/insights.ts';
-import type { RewardsService } from '../services/rewards.ts';
 import {
   CreateSessionSchema,
   EndSessionSchema,
   LIMITS,
-  MentorScoreSchema,
   SendMessageSchema,
   toAppError,
   type SessionService,
 } from '../services/sessions.ts';
+import { SPEECH_OFF_MESSAGES, SPEECH_LIMITS, SpeechError } from '../speech/types.ts';
+import type { SpeechProvider } from '../speech/types.ts';
+import { validateWav } from '../speech/wav.ts';
+import { voiceDirection } from '../speech/voices.ts';
 import {
   assertSameOrigin,
+  assertSmallBody,
   createRateLimiter,
+  readAudioBody,
   readJsonBody,
   resolveProfile,
   securityHeaders,
@@ -42,10 +49,8 @@ import { serveStatic } from './static.ts';
 export interface AppDeps {
   config: AppConfig;
   service: SessionService;
-  insights: InsightsService;
-  rewards: RewardsService;
-  demo: DemoService;
   provider: ModelProvider;
+  speech: SpeechProvider;
   repo: Repository;
   hooks: FailureHooks;
   log: Logger;
@@ -57,9 +62,21 @@ interface Ctx {
   url: URL;
   params: Record<string, string>;
   profileId: string;
+  requestId: string;
   signal: AbortSignal;
   body: () => Promise<unknown>;
 }
+
+/** A handler returns this instead of JSON to send bytes (spoken audio). */
+const BINARY = Symbol('binary reply');
+interface BinaryReply {
+  [BINARY]: true;
+  status: number;
+  headers: Record<string, string>;
+  body: Buffer;
+}
+const isBinaryReply = (value: unknown): value is BinaryReply =>
+  typeof value === 'object' && value !== null && BINARY in value;
 
 type Handler = (ctx: Ctx) => Promise<unknown> | unknown;
 
@@ -94,27 +111,31 @@ const sendJson = (res: ServerResponse, status: number, body: unknown) => {
   res.end(text);
 };
 
+const sendBinary = (res: ServerResponse, reply: BinaryReply) => {
+  res.statusCode = reply.status;
+  for (const [name, value] of Object.entries(reply.headers)) res.setHeader(name, value);
+  res.setHeader('Content-Length', reply.body.length);
+  res.end(reply.body);
+};
+
+/** A header value that can never break the response: printable ASCII only. */
+const headerText = (value: string): string => value.replace(/[^\x20-\x7e]/g, '').slice(0, 200);
+
 const ListFilters = z.object({
   status: z.enum(SESSION_STATUSES).optional(),
   difficulty: z.enum(DIFFICULTIES).optional(),
   scenarioId: z.string().max(64).optional(),
-  includeSamples: z.enum(['0', '1']).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
   offset: z.coerce.number().int().min(0).max(10_000).optional(),
 });
 
-// `Date.getTimezoneOffset()` of the browser: whole minutes, UTC minus local time.
-const RewardsQuery = z.object({
-  tzOffset: z
-    .string()
-    .regex(/^-?\d{1,3}$/, 'tzOffset must be a whole number of minutes.')
-    .transform(Number)
-    .pipe(z.number().int().min(-840).max(840))
-    .optional(),
+/** The language of a spoken request: recognition and the customer's voice both follow it. */
+const TranscribeQuerySchema = z.object({
+  lang: z.enum(SPEECH_LANGUAGES).default(DEFAULT_SPEECH_LANGUAGE),
 });
 
 export function createApp(deps: AppDeps) {
-  const { config, service, insights, rewards, demo, provider, hooks, log } = deps;
+  const { config, service, provider, speech, hooks, log } = deps;
   const limiter = createRateLimiter();
 
   const publicConfig = (): AppConfigDTO => ({
@@ -125,9 +146,23 @@ export function createApp(deps: AppDeps) {
       demo: provider.demo,
       notice: config.provider.problem,
     },
+    speech: speech.capabilities(),
     limits: { maxMessageChars: LIMITS.maxMessageChars, maxTraineeTurns: LIMITS.maxTraineeTurns },
     features: { devDiagnostics: config.devDiagnostics, testHooks: hooks.enabled },
   });
+
+  // Speech failures are logged without the audio, the words or anything the provider said.
+  const speechFailed = (c: Ctx, op: 'transcribe' | 'speak', started: number, error: unknown) => {
+    if (!isAbortError(error)) {
+      log.warn('speech.failed', {
+        requestId: c.requestId,
+        op,
+        provider: speech.kind,
+        code: toAppError(error).code,
+        ms: Date.now() - started,
+      });
+    }
+  };
 
   const routes: Route[] = [
     route('GET', '/api/health', () => ({
@@ -136,6 +171,7 @@ export function createApp(deps: AppDeps) {
       version: config.version,
       schemaVersion: LATEST_SCHEMA_VERSION,
       provider: { kind: provider.kind, demo: provider.demo },
+      speech: { kind: speech.kind },
     })),
     route('GET', '/api/config', () => publicConfig()),
 
@@ -161,7 +197,6 @@ export function createApp(deps: AppDeps) {
         ...(f.status ? { status: f.status } : {}),
         ...(f.difficulty ? { difficulty: f.difficulty } : {}),
         ...(f.scenarioId ? { scenarioId: f.scenarioId } : {}),
-        includeSamples: f.includeSamples !== '0',
         ...(f.limit ? { limit: f.limit } : {}),
         ...(f.offset ? { offset: f.offset } : {}),
       });
@@ -169,8 +204,7 @@ export function createApp(deps: AppDeps) {
     route('GET', '/api/sessions/:id', (c) => ({
       session: service.getSession(c.profileId, c.params.id as string),
     })),
-    // The conversation and nothing else: no report, scores or analysis markers. Mentor reviews use it
-    // so a review is blind by construction.
+    // The conversation and nothing else: no report, scores or analysis markers.
     route('GET', '/api/sessions/:id/transcript', (c) => ({
       transcript: service.getTranscript(c.profileId, c.params.id as string),
     })),
@@ -211,37 +245,94 @@ export function createApp(deps: AppDeps) {
     route('GET', '/api/sessions/:id/report', (c) => ({
       report: service.getReport(c.profileId, c.params.id as string),
     })),
-    route('POST', '/api/sessions/:id/mentor-score', async (c) => {
-      insights.mentorScore(
-        c.profileId,
-        c.params.id as string,
-        MentorScoreSchema.parse(await c.body()) as MentorScoreRequest,
-      );
-      return { saved: true };
-    }),
 
-    route('GET', '/api/progress', (c) => ({
-      progress: insights.progress(c.profileId, c.url.searchParams.get('includeSamples') === '1'),
-    })),
-    route('GET', '/api/calibration', (c) =>
-      insights.calibration(c.profileId, c.url.searchParams.get('includeSamples') === '1'),
+    // ---- speech ----------------------------------------------------------------------------
+    // The trainee's recording in, text out. The audio is held in memory for this request only:
+    // it is never written to disk, never logged and never kept by Firefly.
+    route(
+      'POST',
+      '/api/speech/transcribe',
+      async (c): Promise<TranscribeResponse> => {
+        const { lang } = TranscribeQuerySchema.parse(Object.fromEntries(c.url.searchParams));
+        if (!speech.capabilities().transcribe) {
+          throw new SpeechError('speech_unavailable', SPEECH_OFF_MESSAGES.transcribe, false);
+        }
+        const upload = await readAudioBody(c.req, SPEECH_LIMITS.maxAudioBytes);
+        const recording = validateWav(upload);
+        if (!recording.ok) throw new AppError(400, 'validation_failed', recording.message);
+        const started = Date.now();
+        try {
+          hooks.maybeFail('transcribe');
+          const result = await speech.transcribe(
+            { audio: recording.wav, language: lang, durationMs: recording.durationMs },
+            c.signal,
+          );
+          log.info('speech.transcribed', {
+            requestId: c.requestId,
+            provider: speech.kind,
+            bytes: upload.length,
+            audioMs: recording.durationMs,
+            status: result.status,
+            ms: Date.now() - started,
+          });
+          return { status: result.status, text: result.text, durationMs: result.durationMs };
+        } catch (error) {
+          speechFailed(c, 'transcribe', started, error);
+          throw error;
+        }
+      },
+      { limit: 'speech' },
     ),
-    // Worked out from saved calls on every request, so asking twice never pays twice.
-    route('GET', '/api/rewards', (c) => {
-      const q = RewardsQuery.parse(Object.fromEntries(c.url.searchParams));
-      return rewards.rewards(c.profileId, { tzOffsetMinutes: q.tzOffset ?? 0 });
-    }),
-
-    route('GET', '/api/demo', (c) => demo.status(c.profileId)),
-    route('POST', '/api/demo/samples', async (c) => demo.loadSamples(c.profileId), {
-      limit: 'create',
-    }),
-    route('POST', '/api/demo/reset', async (c) => {
-      const body = z
-        .object({ scope: z.enum(['practice', 'samples', 'all']) })
-        .parse(await c.body());
-      return { deleted: demo.reset(c.profileId, body.scope) };
-    }),
+    // One stored customer turn spoken aloud. The words come from the call itself, never from the
+    // request, so this cannot be used to speak anything else. The request body is not read.
+    route(
+      'POST',
+      '/api/sessions/:id/turns/:index/speech',
+      async (c): Promise<BinaryReply> => {
+        assertSmallBody(c.req);
+        const { lang } = TranscribeQuerySchema.parse(Object.fromEntries(c.url.searchParams));
+        const index = c.params.index as string;
+        // Anything but a whole number cannot name a turn, so it finds none.
+        const turnIndex = /^\d{1,5}$/.test(index) ? Number(index) : 0;
+        const line = service.getSpeakableTurn(c.profileId, c.params.id as string, turnIndex);
+        if (!speech.capabilities().synthesize) {
+          throw new SpeechError('speech_unavailable', SPEECH_OFF_MESSAGES.synthesize, false);
+        }
+        const started = Date.now();
+        try {
+          hooks.maybeFail('synthesize');
+          const spoken = await speech.synthesize(
+            {
+              text: line.text,
+              direction: voiceDirection({ speaker: line.speaker, language: lang, mood: line.mood }),
+            },
+            c.signal,
+          );
+          log.info('speech.spoken', {
+            requestId: c.requestId,
+            provider: speech.kind,
+            bytes: spoken.audio.length,
+            ms: Date.now() - started,
+          });
+          return {
+            [BINARY]: true,
+            status: 200,
+            headers: {
+              'Content-Type': headerText(spoken.contentType),
+              'Cache-Control': 'no-store',
+              [SPEECH_RESPONSE_HEADERS.provider]: speech.kind,
+              [SPEECH_RESPONSE_HEADERS.voice]: headerText(spoken.voice),
+              [SPEECH_RESPONSE_HEADERS.style]: headerText(spoken.style),
+            },
+            body: spoken.audio,
+          };
+        } catch (error) {
+          speechFailed(c, 'speak', started, error);
+          throw error;
+        }
+      },
+      { limit: 'speech' },
+    ),
   ];
 
   if (hooks.enabled) {
@@ -249,11 +340,11 @@ export function createApp(deps: AppDeps) {
       route('POST', '/api/test/fail-next', async (c) => {
         const body = z
           .object({
-            target: z.enum(['customer', 'classifier', 'evaluator']),
+            target: z.enum(FAILURE_TARGETS),
             count: z.number().int().min(0).max(5).default(1),
           })
           .parse(await c.body());
-        hooks.setNext(body.target as FailureTarget, body.count);
+        hooks.setNext(body.target, body.count);
         return { queued: body.count };
       }),
     );
@@ -305,7 +396,9 @@ export function createApp(deps: AppDeps) {
     const isApi = url.pathname.startsWith('/api/');
     securityHeaders(res, isApi);
     let status = 200;
-    let routeLabel = url.pathname;
+    // Logged for a request that fails before a route matches. The raw path is never used: it can
+    // hold a whole session id.
+    let routeLabel = 'unmatched';
 
     try {
       if (!isApi) {
@@ -336,7 +429,12 @@ export function createApp(deps: AppDeps) {
         pathExists = true;
         if (r.method !== method) continue;
         const params: Record<string, string> = {};
-        r.keys.forEach((key, i) => (params[key] = decodeURIComponent(m[i + 1] as string)));
+        try {
+          r.keys.forEach((key, i) => (params[key] = decodeURIComponent(m[i + 1] as string)));
+        } catch {
+          // A malformed percent-escape cannot name anything.
+          throw new AppError(404, 'not_found', 'That endpoint does not exist.');
+        }
         matched = { route: r, params };
         break;
       }
@@ -350,6 +448,9 @@ export function createApp(deps: AppDeps) {
         .replace(/\\\//g, '/')
         .replace(/^\^|\$$/g, '')}`;
       if (matched.route.limit) limiter.take(profileId, matched.route.limit);
+      // Speech reaches a metered service, and a caller without a cookie always has a fresh
+      // per-profile allowance, so every speech request also counts against one server-wide bucket.
+      if (matched.route.limit === 'speech') limiter.take('all', 'speech-all');
 
       const controller = new AbortController();
       res.on('close', () => {
@@ -362,11 +463,17 @@ export function createApp(deps: AppDeps) {
         url,
         params: matched.params,
         profileId,
+        requestId,
         signal: controller.signal,
         body: () => (cached ??= readJsonBody(req)),
       });
-      status = matched.route.status ?? 200;
-      sendJson(res, status, result);
+      if (isBinaryReply(result)) {
+        status = result.status;
+        sendBinary(res, result);
+      } else {
+        status = matched.route.status ?? 200;
+        sendJson(res, status, result);
+      }
     } catch (error) {
       if ((error as { name?: string })?.name === 'AbortError') {
         status = 499;
