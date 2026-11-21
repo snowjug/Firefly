@@ -257,6 +257,55 @@ describe('quotes and budgets in model text', () => {
   });
 });
 
+describe('the note that a call gave limited evidence', () => {
+  // A model may write up to 40 words of summary. The note that the call was too short to judge is
+  // added to it, and the two together have to fit the 45 words a trainee reads.
+  const FORTY =
+    'You opened with a warm greeting and named yourself clearly. The questions that followed were focused and found the main fact quickly. Next time keep that pace and add a short recap before you close so nothing is left open.';
+  const two = buildInput(makeScenario(), STRONG_STEPS.slice(0, 2), { endedEarly: true });
+  const four = buildInput(makeScenario(), STRONG_STEPS.slice(0, 4), { endedEarly: true });
+  const summaryOf = (summary: string, input: EvaluationInput) =>
+    model(draft({ summary }), input).report.summary.overall;
+
+  it('is a 40-word summary that the note has to fit beside', () => {
+    expect(wordCount(FORTY)).toBe(40);
+    expect(FORTY).not.toMatch(/limited|too short|too few|ended early/i);
+  });
+
+  it('survives a model summary of 40 words on a call too short to score', () => {
+    const overall = summaryOf(FORTY, two);
+    expect(overall).toMatch(/Only 2 trainee turns were recorded/);
+    expect(overall).toMatch(/^You opened with a warm greeting/);
+    expect(wordCount(overall)).toBeLessThanOrEqual(BUDGETS.summaryWords);
+  });
+
+  it('survives a model summary of 40 words on a call with limited evidence', () => {
+    const overall = summaryOf(FORTY, four);
+    expect(overall).toMatch(/With only 4 trainee turns, this rests on limited evidence\.$/);
+    expect(wordCount(overall)).toBeLessThanOrEqual(BUDGETS.summaryWords);
+  });
+
+  it('is added when the model said so only in words that the budget cuts off', () => {
+    const late = `${FORTY} This was a limited call, so read the advice with care.`;
+    expect(wordCount(late)).toBeGreaterThan(BUDGETS.summaryWords);
+    const overall = summaryOf(late, two);
+    expect(overall).toMatch(/Only 2 trainee turns were recorded/);
+    expect(wordCount(overall)).toBeLessThanOrEqual(BUDGETS.summaryWords);
+  });
+
+  it('is not repeated when the model said so in the words that are kept', () => {
+    const early = `This was a short call, so the evidence is limited. ${FORTY}`;
+    const overall = summaryOf(early, two);
+    expect(overall).toMatch(/^This was a short call, so the evidence is limited\./);
+    expect(overall).not.toMatch(/Only 2 trainee turns were recorded/);
+    expect(wordCount(overall)).toBeLessThanOrEqual(BUDGETS.summaryWords);
+  });
+
+  it('is not added to a call with enough evidence', () => {
+    expect(summaryOf(FORTY, strongCall())).toBe(FORTY);
+  });
+});
+
 describe('the report a model draft becomes', () => {
   it('is a valid version 2 report for every kind of call, including one with no trainee turns', () => {
     for (const call of [

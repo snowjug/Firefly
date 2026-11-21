@@ -91,7 +91,6 @@ const scenario = {
       'Earn her trust, test her theory respectfully, and agree evidence, an owner and a next update time.',
     knownContext:
       'Nadia is an expert and expects the engineer to keep up. She is short on patience and may disagree with you.',
-    previousContact: 'No earlier contact about this problem.',
     environment:
       'A company that manages its own accounts and creates new ones ahead of each start date.',
   },

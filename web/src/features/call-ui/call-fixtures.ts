@@ -55,7 +55,6 @@ export const SCENARIO: SessionScenarioView = {
     },
     objective: 'Find what changed, then agree a next step and when the customer hears back.',
     knownContext: 'The team joins from shared Windows desktop PCs with USB headsets.',
-    previousContact: 'None. This is the first contact.',
     environment: 'Teams desktop app on Windows 11, wired network.',
   },
   persona: {

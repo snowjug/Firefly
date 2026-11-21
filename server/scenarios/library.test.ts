@@ -309,4 +309,18 @@ describe('the checks on authored text', () => {
     });
     expect(semanticIssues(noRef).join('\n')).toMatch(/caseReference is needed/);
   });
+
+  it('refuses an earlier contact on a scenario written for a first contact, which would be shown at every stage', () => {
+    const firstContact = library.find((s) => s.callStage === 'first-contact') as ScenarioDefinition;
+    const callBack = library.find((s) => s.callStage !== 'first-contact') as ScenarioDefinition;
+    const withContact = (s: ScenarioDefinition) =>
+      semanticIssues({
+        ...s,
+        publicBrief: { ...s.publicBrief, previousContact: 'No earlier contact.' },
+      });
+    expect(withContact(firstContact).join('\n')).toMatch(
+      /first-contact scenario has no earlier contact/,
+    );
+    expect(withContact(callBack).join('\n')).not.toMatch(/first-contact scenario/);
+  });
 });

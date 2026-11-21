@@ -168,6 +168,13 @@ export function sharedPhrase(source: string, other: string): string | null {
 
 export function semanticIssues(s: ScenarioDefinition): string[] {
   const issues: string[] = [];
+  // The public brief is the same at every call stage, so a scenario written for a first contact has
+  // no earlier contact to state: it would be shown, and be wrong, if the call were set to a call-back.
+  if (s.callStage === 'first-contact' && s.publicBrief.previousContact) {
+    issues.push(
+      'publicBrief.previousContact: a first-contact scenario has no earlier contact to state (the brief is shown at every call stage)',
+    );
+  }
   // Everything the customer or the trainee can read before a hidden fact is discovered. A hidden
   // fact has to come out through discovery, so none of its distinctive tokens may appear here.
   const earlyText: [string, string][] = [

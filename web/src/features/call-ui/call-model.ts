@@ -683,7 +683,8 @@ export function describeCase(scenario: SessionScenarioView): CaseFacts {
   const more: CaseFacts['more'] = [];
   if (publicBrief?.knownContext)
     more.push({ label: 'Known context', text: publicBrief.knownContext });
-  if (publicBrief?.previousContact) {
+  // There is nothing to say about an earlier contact on a first call, as in the case brief.
+  if (publicBrief?.previousContact && config.callStage !== 'first-contact') {
     more.push({ label: 'Previous contact', text: publicBrief.previousContact });
   }
   if (publicBrief?.environment) more.push({ label: 'Environment', text: publicBrief.environment });

@@ -409,15 +409,53 @@ export function isUnverifiedPromise(sentence: string): boolean {
   );
 }
 
-export const BLAME =
-  /\b(?:you (?:should have|shouldn'?t have|need to (?:read|follow|make sure|be more)|failed to|forgot to|were supposed to|must have|probably (?:did|didn'?t|forgot))|(?:your|the customer'?s?) (?:fault|mistake|error|responsibility)|user error|that'?s (?:on you|your (?:side|end|problem|responsibility))|(?:not|isn'?t) (?:our|my) (?:problem|fault|issue|responsibility)|(?:another|other|a different|the) (?:team|department|vendor|provider) (?:is|are|was|were) (?:responsible|to blame|at fault)|(?:it'?s|that'?s) (?:a |an )?(?:network|your network|internal|your it) (?:issue|problem)|you (?:didn'?t|did not) (?:follow|read|tell|check|make sure))\b/;
+// Blame. "You should have restarted it" scolds. "You shouldn't have to chase us", "you must have been
+// waiting a long time" and "you were supposed to hear from us" use the same words to take the
+// customer's side, so a modal form is blame only when it is about something the customer did. (Kept
+// in step with the care lexicon the evaluator reads tone with; the engine may not import it.)
+const OWED = String.raw`(?:(?:heard|received|got|gotten)|had (?:an? |some |any |more |better |the )?(?:update|call|callback|call back|reply|response|answer|email|message|confirmation|news|help|support|apology|follow-up|resolution|reminder)s?|been (?:told|given|sent|contacted|called|updated|notified|informed|offered|provided|kept|helped|answered|looked after))`;
+const OWED_TO_BE = String.raw`(?:receive|get|hear|have (?:received|heard|been|had|got)|be (?:contacted|called|told|sent|given|updated|notified|informed|offered|provided|helped))`;
+const WENT_WRONG = String.raw`(?:clicked|pressed|changed|deleted|typed|entered|selected|installed|removed|disabled|turned|set|configured|misconfigured|done|missed|forgotten|ignored|skipped|broken|messed|mistyped|overlooked|accidentally|made (?:an? )?(?:mistake|error|typo))`;
+
+/** Blame that nobody says kindly. */
+export const BLAME_CLEAR =
+  /\b(?:you (?:need to (?:read|follow|make sure|be more)|failed to|forgot to|probably (?:did|didn'?t|forgot))|(?:your|the customer'?s?) (?:fault|mistake|error|responsibility)|user error|that'?s (?:on you|your (?:side|end|problem|responsibility))|(?:not|isn'?t) (?:our|my) (?:problem|fault|issue|responsibility)|(?:another|other|a different|the) (?:team|department|vendor|provider) (?:is|are|was|were) (?:responsible|to blame|at fault)|(?:it'?s|that'?s) (?:a |an )?(?:network|your network|internal|your it) (?:issue|problem)|you (?:didn'?t|did not) (?:follow|read|tell|check|make sure))\b/;
+
+/** Blame that can also be sympathy, as long as it is about something the customer did. */
+export const BLAME_MODAL = new RegExp(
+  String.raw`\byou (?:should have\b(?! ${OWED}\b)|shouldn'?t have\b(?! (?:to|had|needed|been)\b)|were supposed to\b(?! ${OWED_TO_BE}\b)|must have ${WENT_WRONG}\b)`,
+);
+
+/** Either kind of blame: the words alone, before the rest of the sentence is weighed. */
+export const BLAME = new RegExp(`${BLAME_CLEAR.source}|${BLAME_MODAL.source}`);
+
+const TAKEN_BACK = /\b(?:but|however|although|though)\b/;
+
+/**
+ * Whether a statement puts the fault on the customer. "I'm sorry, you shouldn't have gone through
+ * all that" holds the words of blame and takes the customer's side: a modal form that comes with an
+ * apology or sympathy the sentence does not take back with a "but" is kindness.
+ */
+export function blames(lower: string): boolean {
+  if (BLAME_CLEAR.test(lower)) return true;
+  return BLAME_MODAL.test(lower) && !(EMPATHY_GENERIC.test(lower) && !TAKEN_BACK.test(lower));
+}
 
 /** The engineer is playing back what they understood: "So to confirm, you changed your password." */
 export const RECAP_LEAD =
   /^(?:and |ok(?:ay)?,? |right,? )?(?:so\b|just to (?:confirm|check|clarify|recap|summari[sz]e)|to (?:confirm|recap|summari[sz]e|clarify|check)|let me (?:just )?(?:confirm|recap|summari[sz]e|check|repeat)|if i(?:'ve| have) (?:understood|got)|what i(?:'ve| have) understood|as i understand)/;
 
+// "As I said" recalls what was said, and "I'll ring at 3 as I said" keeps a promise, so only the
+// scolding forms are held against the engineer: "as I already told you", "I already told you".
 export const DISMISSIVE =
-  /\b(?:calm down|don'?t worry about it|no (?:big|great) deal|it'?s (?:just|only|simply) (?:a |an )?(?:minor|small|simple|little)|that'?s not (?:a |that |really )?(?:big|major|serious|an issue|a problem|an emergency)|(?:you'?re|you are) (?:over ?reacting|exaggerating)|that (?:shouldn'?t|can'?t|cannot|doesn'?t) (?:be|happen|possible|work that way)|(?:that'?s|it'?s) (?:impossible|not possible)|there'?s nothing (?:i|we) can (?:do|say)|that'?s (?:just|simply) how it (?:works|is)|as i (?:said|told you|already said)|like i (?:said|told you)|i (?:already|have already) (?:told|explained))\b/;
+  /\b(?:calm down|don'?t worry about it|no (?:big|great) deal|it'?s (?:just|only|simply) (?:a |an )?(?:minor|small|simple|little)|that'?s not (?:a |that |really )?(?:big|major|serious|an issue|a problem|an emergency)|(?:you'?re|you are) (?:over ?reacting|exaggerating)|that (?:shouldn'?t|can'?t|cannot|doesn'?t) (?:be|happen|possible|work that way)|(?:that'?s|it'?s) (?:impossible|not possible)|there'?s nothing (?:i|we) can (?:do|say)|that'?s (?:just|simply) how it (?:works|is)|as i (?:already|have already|just) (?:said|told you|explained)|like i (?:already|just) (?:said|told you)|i (?:already|have already|just) (?:told|explained|said)(?: (?:it|this|that))?(?: to)? you)\b/;
+
+/**
+ * Impatience with the customer, in a statement: an order to answer, or the whole sentence a brush-off.
+ * Never a question: "Could you just tell me what the screen says?" is polite.
+ */
+export const IMPATIENT_STATEMENT =
+  /\bjust (?:tell me|answer)\b|^(?:(?:oh|ok(?:ay)?),? )?whatever\W*$/;
 
 // More ways of putting the fault on the customer, in everyday words ("a problem on your side",
 // "your developer broke it", "that's not something we did"). Statements only: the classifier does

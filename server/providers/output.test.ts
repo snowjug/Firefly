@@ -56,6 +56,11 @@ describe('cleanCustomerText', () => {
     ['emphasis inside a sentence', "I *can't* open it.", "I can't open it."],
     ['a bullet list', '- It is slow.\n- I cannot open it.', 'It is slow. I cannot open it.'],
     ['a numbered list', '1. It is slow.\n2) I cannot open it.', 'It is slow. I cannot open it.'],
+    [
+      'list items with no full stop, which are sentences of their own',
+      'Here is what I have:\n- The laptop is a Dell\n- It started Monday\n- I tried a restart',
+      'Here is what I have: The laptop is a Dell. It started Monday. I tried a restart.',
+    ],
     ['a code fence', 'It is slow.\n```\nnot speech\n```\nThanks.', 'It is slow. Thanks.'],
     ['HTML tags', 'It is <b>slow</b> today.', 'It is slow today.'],
     ['reasoning text', '<think>Plan the reply.</think>It is slow today.', 'It is slow today.'],

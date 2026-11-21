@@ -180,6 +180,24 @@ function customerWords(
   };
 }
 
+// The tag that ends a recap to ask whether it is right: "you have 12 users affected, is that
+// right?" What comes before the tag is the claim, and it is judged like any other. A short tag
+// ("right?", "isn't it?") has to follow a comma or a dash, so that "Is the date correct?" is still a
+// question of its own.
+const RECAP_TAG = new RegExp(
+  [
+    String.raw`\s*[,;:\u2013\u2014-]?\s*\b(?:(?:is|was) that (?:right|correct|accurate|fair|about right|ok(?:ay)?|so|true)|(?:am i|have i got that|did i get that|have i got it|did i get it) (?:right|correct)|have i understood (?:that |this |it )?(?:right|correctly))\s*\?\s*$`,
+    String.raw`\s*[,;:\u2013\u2014-]\s*\b(?:right|correct|yes|ok(?:ay)?|(?:isn't|aren't|doesn't|didn't|wasn't|weren't|don't) (?:it|you|that|they))\s*\?\s*$`,
+  ].join('|'),
+  'i',
+);
+
+/** A sentence without the tag that asks whether it is right; a question of its own is left alone. */
+function withoutRecapTag(sentence: string): string {
+  const trimmed = sentence.trim();
+  return trimmed.endsWith('?') ? trimmed.replace(RECAP_TAG, '').trim() : trimmed;
+}
+
 function judgeSummary(
   args: AnalyseArgs,
   sentences: string[],
@@ -188,10 +206,17 @@ function judgeSummary(
   const none: SummaryVerdict = { verdict: 'none', fault: null };
   if (wording !== 'summary' && wording !== 'confirmation') return none;
   // A recap of what the engineer will do or found is not a claim about the customer's situation,
-  // and neither is the question that ends a recap ("Is that right?").
-  const claims = sentences.filter(
-    (s) => !isAsking(s) && !FIRST_PERSON_FUTURE.test(prep(s)) && !ENGINEER_SIDE.test(prep(s)),
-  );
+  // and neither is the question that ends a recap ("Is that right?"). A recap in one sentence that
+  // ends in a tag still makes its claim.
+  const claims = sentences
+    .map(withoutRecapTag)
+    .filter(
+      (s) =>
+        s !== '' &&
+        !isAsking(s) &&
+        !FIRST_PERSON_FUTURE.test(prep(s)) &&
+        !ENGINEER_SIDE.test(prep(s)),
+    );
   const claimText = claims.join(' ');
   const known = customerWords(args.scenario, args.runtime, args.history);
 
@@ -300,11 +325,29 @@ function timesDiffer(a: string, b: string): boolean {
   return x.hour !== y.hour || x.minute !== y.minute;
 }
 
+// A promised time that recurs ("every hour", "daily") says how often the customer will hear, not
+// when: it cannot be a different time for the same thing.
+const RECURRING = /\b(?:every|each|hourly|daily|twice a day)\b/;
+
+/**
+ * An earlier time for the very same promise (what the ledger merges on: the same kind and action)
+ * that this one contradicts. Another thing promised for another time ("I'll email you the summary
+ * by 5pm" after "I'll call you back by 3pm"), or how often the customer will hear, is not a change
+ * of mind.
+ */
 function findConflict(existing: Commitment[], next: NewCommitment): Commitment | null {
-  if (!next.due) return null;
+  if (!next.due || RECURRING.test(next.due)) return null;
   const earlier = [...existing]
     .reverse()
-    .find((e) => e.by === 'engineer' && e.due !== null && e.kind !== 'action');
+    .find(
+      (e) =>
+        e.by === 'engineer' &&
+        e.kind !== 'action' &&
+        e.kind === next.kind &&
+        e.action === next.action &&
+        e.due !== null &&
+        !RECURRING.test(e.due),
+    );
   return earlier && earlier.due && timesDiffer(earlier.due, next.due) ? earlier : null;
 }
 
@@ -321,7 +364,9 @@ export function recordCommitment(
     const updated: Commitment = {
       ...repeat,
       due: next.due ?? repeat.due,
-      clarity: next.due || repeat.due ? next.clarity : repeat.clarity,
+      // Said again with no time, a commitment keeps the time and the clarity it already had ("so
+      // I'll own this and call you back" does not undo "by 3pm").
+      clarity: next.due ? next.clarity : repeat.clarity,
       supported: next.supported,
       reflected: next.due !== null && next.due !== repeat.due ? false : repeat.reflected,
     };
@@ -355,8 +400,9 @@ const NOT_A_NAME = new Set(
 
 /** The first name the engineer gave ("my name is Sam", "this is Sam from Microsoft"), or null. */
 export function introducedAs(text: string): string | null {
+  // The lead-in may start a sentence ("I'm Sam"); the name itself has to be capitalised.
   const found = text.match(
-    /\b(?:my name(?:'s| is)|this is|i(?:'m| am)) ([A-Z][a-z]{1,14})(?=\s+(?:from|with|at|here|speaking|and|on)\b|[,.!]|$)/,
+    /\b(?:[Mm]y name(?:'s| is)|[Tt]his is|[Ii](?:'m| am)) ([A-Z][a-z]{1,14})(?=\s+(?:from|with|at|here|speaking|and|on)\b|[,.!]|$)/,
   )?.[1];
   return found && !NOT_A_NAME.has(found.toLowerCase()) ? found : null;
 }

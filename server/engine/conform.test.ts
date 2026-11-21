@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { conformCustomerReply, sentenceCount } from './conform.ts';
+import { conformCustomerReply, endListItems, sentenceCount } from './conform.ts';
 
 const conform = (text: string, maxSentences = 3, maxChars?: number) =>
   conformCustomerReply(
@@ -57,6 +57,61 @@ describe('conforming a customer reply', () => {
     expect(conform('Well done, spot on.').problems).toEqual(
       expect.arrayContaining(['praise', 'empty']),
     );
+  });
+
+  it('ends the lines of a list as sentences before line breaks are collapsed, and leaves other breaks alone', () => {
+    expect(
+      endListItems(
+        'Here is what I have:\n- The laptop is a Dell\n* It started Monday!\n\u2022 I tried: a restart:\n1. Nothing helped\n2) It still fails.\n## Notes',
+      ),
+    ).toBe(
+      'Here is what I have:\nThe laptop is a Dell.\nIt started Monday!\nI tried: a restart.\nNothing helped.\nIt still fails.\nNotes.',
+    );
+    // A sentence wrapped over two lines is one sentence, and a bare marker leaves nothing behind.
+    expect(endListItems('It is slow\ntoday and I cannot sign in.\r\n- \nThanks')).toBe(
+      'It is slow\ntoday and I cannot sign in.\n\nThanks',
+    );
+    // Plain speech, with no line breaks, is exactly as it was.
+    expect(endListItems("I can't sign in. It started this morning.")).toBe(
+      "I can't sign in. It started this morning.",
+    );
+  });
+
+  it('does not take what the customer says about their own plans, offers and answers for coaching', () => {
+    for (const text of [
+      "I'll try asking our administrator.",
+      'Let me try to ask Dana in IT.',
+      'I could try asking the team, I suppose.',
+      'Do you want me to try asking our administrator?',
+      "Next time I'll try the web version first.",
+      "Next time I'll ask Jen to send it.",
+      "Don't ask me about the policy. I only use the mailbox.",
+      'Don\u2019t ask me about the policy. I only use the mailbox.',
+      'If you ask me about the policy, I would not know.',
+    ]) {
+      const result = conform(text);
+      expect(result.problems, text).toEqual([]);
+      expect(result.text, text).toBe(text);
+    }
+    // Alone it is a whole reply, not an empty one.
+    expect(conform("I'll try asking our administrator.").problems).not.toContain('empty');
+  });
+
+  it('still removes telling the engineer what to ask, in every form', () => {
+    for (const text of [
+      'Try asking me about the screen.',
+      'You could try asking me about my phone.',
+      'You can try asking me what it says.',
+      'You might try asking me about the phone.',
+      'Next time, ask about my phone.',
+      'Next time you should ask about the phone.',
+      'Please ask me about the laptop.',
+      'You should have asked about my phone first.',
+    ]) {
+      const result = conform(`It keeps asking for a password. ${text}`);
+      expect(result.problems, text).toContain('coaching');
+      expect(result.text, text).toBe('It keeps asking for a password.');
+    }
   });
 
   it('never coaches the engineer or announces what it is holding back', () => {

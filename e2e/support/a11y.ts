@@ -7,6 +7,7 @@ import {
   type Page,
   type TestInfo,
 } from '@playwright/test';
+import { GOOD_CALL } from './api.ts';
 
 // Shared helpers for the accessibility and responsive specs (a11y.spec.ts, keyboard.spec.ts,
 // responsive.spec.ts). Nothing here hard-codes a port or a path: every address is relative to the
@@ -285,6 +286,39 @@ export interface TargetSize {
   height: number;
 }
 
+/**
+ * Visible controls, headings and labels whose text is cut off by their own box (a box that hides its
+ * overflow and has more inside than it shows). A label that is cut is a label nobody can read.
+ */
+export async function clippedText(page: Page, root = 'main'): Promise<string[]> {
+  return page.evaluate((selector) => {
+    const found: string[] = [];
+    const scope = document.querySelector(selector);
+    if (!scope) return found;
+    for (const element of scope.querySelectorAll(
+      'button, a, h1, h2, h3, h4, label, summary, [role="tab"], [role="radio"], legend',
+    )) {
+      if (found.length >= 8) break;
+      if (element.closest('.visually-hidden, .skip-link, [hidden], svg')) continue;
+      if (!element.checkVisibility({ visibilityProperty: true })) continue;
+      const style = getComputedStyle(element);
+      const hides = /hidden|clip/.test(style.overflowX) || /hidden|clip/.test(style.overflowY);
+      const box = element as HTMLElement;
+      // A heading kept for screen readers is cut down to a pixel on purpose.
+      if (box.clientWidth <= 2 || box.clientHeight <= 2) continue;
+      if (
+        hides &&
+        (box.scrollWidth > box.clientWidth + 1 || box.scrollHeight > box.clientHeight + 1)
+      ) {
+        found.push(
+          `${element.tagName.toLowerCase()} "${(element.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40)}" (${box.scrollWidth}x${box.scrollHeight} in ${box.clientWidth}x${box.clientHeight})`,
+        );
+      }
+    }
+    return found;
+  }, root);
+}
+
 /** The rendered size of the first visible match, so a test can assert a minimum target size. */
 export async function targetSize(page: Page, selector: string): Promise<TargetSize | null> {
   return page.evaluate((query) => {
@@ -321,7 +355,7 @@ export interface FocusStop {
 
 /** What has keyboard focus now, and whether it can be seen. Null when nothing (the body) has it. */
 export async function focusStop(page: Page): Promise<FocusStop | null> {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
     const active = document.activeElement;
     if (!active || active === document.body || active === document.documentElement) return null;
     const channel = (value: string): [number, number, number, number] | null => {
@@ -382,6 +416,31 @@ export async function focusStop(page: Page): Promise<FocusStop | null> {
         ring = true;
         ringContrast = 21;
         break;
+      }
+    }
+    // A control drawn inside an SVG (a point on a chart) cannot take an outline in every browser, so
+    // its ring is a stroke-only shape inside it that ignores the pointer. It counts when it is drawn.
+    if (!ring && active instanceof SVGElement) {
+      // The ring fades in; read it once it has.
+      await Promise.all(
+        active
+          .getAnimations({ subtree: true })
+          .map((animation) => animation.finished.catch(() => undefined)),
+      );
+      for (const shape of active.querySelectorAll('circle, rect, ellipse, path, polygon')) {
+        const style = getComputedStyle(shape);
+        const stroke = channel(style.stroke);
+        if (
+          stroke &&
+          style.fill === 'none' &&
+          style.pointerEvents === 'none' &&
+          parseFloat(style.strokeWidth) >= 1.5 &&
+          parseFloat(style.opacity) >= 0.9
+        ) {
+          ring = true;
+          ringContrast = contrast(stroke.slice(0, 3), backgroundOf(active));
+          break;
+        }
       }
     }
     const rect = (
@@ -527,6 +586,17 @@ export async function speak(page: Page, on: boolean): Promise<void> {
   );
 }
 
+/**
+ * Waits, in the page, until the tone has been on for `ms`. An utterance shorter than 400 ms is a click
+ * and not speech, so a journey that ends a turn with "Done speaking" has to let it last first.
+ */
+export async function holdTone(page: Page, ms = 800): Promise<void> {
+  await page.waitForFunction((held) => {
+    const started = window.__fireflyMic?.startedAt;
+    return typeof started === 'number' && performance.now() - started >= held;
+  }, ms);
+}
+
 /** Makes the next requests for the microphone fail the way a browser's refusal does. */
 export async function refuseMicrophone(page: Page, name = 'NotAllowedError'): Promise<void> {
   await page.evaluate((error) => {
@@ -581,18 +651,17 @@ export async function lengthenCustomerVoice(page: Page, seconds: number): Promis
 
 // ---- sessions made through the API -----------------------------------------------------------
 
-export const SCENARIO_ID = 'locked-out-after-password-reset';
-export const HARD_SCENARIO_ID = 'escalated-integration-failures';
+/** A starter, first-contact scenario: a calm, terse customer (Marcus Bell, an Outlook shared mailbox). */
+export const SCENARIO_ID = 'outlook-shared-mailbox-missing';
+/** A challenge, escalated scenario: an angry, expert customer (Gareth Owens, a SharePoint site). */
+export const HARD_SCENARIO_ID = 'sharepoint-site-access-escalated';
 
-/** Things a new trainee might say, which move the demo customer and uncover what it holds back. */
-export const TRAINEE_LINES = [
-  "Hi, thanks for calling. My name is Sam. What's been happening?",
-  "I'm sorry about that, it sounds really frustrating. Can you read me exactly what the screen says?",
-  'Thanks. When did it last work, and did anything change before that?',
-  'Is your work email also signed in on your phone or another device?',
-  'How many people are affected, and what does this stop you from doing today?',
-  "I'll take ownership of this. I'll get it sorted and call you back by 10am. Is there anything else I can help with?",
-];
+/**
+ * Things a new trainee might say, which move the demo customer and uncover what it holds back. They
+ * are written for SCENARIO_ID (see GOOD_CALL in api.ts); said to another scenario's customer they
+ * still make a transcript and a report, with fewer facts found.
+ */
+export const TRAINEE_LINES: readonly string[] = GOOD_CALL;
 
 export async function createSession(
   request: APIRequestContext,
@@ -607,7 +676,7 @@ export async function createSession(
 export async function sendLines(
   request: APIRequestContext,
   id: string,
-  lines: string[],
+  lines: readonly string[],
 ): Promise<void> {
   for (const [index, text] of lines.entries()) {
     const response = await request.post(`/api/sessions/${id}/messages`, {
@@ -634,7 +703,7 @@ export async function endSession(request: APIRequestContext, id: string): Promis
 /** A finished call with a report, made through the API in whichever profile `request` belongs to. */
 export async function finishedCall(
   request: APIRequestContext,
-  scenarioId = HARD_SCENARIO_ID,
+  scenarioId = SCENARIO_ID,
 ): Promise<string> {
   const id = await createSession(request, scenarioId);
   await sendLines(request, id, TRAINEE_LINES);
@@ -675,12 +744,13 @@ export async function watchAnnouncements(page: Page): Promise<() => Promise<stri
     const said: string[] = [];
     (window as unknown as { __said: string[] }).__said = said;
     const record = () => {
-      let last = '';
+      // Each region is followed on its own: a dialog brings a region of its own for as long as it is open.
+      const last = new WeakMap<Element, string>();
       new MutationObserver(() => {
         for (const region of document.querySelectorAll('[role="status"][aria-live="polite"]')) {
           const text = (region.textContent ?? '').replace(/\s+/g, ' ').trim();
-          if (text !== last) said.push(text);
-          last = text;
+          if (text !== (last.get(region) ?? '')) said.push(text);
+          last.set(region, text);
         }
       }).observe(document, { subtree: true, childList: true, characterData: true });
     };
@@ -695,21 +765,25 @@ export async function watchAnnouncements(page: Page): Promise<() => Promise<stri
 
 // ---- a spoken call, one stage at a time ------------------------------------------------------
 
-/** The call's status line has reached this stage (the strip carries it as `data-stage`). */
-export async function expectStage(page: Page, stage: string, timeout = 20_000): Promise<void> {
-  await expect(page.locator(`[data-stage="${stage}"]`)).toBeVisible({ timeout });
+/**
+ * The call's status line has reached this state. The line carries it as `data-status`: `customer-speaking`,
+ * `mic-ready`, `listening`, `speech-detected` ("Hearing you"), `processing-speech`,
+ * `generating-reply` ("Customer is replying"), `muted`, `paused`, `text-fallback` ("Typing") ...
+ */
+export async function expectStatus(page: Page, status: string, timeout = 20_000): Promise<void> {
+  await expect(page.locator(`.cw-status[data-status="${status}"]`)).toBeVisible({ timeout });
 }
 
-/** Delays, in milliseconds, that hold the call at "Transcribing" and "The customer is thinking". */
+/** Delays, in milliseconds, that hold the call at "Processing speech" and "Customer is replying". */
 export interface Delays {
   transcribe: number;
   reply: number;
 }
 
 /**
- * Opens a spoken call with the fake microphone and a long customer voice, and starts it: the page
- * is left on "The customer is speaking" (the opening line). The returned `delays` can be raised to
- * hold a later stage still.
+ * Opens a spoken call with the controllable microphone and a long customer voice, and starts it: the
+ * page is left on "Customer speaking" (the greeting). The returned `delays` can be raised to hold a
+ * later stage still.
  */
 export async function startSpokenCall(
   page: Page,
@@ -729,9 +803,9 @@ export async function startSpokenCall(
     await route.continue();
   });
   const id = await createSession(page.request, options.scenarioId ?? HARD_SCENARIO_ID);
-  await page.goto(`/calls/${id}`);
-  await page.getByRole('button', { name: 'Allow microphone and start' }).click();
-  await expectStage(page, 'speaking');
+  await page.goto(`/calls/${id}?input=voice`);
+  await page.getByRole('button', { name: 'Start voice call' }).click();
+  await expectStatus(page, 'customer-speaking');
   return { id, delays };
 }
 

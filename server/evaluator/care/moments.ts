@@ -362,7 +362,10 @@ function summaryMoments(ctx: CareContext): SummaryMoment[] {
     );
     const flagged = view.turn.cls.summarises || view.turn.cls.wrapsUp;
     if (framed < 0 && !flagged) continue;
-    const sentence = (view.sentences[framed] ?? view.sentences[0]) as SentenceView;
+    // A turn with no letters or digits to read (another script, an emoji) has no sentence to quote
+    // as a recap, whatever the classification said of it.
+    const sentence = view.sentences[framed] ?? view.sentences[0];
+    if (!sentence) continue;
 
     const earlier = everything.filter((t) => t.index < view.turn.index);
     const earlierWords = new Set<string>();

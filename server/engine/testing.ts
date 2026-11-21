@@ -6,7 +6,7 @@ import {
   type ScenarioInput,
   type ScenarioOverrides,
 } from '#shared/domain/scenario.ts';
-import type { CommunicationStyle } from '#shared/domain/vocab.ts';
+import type { CommunicationStyle, StartTemperature } from '#shared/domain/vocab.ts';
 import type { MatchingMode } from './discovery.ts';
 import { mockClassifier } from './mock/index.ts';
 import { processTraineeTurn, type CustomerGenerationContext } from './pipeline.ts';
@@ -456,6 +456,7 @@ const COUNT_FACT: ScenarioInput['hiddenFacts'][number] = {
   label: 'How many people are affected',
   statement:
     "It isn't only me. I make it 27 people across sales and the executive office who can't sign in.",
+  statementTerse: 'I make it 27 people, across sales and the executive office.',
   revealWhen: 'Asks how many people are affected, or who else is affected.',
   intents: ['affected_scope'],
   cues: ['how many', 'who else', 'who is affected', 'how many people'],
@@ -471,14 +472,17 @@ const REST_WORKS_FACT: ScenarioInput['knownFacts'][number] = {
   cues: ['email', 'chat'],
 };
 
-export function makeScopeScenario(style: CommunicationStyle = 'talkative'): EffectiveScenario {
+export function makeScopeScenario(
+  style: CommunicationStyle = 'talkative',
+  startingTemperature: StartTemperature = 'calm',
+): EffectiveScenario {
   return applyConfig(
     makeDefinition({
       checkableFacts: [],
       knownFacts: [...FIXTURE_INPUT.knownFacts, REST_WORKS_FACT],
       hiddenFacts: [...FIXTURE_INPUT.hiddenFacts, COUNT_FACT],
     }),
-    { difficulty: 'standard', startingTemperature: 'calm', style, curveballs: [] },
+    { difficulty: 'standard', startingTemperature, style, curveballs: [] },
     { seed: 7, timeOfDay: 'morning' },
   );
 }

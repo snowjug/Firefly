@@ -3,7 +3,7 @@ import type { EffectiveScenario } from '#shared/domain/config.ts';
 import type { StateEvent } from '#shared/domain/state.ts';
 import { DISCOVERY_INTENTS, type DiscoveryIntent } from '#shared/domain/vocab.ts';
 import { quoteInText, redactSensitive, sanitizeModelText } from '#shared/domain/text.ts';
-import { conformCustomerReply } from './conform.ts';
+import { conformCustomerReply, endListItems } from './conform.ts';
 import { processCurveball, type CurveballTurnResult } from './curveballs.ts';
 import { processDiscovery, type DiscoveryTurnResult, type MatchingMode } from './discovery.ts';
 import { analyseTurn, recordCommitment, type TurnAnalysis } from './memory.ts';
@@ -310,7 +310,8 @@ export async function processTraineeTurn(args: ProcessTurnArgs): Promise<Process
   const plan = planReply(ctx);
 
   // Conform first, then record: nothing counts as said unless it is in the reply the customer gave.
-  const cleaned = sanitizeModelText(redactSensitive(generated.text).text, 900);
+  // The lines of a list become sentences before line breaks are collapsed, or they would run together.
+  const cleaned = sanitizeModelText(endListItems(redactSensitive(generated.text).text), 900);
   const conformed = conformCustomerReply(cleaned, { maxSentences: bk.limit ?? plan.maxSentences });
   const customerText = conformed.text || NEUTRAL_REPLY;
   const removed = conformed.problems.some((p) => REMOVING.has(p));
@@ -413,9 +414,10 @@ export async function processTraineeTurn(args: ProcessTurnArgs): Promise<Process
           { by: 'customer' as const, turnIndex, about: 'term' as const },
         ].slice(-8)
       : updated.misunderstandings,
-    // The reason for the call has now been given, and a first exchange that was only a greeting
-    // is not counted by the rules about timing.
-    opening: 'reason-given',
+    // The reason for the call is given once it has been said: a reply that did not say it (the
+    // engineer's first words were only "Yes.") leaves it still to give. A first exchange that was
+    // only a greeting is not counted by the rules about timing.
+    opening: toldIds.includes('reason') ? 'reason-given' : runtime.opening,
     greetingTurns:
       runtime.opening === 'awaiting-engineer' && analysis.greetingOnly
         ? runtime.greetingTurns + 1

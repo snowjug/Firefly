@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { applyConfig, type EffectiveScenario } from '#shared/domain/config.ts';
 import { createRng, rngFor } from './rng.ts';
+import { introducedAs } from './memory.ts';
+import { mockClassifier } from './mock/index.ts';
+import { processTraineeTurn } from './pipeline.ts';
 import { simulate } from './simulate.ts';
 import { createInitialRuntime, openingMessage, publicState } from './session.ts';
 import { makeDefinition, makeScenario } from './testing.ts';
 import { dropRedundantSentences, expandContractions, saysTheSame } from './textutil.ts';
+import type { TranscriptTurn } from './types.ts';
 
 describe('text helpers', () => {
   it('writes out every spoken contraction for a customer who speaks a second language', () => {
@@ -62,6 +66,82 @@ describe('text helpers', () => {
   });
 });
 
+describe('the name the engineer gives', () => {
+  it('is read from the ways people introduce themselves, however the sentence begins', () => {
+    for (const text of [
+      "I'm Sam",
+      'I am Sam.',
+      'My name is Sam',
+      "My name's Sam, how can I help?",
+      'This is Sam from Microsoft support',
+      'Good morning, this is Sam speaking',
+      'Hello, my name is Sam.',
+      "hi, i'm Sam.",
+    ]) {
+      expect(introducedAs(text), text).toBe('Sam');
+    }
+    // A capitalised word that is not a name is not one, and neither is a name that is not capitalised.
+    for (const text of [
+      "I'm Sorry about that.",
+      'This is Outlook.',
+      'I am Happy to help.',
+      "I'm calling from Microsoft support.",
+      'This is a problem.',
+      'my name is sam',
+    ]) {
+      expect(introducedAs(text), text).toBeNull();
+    }
+  });
+
+  it('is said back by the customer now and then, however the engineer put it', async () => {
+    for (const line of [
+      "Hello, I'm Sam. How can I help?",
+      'My name is Sam. How can I help?',
+      'This is Sam from Microsoft support. How can I help?',
+    ]) {
+      let named = 0;
+      for (let seed = 1; seed <= 24; seed++) {
+        const scenario = makeScenario({ startingTemperature: 'calm', style: 'talkative' }, seed);
+        const sim = await simulate(scenario, [line]);
+        if (/\bSam\b/.test(sim.turns[0]?.customer ?? '')) named += 1;
+      }
+      expect(named, line).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('what a model writes', () => {
+  it('has the lines of a list said as sentences, so the limit on sentences applies to them', async () => {
+    const scenario = makeScenario({ startingTemperature: 'calm' });
+    const said = async (text: string, limit: number) =>
+      (
+        await processTraineeTurn({
+          scenario,
+          runtime: createInitialRuntime(scenario),
+          traineeText: 'What laptop are you using?',
+          turnIndex: 2,
+          history: [{ index: 1, role: 'customer', text: openingMessage(scenario) }],
+          classify: mockClassifier(scenario),
+          generate: () => Promise.resolve({ text, source: 'live', bookkeeping: { limit } }),
+        })
+      ).customerText;
+    const list =
+      'Here is what I have:\n- The laptop is a Dell\n- It started Monday\n- I tried a restart';
+    // Without a full stop after each line the three would run together as one sentence, and
+    // neither the markers nor the limit would deal with them.
+    expect(await said(list, 2)).toBe(
+      'Here is what I have: The laptop is a Dell. It started Monday.',
+    );
+    expect(await said(list, 4)).toBe(
+      'Here is what I have: The laptop is a Dell. It started Monday. I tried a restart.',
+    );
+    // A sentence wrapped over two lines is still one sentence.
+    expect(await said('It is slow\ntoday and I cannot sign in.', 3)).toBe(
+      'It is slow today and I cannot sign in.',
+    );
+  });
+});
+
 describe('opening', () => {
   it('never reveals hidden facts', () => {
     for (const style of ['talkative', 'terse', 'demanding', 'vague', 'non-native'] as const) {
@@ -108,6 +188,64 @@ describe('opening', () => {
     ]);
     expect(sim.turns[0]?.customer).toMatch(/can't sign in to Outlook/);
     expect(sim.runtime.opening).toBe('reason-given');
+  });
+
+  it('still has to say why it called when the engineer only said "Yes." first', async () => {
+    const scenario = makeScenario({ startingTemperature: 'calm', style: 'talkative' });
+    for (const first of ['Yes.', 'Okay.', 'Sure.']) {
+      const sim = await simulate(scenario, [
+        first,
+        'Hi, this is Sam from Microsoft support. How can I help?',
+      ]);
+      // Nothing about the problem was said, so the reason is still to come...
+      expect(sim.turns[0]?.runtime.opening, first).toBe('awaiting-engineer');
+      expect(sim.turns[0]?.customer, first).not.toMatch(/can't sign in to Outlook/);
+      // ...and it comes with the greeting that follows.
+      expect(sim.turns[1]?.customer, first).toMatch(/can't sign in to Outlook/);
+      expect(sim.turns[1]?.runtime.opening, first).toBe('reason-given');
+    }
+  });
+
+  it('follows the plan when a model writes the reply: the reason is done once it was in the plan', async () => {
+    const scenario = makeScenario({ startingTemperature: 'calm', style: 'talkative' });
+    const history: TranscriptTurn[] = [
+      { index: 1, role: 'customer', text: openingMessage(scenario) },
+    ];
+    const turn = (traineeText: string, runtime = createInitialRuntime(scenario)) =>
+      processTraineeTurn({
+        scenario,
+        runtime,
+        traineeText,
+        turnIndex: history.length + 1,
+        history,
+        classify: mockClassifier(scenario),
+        // A model's reply carries no bookkeeping: what was said is read from the plan it was given.
+        generate: () => Promise.resolve({ text: 'Okay, thanks.', source: 'live' }),
+      });
+    const first = await turn('Yes.');
+    expect(first.runtime.opening).toBe('awaiting-engineer');
+    history.push(
+      { index: 2, role: 'trainee', text: 'Yes.' },
+      { index: 3, role: 'customer', text: first.customerText },
+    );
+    const second = await turn(
+      'Hi, this is Sam from Microsoft support. How can I help?',
+      first.runtime,
+    );
+    expect(second.runtime.opening).toBe('reason-given');
+  });
+
+  it('gives the reason itself in a short first reply, whatever lead the customer has', async () => {
+    for (const first of ['What seems to be the problem?', 'Can you hear me?']) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const sim = await simulate(
+          makeScenario({ startingTemperature: 'calm', style: 'vague' }, seed),
+          [first],
+        );
+        expect(sim.turns[0]?.customer, `${first} / ${seed}`).toMatch(/can't sign in to Outlook/);
+        expect(sim.turns[0]?.runtime.opening).toBe('reason-given');
+      }
+    }
   });
 
   it('greets to suit the time of day', () => {

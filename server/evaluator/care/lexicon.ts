@@ -78,6 +78,11 @@ const NAME_AFTER_LEAD =
   /\b(?:my name is|my name's|this is|it's|i'm|i am|name's)\s+([\p{L}][\p{L}'-]*)([^.?!]*)/giu;
 const NAME_BEFORE_WORD = /\b([\p{Lu}][\p{L}'-]*)\s+(?:speaking|here)\b/gu;
 
+// Names that are also words. "I'm Will" and "my name is May" give a name; "I will help you" and "may
+// I ask" do not, and neither does "it's May 5th".
+const NAME_AS_WORD = new Set(['will', 'may']);
+const INTRO_CONTINUES = /^(?:from|with|at|on|speaking|here)\b/;
+
 /** True when the sentence gives a name: "my name is Sam", "this is Sam from ...", "Sam speaking". */
 export function givesName(sentence: string): boolean {
   const text = sentence.replace(/[\u2018\u2019\u201b]/g, "'").replace(/\b[Ii]m\b/g, "I'm");
@@ -85,15 +90,29 @@ export function givesName(sentence: string): boolean {
     const lead = norm(match[0]);
     const word = norm(match[1] ?? '');
     const rest = norm(match[2] ?? '');
-    if (NOT_A_NAME.has(word) || word.length < 2) continue;
+    const capital = /^\p{Lu}/u.test(match[1] ?? '');
+    if (word.length < 2) continue;
+    const alsoAWord = NAME_AS_WORD.has(word);
+    if (NOT_A_NAME.has(word) && !alsoAWord) continue;
+    // "My name is Will": the lead says what follows is a name, whatever else the word means.
     if (/^(?:my name is|my name's|name's)/.test(lead)) return true;
+    if (alsoAWord) {
+      // Anywhere else it has to read as a name: "I'm Will", "this is May from support".
+      const after = rest.replace(/^[,\s]+/, '');
+      const reads = capital
+        ? /^(?:i'm|i am)\b/.test(lead) || after === '' || INTRO_CONTINUES.test(after)
+        : INTRO_CONTINUES.test(after);
+      if (reads) return true;
+      continue;
+    }
     // A capital letter in mid-sentence marks a name. Without capitals (speech-to-text) a name is
     // recognised by what follows it.
-    if (/^\p{Lu}/u.test(match[1] ?? '')) return true;
+    if (capital) return true;
     if (/^(?:from|with|at|on|speaking|here|and|in)\b/.test(rest)) return true;
   }
   for (const match of text.matchAll(NAME_BEFORE_WORD)) {
-    if (!NOT_A_NAME.has(norm(match[1] ?? ''))) return true;
+    const word = norm(match[1] ?? '');
+    if (!NOT_A_NAME.has(word) || NAME_AS_WORD.has(word)) return true;
   }
   return false;
 }
@@ -215,14 +234,82 @@ export const SPECIFIC_FRAME =
 export const FEELING_WORDS =
   /\b(?:frustrat\w*|stress\w*|worr\w*|anxious|anxiety|upset\w*|annoy\w*|angry|concern\w*|urgent\w*|pressure|difficult|stuck|blocked|waiting|wait|disrupt\w*|inconvenien\w*|chase|chasing|delay\w*)\b/;
 
-export const IMPATIENT =
-  /\b(?:as i (?:said|told you|already (?:said|told|explained))|like i (?:said|told you)|i (?:already|have already) (?:told|explained|said)|i don'?t have (?:time|all day)|hurry up|come on|just (?:tell me|answer)|calm down|you(?:'re| are) not (?:listening|making sense)|whatever|that'?s a (?:stupid|silly|ridiculous) question)\b/;
+// Impatience with the customer. Words that are only impatient in a particular use are anchored to
+// it: "as I said" recalls a promise ("I'll ring at 3 as I said"), "come on" and "whatever" are
+// ordinary words ("does the screen come on?"), so only the scolding forms are matched.
+export const IMPATIENT = new RegExp(
+  [
+    String.raw`\bas i (?:already|have already|just) (?:said|told you|explained)\b`,
+    String.raw`\blike i (?:already|just) (?:said|told you)\b`,
+    String.raw`\bi (?:already|have already|just) (?:told|explained|said)(?: (?:it|this|that))?(?: to)? you\b`,
+    String.raw`\bi don'?t have (?:time|all day)\b`,
+    // An order to the customer, not "I'll ask the engineers to hurry up".
+    String.raw`(?:^|[,;] ?|\bplease |\bjust )hurry up\b`,
+    String.raw`\bjust (?:tell me|answer)\b`,
+    String.raw`\bcalm down\b`,
+    String.raw`\byou(?:'re| are) not (?:listening|making sense)\b`,
+    String.raw`\bthat'?s a (?:stupid|silly|ridiculous) question\b`,
+    // The whole sentence is the brush-off.
+    String.raw`^(?:(?:oh|ok(?:ay)?),? )?(?:whatever|come on)\W*$`,
+  ].join('|'),
+);
 
 export const DISMISSIVE =
   /\b(?:calm down|don'?t worry about it|no (?:big|great) deal|(?:it'?s|that'?s) not (?:a |that |really |such )?(?:big|major|serious)(?: of)?(?: a)? (?:deal|issue|problem|thing)|(?:it'?s|that'?s) (?:just|only|simply) (?:a |an )?(?:minor|small|simple|little)|you(?:'re| are) (?:over ?reacting|exaggerating|making (?:a )?(?:fuss|scene|big deal))|nothing to (?:worry|be (?:upset|angry|worried)) (?:about)?|there'?s nothing (?:i|we) can (?:do|say)|that'?s (?:just|simply) how it (?:works|is)|not the end of the world|relax)\b/;
 
-export const BLAME =
-  /\b(?:you (?:should have|shouldn'?t have|failed to|forgot to|were supposed to|didn'?t (?:follow|read|check|make sure|tell)|need to be more careful|must have)|your (?:fault|mistake|error)|user error|that'?s on you|not (?:our|my) (?:problem|fault|issue)|(?:caused|broken|done) by you|you (?:broke|caused|messed|misconfigured))\b/;
+// Blame. "You should have restarted it" scolds. "You shouldn't have to chase us", "you must have been
+// waiting" and "you were supposed to hear from us" use the same words to take the customer's side,
+// so a modal form is blame only when it is about something the customer did.
+const OWED = String.raw`(?:(?:heard|received|got|gotten)|had (?:an? |some |any |more |better |the )?(?:update|call|callback|call back|reply|response|answer|email|message|confirmation|news|help|support|apology|follow-up|resolution|reminder)s?|been (?:told|given|sent|contacted|called|updated|notified|informed|offered|provided|kept|helped|answered|looked after))`;
+const OWED_TO_BE = String.raw`(?:receive|get|hear|have (?:received|heard|been|had|got)|be (?:contacted|called|told|sent|given|updated|notified|informed|offered|provided|helped))`;
+const WENT_WRONG = String.raw`(?:clicked|pressed|changed|deleted|typed|entered|selected|installed|removed|disabled|turned|set|configured|misconfigured|done|missed|forgotten|ignored|skipped|broken|messed|mistyped|overlooked|accidentally|made (?:a |an )?(?:mistake|error|typo))`;
+
+/** Blame that nobody says kindly. */
+export const BLAME_CLEAR =
+  /\b(?:you (?:failed to|forgot to|didn'?t (?:follow|read|check|make sure|tell)|need to be more careful|broke|caused|messed|misconfigured)|your (?:fault|mistake|error)|user error|that'?s on you|not (?:our|my) (?:problem|fault|issue)|(?:caused|broken|done) by you)\b/;
+
+/** Blame that can also be sympathy, as long as it is about something the customer did. */
+export const BLAME_MODAL = new RegExp(
+  String.raw`\byou (?:should have\b(?! ${OWED}\b)|shouldn'?t have\b(?! (?:to|had|needed|been)\b)|were supposed to\b(?! ${OWED_TO_BE}\b)|must have ${WENT_WRONG}\b)`,
+);
+
+/** Either kind of blame: the words alone, before the rest of the sentence is weighed. */
+export const BLAME = new RegExp(`${BLAME_CLEAR.source}|${BLAME_MODAL.source}`);
+
+// The same words used kindly, which the engine's classification also marks as blame.
+const KIND_MODAL = new RegExp(
+  String.raw`\byou (?:should have ${OWED}\b|shouldn'?t have (?:to|had|needed|been)\b|were supposed to ${OWED_TO_BE}\b|must have (?!${WENT_WRONG}\b)\w+)`,
+);
+const MODAL_FORM = /\byou (?:should have|shouldn'?t have|were supposed to|must have)\b/;
+const TAKEN_BACK = /\b(?:but|however|although|though)\b/;
+
+/** An apology or sympathy that the sentence does not take back with a "but". */
+export const saidKindly = (lower: string): boolean =>
+  (APOLOGY.test(lower) || EMPATHY.test(lower)) && !TAKEN_BACK.test(lower);
+
+/**
+ * Whether a sentence the engine's classification marked as blame is really kindness: "you shouldn't
+ * have to chase us" holds the same words as "you shouldn't have changed it". Blame the sentence
+ * also contains is never excused, and neither is a modal form after "I'm sorry, but".
+ */
+export function readsAsKindness(sentence: string): boolean {
+  const lower = norm(sentence);
+  if (BLAME_CLEAR.test(lower)) return false;
+  if (KIND_MODAL.test(lower) && !BLAME_MODAL.test(lower)) return true;
+  return MODAL_FORM.test(lower) && saidKindly(lower);
+}
+
+// "As I said" and "I already told you" recall what was said. Only the scolding forms (IMPATIENT)
+// and the brush-offs (DISMISSIVE) are held against the engineer.
+const RECALL =
+  /\b(?:(?:as|like) i (?:said|told you|mentioned)|i (?:already|have already) (?:told|explained|said|mentioned))\b/;
+
+/** Whether a sentence the engine's classification marked as dismissive only recalls what was said. */
+export function readsAsRecall(sentence: string): boolean {
+  const lower = norm(sentence);
+  return RECALL.test(lower) && !IMPATIENT.test(lower) && !DISMISSIVE.test(lower);
+}
+
 export const HEDGED =
   /\b(?:could|might|may be|maybe|perhaps|possibly|not sure|unsure|wondering|if)\b/;
 

@@ -38,6 +38,7 @@ import { withoutRawMoodNumbers } from './mood.ts';
 import { withoutCbcfMentions } from './cbcf-mapping.ts';
 import { conformReport } from './conform.ts';
 import { assessRubric } from './rubric.ts';
+import { BUDGETS, fitWords, wordCount } from './words.ts';
 import {
   improvementText,
   lowerLabel,
@@ -388,15 +389,19 @@ export function mergeModelDraft(
     'The summary',
     `${discoverySentence(discovery, call.scenario)}.`,
   );
-  if (
-    completion.evidence !== 'sufficient' &&
-    !/\b(limited|too short|too few|ended early)\b/i.test(summary)
-  ) {
-    const note =
-      completion.evidence === 'insufficient'
-        ? `Only ${plural(n, 'trainee turn')} were recorded, so treat this as a first look rather than a full evaluation.`
-        : `With only ${plural(n, 'trainee turn')}, this rests on limited evidence.`;
-    summary = `${truncate(summary, 1200 - note.length - 1)} ${note}`;
+  if (completion.evidence !== 'sufficient') {
+    // The note that the call was too short to judge has to survive the word budget, which keeps
+    // whole sentences from the front. So the model's summary is cut to leave room for it, and
+    // whether the model already said so is judged on the words that will be kept.
+    const kept = fitWords(summary, BUDGETS.summaryWords);
+    if (!/\b(limited|too short|too few|ended early)\b/i.test(kept)) {
+      const note =
+        completion.evidence === 'insufficient'
+          ? `Only ${plural(n, 'trainee turn')} were recorded, so treat this as a first look rather than a full evaluation.`
+          : `With only ${plural(n, 'trainee turn')}, this rests on limited evidence.`;
+      const room = BUDGETS.summaryWords - wordCount(note);
+      summary = `${truncate(fitWords(summary, room), 1200 - note.length - 1)} ${note}`;
+    }
   }
 
   const candidate = {

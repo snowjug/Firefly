@@ -403,12 +403,10 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
       case 'record': // said inside the reaction to being asked for it
         break;
       case 'reason': {
-        const line = reasonLine(item, { style, rng });
-        facts.push({
-          text: shortReason ? firstSentenceOf(line) : line,
-          priority: 0,
-          told: ['reason'],
-        });
+        // A short reason is the first sentence of the reason itself, never a lead standing in for it.
+        const said = shortReason ? { ...item, text: firstSentenceOf(item.text) } : item;
+        const line = reasonLine(said, { style, rng, short: shortReason });
+        facts.push({ text: line, priority: 0, told: ['reason'] });
         break;
       }
       case 'impact':
@@ -513,6 +511,7 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
     // other answer, up to two sentences' worth of answers in all. What the engineer did that the
     // customer has to answer ("You should have read the instructions") still gets a few words.
     const answersBack = reaction !== null && primary !== undefined && MUST_REACT.has(primary);
+    const restated = reminderUsed && reminder ? reminder.text : null;
     let room = Math.max(
       0,
       2 - facts.filter((s) => s.priority === 0).length - (answersBack ? 1 : 0),
@@ -525,12 +524,15 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
       }
       return false;
     });
-    if (reaction && (answersBack || answers.length === 0)) {
+    if (reaction && (answersBack || (answers.length === 0 && restated === null))) {
       add(firstSentenceOf(reaction.text), reaction.priority ?? reactionPriority, {
         ...reaction.extra,
         reaction: true,
       });
     }
+    // What the customer is asked about again is answered however few words the rest gets: the
+    // answer is not part of the reaction's lead, which is all that is kept of a reaction here.
+    if (restated !== null) add(restated, 0);
     segments.push(...answers);
   } else {
     if (reaction) {
@@ -679,10 +681,14 @@ function detailLine(
 
 function reasonLine(
   item: Sayable,
-  how: { style: EffectiveScenario['config']['style']; rng: () => number },
+  how: { style: EffectiveScenario['config']['style']; rng: () => number; short?: boolean },
 ): string {
   if (how.style === 'terse') return item.text;
-  if (how.style === 'vague') return `${pick(how.rng as never, P.VAGUE_LEADS)} ${item.text}`;
+  // A vague customer's lead ("It's a bit hard to explain.") is a sentence of its own. A short first
+  // reply has room for the reason as one sentence, so it goes without.
+  if (how.style === 'vague') {
+    return how.short ? item.text : `${pick(how.rng as never, P.VAGUE_LEADS)} ${item.text}`;
+  }
   const callingAlready = /^(?:i'?m calling|i am calling|the reason i)/i.test(item.text);
   if (callingAlready || !SAFE_START.test(item.text)) return item.text;
   return `${pick(how.rng as never, P.REASON_LEAD)} ${lowerFirst(item.text)}`;

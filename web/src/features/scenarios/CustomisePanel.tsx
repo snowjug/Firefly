@@ -52,7 +52,7 @@ const CURVEBALL_MODES = [
 ] as const;
 
 const HINTS_HELP =
-  "Shows light cues during the call: the customer's mood trend and how much context you have found. Off for a realistic call.";
+  'Adds a short list of areas worth exploring to the case panel during the call. Off for a realistic call.';
 const VOICE_HELP = 'A synthetic voice. It does not change how the customer behaves.';
 
 function pick<T extends string>(list: readonly T[], value: string): T | undefined {

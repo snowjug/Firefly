@@ -7,7 +7,7 @@ import type { EffectiveScenario } from '#shared/domain/config.ts';
 import { DISCOVERY_INTENTS, type DiscoveryIntent } from '#shared/domain/vocab.ts';
 import {
   ANYTHING_ELSE,
-  BLAME,
+  blames,
   BLAME_MORE,
   clip,
   contentWords,
@@ -20,6 +20,7 @@ import {
   hasSpecificNextSteps,
   HEDGES,
   IMPACT_ACK,
+  IMPATIENT_STATEMENT,
   INJECTION,
   INTENT_PATTERNS,
   isAsking,
@@ -227,14 +228,15 @@ export function classifyTurnRules(text: string, ctx: ClassifierContext): TurnCla
     }
 
     // A recap ("So to confirm, you changed your password") plays back what was said; it blames no one.
-    if (
-      !asking &&
-      (BLAME.test(ls) || (!RECAP_LEAD.test(ls) && BLAME_MORE.some((p) => p.test(ls))))
-    ) {
+    if (!asking && (blames(ls) || (!RECAP_LEAD.test(ls) && BLAME_MORE.some((p) => p.test(ls))))) {
       out.blame = true;
       note('blame', sentence);
     }
-    if (DISMISSIVE.test(ls) || DISMISSIVE_MORE.some((p) => p.test(ls))) {
+    if (
+      DISMISSIVE.test(ls) ||
+      DISMISSIVE_MORE.some((p) => p.test(ls)) ||
+      (!question && IMPATIENT_STATEMENT.test(ls))
+    ) {
       out.dismissive = true;
       note('dismissive', sentence);
     }

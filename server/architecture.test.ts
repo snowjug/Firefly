@@ -40,6 +40,8 @@ function importsOf(dir: string): Import[] {
     return specifiers.map((specifier) => {
       let target: string | null = null;
       if (specifier.startsWith('#shared/')) target = `shared/${specifier.slice('#shared/'.length)}`;
+      else if (specifier.startsWith('#server/'))
+        target = `server/${specifier.slice('#server/'.length)}`;
       else if (specifier.startsWith('.'))
         target = relative(root, resolve(dirname(file), specifier))
           .split(sep)

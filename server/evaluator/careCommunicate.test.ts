@@ -69,6 +69,36 @@ describe('the greeting and the introduction', () => {
     );
     expect(careStatus(report, 'communicate.introduction')).toBe('partly');
   });
+
+  describe('when the engineer\u2019s name is also a word', () => {
+    it.each([
+      ['Hello, my name is Will.', 'partly'],
+      ['Hello, my name is Will. How can I help?', 'partly'],
+      ['Hello, my name is May.', 'partly'],
+      ["Hi, I'm Will.", 'partly'],
+      ['Hi, I am May.', 'partly'],
+      ['Hello, my name is Will from the Microsoft support team.', 'shown'],
+      ["Hi, I'm Will from the Microsoft support team.", 'shown'],
+      ['Good morning, this is May from Microsoft support.', 'shown'],
+      ["Hi, I'm May, a support engineer at Microsoft.", 'shown'],
+      ['Will here from Microsoft support.', 'shown'],
+      ['hello this is will from microsoft support', 'shown'],
+    ])('the name is credited: %s', (introduction, status) => {
+      expect(careStatus(opening(`${introduction} ${ASK}`), 'communicate.introduction')).toBe(
+        status,
+      );
+    });
+
+    it.each([
+      'I will help you with that.',
+      'May I ask what happens when you try to sign in?',
+      "I'm willing to help.",
+      "It's May 5th, so the invoices are due.",
+      'I will look into it for you.',
+    ])('the word is not read as a name: %s', (said) => {
+      expect(careStatus(opening(`${said} ${ASK}`), 'communicate.introduction')).toBe('not-shown');
+    });
+  });
 });
 
 describe('questions and scoping', () => {

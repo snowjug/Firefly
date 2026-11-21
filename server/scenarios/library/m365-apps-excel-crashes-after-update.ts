@@ -91,7 +91,6 @@ const scenario = {
       'Understand the problem, take ownership, speak clearly and agree next steps he can rely on.',
     knownContext:
       'Rafael speaks English as a second language. Simple words and checking that he has understood will help.',
-    previousContact: 'No earlier contact about this problem.',
     environment: 'A company laptop managed by the IT team, with Excel used all day.',
   },
   brief: {

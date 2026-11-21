@@ -755,9 +755,28 @@ describe('the case', () => {
     });
     expect(facts.callStage).toBe('First contact');
     expect(facts.objective).toMatch(/Find what changed/);
-    expect(facts.more.map((item) => item.label)).toEqual([
+    // A first call has no earlier contact to read about, as in the case brief.
+    expect(facts.more.map((item) => item.label)).toEqual(['Known context', 'Environment']);
+  });
+
+  it('lists the earlier contact only when the call is a call back', () => {
+    const callBack = (callStage: 'follow-up' | 'escalated' | 'closure' | 'first-contact') =>
+      describeCase({
+        ...SCENARIO,
+        config: { ...SCENARIO.config, callStage },
+        publicBrief: {
+          ...SCENARIO.publicBrief!,
+          previousContact: 'The case was opened yesterday and has not been answered.',
+        },
+      });
+    for (const stage of ['follow-up', 'escalated', 'closure'] as const) {
+      expect(
+        callBack(stage).more.map((item) => item.label),
+        stage,
+      ).toEqual(['Known context', 'Previous contact', 'Environment']);
+    }
+    expect(callBack('first-contact').more.map((item) => item.label)).toEqual([
       'Known context',
-      'Previous contact',
       'Environment',
     ]);
   });
@@ -786,7 +805,13 @@ describe('the case', () => {
   it('leaves out the details a brief does not have', () => {
     const facts = describeCase({
       ...SCENARIO,
-      publicBrief: { ...SCENARIO.publicBrief!, knownContext: '', environment: '' },
+      config: { ...SCENARIO.config, callStage: 'follow-up' },
+      publicBrief: {
+        ...SCENARIO.publicBrief!,
+        knownContext: '',
+        previousContact: 'The case was opened yesterday and has not been answered.',
+        environment: '',
+      },
     });
     expect(facts.more.map((item) => item.label)).toEqual(['Previous contact']);
   });

@@ -204,6 +204,58 @@ describe('rules classifier: harmful behaviour', () => {
     expect(classify("Calm down, it's not a big deal.").dismissive).toBe(true);
   });
 
+  it('does not take what is said kindly for blame or a brush-off, though it holds the same words', () => {
+    for (const text of [
+      "I'm sorry, you shouldn't have to chase us for an update.",
+      "You shouldn't have to chase us for an update.",
+      'You must have been waiting a long time.',
+      'You were supposed to hear from us yesterday.',
+      'You were supposed to have heard from us by now.',
+      'You should have had an update by now.',
+      'You should have received a call back yesterday.',
+      "I'm sorry, you shouldn't have gone through all that.",
+      "I'll ring at 3 as I said.",
+      'As I mentioned, the team is looking at it.',
+      'Does the screen come on?',
+      'The light should come on when it connects.',
+      "I'll ask the engineers to hurry up.",
+      "I'll ask the admin to relax the rule.",
+      'Whatever the screen shows, please read it to me.',
+      'Could you just tell me what the screen says?',
+    ]) {
+      const c = classify(text);
+      expect(c.blame, text).toBe(false);
+      expect(c.dismissive, text).toBe(false);
+    }
+  });
+
+  it('still takes blame and impatience that use the same words against the customer', () => {
+    for (const text of [
+      'You should have restarted it.',
+      'You should have had a backup.',
+      "You shouldn't have changed it.",
+      'You were supposed to read the email.',
+      'You were supposed to have backed it up.',
+      'You must have clicked the wrong link.',
+      'That was your mistake.',
+      "I'm sorry, but you should have restarted it first.",
+      "I'm sorry, you forgot to restart it.",
+    ]) {
+      expect(classify(text).blame, text).toBe(true);
+    }
+    for (const text of [
+      'As I already told you, restart it.',
+      'As I already told you.',
+      'I already told you that.',
+      'Whatever.',
+      'Oh, whatever.',
+      'Just answer the question.',
+      'Calm down.',
+    ]) {
+      expect(classify(text).dismissive, text).toBe(true);
+    }
+  });
+
   it('flags unexplained jargon but not explained jargon', () => {
     expect(
       classify('Your cached credentials are probably stale after DNS propagation.').jargon,

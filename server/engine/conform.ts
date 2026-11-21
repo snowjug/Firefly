@@ -39,10 +39,46 @@ const PRAISE =
   /\b(?:well done|good job|great job|nicely done|nice work|excellent work|good work|you(?:'re| are) doing (?:great|well|a (?:great|good) job)|you did (?:great|well|a (?:great|good) job)|spot on|bingo)\b/i;
 const THATS_CORRECT = /\bthat(?:'s| is) (?:absolutely |completely |entirely |exactly )?correct\b/i;
 
-const COACHING =
-  /\byou (?:should|could|might want to|need to|ought to|might like to|may want to) (?:have )?(?:ask|asked|check|try asking|be asking)\b|\btry (?:to )?ask(?:ing)?\b|\bask me (?:about|whether|if|what|how|when|where|who)\b|\b(?:a|the) (?:better|good|right|great) question (?:would|to ask|is)\b|\bwhat you should (?:have )?ask(?:ed)?\b|\bnext time\b[^.?!]{0,30}\b(?:ask|try|say)\b|\bi(?:'d| would) suggest (?:you )?(?:ask|check|try)\b|(?:^|\s)(?:hint|tip)\s*:/i;
+const COACHING = new RegExp(
+  [
+    // What the engineer should ask or check. It is advice because it is aimed at "you": the
+    // customer's own "I'll try asking our administrator" is an offer, and "next time I'll try the
+    // web version" is a plan.
+    String.raw`\byou (?:should|could|might want to|need to|ought to|might like to|may want to) (?:have )?(?:ask|asked|check|try asking|be asking)\b`,
+    String.raw`\byou(?:'d| would| could| can| might| may| should| must)?(?: also| maybe| perhaps| just)? try (?:to )?ask(?:ing)?\b`,
+    String.raw`\btry (?:to )?ask(?:ing)? me\b`,
+    // "Ask me about..." is advice; "Don't ask me about it" and "if you ask me about it" are not.
+    String.raw`(?<!\b(?:don't|do not|never|stop|if you|when you)\s)\bask me (?:about|whether|if|what|how|when|where|who)\b`,
+    String.raw`\b(?:a|the) (?:better|good|right|great) question (?:would|to ask|is)\b`,
+    String.raw`\bwhat you should (?:have )?ask(?:ed)?\b`,
+    String.raw`\bnext time\b[^.?!]{0,30}\byou\b[^.?!]{0,20}\b(?:ask|try|say)\b`,
+    String.raw`\bnext time,? (?:please |just )?(?:ask|try|say)\b`,
+    String.raw`\bi(?:'d| would) suggest (?:you )?(?:ask|check|try)\b`,
+    String.raw`(?:^|\s)(?:hint|tip)\s*:`,
+  ].join('|'),
+  'i',
+);
 const ANNOUNCES =
   /\bhidden facts?\b|\banother (?:hidden )?fact\b|\bi(?:'ll| will| can| could) (?:now )?(?:reveal|disclose)\b|\bhere(?:'s| is) (?:another|a|the next) (?:hidden )?(?:fact|detail|clue)\b|\bnext (?:fact|clue)\b/i;
+
+/**
+ * Turns the lines of a list or heading into sentences of their own, for the step that collapses
+ * line breaks into spaces: each such line loses its marker and ends with a full stop, so that
+ * "- The laptop is a Dell\n- It started Monday" is not run together as "The laptop is a Dell It
+ * started Monday", one sentence, which no list flag or sentence limit could then see. Any other
+ * line break is left alone: a sentence wrapped over two lines is still one sentence.
+ */
+export function endListItems(input: string): string {
+  return input
+    .split(/\r?\n/)
+    .map((line) => {
+      if (!LIST_MARKER.test(line)) return line;
+      const item = line.replace(LIST_MARKER, '').trim();
+      if (item === '') return '';
+      return /[.!?\u2026]["')\u201d]?$/.test(item) ? item : `${item.replace(/[:;,]$/, '')}.`;
+    })
+    .join('\n');
+}
 
 /** Splits into lines, strips list and heading markers, and ends each line as a sentence. */
 function flatten(input: string): { text: string; markers: number } {
@@ -83,7 +119,7 @@ export function conformCustomerReply(input: string, options: ConformOptions): Co
         m[0] === 'T' ? "That's right" : "that's right",
       );
     }
-    if (COACHING.test(sentence)) {
+    if (COACHING.test(sentence.replace(/[\u2018\u2019]/g, "'"))) {
       problems.add('coaching');
       continue;
     }

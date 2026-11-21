@@ -351,6 +351,25 @@ function earlyUnscopedFix(ctx: CustomerGenerationContext): boolean {
   );
 }
 
+/**
+ * The engineer said again a commitment the customer already has a time for ("so I'll own this and
+ * call you back"). The time still stands, so this is not a vague promise to challenge.
+ */
+function restatesClearCommitment(ctx: CustomerGenerationContext): boolean {
+  const made = ctx.analysis.commitment;
+  return (
+    made !== null &&
+    made.due === null &&
+    ctx.runtime.commitments.some(
+      (e) =>
+        e.by === 'engineer' &&
+        e.kind === made.kind &&
+        e.action === made.action &&
+        e.clarity === 'clear',
+    )
+  );
+}
+
 function reactionsOf(
   ctx: CustomerGenerationContext,
   echo: Commitment | null,
@@ -381,7 +400,12 @@ function reactionsOf(
     [cfg.proficiency === 'expert' && analysis.basics && c.troubleshooting, 'basics'],
     [c.promise === 'unverified', 'unsupported-promise'],
     [analysis.conflict !== null, 'conflicting-commitment'],
-    [analysis.commitment?.clarity === 'vague' && analysis.commitment.supported, 'vague-commitment'],
+    [
+      analysis.commitment?.clarity === 'vague' &&
+        analysis.commitment.supported &&
+        !restatesClearCommitment(ctx),
+      'vague-commitment',
+    ],
     [analysis.summary.verdict === 'inaccurate', 'summary-wrong'],
     // Asked whether a recap is right, the customer says so before anything else.
     [c.summarises && c.askedQuestion && analysis.summary.verdict === 'accurate', 'summary-right'],
@@ -479,10 +503,11 @@ function flavourOf(
     return null;
   const draw = rngFor(cfg.seed, ctx.traineeTurnNumber, 13);
   const vague =
-    c.ownership === 'vague' ||
-    c.nextSteps === 'vague' ||
-    analysis.commitment?.clarity === 'vague' ||
-    reactions.includes('unsupported-promise');
+    !restatesClearCommitment(ctx) &&
+    (c.ownership === 'vague' ||
+      c.nextSteps === 'vague' ||
+      analysis.commitment?.clarity === 'vague' ||
+      reactions.includes('unsupported-promise'));
   const open = !customer.nextStepsStated;
   // Asking for a plan, an owner or an escalation is held to the same rules as any other ask.
   const may = mayAsk(pressing, effectiveTurn);

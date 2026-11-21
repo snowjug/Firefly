@@ -254,6 +254,26 @@ describe("the scenario's own notes in the customer prompt", () => {
     expect(memory).toMatch(/What you said you would do/);
     expect(memory).toContain('ask our administrator');
   });
+
+  it('keeps a commitment clear in what it remembers, and in what it says at the close, when it was said again without its time', async () => {
+    const ctx = await lastContext(
+      [
+        GREET,
+        "I'll take ownership and call you back by 3pm with an update.",
+        'So I will own this and call you back. Is there anything else I can help with?',
+      ],
+      makeScenario({ style: 'talkative' }),
+    );
+    const system = systemOf(ctx);
+    const memory = section(system, 'THE CALL SO FAR', 'THIS REPLY');
+    expect(memory).toContain('own the case and call me back by 3pm');
+    expect(memory).not.toContain('vague: no clear time');
+    // The customer is asked to mention the time they were given, and not to ask for one.
+    expect(replySection(system)).toContain(
+      'mention what the engineer committed to, in your own words: "own the case and call me back by 3pm"',
+    );
+    expect(replySection(system)).not.toMatch(/ask what happens next and when|challenge/i);
+  });
 });
 
 describe('what the prompt keeps from the engineer, and from the hidden facts', () => {

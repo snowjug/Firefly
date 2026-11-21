@@ -13,12 +13,16 @@ import {
   type TurnView,
 } from './context.ts';
 import {
-  BLAME,
+  BLAME_CLEAR,
+  BLAME_MODAL,
   DISMISSIVE,
   HEDGED,
   IMPATIENT,
   isUnsupportedPromise,
   promisesOnlyToCheck,
+  readsAsKindness,
+  readsAsRecall,
+  saidKindly,
 } from './lexicon.ts';
 import { isHousekeeping } from './intents.ts';
 
@@ -61,10 +65,10 @@ function fromFlags(
 
 function fromWords(
   ctx: CareContext,
-  test: (lower: string, question: boolean) => boolean,
+  test: (lower: string, question: boolean, text: string) => boolean,
 ): Evidence[] {
   const out: Evidence[] = [];
-  const found: Hit[] = hits(ctx, (s) => test(s.lower, s.question));
+  const found: Hit[] = hits(ctx, (s) => test(s.lower, s.question, s.text));
   for (const hit of found) pushEvidence(out, evidenceOf(hit), 4);
   return out;
 }
@@ -79,24 +83,46 @@ function merge(...lists: Evidence[][]): Evidence[] {
   return out.sort((a, b) => a.turnIndex - b.turnIndex).slice(0, 2);
 }
 
+// The engine's classification marks a turn as blame or dismissive from words alone, so it raises
+// the flag for "you shouldn't have to chase us" and "I'll ring at 3 as I said" too. A flagged
+// sentence that only uses those words kindly is not held against the engineer.
+const without = (list: Evidence[], kind: (quote: string) => boolean): Evidence[] =>
+  list.filter((e) => !kind(e.quote));
+
 export function blameEvidence(ctx: CareContext): Evidence[] {
   return merge(
-    fromWords(ctx, (lower, question) => !question && BLAME.test(lower) && !HEDGED.test(lower)),
-    fromFlags(ctx, (v) => v.turn.cls.blame, 'blame'),
-    fromEvents(ctx, ['blame'], ['blame']),
+    fromWords(
+      ctx,
+      (lower, question) =>
+        !question &&
+        !HEDGED.test(lower) &&
+        (BLAME_CLEAR.test(lower) || (BLAME_MODAL.test(lower) && !saidKindly(lower))),
+    ),
+    without(
+      fromFlags(ctx, (v) => v.turn.cls.blame, 'blame'),
+      readsAsKindness,
+    ),
+    without(fromEvents(ctx, ['blame'], ['blame']), readsAsKindness),
   );
 }
 
 export function dismissiveEvidence(ctx: CareContext): Evidence[] {
   return merge(
     fromWords(ctx, (lower, question) => !question && DISMISSIVE.test(lower)),
-    fromFlags(ctx, (v) => v.turn.cls.dismissive, 'dismissive'),
-    fromEvents(ctx, ['dismissal'], ['dismissive']),
+    without(
+      fromFlags(ctx, (v) => v.turn.cls.dismissive, 'dismissive'),
+      readsAsRecall,
+    ),
+    without(fromEvents(ctx, ['dismissal'], ['dismissive']), readsAsRecall),
   );
 }
 
 export function impatientEvidence(ctx: CareContext): Evidence[] {
-  return merge(fromWords(ctx, (lower) => IMPATIENT.test(lower)));
+  // A question that ends in "?" asks; "Just tell me what you see." (a request worded as a
+  // statement, which counts as a question elsewhere) is the order.
+  return merge(
+    fromWords(ctx, (lower, _question, text) => !text.trim().endsWith('?') && IMPATIENT.test(lower)),
+  );
 }
 
 export function promiseEvidence(ctx: CareContext): Evidence[] {
