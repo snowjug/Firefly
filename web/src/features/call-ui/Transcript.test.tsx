@@ -1,6 +1,7 @@
 import { createElement, type ComponentProps } from 'react';
 import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as Design from '../../design/index.ts';
 import type { CallSnapshot, CallTurn } from '../call/contract.ts';
 import { FIXTURES } from './call-fixtures.ts';
 import { clearViewport, renderCall, WIDTH } from './test-utils.tsx';
@@ -12,7 +13,7 @@ import { clearViewport, renderCall, WIDTH } from './test-utils.tsx';
 const drawn = vi.hoisted(() => ({ rows: 0 }));
 
 vi.mock('../../design/index.ts', async (importOriginal) => {
-  const design = await importOriginal<typeof import('../../design/index.ts')>();
+  const design = await importOriginal<typeof Design>();
   return {
     ...design,
     Avatar: (props: ComponentProps<typeof design.Avatar>) => {
