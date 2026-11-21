@@ -177,9 +177,9 @@ a first pass over the same build before the four fixes listed below it, made wit
 | Reflow                                                   | With the text made 200 percent larger from script, the scenario toolbar was 111 px wider than a 1440 px window         | 16 of 16 tests pass                                                                         |
 | The whole suite                                          |                                                                                                                        | 44 tests; three full runs in a row passed; the last took 5.3 minutes                        |
 
-Ten defects were found and fixed: the first four by the specs on a Windows machine, the next four by
-the first run on the Linux CI runner, whose fallback font (DejaVu Sans) is wider than Segoe UI, and
-the last two by an independent code review of the screens:
+Eleven defects were found and fixed: numbers 1 to 4 by the specs on a Windows machine, numbers 5 to 8
+and 11 by the runs on the Linux CI runner (its fallback font, DejaVu Sans, is wider than Segoe UI),
+and numbers 9 and 10 by an independent code review of the screens:
 
 1. **The call's context column was not reachable by keyboard** (WCAG 2.1.1, serious). On wide screens
    it scrolls on its own and holds only text, so nothing in it could take focus. The scrolling area is
@@ -216,15 +216,22 @@ the last two by an independent code review of the screens:
     back, and being offline while ending is treated like any other failed attempt, so Continue call
     lets the call carry on (it used to leave the call blocked until the page was reloaded)
     (`EndCallDialog.tsx`, `problems.ts`).
+11. **A badge's text spilled out of its pill** (WCAG 1.4.10). "Written by the coaching evaluator" is
+    one line that did not fit the 246 px header of the landing page's report preview at 320 px with
+    DejaVu Sans, so it ran 49 px outside the pill and made the page 1 px wider than the screen. Only
+    the Linux runner showed it, and only once its real font was loaded here. A badge's text now
+    wraps when there is less room than it needs (`badge.css`).
 
 Each has a regression test: 1 to 3 in the unit tests (`CallWorkspace.test.tsx`,
-`ScenarioWorkspace.test.tsx`) and in the specs above; 4 to 7 in `responsive.spec.ts`, which measures
+`ScenarioWorkspace.test.tsx`) and in the specs above; 4 to 7 and 11 in `responsive.spec.ts`, which measures
 layout and so needs a real browser, and which now sets every element to a deliberately wide font
 (Verdana, or DejaVu Sans where it is missing) so that its result does not depend on the machine's
-fonts; 9 and 10 in `use-rescue-focus.test.tsx`, `Preflight.test.tsx` and
-`CallWorkspace.flows.test.tsx`. Number 8 has no test of its own (see Known gaps). The same run showed
-that the forced-colours check read a button's colour while it was still easing from one colour to
-another, which failed on the fast runner; it now waits for the colour to settle.
+fonts (Verdana is wider than DejaVu Sans but did not show number 11, which depends on exact widths:
+only the Linux runner and a local run with the real DejaVu Sans did); 9 and 10 in
+`use-rescue-focus.test.tsx`, `Preflight.test.tsx` and `CallWorkspace.flows.test.tsx`. Number 8 has no
+test of its own (see Known gaps). The same run showed that the forced-colours check read a button's
+colour while it was still easing from one colour to another, which failed on the fast runner; it now
+waits for the colour to settle.
 
 ### Manual review
 

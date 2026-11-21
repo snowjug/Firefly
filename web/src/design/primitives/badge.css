@@ -31,6 +31,10 @@
 }
 .ff-badge__text {
   min-inline-size: 0;
+  /* The pill is as wide as its text. Only when there is less room than that does the text wrap,
+     rather than spill out of the pill. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .ff-badge--outline {
   background: transparent;
