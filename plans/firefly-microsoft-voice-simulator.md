@@ -157,6 +157,7 @@ What differs from the plan, so that nobody has to find it:
 
 - **Intermediate commits do not build on their own.** The schema, the scenario library and the engine depend on each other, so commits 2 to 10 are not each runnable (for example `c88e535` imports an engine file that arrives in commit 7). The checks above were run on the final commit, and on nothing earlier.
 - **Independent review after the build.** Three read-only reviews of the committed engine, evaluator and call code found real defects (a failed message could lose its Retry notice, the microphone stayed open in a hidden tab, a pre-flight button did nothing, polite sentences were scored as blame, and more). Each was fixed with a test that fails without the fix, in commits 12 to 14.
+- **Two test-only commits follow the fifteen milestones.** The fresh-clone browser run found one stale wording match (commit 16, `8915035`, `e2e/voice-call.spec.ts`), and CI then flagged a timing-sensitive performance assertion (commit 17, `bc9d5d8`, `e2e/perf.spec.ts`). The branch has seventeen commits; no application code changed in these two.
 - **No `npm run calibrate`.** The script does not exist in this repository and nothing was added in its place; scores have not been compared with a mentor's.
 - **CBCF is not applied.** No authoritative material was found, so the report says so and no screen or document claims alignment.
 - **The scenario pane's main button says "Review brief"**, where the brief called it "Start configuration": it opens the case brief, and the customise options sit in the same pane.
