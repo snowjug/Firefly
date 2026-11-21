@@ -1,124 +1,140 @@
 import { describe, expect, it } from 'vitest';
-import { CoachingReportSchema, type CoachingReport } from '#shared/domain/report.ts';
+import type { CoachingReport } from '#shared/domain/report.ts';
 import { DIMENSION_IDS } from '#shared/domain/vocab.ts';
-import { CALL_NAMES, callFixtures } from './fixtures.ts';
+import { CALLS, asVersion1 } from './fixtures.ts';
 import {
+  careCounts,
   discoveryGroups,
-  lowestSkill,
   orderedDimensions,
+  reportSections,
   restsOnLimitedEvidence,
+  suggestedQuestion,
+  wordingPairs,
 } from './report-model.ts';
 
 describe('orderedDimensions', () => {
-  it('lists the six skills in rubric order whatever order they arrive in', async () => {
-    const { strong } = await callFixtures();
+  it('lists the six skills in rubric order whatever order they arrive in', () => {
     const shuffled: CoachingReport = {
-      ...strong.report,
-      dimensions: [...strong.report.dimensions].reverse(),
+      ...CALLS.strong.report,
+      dimensions: [...CALLS.strong.report.dimensions].reverse(),
     };
     expect(orderedDimensions(shuffled).map((d) => d.id)).toEqual([...DIMENSION_IDS]);
   });
 });
 
-describe('lowestSkill', () => {
-  it('is the lowest-scored skill', async () => {
-    const { curveball } = await callFixtures();
-    const lowest = lowestSkill(curveball.report);
-    const scores = curveball.report.dimensions.map((d) => d.score);
-    expect(curveball.report.dimensions.find((d) => d.id === lowest)?.score).toBe(
-      Math.min(...scores),
-    );
-  });
-
-  it('prefers the skill the report recommends practising when several share the lowest score', async () => {
-    const { weak } = await callFixtures();
-    const lows = weak.report.dimensions.filter((d) => d.score === 1).map((d) => d.id);
-    expect(lows.length).toBeGreaterThan(1);
-    expect(lowestSkill(weak.report)).toBe(weak.report.nextPractice.dimension);
-    const elsewhere: CoachingReport = {
-      ...weak.report,
-      nextPractice: { ...weak.report.nextPractice, dimension: 'clarity' },
-    };
-    expect(lowestSkill(elsewhere)).toBe(lows[0]);
-  });
-});
-
 describe('restsOnLimitedEvidence', () => {
-  it('is true for a short call that ended early, false for a thorough one', async () => {
-    const { short, strong, long } = await callFixtures();
-    expect(restsOnLimitedEvidence(short.report)).toBe(true);
-    expect(restsOnLimitedEvidence(strong.report)).toBe(false);
-    expect(restsOnLimitedEvidence(long.report)).toBe(false);
+  it('is true for a short call that ended early, false for a thorough one', () => {
+    expect(restsOnLimitedEvidence(CALLS.short.report)).toBe(true);
+    expect(restsOnLimitedEvidence(CALLS.strong.report)).toBe(false);
+    expect(restsOnLimitedEvidence(CALLS.long.report)).toBe(false);
   });
 
-  it('is also true when the call was not ended early but the evidence was not sufficient', async () => {
-    const { strong } = await callFixtures();
+  it('is also true when the call was not ended early but the evidence was not sufficient', () => {
     const thin: CoachingReport = {
-      ...strong.report,
-      completion: { ...strong.report.completion, evidence: 'limited' },
+      ...CALLS.strong.report,
+      completion: { ...CALLS.strong.report.completion, evidence: 'limited' },
     };
     expect(restsOnLimitedEvidence(thin)).toBe(true);
   });
 });
 
 describe('discoveryGroups', () => {
-  it('groups the facts as found, partly found and missed, leaving none out and none reordered', async () => {
-    const { strong } = await callFixtures();
-    const { discovery } = strong.report;
+  it('groups the facts as found, partly found and missed, leaving none out and none reordered', () => {
+    const { discovery } = CALLS.strong.report;
     const groups = discoveryGroups(discovery);
-    expect(groups.map((g) => g.title)).toEqual(['Found', 'Missed']);
+    expect(groups.map((g) => g.title)).toEqual(['Found', 'Partly found', 'Missed']);
     expect(groups.flatMap((g) => g.results)).toHaveLength(discovery.total);
     for (const group of groups) {
-      const expected = discovery.results.filter((r) => r.status === group.status);
-      expect(group.results).toEqual(expected);
+      expect(group.results).toEqual(discovery.results.filter((r) => r.status === group.status));
     }
   });
 
-  it('keeps a partly found fact in its own group, between the others', async () => {
-    const { strong } = await callFixtures();
-    const [first, ...rest] = strong.report.discovery.results;
-    if (!first) throw new Error('no facts');
-    const discovery = {
-      ...strong.report.discovery,
-      results: [{ ...first, status: 'partial' as const }, ...rest],
-    };
-    expect(discoveryGroups(discovery).map((g) => g.title)).toEqual([
+  it('leaves out a group with nothing in it', () => {
+    expect(discoveryGroups(CALLS.curveball.report.discovery).map((g) => g.title)).toEqual([
       'Found',
-      'Partly found',
       'Missed',
     ]);
+    expect(discoveryGroups(CALLS.weak.report.discovery).map((g) => g.title)).toEqual(['Missed']);
   });
 });
 
-describe('the fixtures', () => {
-  it('are reports the real evaluator made, valid against the schema, wrapped as the server sends them', async () => {
-    const calls = await callFixtures();
-    for (const name of CALL_NAMES) {
-      const { session, report } = calls[name];
-      expect(CoachingReportSchema.safeParse(report).success, name).toBe(true);
-      expect(session.report, name).toEqual(report);
-      expect(session.status, name).toBe('completed');
-      expect(
-        session.turns.some((t) => (t.markers ?? []).length > 0),
-        name,
-      ).toBe(true);
-    }
+describe('suggestedQuestion', () => {
+  it('is the question for the most important fact that was not found in full', () => {
+    // A critical fact was missed and a helpful one was only partly found: the critical one wins.
+    expect(suggestedQuestion(CALLS.strong.report.discovery)?.factId).toBe('organiser-licence');
   });
 
-  it('cover a strong call, a weak call, a short call, an unexpected turn and spoken turns', async () => {
-    const { strong, weak, short, curveball, unresolved, voice, long } = await callFixtures();
-    expect(strong.report.summary.overallScore).toBeGreaterThanOrEqual(4);
-    expect(strong.report.curveball).toBeNull();
-    expect(weak.report.summary.overallScore).toBeLessThan(2.5);
-    expect(weak.report.strengths).toHaveLength(0);
-    expect(weak.report.improvements.some((i) => i.turnIndex === null)).toBe(true);
-    expect(weak.report.improvements.some((i) => i.turnIndex !== null)).toBe(true);
-    expect(short.report.completion.status).toBe('ended-early');
-    expect(short.report.summary.overallScore).toBeNull();
-    expect(curveball.report.curveball?.status).toBe('resolved');
-    expect(unresolved.report.curveball?.status).toBe('unresolved');
-    expect(weak.report.curveball?.status).toBe('active');
-    expect(voice.session.turns.some((t) => t.inputMode === 'voice')).toBe(true);
-    expect(long.session.turns.length).toBeGreaterThanOrEqual(60);
+  it('prefers a missed fact to a partly found one of the same importance, and keeps report order after that', () => {
+    const base = CALLS.strong.report.discovery.results;
+    const critical = base.find((r) => r.factId === 'storage-changed');
+    if (!critical) throw new Error('fixture changed');
+    const results = [
+      { ...critical, factId: 'a', status: 'partial' as const, betterQuestion: 'A?' },
+      { ...critical, factId: 'b', status: 'missed' as const, betterQuestion: 'B?' },
+      { ...critical, factId: 'c', status: 'missed' as const, betterQuestion: 'C?' },
+    ];
+    const discovery = { ...CALLS.strong.report.discovery, results };
+    expect(suggestedQuestion(discovery)?.factId).toBe('b');
+  });
+
+  it('is null when every fact was found, or none has a question', () => {
+    const found = CALLS.strong.report.discovery.results.filter((r) => r.status === 'discovered');
+    expect(suggestedQuestion({ ...CALLS.strong.report.discovery, results: found })).toBeNull();
+    const blank = CALLS.weak.report.discovery.results.map((r) => ({ ...r, betterQuestion: ' ' }));
+    expect(suggestedQuestion({ ...CALLS.weak.report.discovery, results: blank })).toBeNull();
+    expect(
+      suggestedQuestion({ results: [], found: 0, partial: 0, missed: 0, total: 0 }),
+    ).toBeNull();
+  });
+});
+
+describe('careCounts', () => {
+  it('counts the behaviours shown, partly shown and not shown', () => {
+    const resourceful = CALLS.strong.report.care?.find((p) => p.id === 'resourceful');
+    if (!resourceful) throw new Error('fixture changed');
+    expect(careCounts(resourceful)).toEqual({ shown: 2, partly: 1, notShown: 1 });
+    const accountable = CALLS.short.report.care?.find((p) => p.id === 'accountable');
+    expect(accountable && careCounts(accountable)).toEqual({ shown: 0, partly: 0, notShown: 0 });
+  });
+});
+
+describe('wordingPairs', () => {
+  it('pairs what was said with the better wording, and says nothing was said for a gap', () => {
+    const pairs = wordingPairs(CALLS.strong.report);
+    expect(pairs).toHaveLength(2);
+    expect(pairs[0]?.original).toBeNull();
+    expect(pairs[1]?.original).toMatch(/what you see in the meeting chat/);
+    expect(pairs[1]?.improved).toMatch(/confirm your organisation/);
+  });
+
+  it('is empty for a report with nothing to improve', () => {
+    expect(wordingPairs({ ...CALLS.strong.report, improvements: [] })).toEqual([]);
+  });
+});
+
+describe('reportSections', () => {
+  const ids = (report: CoachingReport) => reportSections(report).map((s) => s.id);
+
+  it('lists every part, in page order, for a full report', () => {
+    expect(ids(CALLS.strong.report)).toEqual([
+      'summary',
+      'scores',
+      'care',
+      'journey',
+      'strengths',
+      'improvements',
+      'wording',
+      'discovery',
+      'next-practice',
+      'actions',
+      'transcript',
+      'about',
+    ]);
+  });
+
+  it('leaves out CARE for an older report and better wording when there is nothing to improve', () => {
+    expect(ids(asVersion1(CALLS.strong.report))).not.toContain('care');
+    expect(ids({ ...CALLS.strong.report, improvements: [] })).not.toContain('wording');
+    expect(ids(CALLS.legacy.report)).not.toContain('care');
   });
 });

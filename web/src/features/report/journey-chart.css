@@ -1,10 +1,23 @@
 /* The temperature chart. It is drawn by its own chunk, so these styles load with it. Everything here
-   is colour, stroke and type for the SVG; the layout is computed in journey-model.ts. */
+   is colour, stroke and type for the SVG, and the states of a point; the layout is computed in
+   journey-model.ts. */
 
 .rp-chart {
   inline-size: 100%;
   min-inline-size: 0;
-  margin-block: var(--sp-1);
+}
+/* Two lines are kept for what the chart says, so a longer line does not move the chart. */
+.rp-chart__readout {
+  min-block-size: calc(var(--lh-compact) * 3);
+  margin-block-end: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+@media (min-width: 40em) {
+  .rp-chart__readout {
+    min-block-size: calc(var(--lh-compact) * 2);
+  }
 }
 .rp-chart__svg {
   display: block;
@@ -81,6 +94,9 @@
 /* A marker takes the colour of the band the customer was in; its shape says what kind of point it is. */
 .rp-chart__marker {
   color: var(--fg-2);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform var(--dur-fast) var(--ease-decelerate);
 }
 .rp-chart__marker--calm {
   color: var(--state-calm-fg);
@@ -96,6 +112,43 @@
 }
 .rp-chart__marker--escalating {
   color: var(--state-escalating-fg);
+}
+
+/* A point is a control: a ring shows where keyboard focus is, and a lighter one where the pointer is.
+   The target is 24 px across, which is also what a thumb needs; the table and the list under the
+   chart give every point a link as well. */
+.rp-chart__point {
+  cursor: pointer;
+}
+.rp-chart__point:focus,
+.rp-chart__point:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.rp-chart__point--static {
+  pointer-events: none;
+}
+.rp-chart__hit {
+  fill: transparent;
+}
+.rp-chart__ring {
+  fill: none;
+  stroke: var(--focus-outer);
+  stroke-width: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-faster) var(--ease-easy);
+}
+.rp-chart__point:focus-visible .rp-chart__ring {
+  opacity: 1;
+}
+.rp-chart__point--on:not(:focus-visible) .rp-chart__ring {
+  stroke: var(--brand);
+  stroke-width: 1.5;
+  opacity: 1;
+}
+.rp-chart__point--on .rp-chart__marker {
+  transform: scale(1.25);
 }
 
 .rp-legend {
@@ -138,6 +191,10 @@
   .rp-chart__line {
     stroke: CanvasText;
   }
+  .rp-chart__ring,
+  .rp-chart__point--on:not(:focus-visible) .rp-chart__ring {
+    stroke: Highlight;
+  }
   .rp-chart__marker,
   .rp-chart__marker--calm,
   .rp-chart__marker--concerned,
@@ -179,6 +236,9 @@
   }
   .rp-chart__line {
     stroke: CanvasText;
+  }
+  .rp-chart__ring {
+    display: none;
   }
   .rp-chart {
     break-inside: avoid;

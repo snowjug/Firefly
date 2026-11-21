@@ -4,6 +4,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router';
 import { vi, type Mock } from 'vitest';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { AnnouncerProvider } from '../../design/index.ts';
+import { SCENARIO_INDEX } from './fixtures.ts';
 import type { ReportClient } from './useReportSession.ts';
 
 // Helpers for the report's component tests: a router with the places the report links to, a
@@ -13,6 +14,7 @@ export interface FakeClient extends ReportClient {
   getSession: Mock<ReportClient['getSession']>;
   evaluate: Mock<ReportClient['evaluate']>;
   deleteSession: Mock<ReportClient['deleteSession']>;
+  scenarios: Mock<NonNullable<ReportClient['scenarios']>>;
 }
 
 /** A client that answers with `sessions` one after another (the last one repeats). */
@@ -24,14 +26,17 @@ export function scriptedClient(...sessions: SessionDTO[]): FakeClient {
     ),
     evaluate: vi.fn(() => Promise.reject(new Error('evaluate was not expected'))),
     deleteSession: vi.fn(() => Promise.resolve({ deleted: true })),
+    scenarios: vi.fn(() => Promise.resolve(SCENARIO_INDEX)),
   };
 }
 
+/** A client that never answers unless told how. */
 export function clientWith(parts: Partial<ReportClient>): FakeClient {
   return {
     getSession: vi.fn(() => new Promise<SessionDTO>(() => undefined)),
     evaluate: vi.fn(() => new Promise<SessionDTO>(() => undefined)),
     deleteSession: vi.fn(() => Promise.resolve({ deleted: true })),
+    scenarios: vi.fn(() => Promise.resolve(SCENARIO_INDEX)),
     ...(parts as Partial<FakeClient>),
   };
 }

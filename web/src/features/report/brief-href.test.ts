@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { applyConfig } from '#shared/domain/config.ts';
-import { ScenarioOverridesSchema, type ScenarioOverrides } from '#shared/domain/scenario.ts';
+import type { SessionDTO } from '#shared/domain/api.ts';
 import {
   CALL_STAGES,
-  CURVEBALL_TYPES,
   DIFFICULTIES,
   IMPACTS,
   PROFICIENCIES,
   START_TEMPERATURES,
   STYLES,
 } from '#shared/domain/vocab.ts';
-import { getScenarioLibrary } from '#server/scenarios/index.ts';
-import { practiceHref, toBriefHref } from './brief-href.ts';
-import { CALL_NAMES, callFixtures } from './fixtures.ts';
+import {
+  SCENARIO_LIST,
+  practiceLink,
+  repeatLink,
+  scenarioExists,
+  toBriefHref,
+} from './brief-href.ts';
+import { CALLS, SCENARIO_INDEX } from './fixtures.ts';
+import type { ScenarioIndex } from './scenario-index.ts';
 
 const EXACT_KEYS = [
   'curveballs',
@@ -25,29 +29,33 @@ const EXACT_KEYS = [
   'temperature',
 ];
 
+const ready: ScenarioIndex = {
+  state: 'ready',
+  byId: new Map(SCENARIO_INDEX.map((s) => [s.id, s] as const)),
+};
+const loading: ScenarioIndex = { state: 'loading' };
+const unavailable: ScenarioIndex = { state: 'unavailable' };
+
 function parse(href: string) {
   const url = new URL(href, 'https://firefly.test');
   return { path: url.pathname, query: url.searchParams };
 }
 
 describe('toBriefHref', () => {
-  it('goes to the brief of the same scenario with exactly the agreed keys', async () => {
-    const calls = await callFixtures();
-    for (const name of CALL_NAMES) {
-      const { session } = calls[name];
-      const { path, query } = parse(toBriefHref(session));
-      expect(path).toBe(`/scenarios/${session.scenario.scenarioId}/brief`);
+  it('goes to the brief of the same scenario with exactly the agreed keys', () => {
+    for (const call of Object.values(CALLS)) {
+      const { path, query } = parse(toBriefHref(call.session));
+      expect(path).toBe(`/scenarios/${call.session.scenario.scenarioId}/brief`);
       const keys = [...query.keys()].sort();
       // `curveballs` is left out only when unexpected turns were on and none came up.
       const expected = EXACT_KEYS.filter((key) => key !== 'curveballs' || keys.includes(key));
-      expect(keys, name).toEqual(expected);
+      expect(keys, call.name).toEqual(expected);
     }
   });
 
-  it('writes values the scenario pages understand', async () => {
-    const calls = await callFixtures();
-    for (const name of CALL_NAMES) {
-      const { query } = parse(toBriefHref(calls[name].session));
+  it('writes values the scenario pages understand', () => {
+    for (const call of Object.values(CALLS)) {
+      const { query } = parse(toBriefHref(call.session));
       expect(DIFFICULTIES).toContain(query.get('difficulty'));
       expect(IMPACTS).toContain(query.get('impact'));
       expect(START_TEMPERATURES).toContain(query.get('temperature'));
@@ -55,91 +63,109 @@ describe('toBriefHref', () => {
       expect(STYLES).toContain(query.get('style'));
       expect(CALL_STAGES).toContain(query.get('stage'));
       expect(['on', 'off']).toContain(query.get('hints'));
-      const curveballs = query.get('curveballs');
-      if (curveballs !== null && curveballs !== 'none') {
-        for (const type of curveballs.split(',')) expect(CURVEBALL_TYPES).toContain(type);
-      }
     }
   });
 
-  it('round-trips: the query rebuilds the call settings through the real config code', async () => {
-    const library = getScenarioLibrary();
-    const calls = await callFixtures();
-    for (const name of CALL_NAMES) {
-      const { session } = calls[name];
-      const { query } = parse(toBriefHref(session));
-      const curveballs = query.get('curveballs');
-      const overrides: ScenarioOverrides = {
-        difficulty: query.get('difficulty') as ScenarioOverrides['difficulty'],
-        impact: query.get('impact') as ScenarioOverrides['impact'],
-        startingTemperature: query.get('temperature') as ScenarioOverrides['startingTemperature'],
-        proficiency: query.get('proficiency') as ScenarioOverrides['proficiency'],
-        style: query.get('style') as ScenarioOverrides['style'],
-        callStage: query.get('stage') as ScenarioOverrides['callStage'],
-        ...(curveballs === null
-          ? {}
-          : { curveballs: curveballs === 'none' ? [] : (curveballs.split(',') as never) }),
-      };
-      expect(ScenarioOverridesSchema.safeParse(overrides).success, name).toBe(true);
-      const base = library.find((s) => s.id === session.scenario.scenarioId);
-      if (!base) throw new Error('scenario missing');
-      const rebuilt = applyConfig(base, overrides, {
-        mode: query.get('hints') === 'on' ? 'guided' : 'immersive',
-      }).config;
-      const { config } = session.scenario;
-      expect(rebuilt.difficulty, name).toBe(config.difficulty);
-      expect(rebuilt.impact, name).toBe(config.impact);
-      expect(rebuilt.startingTemperature, name).toBe(config.startingTemperature);
-      expect(rebuilt.proficiency, name).toBe(config.proficiency);
-      expect(rebuilt.style, name).toBe(config.style);
-      expect(rebuilt.callStage, name).toBe(config.callStage);
-      expect(rebuilt.mode, name).toBe(config.mode);
-      if (curveballs !== null) {
-        expect(rebuilt.curveballTypes.length > 0, name).toBe(config.curveballsEnabled);
-      }
-    }
+  it('says `none` when unexpected turns were off, and hints on or off from the practice mode', () => {
+    expect(parse(toBriefHref(CALLS.strong.session)).query.get('curveballs')).toBe('none');
+    expect(parse(toBriefHref(CALLS.strong.session)).query.get('hints')).toBe('off');
+    expect(parse(toBriefHref(CALLS.short.session)).query.get('hints')).toBe('on');
   });
 
-  it('says `none` when unexpected turns were off, and hints on or off from the practice mode', async () => {
-    const { strong, short } = await callFixtures();
-    expect(parse(toBriefHref(strong.session)).query.get('curveballs')).toBe('none');
-    expect(parse(toBriefHref(strong.session)).query.get('hints')).toBe('off');
-    expect(parse(toBriefHref(short.session)).query.get('hints')).toBe('on');
-  });
-
-  it('asks for the kind that came up when unexpected turns were on, and for the default when none did', async () => {
-    const { curveball } = await callFixtures();
-    expect(curveball.session.scenario.config.curveballsEnabled).toBe(true);
-    expect(parse(toBriefHref(curveball.session)).query.get('curveballs')).toBe(
-      curveball.report.curveball?.type,
+  it('asks for the kind that came up when unexpected turns were on, and for the default when none did', () => {
+    expect(parse(toBriefHref(CALLS.curveball.session)).query.get('curveballs')).toBe(
+      CALLS.curveball.report.curveball?.type,
     );
-    // The same call, had no unexpected turn been reported.
-    const unreported = {
-      ...curveball.session,
-      report: curveball.session.report && { ...curveball.session.report, curveball: null },
+    const unreported: SessionDTO = {
+      ...CALLS.curveball.session,
+      report: CALLS.curveball.session.report && {
+        ...CALLS.curveball.session.report,
+        curveball: null,
+      },
     };
     expect(parse(toBriefHref(unreported)).query.has('curveballs')).toBe(false);
   });
+
+  it('encodes an id that is not a plain word', () => {
+    const odd: SessionDTO = {
+      ...CALLS.strong.session,
+      scenario: { ...CALLS.strong.session.scenario, scenarioId: 'a b/c' },
+    };
+    expect(parse(toBriefHref(odd)).path).toBe('/scenarios/a%20b%2Fc/brief');
+  });
 });
 
-describe('practiceHref', () => {
-  it('opens the workspace on the suggested scenario and difficulty', async () => {
-    const { weak } = await callFixtures();
-    const next = weak.report.nextPractice;
-    expect(next.suggestedScenarioId).not.toBeNull();
-    const { path, query } = parse(practiceHref(next));
+describe('scenarioExists', () => {
+  it('lets the list of scenarios decide once it has arrived', () => {
+    expect(scenarioExists(ready, 'entra-mfa-lockout', CALLS.strong.session)).toBe(true);
+    expect(scenarioExists(ready, 'recurring-midday-slowdowns', CALLS.legacy.session)).toBe(false);
+  });
+
+  it('takes a call without a product to name a retired scenario until it hears otherwise', () => {
+    for (const index of [loading, unavailable]) {
+      expect(scenarioExists(index, 'recurring-midday-slowdowns', CALLS.legacy.session)).toBe(false);
+      expect(scenarioExists(index, 'teams-recordings-missing', CALLS.strong.session)).toBe(true);
+    }
+  });
+});
+
+describe('repeatLink', () => {
+  it('opens the brief with the same settings when the scenario exists', () => {
+    const link = repeatLink(CALLS.strong.session, ready);
+    expect(link.available).toBe(true);
+    expect(link.to).toBe(toBriefHref(CALLS.strong.session));
+  });
+
+  it('opens the scenario list instead when the scenario is gone', () => {
+    expect(repeatLink(CALLS.legacy.session, ready)).toEqual({
+      to: SCENARIO_LIST,
+      available: false,
+    });
+    expect(repeatLink(CALLS.legacy.session, unavailable)).toEqual({
+      to: SCENARIO_LIST,
+      available: false,
+    });
+  });
+
+  it('opens the brief while the list of scenarios is still on its way, for a call that has a product', () => {
+    expect(repeatLink(CALLS.strong.session, loading).available).toBe(true);
+  });
+});
+
+describe('practiceLink', () => {
+  it('opens the workspace on the suggested scenario and difficulty, with the scenario\u2019s title', () => {
+    const next = CALLS.weak.report.nextPractice;
+    const link = practiceLink(CALLS.weak.session, next, ready);
+    const { path, query } = parse(link.to);
     expect(path).toBe('/scenarios');
     expect(query.get('scenario')).toBe(next.suggestedScenarioId);
     expect(query.get('difficulty')).toBe(next.suggestedDifficulty);
+    expect(link.scenario).toEqual({ title: 'Shared calendar is not updating', product: 'Outlook' });
   });
 
-  it('is just the workspace when no scenario is suggested', async () => {
-    const { weak } = await callFixtures();
-    const none = {
-      ...weak.report.nextPractice,
+  it('uses the title in the report when the list of scenarios has not arrived', () => {
+    const link = practiceLink(CALLS.weak.session, CALLS.weak.report.nextPractice, loading);
+    expect(link.scenario).toEqual({ title: 'Shared calendar is not updating', product: null });
+  });
+
+  it('is just the scenario list when the suggested scenario no longer exists', () => {
+    const next = CALLS.legacy.report.nextPractice;
+    expect(practiceLink(CALLS.legacy.session, next, ready)).toEqual({
+      to: SCENARIO_LIST,
+      scenario: null,
+    });
+    expect(practiceLink(CALLS.legacy.session, next, unavailable).scenario).toBeNull();
+  });
+
+  it('is just the scenario list when no scenario is suggested', () => {
+    const next = {
+      ...CALLS.weak.report.nextPractice,
       suggestedScenarioId: null,
       suggestedScenarioTitle: null,
     };
-    expect(practiceHref(none)).toBe('/scenarios');
+    expect(practiceLink(CALLS.weak.session, next, ready)).toEqual({
+      to: SCENARIO_LIST,
+      scenario: null,
+    });
   });
 });

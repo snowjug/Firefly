@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import {
-  Breadcrumb,
   Button,
   Icon,
   LinkButton,
   MessageBar,
   Skeleton,
   Spinner,
-  TextLink,
   VisuallyHidden,
   useAnnouncer,
 } from '../../design/index.ts';
+import { SCENARIO_LIST } from './brief-href.ts';
 import { DeleteCall } from './Actions.tsx';
 import { TranscriptReview } from './Transcript.tsx';
 import { PHASE_STEPS, phaseAnnouncement, stepStatuses, type StepStatus } from './evaluation.ts';
@@ -32,16 +31,18 @@ function Title({ children }: { children: string }) {
 /** While the call is being fetched: the shape of the page, and a name for assistive technology. */
 export function LoadingView() {
   return (
-    <div className="rp-state l-page l-page--read" aria-busy="true">
+    <div className="rp-state l-page" aria-busy="true">
       <Title>Coaching report</Title>
       <div role="status">
         <VisuallyHidden>Loading your coaching report</VisuallyHidden>
       </div>
       <div className="rp-state__skeleton" aria-hidden="true">
-        <Skeleton variant="text" width="60%" />
-        <Skeleton variant="rect" height={96} />
-        <Skeleton variant="text" lines={4} />
-        <Skeleton variant="rect" height={180} />
+        <Skeleton variant="text" width="50%" />
+        <Skeleton variant="rect" height={72} />
+        <Skeleton variant="text" lines={3} />
+        {[1, 2, 3, 4, 5, 6].map((row) => (
+          <Skeleton key={row} variant="rect" height={56} />
+        ))}
       </div>
     </div>
   );
@@ -58,12 +59,11 @@ export function UnavailableView({
   onRetry: () => void;
 }) {
   return (
-    <div className="rp-state l-page l-page--read">
+    <div className="rp-state l-page">
       <Title>Report unavailable</Title>
       {notFound ? (
         <MessageBar intent="warning" title="We could not find this call" live={false}>
-          It may have been deleted from this device, or the link may not be right. Nothing else was
-          changed.
+          It may have been deleted from this device, or the link is not right.
         </MessageBar>
       ) : (
         <MessageBar
@@ -79,7 +79,7 @@ export function UnavailableView({
         </MessageBar>
       )}
       <div className="rp-state__actions">
-        <LinkButton to="/scenarios" appearance={notFound ? 'primary' : 'secondary'}>
+        <LinkButton to={SCENARIO_LIST} appearance={notFound ? 'primary' : 'secondary'}>
           Choose a scenario
         </LinkButton>
         <LinkButton to="/" appearance="subtle">
@@ -132,13 +132,9 @@ export function EvaluatingView({
   }, [session.evaluationPhase, announce]);
 
   return (
-    <div className="rp-state l-page l-page--read">
-      <Breadcrumb items={[{ label: 'Scenarios', to: '/scenarios' }, { label: 'Report' }]} />
+    <div className="rp-state l-page">
       <Title>Building your coaching report</Title>
-      <p className="rp-state__lead t-reading">
-        Your transcript is saved. Firefly is reading it and preparing coaching that points to what
-        was actually said. Scores are for coaching practice, not employee-performance assessment.
-      </p>
+      <p className="rp-state__lead">Your transcript is saved.</p>
       <ol className="rp-steps" role="list" aria-label="Report progress">
         {PHASE_STEPS.map((step, index) => {
           const status = statuses[index] ?? 'waiting';
@@ -156,7 +152,7 @@ export function EvaluatingView({
       </ol>
       {trouble ? (
         <MessageBar intent="warning" live={false}>
-          Firefly cannot reach the server to check progress. Your transcript is saved, and the page
+          Firefly cannot reach the server to check progress. Your transcript is saved, and this page
           keeps trying.
         </MessageBar>
       ) : null}
@@ -170,7 +166,7 @@ export function EvaluatingView({
             <TranscriptReview
               session={session}
               report={null}
-              lead="Your transcript is saved. You can read it now, before the report is ready."
+              lead="Your transcript is saved. You can read it before the report is ready."
             />
           </EvidenceProvider>
         </>
@@ -202,9 +198,15 @@ export function FailedView({
   const what = unreadable
     ? 'The saved coaching report for this call could not be read.'
     : (message ?? 'Something went wrong while the coaching report was being prepared.');
+  // The server's own words often say the transcript is safe; saying it twice helps no one.
+  const note = [
+    /transcript/i.test(what) ? '' : 'Your call and its transcript are saved. Nothing was lost.',
+    retryable ? '' : 'Trying again will not fix this.',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
     <div className="rp-state rp-state--wide l-page">
-      <Breadcrumb items={[{ label: 'Scenarios', to: '/scenarios' }, { label: 'Report' }]} />
       <Title>Coaching report</Title>
       <p className="rp-state__scenario">{session.scenario.title}</p>
       <MessageBar
@@ -225,12 +227,7 @@ export function FailedView({
         }
       >
         <p className="rp-state__para">{what}</p>
-        <p className="rp-state__para">Your call and its transcript are saved. Nothing was lost.</p>
-        <p className="rp-state__para">
-          {retryable
-            ? 'You can try the evaluation again, or read the transcript below and review it with a mentor.'
-            : 'Trying again will not fix this. You can still read the transcript below, practise another scenario or delete this call.'}
-        </p>
+        {note ? <p className="rp-state__para">{note}</p> : null}
       </MessageBar>
       {retryError ? (
         <MessageBar intent="error" title="The evaluation did not start again">
@@ -238,17 +235,11 @@ export function FailedView({
         </MessageBar>
       ) : null}
       <div className="rp-state__actions">
-        <LinkButton to="/scenarios" icon="list">
-          Try another scenario
-        </LinkButton>
-        <LinkButton to="/" icon="home">
-          Return home
+        <LinkButton to={SCENARIO_LIST} icon="phone">
+          Try another call
         </LinkButton>
         <DeleteCall sessionId={session.id} client={client} />
       </div>
-      <p className="rp-state__note t-meta">
-        <TextLink to="/responsible-ai">How Firefly uses AI and speech</TextLink>
-      </p>
       <EvidenceProvider turnIndexes={turnIndexes}>
         <TranscriptReview
           session={session}

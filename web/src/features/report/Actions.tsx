@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { SessionDTO } from '#shared/domain/api.ts';
-import { Button, Dialog, LinkButton, MessageBar, useAnnouncer } from '../../design/index.ts';
+import { Button, Dialog, Icon, LinkButton, MessageBar, useAnnouncer } from '../../design/index.ts';
 import { errorMessage } from '../../lib/api.ts';
-import { toBriefHref } from './brief-href.ts';
+import { SCENARIO_LIST, repeatLink } from './brief-href.ts';
 import { jumpToSection } from './dom.ts';
 import { Section } from './parts.tsx';
+import type { ScenarioIndex } from './scenario-index.ts';
 import type { ReportClient } from './useReportSession.ts';
+import './report.css';
 
 /**
  * "Delete this call": asks first, says what goes, and only then deletes. The call and its report live
@@ -33,7 +35,7 @@ export function DeleteCall({ sessionId, client }: { sessionId: string; client: R
       .deleteSession(sessionId)
       .then(() => {
         announce('The call was deleted.');
-        void navigate('/scenarios');
+        void navigate(SCENARIO_LIST);
       })
       .catch((failure: unknown) => {
         setError(errorMessage(failure));
@@ -79,24 +81,36 @@ export function DeleteCall({ sessionId, client }: { sessionId: string; client: R
   );
 }
 
-/** The next moves: another scenario, the same one again, the transcript, a printout, home or deleting the call. */
+/**
+ * The next moves: another call, the same scenario again, the transcript or a printout. If the
+ * scenario of this call no longer exists, "Repeat scenario" opens the scenario list and says why,
+ * rather than leading to a page that is not there. Deleting the call sits apart, below.
+ */
 export function Actions({
   session,
   client,
+  index,
   onPrint,
 }: {
   session: SessionDTO;
   client: ReportClient;
+  index: ScenarioIndex;
   onPrint: () => void;
 }) {
+  const repeat = repeatLink(session, index);
+  const note = useId();
   return (
-    <Section id="actions" title="Actions" lead="Choose what to do with this call.">
+    <Section id="actions" title="Actions">
       <div className="rp-actions">
-        <LinkButton to="/scenarios" icon="list">
-          Try another scenario
+        <LinkButton to={SCENARIO_LIST} appearance="primary" icon="phone">
+          Try another call
         </LinkButton>
-        <LinkButton to={toBriefHref(session)} icon="refresh">
-          Repeat this scenario
+        <LinkButton
+          to={repeat.to}
+          icon="refresh"
+          aria-describedby={repeat.available ? undefined : note}
+        >
+          Repeat scenario
         </LinkButton>
         <Button icon="document" onClick={() => jumpToSection('transcript')}>
           Review transcript
@@ -104,10 +118,15 @@ export function Actions({
         <Button icon="print" onClick={onPrint}>
           Print report
         </Button>
-        <LinkButton to="/" icon="home">
-          Return home
-        </LinkButton>
       </div>
+      {repeat.available ? null : (
+        <p id={note} className="rp-actions__note">
+          <Icon name="info" size={16} />
+          <span>
+            This scenario is no longer available, so Repeat scenario opens the scenario list.
+          </span>
+        </p>
+      )}
       <div className="rp-actions rp-actions--danger">
         <DeleteCall sessionId={session.id} client={client} />
       </div>

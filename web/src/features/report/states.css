@@ -5,6 +5,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
+  max-inline-size: calc(46rem + 2 * var(--gutter));
   padding-block: var(--sp-8) var(--sp-16);
 }
 /* The failed state carries a whole transcript, so it is as wide as the report's own column. */
@@ -12,7 +13,6 @@
   max-inline-size: calc(56rem + 2 * var(--gutter));
 }
 .rp-state__lead {
-  max-inline-size: var(--read-max);
   color: var(--fg-2);
 }
 .rp-state__scenario {
@@ -24,15 +24,12 @@
 .rp-state__skeleton {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-3);
 }
 .rp-state__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2) var(--sp-3);
-}
-.rp-state__note {
-  max-inline-size: var(--read-max);
 }
 .rp-state__para + .rp-state__para {
   margin-block-start: var(--sp-1);
@@ -51,6 +48,7 @@
   overflow: hidden;
 }
 .rp-step {
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -67,32 +65,38 @@
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
 }
+.rp-step__icon {
+  color: var(--fg-3);
+}
 .rp-step[data-status='done'] .rp-step__icon {
   color: var(--status-success-fg);
 }
+/* The step in progress is marked by a bar on its edge as well as by tint and weight. */
 .rp-step[data-status='current'] {
   background: var(--brand-tint);
+}
+.rp-step[data-status='current']::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+  background: var(--brand);
+}
+.rp-step[data-status='current'] .rp-step__icon {
+  color: var(--brand);
 }
 .rp-step[data-status='current'] .rp-step__title,
 .rp-step[data-status='current'] .rp-step__status {
   color: var(--fg-1);
   font-weight: var(--fw-semibold);
 }
-.rp-step[data-status='waiting'] .rp-step__icon {
-  color: var(--fg-3);
-}
 .rp-step[data-status='waiting'] .rp-step__title {
   color: var(--fg-2);
 }
 
 @media (forced-colors: active) {
-  .rp-steps {
-    border-color: CanvasText;
-  }
-  .rp-step {
-    border-block-end-color: CanvasText;
-  }
-  .rp-step[data-status='current'] {
-    border-inline-start: 4px solid Highlight;
+  .rp-step[data-status='current']::before {
+    background: Highlight;
   }
 }

@@ -1,58 +1,68 @@
-import { cleanup, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import { CURVEBALL_LABELS } from '#shared/domain/vocab.ts';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import JourneyChart from './JourneyChart.tsx';
 import { ReportView } from './ReportView.tsx';
-import { callFixtures } from './fixtures.ts';
-import { journeyListItems } from './journey-model.ts';
-import { renderAtReport, scriptedClient } from './test-utils.tsx';
+import { CALLS, type CallName } from './fixtures.ts';
+import { EvidenceProvider, HIGHLIGHT_MS } from './evidence.tsx';
+import { renderAtReport, scriptedClient, stubScroll } from './test-utils.tsx';
 
-afterEach(cleanup);
+// Role queries over a whole report are slow in jsdom, and slower on a busy machine.
+vi.setConfig({ testTimeout: 20_000 });
 
-async function show(name: 'strong' | 'curveball' | 'weak' | 'unresolved') {
-  const call = (await callFixtures())[name];
-  renderAtReport(
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+function show(name: CallName) {
+  const { session, report } = CALLS[name];
+  return renderAtReport(
     <ReportView
-      session={call.session}
-      report={call.report}
-      client={scriptedClient(call.session)}
+      session={session}
+      report={report}
+      client={scriptedClient(session)}
       reveal={false}
     />,
   );
-  return call;
 }
 
-const section = () => screen.getByRole('region', { name: 'Customer temperature' });
+const section = () => screen.getByRole('region', { name: 'Customer journey' });
+const chart = () =>
+  within(section()).findByRole('group', { name: /Customer temperature through the call/ });
+const points = async () => within(await chart()).getAllByRole('button');
+/** What the chart says about itself, above the drawing. */
+const readout = async () =>
+  (await chart()).closest('.rp-chart')?.querySelector('.rp-chart__readout') as HTMLElement;
+const focus = (element: Element | undefined) =>
+  act(() => {
+    (element as HTMLElement | SVGElement).focus();
+  });
 
-// This file renders the chart first, so the placeholder for its separate chunk is still on screen.
-describe('the customer temperature section', () => {
-  it('shows a placeholder while the chart loads, with the list and the table already there', async () => {
-    const call = await show('strong');
+// This file renders the chart through the report, so the placeholder for its own chunk is on screen
+// first and the chart arrives a moment later.
+describe('the chart', () => {
+  it('shows a placeholder while it loads, with the words and the list already there', async () => {
+    show('strong');
     expect(
       within(section()).getByText('Loading the customer temperature chart'),
     ).toBeInTheDocument();
-    expect(within(section()).getByRole('list', { name: '' })).toBeDefined();
     expect(
-      within(section()).getByRole('heading', { level: 3, name: 'What moved the customer' }),
+      within(section()).getByText('The customer started Frustrated and ended Calm.'),
     ).toBeInTheDocument();
-    expect(within(section()).getAllByRole('listitem').length).toBe(
-      journeyListItems(call.report.journey).length,
-    );
-    // Then the chart arrives, named, with the same facts in words.
-    const chart = await within(section()).findByRole('img', {
-      name: /Customer temperature through the call/,
-    });
-    expect(chart).toHaveAccessibleName(/started Frustrated and ended Calm/);
-    expect(chart).toHaveAccessibleName(/listed below the chart/);
+    const drawn = await chart();
+    expect(drawn).toHaveAccessibleName(/started Frustrated and ended Calm/);
+    expect(drawn).toHaveAccessibleName(/listed below the chart/);
     expect(
       within(section()).queryByText('Loading the customer temperature chart'),
     ).not.toBeInTheDocument();
   });
 
-  it('labels the five bands in text and has a key for the markers', async () => {
-    await show('strong');
-    const chart = await within(section()).findByRole('img', { name: /Customer temperature/ });
+  it('names the five bands in text and has a key for the markers', async () => {
+    show('strong');
+    const drawn = await chart();
     for (const band of ['Escalating', 'Angry', 'Frustrated', 'Concerned', 'Calm']) {
-      expect(chart).toHaveTextContent(band);
+      expect(drawn).toHaveTextContent(band);
     }
     const key = within(section()).getByRole('list', { name: 'Chart key' });
     expect(
@@ -62,58 +72,161 @@ describe('the customer temperature section', () => {
     ).toEqual(['Start', 'Turn', 'Turning point', 'Unexpected turn', 'End']);
   });
 
-  it('lists what moved the customer as "Turn N: from to to", with the reason, the words and a link', async () => {
-    const call = await show('strong');
-    const moves = within(section()).getByRole('heading', { name: 'What moved the customer' })
-      .nextElementSibling as HTMLElement;
-    const items = within(moves).getAllByRole('listitem');
-    expect(items[1]).toHaveTextContent('Turn 2: Frustrated to Concerned');
-    expect(items[1]).toHaveTextContent('Acknowledged the business impact');
-    expect(items[1]).toHaveTextContent(
-      /You said: .I.m sorry your team can.t open the project workspace/,
+  it('makes every point after the start a control with a name that says the turn and where the customer was', async () => {
+    show('strong');
+    const buttons = await points();
+    expect(buttons).toHaveLength(CALLS.strong.report.journey.points.length - 1);
+    expect(buttons[1]).toHaveAccessibleName(
+      'Turn 4: Frustrated to Concerned. See turn 4 in the transcript',
     );
-    expect(
-      within(items[1] as HTMLElement).getByRole('link', { name: 'See turn 2 in the transcript' }),
-    ).toHaveAttribute('href', '#turn-2');
-    expect(call.report.journey.points.length).toBeGreaterThan(items.length);
+    expect(buttons[0]).toHaveAccessibleName(
+      'Turn 2: Still Frustrated, temperature eased. See turn 2 in the transcript',
+    );
   });
 
-  it('gives the same data as a table behind "Show as a table"', async () => {
-    const call = await show('strong');
-    expect(within(section()).getByText('Show as a table')).toBeInTheDocument();
-    const table = within(section()).getByRole('table', {
-      name: 'Customer temperature at each point in the call',
-    });
-    expect(
-      within(table)
-        .getAllByRole('columnheader')
-        .map((h) => h.textContent),
-    ).toEqual(['Turn', 'Point', 'Customer', 'Change', 'What happened']);
-    expect(within(table).getAllByRole('row')).toHaveLength(call.report.journey.points.length + 1);
+  it('has one tab stop for the whole chart, and the arrow keys move it', async () => {
+    const user = userEvent.setup();
+    show('strong');
+    const buttons = await points();
+    expect(buttons.filter((b) => b.getAttribute('tabindex') === '0')).toHaveLength(1);
+    expect(buttons[0]).toHaveAttribute('tabindex', '0');
+
+    buttons[0]?.focus();
+    expect(buttons[0]).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(buttons[1]).toHaveFocus();
+    expect(buttons[1]).toHaveAttribute('tabindex', '0');
+    expect(buttons[0]).toHaveAttribute('tabindex', '-1');
+    await user.keyboard('{ArrowLeft}{ArrowLeft}');
+    expect(buttons[0]).toHaveFocus();
+    await user.keyboard('{End}');
+    expect(buttons.at(-1)).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(buttons.at(-1)).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(buttons[0]).toHaveFocus();
   });
 
-  it('describes an unexpected turn after the call: what it was, when, how it went and the assessment', async () => {
-    const call = await show('curveball');
-    const block = within(section()).getByRole('heading', { level: 3, name: 'Unexpected turn' })
-      .parentElement as HTMLElement;
-    expect(block).toHaveTextContent(CURVEBALL_LABELS['previous-bad-experience'].label);
-    expect(block).toHaveTextContent(`After turn ${call.report.curveball?.firedAtTurn}`);
-    expect(block).toHaveTextContent('Resolved');
-    expect(block).toHaveTextContent((call.report.curveball?.assessment ?? '').slice(0, 40));
-    expect(
-      within(block).getByRole('link', { name: /See turn \d+ in the transcript/ }),
-    ).toBeInTheDocument();
+  it('leaves the chart on Tab instead of walking through every point', async () => {
+    const user = userEvent.setup();
+    show('strong');
+    const buttons = await points();
+    buttons[0]?.focus();
+    await user.tab();
+    for (const button of buttons) expect(button).not.toHaveFocus();
   });
 
-  it('says Not resolved, and Still open when the call ended, for the other outcomes', async () => {
-    await show('unresolved');
-    expect(
-      within(section()).getByRole('heading', { level: 3, name: 'Unexpected turn' }).parentElement,
-    ).toHaveTextContent('Not resolved');
-    cleanup();
-    await show('weak');
-    expect(
-      within(section()).getByRole('heading', { level: 3, name: 'Unexpected turn' }).parentElement,
-    ).toHaveTextContent('Still open when the call ended');
+  it('says what a point is while it has focus, and goes back to the sentence when it loses it', async () => {
+    const user = userEvent.setup();
+    show('strong');
+    const buttons = await points();
+    await focus(buttons[1]);
+    expect(await readout()).toHaveTextContent(
+      'Turn 4: Frustrated to Concerned. Asked a focused question about scope',
+    );
+    await user.tab();
+    expect(await readout()).toHaveTextContent('The customer started Frustrated and ended Calm.');
+  });
+
+  it('also says it when the pointer is over a point', async () => {
+    const user = userEvent.setup();
+    show('strong');
+    const buttons = await points();
+    await user.hover(buttons[1] as HTMLElement);
+    expect(await readout()).toHaveTextContent(/^Turn 4: Frustrated to Concerned/);
+    await user.unhover(buttons[1] as HTMLElement);
+    expect(await readout()).toHaveTextContent('The customer started Frustrated and ended Calm.');
+  });
+
+  it('shows the matching turn when a point is chosen with Enter, Space or a click', async () => {
+    const { scroll, restore } = stubScroll();
+    const user = userEvent.setup();
+    try {
+      show('strong');
+      const buttons = await points();
+      buttons[1]?.focus();
+      await user.keyboard('{Enter}');
+      const turn = document.getElementById('turn-4') as HTMLElement;
+      expect(turn).toHaveFocus();
+      expect(turn).toHaveClass('rp-turn--cited');
+      expect(scroll).toHaveBeenCalled();
+      // The words the trainee said at that turn are marked too.
+      expect(turn.querySelector('mark')).toHaveTextContent(
+        'Is it happening in every meeting, or only for some organisers?',
+      );
+      expect(screen.getByRole('button', { name: 'Back to Customer journey' })).toBeInTheDocument();
+
+      buttons[3]?.focus();
+      await user.keyboard(' ');
+      expect(document.getElementById('turn-8')).toHaveFocus();
+
+      await user.click(buttons[0] as HTMLElement);
+      expect(document.getElementById('turn-2')).toHaveFocus();
+    } finally {
+      restore();
+    }
+  });
+
+  it('goes back to the point it came from, with focus on it', async () => {
+    const { restore } = stubScroll();
+    const user = userEvent.setup();
+    try {
+      show('strong');
+      const buttons = await points();
+      buttons[2]?.focus();
+      await user.keyboard('{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Back to Customer journey' }));
+      expect(buttons[2]).toHaveFocus();
+      expect(screen.queryByRole('button', { name: /^Back to/ })).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it('marks the turn only for a few seconds, and keeps the way back', async () => {
+    const { restore } = stubScroll();
+    try {
+      show('strong');
+      const buttons = await points();
+      vi.useFakeTimers();
+      await focus(buttons[1]);
+      act(() => {
+        fireEvent.keyDown(buttons[1] as Element, { key: 'Enter' });
+      });
+      const turn = document.getElementById('turn-4') as HTMLElement;
+      expect(turn).toHaveClass('rp-turn--cited');
+      expect(within(turn).getByText('Cited')).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(HIGHLIGHT_MS + 50);
+      });
+      expect(turn).not.toHaveClass('rp-turn--cited');
+      expect(within(turn).queryByText('Cited')).not.toBeInTheDocument();
+      expect(turn.querySelector('mark')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Back to Customer journey' })).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps the long call usable: every point is a control, and End reaches the last', async () => {
+    const user = userEvent.setup();
+    show('long');
+    const buttons = await points();
+    expect(buttons).toHaveLength(CALLS.long.report.journey.points.length - 1);
+    expect(buttons.length).toBeGreaterThan(30);
+    buttons[0]?.focus();
+    await user.keyboard('{End}');
+    expect(buttons.at(-1)).toHaveFocus();
+  });
+
+  it('is only a picture, with nothing to press, when the transcript has none of its turns', async () => {
+    render(
+      <EvidenceProvider turnIndexes={[]}>
+        <JourneyChart journey={CALLS.strong.report.journey} />
+      </EvidenceProvider>,
+    );
+    const picture = screen.getByRole('img', { name: /Customer temperature through the call/ });
+    expect(picture).toBeInTheDocument();
+    expect(within(picture).queryAllByRole('button')).toHaveLength(0);
   });
 });

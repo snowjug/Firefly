@@ -1,5 +1,11 @@
-import type { CoachingReport, DimensionResult, DiscoveryResult } from '#shared/domain/report.ts';
-import { DIMENSION_IDS, type DimensionId } from '#shared/domain/vocab.ts';
+import type {
+  CarePrincipleResult,
+  CoachingReport,
+  DimensionResult,
+  DiscoveryResult,
+  ImprovementItem,
+} from '#shared/domain/report.ts';
+import { DIMENSION_IDS, FACT_WEIGHT } from '#shared/domain/vocab.ts';
 
 // Small decisions about the report's data, kept out of the components so they can be tested.
 
@@ -8,17 +14,6 @@ export function orderedDimensions(report: CoachingReport): DimensionResult[] {
   return DIMENSION_IDS.map((id) => report.dimensions.find((d) => d.id === id)).filter(
     (d): d is DimensionResult => d !== undefined,
   );
-}
-
-/**
- * The skill to open first: the lowest-scored. Where several share the lowest score, the one the
- * report recommends practising next, else the first in rubric order.
- */
-export function lowestSkill(report: CoachingReport): DimensionId | null {
-  const dimensions = orderedDimensions(report);
-  const lowest = Math.min(...dimensions.map((d) => d.score));
-  const tied = dimensions.filter((d) => d.score === lowest);
-  return (tied.find((d) => d.id === report.nextPractice.dimension) ?? tied[0])?.id ?? null;
 }
 
 /** True when the report should say it rests on limited evidence. */
@@ -47,4 +42,80 @@ export function discoveryGroups(discovery: CoachingReport['discovery']): Discove
       results: discovery.results.filter((r) => r.status === status),
     }))
     .filter((group) => group.results.length > 0);
+}
+
+/**
+ * The one question to take into the next call: from the fact that mattered most and was not found
+ * in full. A missed fact comes before a partly found one of the same importance; ties keep the
+ * report's order.
+ */
+export function suggestedQuestion(discovery: CoachingReport['discovery']): DiscoveryResult | null {
+  const open = discovery.results
+    .map((result, order) => ({ result, order }))
+    .filter(({ result }) => result.status !== 'discovered' && result.betterQuestion.trim() !== '');
+  open.sort(
+    (a, b) =>
+      FACT_WEIGHT[b.result.importance] - FACT_WEIGHT[a.result.importance] ||
+      Number(b.result.status === 'missed') - Number(a.result.status === 'missed') ||
+      a.order - b.order,
+  );
+  return open[0]?.result ?? null;
+}
+
+export interface BehaviourCounts {
+  shown: number;
+  partly: number;
+  notShown: number;
+}
+
+/** How many of a principle's behaviours were shown, partly shown and not shown. */
+export function careCounts(principle: CarePrincipleResult): BehaviourCounts {
+  const counts: BehaviourCounts = { shown: 0, partly: 0, notShown: 0 };
+  for (const behaviour of principle.behaviours) {
+    if (behaviour.status === 'shown') counts.shown += 1;
+    else if (behaviour.status === 'partly') counts.partly += 1;
+    else counts.notShown += 1;
+  }
+  return counts;
+}
+
+export interface WordingPair {
+  improvement: ImprovementItem;
+  /** What was said, or null for a gap that never happened. */
+  original: string | null;
+  improved: string;
+}
+
+/** One "Original, Improved" pair for each improvement that offers better wording. */
+export function wordingPairs(report: CoachingReport): WordingPair[] {
+  return report.improvements
+    .filter((item) => item.betterPhrasing.trim() !== '')
+    .map((item) => ({
+      improvement: item,
+      original: item.quote && item.quote.trim() !== '' ? item.quote : null,
+      improved: item.betterPhrasing,
+    }));
+}
+
+export interface SectionItem {
+  id: string;
+  label: string;
+}
+
+/** The parts of the report, in page order. A part with nothing behind it is not listed. */
+export function reportSections(report: CoachingReport): SectionItem[] {
+  return [
+    { id: 'summary', label: 'Summary' },
+    { id: 'scores', label: 'Scores' },
+    ...(report.care ? [{ id: 'care', label: 'CARE summary' }] : []),
+    { id: 'journey', label: 'Customer journey' },
+    { id: 'strengths', label: 'Strengths' },
+    { id: 'improvements', label: 'Improvements' },
+    ...(wordingPairs(report).length > 0 ? [{ id: 'wording', label: 'Better wording' }] : []),
+    { id: 'discovery', label: 'Discovery' },
+    { id: 'next-practice', label: 'Next practice' },
+    { id: 'actions', label: 'Actions' },
+    { id: 'transcript', label: 'Transcript' },
+    { id: 'about', label: 'About this report' },
+  ];
 }

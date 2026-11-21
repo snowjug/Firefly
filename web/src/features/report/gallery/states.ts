@@ -2,23 +2,29 @@ import type { SessionDTO } from '#shared/domain/api.ts';
 import { EVALUATION_PHASES } from '#shared/domain/vocab.ts';
 import { ApiError } from '../../../lib/api.ts';
 import {
+  CALLS,
   CALL_NAMES,
+  SCENARIO_INDEX,
   SERVER_EVALUATION_ERRORS,
-  callFixtures,
+  asVersion1,
   evaluatingSession,
   failedSession,
   unreadableReportSession,
+  withReport,
   type CallName,
 } from '../fixtures.ts';
 import type { ReportClient } from '../useReportSession.ts';
 
-// What the development gallery can show: `?state=<name>`. Every completed report is a call made by
-// the real engine and evaluator (see ../fixtures.ts).
+// What the development gallery can show: `?state=<name>`. The reports are written by hand in
+// ../fixtures.ts (Microsoft scenarios, fictional people), so this page needs no server.
 
 export const EVALUATING_PHASES = EVALUATION_PHASES.filter((phase) => phase !== 'saved');
 
 export const GALLERY_STATES = [
   ...CALL_NAMES,
+  'version-1',
+  'no-product',
+  'long-text',
   'loading',
   'not-found',
   'unreachable',
@@ -46,6 +52,7 @@ function client(parts: Partial<ReportClient>): ReportClient {
     getSession: () => pending<SessionDTO>(),
     evaluate: () => pending<SessionDTO>(),
     deleteSession: () => Promise.resolve({ deleted: true }),
+    scenarios: () => Promise.resolve(SCENARIO_INDEX),
     ...parts,
   };
 }
@@ -56,9 +63,29 @@ function playing(frames: SessionDTO[]): ReportClient['getSession'] {
   return () => Promise.resolve(frames[Math.min(next++, frames.length - 1)] as SessionDTO);
 }
 
+const WORDS =
+  'The call opened well and the customer settled, but the coaching came back with more to say than the page first shows, so the rest waits behind a button where anyone who wants it can read it in full. ';
+
+/** The strong call with every budgeted text longer than its budget, to show what "Show more" does. */
+function longTextSession(): SessionDTO {
+  const { report } = CALLS.strong;
+  const long: typeof report = {
+    ...report,
+    summary: { ...report.summary, overall: WORDS.repeat(2).trim().slice(0, 1190) },
+    strengths: report.strengths.map((s) => ({
+      ...s,
+      whyItHelped: `${s.whyItHelped} ${WORDS}`.slice(0, 390),
+    })),
+    improvements: report.improvements.map((i) => ({
+      ...i,
+      risk: `${i.risk} ${WORDS}`.slice(0, 390),
+    })),
+  };
+  return withReport(CALLS.strong, long);
+}
+
 export async function galleryScenario(state: string): Promise<GalleryScenario> {
-  const calls = await callFixtures();
-  const done = (name: CallName) => calls[name].session;
+  const done = (name: CallName) => CALLS[name].session;
 
   if ((CALL_NAMES as readonly string[]).includes(state)) {
     return { client: client({ getSession: () => Promise.resolve(done(state as CallName)) }) };
@@ -70,11 +97,29 @@ export async function galleryScenario(state: string): Promise<GalleryScenario> {
   ) {
     const phase = EVALUATING_PHASES.find((p) => `evaluating-${p}` === state) ?? 'scoring';
     return {
-      client: client({ getSession: () => Promise.resolve(evaluatingSession(calls.strong, phase)) }),
+      client: client({
+        getSession: () => Promise.resolve(evaluatingSession(CALLS.strong, phase)),
+      }),
     };
   }
 
   switch (state) {
+    case 'version-1':
+      return {
+        client: client({
+          getSession: () =>
+            Promise.resolve(withReport(CALLS.strong, asVersion1(CALLS.strong.report))),
+        }),
+      };
+    case 'no-product': {
+      const session = {
+        ...done('strong'),
+        scenario: { ...done('strong').scenario, product: null },
+      };
+      return { client: client({ getSession: () => Promise.resolve(session) }) };
+    }
+    case 'long-text':
+      return { client: client({ getSession: () => Promise.resolve(longTextSession()) }) };
     case 'loading':
       return { client: client({}) };
     case 'not-found':
@@ -101,7 +146,7 @@ export async function galleryScenario(state: string): Promise<GalleryScenario> {
     case 'evaluating-slow':
       return {
         client: client({
-          getSession: () => Promise.resolve(evaluatingSession(calls.strong, 'scoring')),
+          getSession: () => Promise.resolve(evaluatingSession(CALLS.strong, 'scoring')),
         }),
         slowAfterMs: 1500,
       };
@@ -109,7 +154,7 @@ export async function galleryScenario(state: string): Promise<GalleryScenario> {
       return {
         client: client({
           getSession: playing([
-            ...EVALUATING_PHASES.map((phase) => evaluatingSession(calls.strong, phase)),
+            ...EVALUATING_PHASES.map((phase) => evaluatingSession(CALLS.strong, phase)),
             done('strong'),
           ]),
         }),
@@ -120,21 +165,20 @@ export async function galleryScenario(state: string): Promise<GalleryScenario> {
         state === 'failed'
           ? SERVER_EVALUATION_ERRORS.internal
           : SERVER_EVALUATION_ERRORS.providerBusy;
-      const failed = failedSession(calls.weak, error);
+      const failed = failedSession(CALLS.weak, error);
       let retried = false;
-      const recovery = [
-        evaluatingSession(calls.weak, 'discovery_review'),
-        evaluatingSession(calls.weak, 'scoring'),
-        evaluatingSession(calls.weak, 'building_report'),
+      const follow = playing([
+        evaluatingSession(CALLS.weak, 'discovery_review'),
+        evaluatingSession(CALLS.weak, 'scoring'),
+        evaluatingSession(CALLS.weak, 'building_report'),
         done('weak'),
-      ];
-      const follow = playing(recovery);
+      ]);
       return {
         client: client({
           getSession: (id, signal) => (retried ? follow(id, signal) : Promise.resolve(failed)),
           evaluate: () => {
             retried = true;
-            return Promise.resolve(evaluatingSession(calls.weak, 'transcript_locked'));
+            return Promise.resolve(evaluatingSession(CALLS.weak, 'transcript_locked'));
           },
         }),
       };
@@ -143,13 +187,13 @@ export async function galleryScenario(state: string): Promise<GalleryScenario> {
       return {
         client: client({
           getSession: () =>
-            Promise.resolve(failedSession(calls.weak, SERVER_EVALUATION_ERRORS.notConfigured)),
+            Promise.resolve(failedSession(CALLS.weak, SERVER_EVALUATION_ERRORS.notConfigured)),
         }),
       };
     case 'unreadable':
       return {
         client: client({
-          getSession: () => Promise.resolve(unreadableReportSession(calls.strong)),
+          getSession: () => Promise.resolve(unreadableReportSession(CALLS.strong)),
         }),
       };
     default:
