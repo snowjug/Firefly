@@ -1,24 +1,26 @@
-import { LinkButton } from '../../design/index.ts';
-import { Band } from './Band.tsx';
-import { CALL_MINUTES } from './scenario-examples.ts';
+import { LinkButton } from '../../design/primitives/Button.tsx';
+import { FINAL_TITLE, HERO } from './landing-copy.ts';
+import './landing.css';
 
+/** The last action on the page: the same way in as the first. */
 export function FinalAction() {
   return (
-    <Band id="start">
-      <div className="lp-final">
-        <div className="lp-final__text">
-          <h2 id="start-title" className="lp-title">
-            Begin your first simulated call
-          </h2>
-          <p className="lp-intro">
-            A call takes between {CALL_MINUTES.min} and {CALL_MINUTES.max} minutes, depending on the
-            scenario.
-          </p>
-        </div>
-        <LinkButton to="/scenarios" appearance="primary" size="large">
-          Start a simulation
+    <section className="lp-section lp-section--final" aria-labelledby="lp-final-title">
+      <div className="l-page lp-final">
+        <h2 id="lp-final-title" className="lp-title lp-title--large">
+          {FINAL_TITLE}
+        </h2>
+        <LinkButton
+          to="/scenarios"
+          appearance="primary"
+          size="large"
+          icon="arrow-right"
+          iconPosition="end"
+          nudge
+        >
+          {HERO.primary}
         </LinkButton>
       </div>
-    </Band>
+    </section>
   );
 }

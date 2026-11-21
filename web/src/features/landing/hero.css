@@ -1,46 +1,31 @@
-/* The hero: the promise and the way in on the left, one moment from a fictional call on the right. */
+/* The hero: the promise and the way in on the left, a moment from a call on the right. */
 
 .lp-hero {
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
   background: var(--bg-quiet);
 }
 .lp-hero__inner {
   display: grid;
   align-items: center;
-  gap: var(--sp-10);
-  padding-block: var(--sp-10);
+  gap: var(--sp-8);
+  padding-block: var(--sp-8) var(--sp-10);
 }
 .lp-hero__copy {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--sp-5);
+  gap: var(--sp-4);
   min-inline-size: 0;
 }
-.lp-hero__eyebrow {
-  margin: 0;
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--fg-2);
-}
 .lp-hero__lead {
-  max-inline-size: 34rem;
+  max-inline-size: 30rem;
   margin: 0;
-  font-size: var(--fs-subtitle1);
-  line-height: var(--lh-subtitle1);
-  color: var(--fg-2);
 }
 .lp-hero__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-3);
-  margin-block-start: var(--sp-1);
-}
-.lp-hero__note {
-  max-inline-size: 32rem;
-  margin: 0;
-  font-size: var(--fs-compact);
-  line-height: var(--lh-compact);
-  color: var(--fg-2);
+  margin-block-start: var(--sp-2);
 }
 
 /* On a phone the two actions fill the row, so each is easy to hit. */

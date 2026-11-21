@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
+import { LANDING_TITLE } from './landing-copy.ts';
 
-export const LANDING_TITLE = 'Firefly: practise customer conversations';
+export { LANDING_TITLE };
 
 /**
  * Sets the landing page's title exactly. `useDocumentTitle` always adds " · Firefly" after the page
- * name, which would read "Firefly: practise customer conversations · Firefly" here.
+ * name, which would read "Firefly: practise Microsoft support calls · Firefly" here.
  */
 export function useLandingTitle(): void {
   useEffect(() => {

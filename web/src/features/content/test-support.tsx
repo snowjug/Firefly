@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { matchRoutes } from 'react-router';
 import { expect, vi } from 'vitest';
 import type { AppConfigDTO } from '#shared/domain/api.ts';
+import { wordCount } from '#shared/domain/scenario.ts';
 import { App, AppProviders, appRoutes, createAppRouter } from '../../App.tsx';
 import { ApiError, api } from '../../lib/api.ts';
 
@@ -134,6 +135,7 @@ export function expectPicturesHaveAlternatives(root: HTMLElement = document.body
 /** The words and marks the product never uses, as a page would show them. */
 export const FORBIDDEN_COPY: readonly [string, RegExp][] = [
   ['AI-powered', /ai-powered/i],
+  ['AI insights', /ai insights?/i],
   ['level up', /level up/i],
   ['supercharge', /supercharge/i],
   ['revolutionise', /revolutionis/i],
@@ -150,7 +152,36 @@ export const FORBIDDEN_COPY: readonly [string, RegExp][] = [
   ['seamless', /seamless/i],
   ['journey', /journey/i],
   ['mastery', /mastery/i],
+  // Claims the product does not and must not make.
+  ['compliant', /\bcompliant\b/i],
+  ['certified', /\b(certified|accredited)\b/i],
+  ['CBCF alignment', /cbcf[- ](aligned|compliant|certified|mapped|approved)/i],
+  ['real-time emotion detection', /(real-time|live) emotion|emotion (detection|recognition)/i],
 ];
+
+const HIDDEN = '[hidden], [aria-hidden="true"], [inert], .visually-hidden';
+
+/**
+ * The text a person can see in `root`: nothing from a closed disclosure, a panel that is not
+ * showing, an element hidden from assistive technology or text that exists only for it. Parts
+ * that sit side by side are separated by a space, unless the next one is punctuation.
+ */
+export function visibleText(root: Element): string {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let text = '';
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const value = node.textContent ?? '';
+    if (!value.trim() || node.parentElement?.closest(HIDDEN)) continue;
+    const joins = /^[\s.,;:!?)\u201d\u2019]/.test(value) || /\s$/.test(text);
+    text += (text && !joins ? ' ' : '') + value;
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/** How many words a person can see in `root`, counted the way the scenario budgets count them. */
+export function visibleWords(root: Element): number {
+  return wordCount(visibleText(root));
+}
 
 /** Everything a person or a screen reader is given as words: text, names and descriptions. */
 export function pageWords(root: HTMLElement = document.body): string {
