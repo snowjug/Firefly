@@ -33,7 +33,7 @@ import {
 import { describeCall } from './mood.ts';
 
 // The six dimension scorers of the rules evaluator. Each returns a score computed from the
-// classifications and recorded state events by explicit, documented rules (docs/evaluation-rubric.md),
+// classifications and recorded state events by explicit, documented rules (docs/scoring-rubric.md),
 // the quotes that support it, and the gap that should drive the guidance. Scores never depend on how
 // long, short, formal or fluent the trainee's messages were: only on what they did.
 

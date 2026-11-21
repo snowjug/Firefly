@@ -1,12 +1,16 @@
 # How Firefly scores a practice call
 
-This page is for trainers and mentors. It describes what the coaching report looks at, exactly how the
-built-in rules evaluator turns a call into scores, what counts as evidence, what is never penalised, and
-where automatic scoring stops being reliable.
+This page is for apprentices, mentors and developers. It describes what the coaching report that follows
+every call looks at, exactly how the built-in rules evaluator turns a call into scores, what counts as
+evidence, what is never penalised, and where automatic scoring stops being reliable.
 
 Firefly's scores are **coaching feedback on a practice call with an invented customer**. They are not an
 assessment of a person's performance, and nobody should use them as one. A mentor reading the transcript
 will often see things the report cannot.
+
+The report itself repeats the short version of this page: six skills scored from 1 to 5 with quotes
+from your own call, a review of the hidden facts the customer held back, how the customer's mood moved,
+and one next practice target.
 
 - Evaluator: `Firefly rules evaluator`, version `rules-1.0.0` (code: `server/evaluator/`)
 - Rubric version: `rubric-1`
@@ -36,6 +40,18 @@ does not say enough:
 
 Those checks look for plain phrases and ignore grammar, spelling and length. No score depends on how
 long, formal or polished a message was.
+
+## Spoken and typed calls
+
+The evaluator reads the transcript and nothing else. A spoken turn reaches it as the words that
+speech-to-text produced; a typed turn reaches it as typed. Both are scored by the same rules, and the
+evaluator does not look at how a turn was entered (the server records it, and shows it in the
+transcript, but no scoring code reads it).
+
+- Tone of voice, pace, volume and accent are not heard and are never scored.
+- Speech-to-text can mishear words. The transcript on the report is the text that was scored, so you can
+  see what the evaluator saw. If a line was misheard, say it again or type it, and treat a score that
+  rests on that line with care.
 
 ## Scores
 
@@ -343,10 +359,11 @@ A model can write the words. It cannot change a number the engine recorded.
 - Tone of voice, pace and warmth cannot be heard in text. Empathy is judged from what was said.
 - The customer is a simulation with a fixed scenario. Behaviours that would be fine with a real customer
   can score low here, and the reverse.
-- A short call gives little evidence. That is why short calls say so and give no overall score.
+- A short call gives little evidence. That is why short calls say so, and why a call of two trainee turns
+  or fewer gets no overall score.
 - The rules are simple on purpose so they can be explained. They do not weigh the importance of a single
   moment, such as one badly timed remark in an otherwise strong call, beyond the rules above.
 - Scores from different evaluator or rubric versions are not directly comparable. The version is stored
   with every report.
-- Agreement between these scores and mentors' scores has to be measured on reviewed calls. Until it has
-  been, treat the scores as a starting point for a conversation, not a result.
+- Nobody has measured how closely these scores agree with mentors' scores, and Firefly includes no tool
+  for measuring it. Treat the scores as a starting point for a conversation, not a result.

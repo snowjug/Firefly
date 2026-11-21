@@ -5,6 +5,8 @@ Firefly runs in one of two modes.
 - **Demo mode** (the default) uses Firefly's built-in rules engine. It needs no credentials and makes no network calls. It is labelled "Demo mode" everywhere in the app and is never presented as a model.
 - **Live mode** uses a chat model for three judgement calls: classifying what the trainee did, writing the customer's replies, and drafting the coaching report. Three providers are supported: Azure OpenAI, Google's Gemini API, and any OpenAI-compatible chat-completions endpoint.
 
+This page is about the language model. Speaking and listening are a separate boundary with their own providers (none, a labelled demo voice, and Azure AI Speech), described in [voice-architecture.md](voice-architecture.md). Neither choice depends on the other.
+
 > **Verification status.** The Gemini provider has been run end to end against the real Gemini API (see [Verified against the Gemini API](#verified-against-the-gemini-api)). Azure OpenAI and generic OpenAI-compatible services have been verified only against a local fake server (`server/providers/fake-llm-server.ts`) in automated tests. For those two, anything that depends on a real service is unverified: the exact wording of error responses, content-filter payloads, JSON-mode support, token budgets for reasoning models, and the quality of the replies. Run the [smoke test](#optional-manual-smoke-test) with your own key before relying on them.
 
 ## Configure a provider
@@ -164,11 +166,11 @@ On 2026-11-19 the Gemini provider was run against the real Gemini API with the d
 - A fourth call (the Standard scenario "Team cannot open the shared project workspace") got its customer replies, but the coaching draft hit the free-tier rate limit (HTTP 429). Firefly showed it as a retryable failure with the transcript kept, as designed.
 - Separate requests confirmed that JSON mode (`response_format`) and `reasoning_effort: "minimal"` are accepted by `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite`, and recorded the shape of Google's error responses for an invalid key, an unknown model, an unknown field and a rate limit. The tests for those cases use those shapes.
 
-This was a handful of scripted calls to show that the provider works. It says nothing about how the coaching compares with a mentor's; see [the evaluation rubric](evaluation-rubric.md) for how scores are checked.
+This was a handful of scripted calls to show that the provider works. It says nothing about how the coaching compares with a mentor's; see [the scoring rubric](scoring-rubric.md) for how scores are checked.
 
 ## Prompt versions
 
-Prompts are plain functions in `server/prompts/` with exported version constants: `CUSTOMER_PROMPT_VERSION` (`customer-1`), `CLASSIFIER_PROMPT_VERSION` (`classifier-1`) and `EVALUATOR_PROMPT_VERSION` (`evaluator-2`). The versions are stored with every session. Change the version whenever you change a prompt's wording or sampling. The evaluator prompt's guidance for each dimension follows [the scoring rubric](evaluation-rubric.md); update both together. A model-written coaching draft is verified and merged by `server/evaluator/merge.ts`, as described in that page.
+Prompts are plain functions in `server/prompts/` with exported version constants: `CUSTOMER_PROMPT_VERSION` (`customer-1`), `CLASSIFIER_PROMPT_VERSION` (`classifier-1`) and `EVALUATOR_PROMPT_VERSION` (`evaluator-2`). The versions are stored with every session. Change the version whenever you change a prompt's wording or sampling. The evaluator prompt's guidance for each dimension follows [the scoring rubric](scoring-rubric.md); update both together. A model-written coaching draft is verified and merged by `server/evaluator/merge.ts`, as described in that page.
 
 ## Optional manual smoke test
 

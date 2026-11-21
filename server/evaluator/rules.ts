@@ -28,7 +28,7 @@ import {
 import { dimensionGuidance } from './phrasing.ts';
 
 // The rules evaluator: scores the six dimensions from the turn classifications and the recorded
-// state events by the explicit rules in docs/evaluation-rubric.md. It is deterministic: the same
+// state events by the explicit rules in docs/scoring-rubric.md. It is deterministic: the same
 // input always produces the same report (apart from `generatedAt`).
 
 export const EVALUATOR_NAME = 'Firefly rules evaluator';
