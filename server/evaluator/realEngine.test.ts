@@ -1,18 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { TurnClassification } from '#shared/domain/classification.ts';
-import { applyConfig } from '#shared/domain/config.ts';
 import type { CoachingReport, EvaluationDraft } from '#shared/domain/report.ts';
-import { startingState } from '#shared/domain/state.ts';
 import { sentences } from '#shared/domain/text.ts';
 import type { EvaluationInput } from '#server/engine/types.ts';
-import { simulate } from '../engine/simulate.ts';
-import { getScenarioLibrary } from '../scenarios/index.ts';
 import { mergeModelDraft } from './merge.ts';
+import { engineCall } from './engineCall.ts';
 import { evaluateWithRules } from './rules.ts';
 import { expectQuotesVerified } from './testing.ts';
 
 // Regression tests on reports for conversations that ran through the real simulation engine, so
 // the wording is checked against the state events and classifications the product really produces.
+// The scenario is the inline fixture; tests against the real scenario library are in
+// realLibrary.test.ts.
 
 const NOW = new Date('2026-03-01T10:00:00Z');
 
@@ -41,52 +39,14 @@ const CALLS = {
   ],
 } as const;
 
-const library = getScenarioLibrary();
-
-// The good call from the review: five turns on the "checkout outage" challenge.
-const CHECKOUT_GOOD = [
-  "Hello Declan, this is Sam from Contoso support. I'm sorry checkout is down; with your CEO presenting at 11:00 I can see how much is riding on this. Can you tell me exactly what customers see when they press pay?",
-  'Thank you. Is it failing for every storefront and every region, or is anything still working?',
-  'Was anything changed or updated on your side shortly before it started, even something small or routine?',
-  "I'll take ownership of this, Declan. I'll escalate it to our engineers now and call you back at 9:30 with an update, even if I have no fix yet.",
-  "To recap: payments fail at the pay step on three storefronts since 07:40, I'm escalating now and I'll call you at 9:30. Is there anything else I can help with? Thank you, Declan.",
-];
+type Difficulty = 'starter' | 'standard' | 'challenge';
 
 async function evaluate(
-  scenarioId: string,
-  difficulty: 'starter' | 'standard' | 'challenge',
+  difficulty: Difficulty,
   lines: readonly string[],
   endedEarly = false,
 ): Promise<{ input: EvaluationInput; report: CoachingReport }> {
-  const base = library.find((s) => s.id === scenarioId);
-  if (!base) throw new Error(`No scenario ${scenarioId}`);
-  const scenario = applyConfig(base, { difficulty });
-  const sim = await simulate(scenario, [...lines]);
-  const classifications: Record<number, TurnClassification> = {};
-  sim.turns.forEach((t, i) => (classifications[2 + 2 * i] = t.classification));
-  const input: EvaluationInput = {
-    scenario,
-    turns: sim.transcript,
-    classifications,
-    stateEvents: sim.events,
-    discovery: sim.runtime.discovery,
-    startState: startingState({
-      startingTemperature: scenario.config.startingTemperature,
-      difficulty: scenario.config.difficulty,
-      callStage: scenario.config.callStage,
-      impact: scenario.config.impact,
-    }),
-    finalState: sim.runtime.customer,
-    endedEarly,
-    durationSeconds: 300,
-    provider: { kind: 'mock', label: 'Demo mode (no live model)' },
-    library: library.map((s) => ({
-      id: s.id,
-      title: s.title,
-      difficulty: s.difficulty,
-      coachingFocus: s.coachingFocus,
-    })),
-  };
+  const input = await engineCall([...lines], { difficulty }, { endedEarly });
   return { input, report: evaluateWithRules(input, { now: NOW }) };
 }
 
@@ -149,42 +109,18 @@ function agreeingDraft(report: CoachingReport): EvaluationDraft {
   };
 }
 
-describe('the checkout outage call from the review', () => {
-  it('describes the customer in words and gives two opportunities and a natural summary', async () => {
-    const { report } = await evaluate(
-      'checkout-outage-before-investor-event',
-      'challenge',
-      CHECKOUT_GOOD,
-      true,
-    );
+describe('a good call through the real engine', () => {
+  it('describes the customer in words and gives at least two opportunities', async () => {
+    const { report } = await evaluate('challenge', CALLS.good, true);
     for (const [path, text] of evaluatorText(report)) {
       expect(text, path).not.toMatch(RAW_MOOD_NUMBER);
     }
-    const strength = report.strengths.find((s) => s.title.startsWith('Acknowledged'));
-    expect(strength?.whyItHelped).toMatch(
-      /Declan's temperature eased a little \(Angry to Frustrated\)/,
-    );
     expect(report.improvements.length).toBeGreaterThanOrEqual(2);
-    expect(report.improvements.map((i) => i.title)).toContain(
-      'Did not find out: a rollback exists but he fears what it would cost',
-    );
-    const summary = outsideQuotes(report.summary.overall);
-    expect(sentences(summary).length).toBeLessThanOrEqual(3);
-    expect(summary).toMatch(
-      /The biggest opportunity is to ask whether the customer can undo, revert or roll back/,
-    );
-    expect(summary).toMatch(
-      /You uncovered 3 of the 6 hidden facts; the biggest gap was an important fact \(a rollback exists but he fears what it would cost\)\./,
-    );
-    expect(summary).not.toMatch(/\ba important\b|missed:|:\s+[A-Z]/);
+    expect(outsideQuotes(report.summary.overall)).not.toMatch(/\ba important\b|missed:|:\s+[A-Z]/);
   });
 
   it('describes clarity by what was seen, never by a count of clear turns', async () => {
-    const { report } = await evaluate(
-      'checkout-outage-before-investor-event',
-      'challenge',
-      CHECKOUT_GOOD,
-    );
+    const { report } = await evaluate('challenge', CALLS.good);
     const clarity = report.dimensions.find((d) => d.id === 'clarity');
     expect(clarity?.rationale).toMatch(/played the situation back/);
     expect(clarity?.rationale).not.toMatch(/\d+ of your \d+ turns?|was clear|were clear/);
@@ -192,21 +128,17 @@ describe('the checkout outage call from the review', () => {
 });
 
 describe('reports for real engine conversations', () => {
-  const setups = library.flatMap((s) =>
-    (['starter', 'standard', 'challenge'] as const).map((difficulty) => ({
-      id: s.id,
-      difficulty,
-    })),
-  );
+  const setups = (['starter', 'standard', 'challenge'] as const).map((difficulty) => ({
+    difficulty,
+  }));
 
   it('never print a raw temperature, trust, confidence, patience or urgency value', async () => {
     const found: string[] = [];
-    for (const { id, difficulty } of setups) {
+    for (const { difficulty } of setups) {
       for (const [name, lines] of Object.entries(CALLS)) {
-        const { report } = await evaluate(id, difficulty, lines);
+        const { report } = await evaluate(difficulty, lines);
         for (const [path, text] of evaluatorText(report)) {
-          if (RAW_MOOD_NUMBER.test(text))
-            found.push(`${id}/${difficulty}/${name} ${path}: ${text}`);
+          if (RAW_MOOD_NUMBER.test(text)) found.push(`${difficulty}/${name} ${path}: ${text}`);
         }
       }
     }
@@ -215,10 +147,10 @@ describe('reports for real engine conversations', () => {
 
   it('read as prose, give two or three opportunities, and cite only verified quotes', async () => {
     const found: string[] = [];
-    for (const { id, difficulty } of setups) {
+    for (const { difficulty } of setups) {
       for (const [name, lines] of Object.entries(CALLS)) {
-        const where = `${id}/${difficulty}/${name}`;
-        const { input, report } = await evaluate(id, difficulty, lines);
+        const where = `${difficulty}/${name}`;
+        const { input, report } = await evaluate(difficulty, lines);
         const summary = outsideQuotes(report.summary.overall);
         if (sentences(summary).length > 3) found.push(`${where}: more than three sentences`);
         if (sentences(summary).length < 2) found.push(`${where}: fewer than two sentences`);
@@ -249,24 +181,24 @@ describe('reports for real engine conversations', () => {
 
   it('are left untouched when a model repeats them, so the evaluator never trips its own guard', async () => {
     const found: string[] = [];
-    for (const { id, difficulty } of setups) {
+    for (const { difficulty } of setups) {
       for (const [name, lines] of Object.entries(CALLS)) {
-        const { input, report } = await evaluate(id, difficulty, lines);
+        const { input, report } = await evaluate(difficulty, lines);
         const { warnings } = mergeModelDraft(
           agreeingDraft(report),
           input,
           { name: 'Model', version: '1', providerLabel: 'Test' },
           { now: NOW },
         );
-        if (warnings.length > 0) found.push(`${id}/${difficulty}/${name}: ${warnings.join(' | ')}`);
+        if (warnings.length > 0) found.push(`${difficulty}/${name}: ${warnings.join(' | ')}`);
       }
     }
     expect(found).toEqual([]);
   });
 
   it('keep short calls honest: no gap in what was found, no stretch, no overall score', async () => {
-    for (const { id, difficulty } of setups.filter((s) => s.difficulty === 'standard')) {
-      const { report } = await evaluate(id, difficulty, CALLS.good.slice(0, 2), true);
+    for (const { difficulty } of setups.filter((s) => s.difficulty === 'standard')) {
+      const { report } = await evaluate(difficulty, CALLS.good.slice(0, 2), true);
       expect(report.summary.overallScore).toBeNull();
       expect(report.completion.evidence).toBe('insufficient');
       expect(report.summary.overall).not.toMatch(/biggest gap/);

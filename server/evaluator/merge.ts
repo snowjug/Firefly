@@ -35,6 +35,9 @@ import {
   type TraineeTurn,
 } from './parts.ts';
 import { withoutRawMoodNumbers } from './mood.ts';
+import { withoutCbcfMentions } from './cbcf-mapping.ts';
+import { conformReport } from './conform.ts';
+import { assessRubric } from './rubric.ts';
 import {
   improvementText,
   lowerLabel,
@@ -109,11 +112,21 @@ function checkCitation(call: CallView, turnIndex: unknown, quote: unknown): Evid
 }
 
 /** Model text, cleaned of markup and cut to the report's limit; `fallback` when nothing is left. */
-function cleanText(text: unknown, max: number, fallback = ''): { text: string; scrubbed: boolean } {
+function cleanText(
+  text: unknown,
+  max: number,
+  fallback = '',
+): { text: string; scrubbed: boolean; cbcfDropped: boolean } {
   const cleaned = typeof text === 'string' ? sanitizeModelText(text, max) : '';
   // Raw 0-100 values of the customer's state mean nothing to a trainee: such a sentence is dropped.
-  const scrubbed = withoutRawMoodNumbers(cleaned);
-  return { text: scrubbed.length > 0 ? scrubbed : fallback, scrubbed: scrubbed !== cleaned };
+  const noNumbers = withoutRawMoodNumbers(cleaned);
+  // CBCF is not mapped, so a model has nothing true to say about it.
+  const scrubbed = withoutCbcfMentions(noNumbers);
+  return {
+    text: scrubbed.length > 0 ? scrubbed : fallback,
+    scrubbed: noNumbers !== cleaned,
+    cbcfDropped: scrubbed !== noNumbers,
+  };
 }
 
 function strengthKindFor(dimension: DimensionId, c: TurnClassification): StrengthKind | null {
@@ -226,6 +239,7 @@ export function mergeModelDraft(
     const result = cleanText(text, max, fallback);
     if (result.scrubbed)
       warnings.push(`${what}: dropped a sentence that gave a raw score for the customer's mood.`);
+    if (result.cbcfDropped) warnings.push(`${what}: dropped a sentence that named CBCF.`);
     return result.text;
   };
 
@@ -355,6 +369,9 @@ export function mergeModelDraft(
   }
 
   const overall = overallScore(scores, completion.evidence);
+  // CARE, the milestones and the CBCF status are read from the transcript by the rubric layer, for
+  // every report. A model never decides them, so nothing it wrote can change them.
+  const rubric = assessRubric(call, discovery);
 
   // Keep the model's chosen focus only if it is a genuinely weak area.
   const lowest = Math.min(...DIMENSION_IDS.map((id) => scores[id]));
@@ -383,7 +400,7 @@ export function mergeModelDraft(
   }
 
   const candidate = {
-    version: 1,
+    version: 2,
     generatedAt: (options.now ?? new Date()).toISOString(),
     evaluator: {
       kind: 'model',
@@ -398,10 +415,12 @@ export function mergeModelDraft(
       coachingFocus: [...new Set(input.scenario.coachingFocus)],
     },
     dimensions,
+    care: rubric.care,
+    cbcf: rubric.cbcf,
     strengths,
     improvements,
     discovery,
-    journey: buildJourney(call),
+    journey: { ...buildJourney(call), milestones: rubric.milestones },
     curveball: buildCurveball(call),
     nextPractice: buildNextPractice(
       call,
@@ -419,5 +438,15 @@ export function mergeModelDraft(
       'The model\u2019s evaluation could not be turned into a valid report, so it was not used.',
     );
   }
-  return { report: parsed.data, warnings };
+  // The last step, the same one the rules evaluator takes: word budgets, and every quote checked
+  // against the turn it cites. A report that no longer holds together after it is not used.
+  const conformed = CoachingReportSchema.safeParse(
+    conformReport(parsed.data, { turns: input.turns }),
+  );
+  if (!conformed.success) {
+    throw new EvaluationDraftError(
+      'The model\u2019s evaluation could not be turned into a valid report, so it was not used.',
+    );
+  }
+  return { report: conformed.data, warnings };
 }

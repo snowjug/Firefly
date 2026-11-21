@@ -26,13 +26,17 @@ import {
   type Scores,
 } from './parts.ts';
 import { dimensionGuidance } from './phrasing.ts';
+import { conformReport } from './conform.ts';
+import { assessRubric } from './rubric.ts';
+import { stageGapsOf } from './stage-gaps.ts';
 
 // The rules evaluator: scores the six dimensions from the turn classifications and the recorded
-// state events by the explicit rules in docs/scoring-rubric.md. It is deterministic: the same
-// input always produces the same report (apart from `generatedAt`).
+// state events by the explicit rules in docs/scoring-rubric.md, and reads CARE, the customer
+// journey milestones and the CBCF status from the transcript (see rubric.ts). It is deterministic:
+// the same input always produces the same report (apart from `generatedAt`).
 
 export const EVALUATOR_NAME = 'Firefly rules evaluator';
-export const EVALUATOR_VERSION = 'rules-1.0.0';
+export const EVALUATOR_VERSION = 'rules-2.0.0';
 
 function judge(call: CallView, outcomes: Outcome[]): DimensionResult[] {
   const context = phraseContext(call);
@@ -76,6 +80,7 @@ export function evaluateWithRules(
   const call = buildCallView(input);
   const completion = buildCompletion(call);
   const discovery = buildDiscovery(call);
+  const rubric = assessRubric(call, discovery);
 
   const nothingSaid = call.turns.length === 0;
   const outcomes = nothingSaid ? [] : scoreDimensions(call, discovery);
@@ -86,10 +91,17 @@ export function evaluateWithRules(
   const strengths = nothingSaid ? [] : buildStrengths(call, discovery, scores);
   const improvements = nothingSaid
     ? []
-    : buildImprovements(call, discovery, scores, completion.evidence, outcomes);
+    : buildImprovements(
+        call,
+        discovery,
+        scores,
+        completion.evidence,
+        outcomes,
+        stageGapsOf(rubric.assessment),
+      );
 
-  return CoachingReportSchema.parse({
-    version: 1,
+  const report = CoachingReportSchema.parse({
+    version: 2,
     generatedAt: (options.now ?? new Date()).toISOString(),
     evaluator: {
       kind: 'rules',
@@ -104,12 +116,16 @@ export function evaluateWithRules(
       coachingFocus: [...new Set(input.scenario.coachingFocus)],
     },
     dimensions,
+    care: rubric.care,
+    cbcf: rubric.cbcf,
     strengths: strengths.map((s) => s.item),
     improvements: improvements.map((i) => i.item),
     discovery,
-    journey: buildJourney(call),
+    journey: { ...buildJourney(call), milestones: rubric.milestones },
     curveball: buildCurveball(call),
     nextPractice: buildNextPractice(call, scores, overall, discovery),
     trainingNote: trainingNote(EVALUATOR_NAME),
   });
+  // The last step: word budgets, and every quote checked against the turn it cites.
+  return CoachingReportSchema.parse(conformReport(report, { turns: input.turns }));
 }

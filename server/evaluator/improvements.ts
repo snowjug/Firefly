@@ -23,13 +23,14 @@ import {
 } from './parts.ts';
 import {
   IMPROVEMENT_DIMENSION,
-  firstFitting,
   improvementText,
   lowerLabel,
   stageLead,
   type ImprovementKind,
+  type StageGapKind,
   type StretchKind,
 } from './phrasing.ts';
+import { BUDGETS, firstFittingWords, fitWords } from './words.ts';
 
 // Improvements for the rules evaluator. Real findings come first: harmful behaviour, then missed
 // or partly found facts (each with the scenario's own better question), then the gaps the
@@ -79,6 +80,12 @@ const SEVERITY: Record<ImprovementKind, number> = {
   unclear: 4,
   'no-next-contact': 3,
   'no-anything-else': 2,
+  'no-history-ack': 6,
+  'no-progress-update': 5,
+  'no-escalation-explained': 5,
+  'no-cadence': 5,
+  'no-resolution-check': 5,
+  'no-agreement-check': 4,
   'stretch-scoping': 1,
   'stretch-empathy': 1,
   'stretch-clarity': 1,
@@ -122,6 +129,12 @@ const IMPROVEMENT_CATEGORIES: Record<ImprovementKind, StateCategory[]> = {
   unclear: ['clarity'],
   'no-next-contact': ['next-steps'],
   'no-anything-else': [],
+  'no-history-ack': [],
+  'no-progress-update': [],
+  'no-escalation-explained': [],
+  'no-cadence': [],
+  'no-resolution-check': [],
+  'no-agreement-check': [],
   'stretch-scoping': [],
   'stretch-empathy': [],
   'stretch-clarity': [],
@@ -152,6 +165,7 @@ function improvementCandidates(
   discovery: CoachingReport['discovery'],
   sufficiency: Sufficiency,
   outcomes: Outcome[],
+  stageGaps: StageGapKind[],
 ): ImprovementCandidate[] {
   const { name, scenario } = call;
   const { proficiency, impact } = scenario.config;
@@ -337,6 +351,18 @@ function improvementCandidates(
     }
   }
 
+  // What this call's stage calls for and never got (a progress update on a follow-up, an
+  // explained escalation on an escalated case, a check that the fix worked on a closure call).
+  for (const kind of stageGaps) {
+    out.push({ kind, turn: null, quote: null, harm: SEVERITY[kind], events: [] });
+  }
+  // The stage's own wording of the empathy gap says more than the general one, so it replaces it.
+  if (stageGaps.includes('no-history-ack')) {
+    for (let i = out.length - 1; i >= 0; i -= 1) {
+      if (out[i]?.kind === 'no-empathy') out.splice(i, 1);
+    }
+  }
+
   for (const r of discovery.results) {
     if (r.status === 'discovered' || r.importance === 'helpful') continue;
     out.push({
@@ -424,8 +450,9 @@ export function buildImprovements(
   scores: Scores,
   sufficiency: Sufficiency,
   outcomes: Outcome[],
+  stageGaps: StageGapKind[] = [],
 ): CoachedImprovement[] {
-  const ranked = improvementCandidates(call, discovery, sufficiency, outcomes)
+  const ranked = improvementCandidates(call, discovery, sufficiency, outcomes, stageGaps)
     .map((c) => ({ c, rank: c.harm + (5 - scores[IMPROVEMENT_DIMENSION[c.kind]]) }))
     .sort((a, b) => b.rank - a.rank || (a.c.turn?.index ?? 0) - (b.c.turn?.index ?? 0))
     .map((r) => r.c);
@@ -461,14 +488,24 @@ export function buildImprovements(
       upset: c.upset,
     });
     const harm = describeHarm(name, c.events);
-    const lead = c.turn ? 'After this,' : 'Along the way,';
-    const consequence = harm ? ` ${lead} ${harm}.` : '';
+    const harmBrief = describeHarm(name, c.events, true);
+    const phrase = (what: string | null) =>
+      what ? ` ${c.turn ? 'After this,' : 'Along the way,'} ${what}.` : '';
+    const consequence = phrase(harm);
+    const consequenceBrief = phrase(harmBrief);
     const stage = STAGE_LEAD_KINDS.has(c.kind) ? stageLead(scenario.config.callStage, name) : '';
     const standing = `${text.risk}${consequence}`;
-    const risk = firstFitting(400, [
-      `${c.riskLead ? `${c.riskLead} ` : ''}${stage ? `${stage} ` : ''}${standing}`,
-      `${c.riskLead ? `${c.riskLead} ` : ''}${standing}`,
-      standing,
+    // The risk is held to 45 words. The customer's second reaction goes first, then the stage and
+    // the call's own lead-in, before the standing reason or the moment itself is touched.
+    const opening = c.riskLead ? `${c.riskLead} ` : '';
+    const risk = firstFittingWords(BUDGETS.riskWords, [
+      `${opening}${stage ? `${stage} ` : ''}${standing}`,
+      `${opening}${stage ? `${stage} ` : ''}${text.risk}${consequenceBrief}`,
+      `${opening}${standing}`,
+      `${opening}${text.risk}${consequenceBrief}`,
+      `${text.risk}${consequenceBrief}`,
+      `${opening}${text.risk}`,
+      text.risk,
     ]);
     return {
       item: {
@@ -476,8 +513,8 @@ export function buildImprovements(
         title: truncate(text.title, 120),
         turnIndex: c.turn?.index ?? null,
         quote: c.quote,
-        risk,
-        betterPhrasing: truncate(text.betterPhrasing, 500),
+        risk: truncate(risk, 400),
+        betterPhrasing: fitWords(text.betterPhrasing, BUDGETS.betterPhrasingWords),
         whyItWorks: truncate(text.whyItWorks, 400),
       },
       kind: c.kind,

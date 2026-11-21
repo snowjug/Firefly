@@ -5,6 +5,7 @@ import { truncate } from '#shared/domain/text.ts';
 import type { DimensionId } from '#shared/domain/vocab.ts';
 import { wentStraightToFix } from './dimensions.ts';
 import { describeHelp } from './mood.ts';
+import { BUDGETS, firstFittingWords, wordCount } from './words.ts';
 import {
   closingSignals,
   curveballState,
@@ -33,7 +34,8 @@ import {
 
 export interface CoachedStrength {
   item: StrengthItem;
-  said: string; // what the trainee did, finishing "At turn N, you ..."
+  said: string; // what the trainee did, with the quote, finishing "At turn N, you ..."
+  saidPlain: string; // the same without the quote, for a summary that has to be short
   help: string | null; // the customer's reaction in brief, when there was one worth mentioning
 }
 
@@ -185,22 +187,67 @@ function strengthCandidates(
 
 const STRENGTH_SAID: Record<
   StrengthKind,
-  (quote: string, name: string, fact?: { label: string; importance: string }) => string
+  (
+    quote: string,
+    name: string,
+    fact?: { label: string; importance: string },
+  ) => { quoted: string; plain: string }
 > = {
-  discovery: (q, _n, fact) =>
-    `asked ${quoted(q)}, which uncovered ${article(fact?.importance ?? 'important')} ${fact?.importance ?? 'important'} fact (${fact?.label ?? 'a hidden detail'})`,
-  'ownership-clear': (q) => `took clear ownership (${quoted(q)})`,
-  'impact-acknowledged': (q, n) => `acknowledged what this meant for ${n} (${quoted(q)})`,
-  'empathy-specific': (q, n) => `showed empathy that fitted ${n}'s situation (${quoted(q)})`,
-  summary: (q) => `played the situation back to check understanding (${quoted(q)})`,
-  recap: (q) => `recapped what was agreed (${quoted(q)})`,
-  'next-steps-specific': (q) => `gave a specific next step (${quoted(q)})`,
-  'corrects-assumption': (q) => `tested a belief gently instead of arguing (${quoted(q)})`,
-  'jargon-explained': (q) => `explained a technical term in plain words (${quoted(q)})`,
-  introduction: (q) => `opened with a greeting and an introduction (${quoted(q)})`,
-  'promise-realistic': (q) => `stayed honest about what could be promised (${quoted(q)})`,
-  'next-contact': (q) => `confirmed when the next contact would be (${quoted(q)})`,
-  'anything-else': (q) => `checked whether anything else was needed (${quoted(q)})`,
+  discovery: (q, _n, fact) => {
+    const what = `${article(fact?.importance ?? 'important')} ${fact?.importance ?? 'important'} fact (${fact?.label ?? 'a hidden detail'})`;
+    return {
+      quoted: `asked ${quoted(q)}, which uncovered ${what}`,
+      plain: `asked a question that uncovered ${what}`,
+    };
+  },
+  'ownership-clear': (q) => ({
+    quoted: `took clear ownership (${quoted(q)})`,
+    plain: 'took clear ownership',
+  }),
+  'impact-acknowledged': (q, n) => ({
+    quoted: `acknowledged what this meant for ${n} (${quoted(q)})`,
+    plain: `acknowledged what this meant for ${n}`,
+  }),
+  'empathy-specific': (q, n) => ({
+    quoted: `showed empathy that fitted ${n}'s situation (${quoted(q)})`,
+    plain: `showed empathy that fitted ${n}'s situation`,
+  }),
+  summary: (q) => ({
+    quoted: `played the situation back to check understanding (${quoted(q)})`,
+    plain: 'played the situation back to check understanding',
+  }),
+  recap: (q) => ({
+    quoted: `recapped what was agreed (${quoted(q)})`,
+    plain: 'recapped what was agreed',
+  }),
+  'next-steps-specific': (q) => ({
+    quoted: `gave a specific next step (${quoted(q)})`,
+    plain: 'gave a specific next step',
+  }),
+  'corrects-assumption': (q) => ({
+    quoted: `tested a belief gently instead of arguing (${quoted(q)})`,
+    plain: 'tested a belief gently instead of arguing',
+  }),
+  'jargon-explained': (q) => ({
+    quoted: `explained a technical term in plain words (${quoted(q)})`,
+    plain: 'explained a technical term in plain words',
+  }),
+  introduction: (q) => ({
+    quoted: `opened with a greeting and an introduction (${quoted(q)})`,
+    plain: 'opened with a greeting and an introduction',
+  }),
+  'promise-realistic': (q) => ({
+    quoted: `stayed honest about what could be promised (${quoted(q)})`,
+    plain: 'stayed honest about what could be promised',
+  }),
+  'next-contact': (q) => ({
+    quoted: `confirmed when the next contact would be (${quoted(q)})`,
+    plain: 'confirmed when the next contact would be',
+  }),
+  'anything-else': (q) => ({
+    quoted: `checked whether anything else was needed (${quoted(q)})`,
+    plain: 'checked whether anything else was needed',
+  }),
 };
 
 export function buildStrengths(
@@ -229,6 +276,12 @@ export function buildStrengths(
     if (chosen.length >= 3) break;
     if (!chosen.includes(c) && c.weight >= 6 && !duplicate(c)) chosen.push(c);
   }
+  // Two strengths are better than one when the call really did two things well, even in one
+  // dimension: anything that cleared the bar can fill the second place.
+  for (const c of candidates) {
+    if (chosen.length >= 2) break;
+    if (!chosen.includes(c) && !duplicate(c)) chosen.push(c);
+  }
 
   const { name } = call;
   const curveball = curveballState(call);
@@ -238,20 +291,36 @@ export function buildStrengths(
       factLabel: c.fact?.label,
       importance: c.fact?.importance,
     });
+    const title = truncate(text.title, 120);
     const help = c.help ? ` After this, ${c.help}.` : '';
+    const helpBrief = c.helpBrief ? ` After this, ${c.helpBrief}.` : '';
     const resolved =
       c.answeredCurveball && curveball.type
         ? ` This reply also resolved the curveball (${name} ${CURVEBALL_PHRASES[curveball.type]}).`
         : '';
+    // The title and the explanation share 35 words. What is dropped first is the second measure
+    // of the customer's reaction, then the reaction, never the reason it helped and, when the same
+    // reply answered a curveball, never that.
+    const room = BUDGETS.strengthWords - wordCount(title);
+    const whyItHelped = firstFittingWords(Math.max(8, room), [
+      `${text.because}${help}${resolved}`,
+      `${text.because}${helpBrief}${resolved}`,
+      `${text.because}${resolved}`,
+      `${text.because}${help}`,
+      `${text.because}${helpBrief}`,
+      text.because,
+    ]);
+    const said = STRENGTH_SAID[c.kind](c.quote, name, c.fact);
     return {
       item: {
         dimension: STRENGTH_DIMENSION[c.kind],
-        title: truncate(text.title, 120),
+        title,
         turnIndex: c.turn.index,
         quote: c.quote,
-        whyItHelped: truncate(`${text.because}${help}${resolved}`, 400),
+        whyItHelped: truncate(whyItHelped, 400),
       },
-      said: `at turn ${c.turn.index}, you ${STRENGTH_SAID[c.kind](c.quote, name, c.fact)}`,
+      said: `at turn ${c.turn.index}, you ${said.quoted}`,
+      saidPlain: `at turn ${c.turn.index}, you ${said.plain}`,
       help: c.helpBrief,
     };
   });

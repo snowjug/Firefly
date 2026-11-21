@@ -45,15 +45,15 @@ describe('evaluateWithRules: contract', () => {
   it('returns a valid report that identifies the rules evaluator and the provider', () => {
     const report = run(strongCall());
     expect(CoachingReportSchema.safeParse(report).success).toBe(true);
-    expect(report.version).toBe(1);
+    expect(report.version).toBe(2);
     expect(report.evaluator).toEqual({
       kind: 'rules',
       name: 'Firefly rules evaluator',
-      version: 'rules-1.0.0',
+      version: 'rules-2.0.0',
       providerLabel: 'Demo mode (no live model)',
     });
     expect(EVALUATOR_NAME).toBe('Firefly rules evaluator');
-    expect(EVALUATOR_VERSION).toBe('rules-1.0.0');
+    expect(EVALUATOR_VERSION).toBe('rules-2.0.0');
     expect(report.generatedAt).toBe(NOW.toISOString());
     expect(report.dimensions.map((d) => d.id)).toEqual([...DIMENSION_IDS]);
   });

@@ -8,6 +8,7 @@ import {
   type Proficiency,
 } from '#shared/domain/vocab.ts';
 import { truncate } from '#shared/domain/text.ts';
+import { BUDGETS, firstFittingWords } from './words.ts';
 
 // The wording library for coaching. Everything the report says that is not a number or a quote
 // comes from here: improvement templates with slots (customer first name, impact wording, deadline,
@@ -44,7 +45,17 @@ export type ImprovementKind =
   | 'unclear'
   | 'no-next-contact'
   | 'no-anything-else'
+  | StageGapKind
   | StretchKind;
+
+/** Something the call's stage calls for that never happened (see care/stages.ts). */
+export type StageGapKind =
+  | 'no-history-ack'
+  | 'no-progress-update'
+  | 'no-escalation-explained'
+  | 'no-cadence'
+  | 'no-resolution-check'
+  | 'no-agreement-check';
 
 export const IMPROVEMENT_DIMENSION: Record<ImprovementKind, DimensionId> = {
   'no-introduction': 'opening-rapport',
@@ -68,6 +79,12 @@ export const IMPROVEMENT_DIMENSION: Record<ImprovementKind, DimensionId> = {
   unclear: 'clarity',
   'no-next-contact': 'ownership-next-steps',
   'no-anything-else': 'closing',
+  'no-history-ack': 'empathy-deescalation',
+  'no-progress-update': 'ownership-next-steps',
+  'no-escalation-explained': 'ownership-next-steps',
+  'no-cadence': 'ownership-next-steps',
+  'no-resolution-check': 'closing',
+  'no-agreement-check': 'closing',
   'stretch-scoping': 'scoping-discovery',
   'stretch-empathy': 'empathy-deescalation',
   'stretch-clarity': 'clarity',
@@ -308,7 +325,7 @@ function jargonText(ctx: PhraseContext, slots: ImprovementSlots): ImprovementTex
   const plain = slots.quote ? plainVersion(slots.quote) : null;
   const check = `Does that make sense so far, ${name}?`;
   const betterPhrasing = plain
-    ? firstFitting(500, [`${stripEnd(plain.text)}. ${check}`])
+    ? firstFittingWords(BUDGETS.betterPhrasingWords, [`${stripEnd(plain.text)}. ${check}`])
     : `Say it in everyday words first, then check it landed: ${quoted(`In simple terms, [what it means for ${name}]. ${check}`)}`;
   const audience =
     ctx.proficiency === 'novice'
@@ -351,7 +368,7 @@ function dismissiveText(ctx: PhraseContext): ImprovementText {
   return {
     title: "Played down the customer's concern",
     risk: 'Telling a customer their concern is small or not a problem makes them feel unheard, which usually raises the temperature and cuts trust.',
-    betterPhrasing: firstFitting(500, [
+    betterPhrasing: firstFittingWords(BUDGETS.betterPhrasingWords, [
       impactQuote
         ? `I hear you, ${name}: ${quoted(impactQuote)} That matters, so let's get it sorted. Can you tell me what you see when you try?`
         : null,
@@ -365,11 +382,11 @@ function dismissiveText(ctx: PhraseContext): ImprovementText {
 
 function promiseText(ctx: PhraseContext): ImprovementText {
   const { name, deadlineQuote } = ctx;
-  const commit = `I can't promise a fix time until I know the cause, ${name}. What I can promise is that I'll look into it now and update you ${NEXT_UPDATE}, even if I don't have an answer yet.`;
+  const commit = `I can't promise a fix time until I know the cause, ${name}. I can promise to look into it now and update you ${NEXT_UPDATE}, even without an answer.`;
   return {
     title: 'Promised an outcome or time that could not be verified',
     risk: 'A promise you cannot yet verify becomes a broken promise if the cause takes longer, and the customer remembers it.',
-    betterPhrasing: firstFitting(500, [
+    betterPhrasing: firstFittingWords(BUDGETS.betterPhrasingWords, [
       deadlineQuote ? `You said ${quoted(deadlineQuote)} ${commit}` : null,
       commit,
     ]),
@@ -445,7 +462,7 @@ function impactText(ctx: PhraseContext): ImprovementText {
   return {
     title: `Did not acknowledge what this meant for ${name}`,
     risk: `The impact in this call was ${IMPACT_LABELS[impact].label.toLowerCase()}, and none of your replies acknowledged it.`,
-    betterPhrasing: firstFitting(500, [
+    betterPhrasing: firstFittingWords(BUDGETS.betterPhrasingWords, [
       impactQuote
         ? `${name}, I can hear how much is riding on this: ${quoted(impactQuote)} ${act}`
         : null,
@@ -462,7 +479,7 @@ function empathyText(ctx: PhraseContext, upset: boolean): ImprovementText {
   return {
     title: upset ? `No empathy while ${name} was upset` : 'No empathy shown during the call',
     risk: `None of your replies acknowledged how ${name} was feeling.`,
-    betterPhrasing: firstFitting(500, [
+    betterPhrasing: firstFittingWords(BUDGETS.betterPhrasingWords, [
       impactQuote
         ? `I'm sorry this is happening, ${name}. ${quoted(impactQuote)} I can see why that's stressful. Let me see what I can do to put it right.`
         : null,
@@ -608,6 +625,77 @@ function anythingElseText(ctx: PhraseContext): ImprovementText {
   };
 }
 
+// What the call's stage calls for, said when it never happened. The wording is about behaviour:
+// it states no product fact, and where the trainee has to supply one it is left in brackets.
+function stageGapText(kind: StageGapKind, ctx: PhraseContext): ImprovementText {
+  const { name } = ctx;
+  switch (kind) {
+    case 'no-history-ack':
+      return {
+        title:
+          ctx.stage === 'escalated'
+            ? 'Did not acknowledge the earlier experience'
+            : 'Did not acknowledge the wait or the history',
+        risk:
+          ctx.stage === 'escalated'
+            ? `${name} had already been through this before the case was escalated, and none of your replies acknowledged it.`
+            : `${name} was following up on a case that was already open, and none of your replies acknowledged the wait.`,
+        betterPhrasing:
+          ctx.stage === 'escalated'
+            ? `I'm sorry this has already taken more than one call, ${name}. I've read what happened before, and I'll own it from here.`
+            : `I'm sorry you've had to chase this, ${name}. I've read the case notes, and I'll tell you where it stands now.`,
+        whyItWorks:
+          'Naming the earlier experience shows you have read the case, and it saves the customer from telling the story again.',
+        advice: `acknowledge what ${name} has already been through before you ask anything`,
+      };
+    case 'no-progress-update':
+      return {
+        title: 'Gave no update on what had happened so far',
+        risk: `${name} was following up to hear what had happened, and none of your replies said.`,
+        betterPhrasing: `Here's where the case stands, ${name}: [what has happened so far]. Next, I'll [action] and update you ${NEXT_UPDATE}.`,
+        whyItWorks:
+          'A short status first answers the question the customer called with, before you ask anything new of them.',
+        advice: 'start with where the case stands, then say what happens next',
+      };
+    case 'no-escalation-explained':
+      return {
+        title: 'Did not explain what the escalation means',
+        risk: `${name}'s case had already been escalated, and nothing you said explained what that would change.`,
+        betterPhrasing: `This is with [the team that has it] now, ${name}. They'll [what they will do], and I'll stay your contact and update you ${NEXT_UPDATE}.`,
+        whyItWorks:
+          'Saying who has the case and what they will do turns "escalated" from a label into a plan.',
+        advice:
+          'explain who has the case now, what they will do and who stays in touch with the customer',
+      };
+    case 'no-cadence':
+      return {
+        title: 'Did not set a regular update time',
+        risk: `On an escalated case a single update is not enough: ${name} needs to know how often to expect news.`,
+        betterPhrasing: `I'll update you every day at [time] until this is resolved, ${name}, even when I have no news.`,
+        whyItWorks:
+          'A regular time lets the customer stop chasing, and it gives you a commitment you can keep.',
+        advice: 'set a regular time for updates, and keep to it even without news',
+      };
+    case 'no-resolution-check':
+      return {
+        title: 'Did not check that the fix really worked',
+        risk: `${name} called to close this off, and nothing you said asked whether the problem had really gone.`,
+        betterPhrasing: `Before we close this, ${name}, is everything working as it should now?`,
+        whyItWorks:
+          'Asking the customer to confirm the result means the case closes on their word, not on an assumption.',
+        advice: 'ask the customer to confirm the problem has gone before you close',
+      };
+    case 'no-agreement-check':
+      return {
+        title: 'Did not check the customer was happy to close',
+        risk: `Closing without asking leaves ${name} no say in it, and a case closed over a doubt tends to reopen.`,
+        betterPhrasing: `Are you happy for us to close this case now, ${name}?`,
+        whyItWorks: 'It gives the customer the last word on whether the case is finished.',
+        advice: 'ask whether the customer is happy to close',
+      };
+  }
+}
+
 // A stretch builds on something that went well. Nothing was wrong, so the risk says so.
 function stretchText(kind: StretchKind, ctx: PhraseContext): ImprovementText {
   const { name, impactQuote } = ctx;
@@ -616,7 +704,7 @@ function stretchText(kind: StretchKind, ctx: PhraseContext): ImprovementText {
       return {
         title: 'Stretch: keep the empathy going',
         risk: `Nothing went wrong here. You showed specific empathy once, and a customer's feelings can come back several times in a call, so each time is another chance to show you noticed.`,
-        betterPhrasing: firstFitting(500, [
+        betterPhrasing: firstFittingWords(BUDGETS.betterPhrasingWords, [
           impactQuote
             ? `I know ${quoted(impactQuote)} is weighing on you, ${name}, and I'm still treating it as a priority. Here's what I'm doing about it next: [action].`
             : null,
@@ -715,6 +803,13 @@ export function improvementText(
       return nextContactText(ctx);
     case 'no-anything-else':
       return anythingElseText(ctx);
+    case 'no-history-ack':
+    case 'no-progress-update':
+    case 'no-escalation-explained':
+    case 'no-cadence':
+    case 'no-resolution-check':
+    case 'no-agreement-check':
+      return stageGapText(kind, ctx);
     case 'stretch-scoping':
     case 'stretch-empathy':
     case 'stretch-clarity':
@@ -745,8 +840,8 @@ export function strengthText(
         // The title already names the fact, so this says why finding it matters instead.
         because:
           importance === 'critical'
-            ? `Asking about this directly brought out the detail that mattered most in this case, so the rest of the call could work from facts instead of guesses.`
-            : `Asking about this directly gave the call a clearer picture of what was happening, so the next questions could be better aimed.`,
+            ? `Asking about this directly brought out the detail that mattered most, so the rest of the call worked from facts.`
+            : `Asking about this directly gave the call a clearer picture, so the next questions could be better aimed.`,
       };
     case 'ownership-clear':
       return {

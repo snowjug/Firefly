@@ -11,7 +11,7 @@ import {
 } from '#shared/domain/vocab.ts';
 import type { EvaluationInput } from '#server/engine/types.ts';
 import { stretchCandidates } from './improvements.ts';
-import { buildCallView } from './parts.ts';
+import { buildCallView, buildDiscovery, discoverySentence } from './parts.ts';
 import { evaluateWithRules } from './rules.ts';
 import {
   STRONG_OPTIONS,
@@ -470,7 +470,7 @@ describe('improvements', () => {
       );
       expect(item?.quote).toBe('It will definitely be fixed in ten minutes.');
       expect(item?.betterPhrasing).toBe(
-        "I can't promise a fix time until I know the cause, Maya. What I can promise is that I'll look into it now and update you in 20 minutes, even if I don't have an answer yet.",
+        "I can't promise a fix time until I know the cause, Maya. I can promise to look into it now and update you in 20 minutes, even without an answer.",
       );
       expect(item?.risk).toContain("After this, Maya's trust fell a little.");
       // the temperature moved by two points: not worth mentioning
@@ -516,7 +516,7 @@ describe('improvements', () => {
       expect(item?.title).toBe('Went to fixes before understanding the problem');
       expect(item?.quote).toBe('Please reset your password again.');
       expect(item?.betterPhrasing).toBe(
-        'Before we try anything, Maya, is your work email or the portal signed in on any other device, like a phone or tablet, that might still have your old password?',
+        'Before we try anything, Maya, is your work email signed in on any other device, like a phone or tablet, that might still have your old password?',
       );
       expect(item?.risk).toContain("After this, Maya's temperature rose a little.");
     });
@@ -553,7 +553,7 @@ describe('improvements', () => {
       );
       expect(item?.quote).toBe('What is the problem again?');
       expect(item?.betterPhrasing).toBe(
-        'Thanks Maya, I have that already. Next, is your work email or the portal signed in on any other device, like a phone or tablet, that might still have your old password?',
+        'Thanks Maya, I have that already. Next, is your work email signed in on any other device, like a phone or tablet, that might still have your old password?',
       );
     });
   });
@@ -589,7 +589,7 @@ describe('improvements', () => {
       );
       expect(item?.title).toBe('No specific next step with a time');
       expect(item?.betterPhrasing).toContain('call you back in 20 minutes');
-      expect(item?.betterPhrasing).toContain('the Northwind staff portal');
+      expect(item?.betterPhrasing).toContain('Microsoft Entra ID');
     });
   });
 
@@ -977,37 +977,52 @@ describe('the overall summary', () => {
       .replace(/\u201c[^\u201d]*\u201d/g, 'QUOTE')
       .split(/(?<=[.!?])\s+(?=[A-Z])/)
       .filter(Boolean);
+  const words = (text: string) => text.trim().split(/\s+/).length;
 
-  it('is two or three natural sentences with specific evidence', () => {
-    for (const input of [strongCall(), weakCall()]) {
+  // Reports are held to 45 words (the product brief's summary budget). The fullest wording that
+  // fits is used: the customer's reaction and the quotes go before the opportunity does.
+  it('is two or three natural sentences, at most 45 words, with specific evidence', () => {
+    const short = buildInput(makeScenario(), WEAK_STEPS.slice(0, 4), { endedEarly: true });
+    const shorter = buildInput(makeScenario(), WEAK_STEPS.slice(0, 2), { endedEarly: true });
+    for (const input of [strongCall(), weakCall(), short, shorter]) {
       const { overall } = run(input).summary;
       expect(sentences(overall).length).toBeGreaterThanOrEqual(2);
       expect(sentences(overall).length).toBeLessThanOrEqual(3);
+      expect(words(overall)).toBeLessThanOrEqual(45);
     }
-    expect(run(weakCall()).summary.overall).toContain(
-      '\u201cYou should have read the reminder email before changing it.\u201d',
-    );
+    expect(run(weakCall()).summary.overall).toContain('(turn 4)');
     expect(run(strongCall()).summary.overall).toContain(
-      "you acknowledged what this meant for Maya (\u201cI can see the first patients arrive at nine, so let's move quickly.\u201d), and Maya's temperature eased a little.",
+      "At turn 10, you acknowledged what this meant for Maya, and Maya's temperature eased a little.",
     );
   });
 
-  it('puts the biggest opportunity as advice about behaviour, with the moment and the reaction', () => {
+  it('puts the biggest opportunity as advice about behaviour, with the moment', () => {
     expect(run(weakCall()).summary.overall).toContain(
-      "The biggest opportunity is to keep blame out of the call: describe what you see and ask Maya what happened instead (turn 4, \u201cYou should have read the reminder email before changing it.\u201d), after which Maya's temperature rose sharply.",
+      'The biggest opportunity is to keep blame out of the call: describe what you see and ask Maya what happened instead (turn 4).',
     );
   });
 
-  it('reports the discovery result in plain words, naming the biggest gap in lower case', () => {
+  it('reports the discovery result in plain words', () => {
     expect(run(strongCall()).summary.overall).toMatch(/You uncovered all 4 hidden facts\.$/);
     expect(run(weakCall()).summary.overall).toMatch(
-      /You did not uncover any of the 4 hidden facts; the biggest gap was a critical fact \(phone still using the old password\)\.$/,
+      /You did not uncover any of the 4 hidden facts\.$/,
+    );
+  });
+
+  // The sentence itself, in full, before a summary has to be cut to its budget.
+  it('names the biggest gap in lower case when the discovery sentence has room for it', () => {
+    const discovery = (input: EvaluationInput) => {
+      const call = buildCallView(input);
+      return discoverySentence(buildDiscovery(call), call.scenario);
+    };
+    expect(discovery(weakCall())).toBe(
+      'You did not uncover any of the 4 hidden facts; the biggest gap was a critical fact (phone still using the old password)',
     );
     const input = strongCall();
     const record = input.discovery['hf-phone-old-password'];
     if (record) record.status = 'partial';
-    expect(run(input).summary.overall).toMatch(
-      /You uncovered 3 of the 4 hidden facts and one more in part; the biggest gap was only part of a critical fact \(phone still using the old password\)\./,
+    expect(discovery(input)).toBe(
+      'You uncovered 3 of the 4 hidden facts and one more in part; the biggest gap was only part of a critical fact (phone still using the old password)',
     );
   });
 

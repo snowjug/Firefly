@@ -448,7 +448,7 @@ describe('mergeModelDraft: next practice', () => {
     expect(lowReport.nextPractice.suggestedDifficulty).toBe('starter');
     // a different scenario that practises the same area, at the suggested difficulty
     expect(lowReport.nextPractice.dimension).toBe('clarity');
-    expect(lowReport.nextPractice.suggestedScenarioId).toBe('cannot-find-export-feature');
+    expect(lowReport.nextPractice.suggestedScenarioId).toBe('dynamics-report-export-missing');
   });
 });
 
