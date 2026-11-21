@@ -5,11 +5,18 @@ import type {
   TranscribeResponse,
   VoiceDirection,
 } from '#shared/domain/speech.ts';
+import type { VoiceId } from '#shared/domain/voices.ts';
 
 // A speech provider turns the trainee's recorded speech into text and speaks the customer's lines.
 // It does only that: the conversation, the customer's mood and what is said all come from the
 // simulation. The provider never learns who the trainee is, never keeps audio or text, and is
 // never asked to judge the trainee's voice or emotion.
+//
+// There are three ports in all, and the two spoken ones are here: speech to text (`SpeechToTextPort`)
+// and text to speech (`TextToSpeechPort`). The third, the customer-response model, is
+// `ModelProvider` in ../providers/types.ts. None of the three knows about the others, about HTTP or
+// about the database. The one place that picks an adapter for each is `createRuntime` in
+// ../bootstrap.ts, and tests give it in-memory fakes instead.
 
 /** What the server accepts and promises. The same numbers are sent to the web app in /api/config. */
 export const SPEECH_LIMITS: SpeechCapabilitiesDTO['limits'] = {
@@ -23,6 +30,9 @@ export const SPEECH_OFF_MESSAGES = {
   transcribe: 'Speech is not turned on for this server, so type your reply instead.',
   synthesize: "The customer's voice is not turned on for this server, so read their reply instead.",
 } as const;
+
+/** What a person is told when a line holds nothing a voice could say (every provider answers alike). */
+export const NOTHING_TO_SPEAK_MESSAGE = 'There is nothing to speak in that line.';
 
 export interface TranscribeRequest {
   /** A validated 16 kHz, 16-bit, mono PCM WAV file. */
@@ -48,18 +58,41 @@ export interface SynthesizeResult {
   voice: string;
   /** The expressive style that was really applied, or `none` when mood was only approximated. */
   style: string;
+  /** The neutral voice choice the audio was made for, when the request named one. */
+  voiceId?: VoiceId;
 }
 
-export interface SpeechProvider {
+/** How a provider makes one of the four neutral customer voices in one language. */
+export interface VoiceOption {
+  id: VoiceId;
+  /** The provider's own name for the voice that speaks, or `mock`. It is never offered as a choice. */
+  providerVoice: string;
+  /** An earlier choice in this language uses the same provider voice: the two differ by pace alone. */
+  shared: boolean;
+  /** Mood is performed with a speaking style on this voice, and not only by pace and pitch. */
+  styles: boolean;
+}
+
+/** Speech to text: one recording in, plain words out. */
+export interface SpeechToTextPort {
+  /** Throws SpeechError on failure, and when the provider cannot transcribe. */
+  transcribe(request: TranscribeRequest, signal?: AbortSignal): Promise<TranscribeResult>;
+}
+
+/** Text to speech: one customer line in, synthetic audio out. */
+export interface TextToSpeechPort {
+  /** Throws SpeechError on failure, and when the provider cannot speak. */
+  synthesize(request: SynthesizeRequest, signal?: AbortSignal): Promise<SynthesizeResult>;
+  /** The four neutral customer voices as this provider makes them in `language`; empty when it cannot speak. */
+  listVoices(language: SpeechLanguage): readonly VoiceOption[];
+}
+
+export interface SpeechProvider extends SpeechToTextPort, TextToSpeechPort {
   readonly kind: SpeechProviderKind;
   /** Shown in the interface. Never claims a service that was not used. */
   readonly label: string;
   readonly demo: boolean;
   capabilities(): SpeechCapabilitiesDTO;
-  /** Throws SpeechError on failure, and when `capabilities().transcribe` is false. */
-  transcribe(request: TranscribeRequest, signal?: AbortSignal): Promise<TranscribeResult>;
-  /** Throws SpeechError on failure, and when `capabilities().synthesize` is false. */
-  synthesize(request: SynthesizeRequest, signal?: AbortSignal): Promise<SynthesizeResult>;
 }
 
 export type SpeechErrorCode =

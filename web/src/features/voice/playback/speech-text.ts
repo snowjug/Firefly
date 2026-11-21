@@ -3,15 +3,19 @@
 // and shaping a believable level meter from the words when the audio itself cannot be measured.
 // Pure functions.
 
-// The server already sends plain speech; this is a second net for a stray action or markdown marker.
-// Like the server, only actions at the very start or end go: *emphasis* inside a sentence is kept.
+import { toSpokenText } from '#shared/domain/spoken-text.ts';
+
+// The server already sends plain speech, and cleans it with the same shared function (markdown,
+// JSON, stage directions, notes for the simulation, speaker labels); this is a second net for
+// anything that reached the browser's own voices, with a few browser-only extras. Like the server,
+// only actions at the very start or end go: *emphasis* inside a sentence is kept.
 const DIRECTION = String.raw`(?:\*(?!\*)[^*\n]{1,80}\*(?!\*)|\([A-Za-z][A-Za-z' -]{0,30}\)|\[[A-Za-z][A-Za-z' -]{0,30}\])`;
 const LEADING_DIRECTION = new RegExp(String.raw`^\s*${DIRECTION}\s*`);
 const TRAILING_DIRECTION = new RegExp(String.raw`\s*${DIRECTION}\s*$`);
 
-/** Removes markdown, links, emoji and stage directions so that the voice reads only what was said. */
+/** Removes markdown, links, JSON, emoji, stage directions and speaker labels so that the voice reads only what was said. */
 export function cleanForSpeech(text: string): string {
-  let cleaned = text;
+  let cleaned = toSpokenText(text);
   for (let i = 0; i < 3; i++) {
     cleaned = cleaned.replace(LEADING_DIRECTION, '').replace(TRAILING_DIRECTION, '');
   }

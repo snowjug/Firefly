@@ -6,6 +6,7 @@ import {
   type RecognitionResultEventLike,
 } from '../support.ts';
 import type { Capture, CaptureFailure, CaptureHandlers, CaptureSession } from './types.ts';
+import { CAPTURE_TUNING } from './tuning.ts';
 
 // Capture with the browser's own speech recognition (Chrome and Edge). It listens for one sentence
 // at a time and reports interim words as they come, then the final text. Firefly never sees audio
@@ -90,7 +91,7 @@ function prepareOnDevice(ctor: RecognitionConstructor, lang: string): void {
 // ---------------------------------------------------------------------------------------
 
 /** How long to wait for the final words once the trainee has stopped speaking. */
-export const RESULT_WAIT_MS = 8000;
+export const RESULT_WAIT_MS = CAPTURE_TUNING.recognitionResultWaitMs;
 
 const HANDLERS = [
   'onstart',
@@ -145,6 +146,7 @@ export function createRecognitionCapture(options: RecognitionOptions): Recogniti
       let closed = false;
       let started = false; // speech start was reported
       let ended = false; // speech end was reported
+      let listening = false; // "the microphone is open" was reported
       let heard = '';
       let instance: RecognitionLike | null = null;
       let resultTimer: ReturnType<typeof setTimeout> | undefined;
@@ -168,8 +170,14 @@ export function createRecognitionCapture(options: RecognitionOptions): Recogniti
       };
       closeOpenPass = close;
 
+      const reportListening = () => {
+        if (listening || closed) return;
+        listening = true;
+        handlers.onListening?.();
+      };
       const reportStart = () => {
         if (started) return;
+        reportListening();
         started = true;
         handlers.onSpeechStart();
       };
@@ -262,6 +270,14 @@ export function createRecognitionCapture(options: RecognitionOptions): Recogniti
             local = false;
           }
         }
+        // The recognising service started, and then the browser began to capture audio: either is
+        // the sign that the microphone is open. (Not every engine reports both.)
+        next.onstart = () => {
+          if (!closed && instance === next) reportListening();
+        };
+        next.onaudiostart = () => {
+          if (!closed && instance === next) reportListening();
+        };
         next.onspeechstart = () => {
           if (!closed && instance === next) reportStart();
         };

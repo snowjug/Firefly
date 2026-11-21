@@ -7,8 +7,14 @@ import {
   splitForSpeech,
   type SpeechChunk,
 } from './speech-text.ts';
-import type { Playback, PlaybackHandlers, PlaybackJob, PlayRequest } from './types.ts';
-import { deliveryFor, pickVoice } from './voices.ts';
+import type {
+  Playback,
+  PlaybackHandlers,
+  PlaybackJob,
+  PlaybackStop,
+  PlayRequest,
+} from './types.ts';
+import { deliveryFor, pickVoice, pickVoiceForChoice } from './voices.ts';
 
 // Playback with the browser's own voices. Nothing here is sent anywhere by Firefly; which voice
 // speaks, and whether it runs on this device or online, is up to the browser. The browser cannot
@@ -34,12 +40,18 @@ interface Chain {
   index: number;
   started: boolean;
   startedAt: number;
+  /** How much was heard when the chain ended, was stopped or failed; null while it is running. */
+  playedMs: number | null;
+  /** What the first `stop` said, so a second one says the same. */
+  stopResult: PlaybackStop | null;
   voice: SpeechSynthesisVoice | null;
   rate: number;
   pitch: number;
   lang: string;
   meter: ReturnType<typeof setInterval> | undefined;
 }
+
+const NOT_CUT_OFF: PlaybackStop = { interrupted: false, playedMs: 0 };
 
 function inertPlayback(): Playback {
   return {
@@ -53,6 +65,7 @@ function inertPlayback(): Playback {
       return {
         stop() {
           stopped = true;
+          return NOT_CUT_OFF;
         },
       };
     },
@@ -74,6 +87,8 @@ export function createBrowserPlayback(): Playback {
   let startTimer: ReturnType<typeof setTimeout> | undefined;
   let endTimer: ReturnType<typeof setTimeout> | undefined;
   let delayTimer: ReturnType<typeof setTimeout> | undefined;
+  // Ends the wait for the browser's voices (its poll and its time limit) as soon as it is not needed.
+  let cancelVoiceWait: (() => void) | null = null;
   let lastCancel = Number.NEGATIVE_INFINITY;
   let gaveUpWaitingForVoices = false;
   const choices = new Map<string, SpeechSynthesisVoice | null>();
@@ -95,11 +110,13 @@ export function createBrowserPlayback(): Playback {
   };
 
   // The same customer keeps one voice for the whole call, even if the browser's list changes.
-  const voiceFor = (seed: string, lang: string) => {
-    const key = `${lang}|${seed}`;
+  const voiceFor = (request: PlayRequest, lang: string) => {
+    const key = `${lang}|${request.voice ?? request.voiceSeed}`;
     if (choices.has(key)) return choices.get(key) ?? null;
     const voices = readVoices();
-    const voice = pickVoice(voices, seed, lang);
+    const voice = request.voice
+      ? pickVoiceForChoice(voices, request.voice, lang)
+      : pickVoice(voices, request.voiceSeed, lang);
     if (voices.length > 0) choices.set(key, voice);
     return voice;
   };
@@ -121,9 +138,15 @@ export function createBrowserPlayback(): Playback {
         } catch {
           // Not every browser lets listeners come and go.
         }
+        if (cancelVoiceWait === cancel) cancelVoiceWait = null;
         if (timedOut) gaveUpWaitingForVoices = true;
         resolve();
       }
+      // A stop ends the wait now, so no poll or time limit outlives the reply it was for.
+      function cancel() {
+        done(false);
+      }
+      cancelVoiceWait = cancel;
       try {
         synth.addEventListener('voiceschanged', check);
       } catch {
@@ -149,7 +172,12 @@ export function createBrowserPlayback(): Playback {
     return cancelled;
   };
 
+  /** How much of the voice has played so far, taken at the moment a chain ends or is stopped. */
+  const playedSoFar = (chain: Chain): number =>
+    chain.started ? Math.max(0, Date.now() - chain.startedAt) : 0;
+
   const endChain = (chain: Chain) => {
+    if (chain.playedMs === null) chain.playedMs = playedSoFar(chain);
     clearTimers();
     clearInterval(chain.meter);
     chain.meter = undefined;
@@ -260,7 +288,7 @@ export function createBrowserPlayback(): Playback {
   const begin = (chain: Chain, mine: number) => {
     const go = () => {
       if (epoch !== mine || active !== chain) return;
-      chain.voice = voiceFor(chain.request.voiceSeed, chain.lang);
+      chain.voice = voiceFor(chain.request, chain.lang);
       chain.handlers.onDetails({
         voice: chain.voice?.name ?? null,
         style: 'none',
@@ -278,15 +306,21 @@ export function createBrowserPlayback(): Playback {
     else void whenVoicesReady().then(go);
   };
 
-  const stopActive = () => {
+  /** Stops whatever is speaking and says whether it was cut off and how far in. */
+  const stopActive = (): PlaybackStop => {
     epoch++;
     const chain = active;
     active = null;
     spoken = null;
     clearTimers();
+    cancelVoiceWait?.();
+    let result = NOT_CUT_OFF;
     if (chain) {
+      chain.playedMs ??= playedSoFar(chain);
       clearInterval(chain.meter);
       chain.meter = undefined;
+      result = { interrupted: chain.started, playedMs: chain.playedMs };
+      chain.stopResult = result;
     }
     lastCancel = Date.now();
     try {
@@ -294,6 +328,7 @@ export function createBrowserPlayback(): Playback {
     } catch {
       // Best effort.
     }
+    return result;
   };
 
   return {
@@ -310,7 +345,7 @@ export function createBrowserPlayback(): Playback {
     },
     play(request, handlers): PlaybackJob {
       if (active) stopActive();
-      const { rate, pitch } = deliveryFor(request.mood, request.voiceSeed);
+      const { rate, pitch } = deliveryFor(request.mood, request.voiceSeed, request.voice);
       const chain: Chain = {
         request,
         handlers,
@@ -318,6 +353,8 @@ export function createBrowserPlayback(): Playback {
         index: 0,
         started: false,
         startedAt: 0,
+        playedMs: null,
+        stopResult: null,
         voice: null,
         rate,
         pitch,
@@ -335,7 +372,9 @@ export function createBrowserPlayback(): Playback {
       }
       return {
         stop() {
-          if (active === chain) stopActive();
+          if (active === chain) return stopActive();
+          // Already over, or already stopped: say what happened, and cut off nothing more.
+          return chain.stopResult ?? { interrupted: false, playedMs: chain.playedMs ?? 0 };
         },
       };
     },

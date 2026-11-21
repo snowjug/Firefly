@@ -13,7 +13,7 @@ import {
   SPEECH_RESPONSE_HEADERS,
   type TranscribeResponse,
 } from '#shared/domain/speech.ts';
-import { DIFFICULTIES, SESSION_STATUSES } from '#shared/domain/vocab.ts';
+import { VOICE_IDS } from '#shared/domain/voices.ts';
 import { LATEST_SCHEMA_VERSION } from '../db/database.ts';
 import { AppError, isAbortError } from '../errors.ts';
 import { FAILURE_TARGETS, type FailureHooks } from '../hooks.ts';
@@ -30,10 +30,10 @@ import {
   toAppError,
   type SessionService,
 } from '../services/sessions.ts';
-import { SPEECH_OFF_MESSAGES, SPEECH_LIMITS, SpeechError } from '../speech/types.ts';
-import type { SpeechProvider } from '../speech/types.ts';
+import { SPEECH_LIMITS } from '../speech/types.ts';
+import type { SpeechProvider, SynthesizeResult } from '../speech/types.ts';
+import { previewVoice, requireSpeech, speakLine, transcribeRecording } from '../speech/service.ts';
 import { validateWav } from '../speech/wav.ts';
-import { voiceDirection } from '../speech/voices.ts';
 import {
   assertSameOrigin,
   assertSmallBody,
@@ -121,18 +121,21 @@ const sendBinary = (res: ServerResponse, reply: BinaryReply) => {
 /** A header value that can never break the response: printable ASCII only. */
 const headerText = (value: string): string => value.replace(/[^\x20-\x7e]/g, '').slice(0, 200);
 
-const ListFilters = z.object({
-  status: z.enum(SESSION_STATUSES).optional(),
-  difficulty: z.enum(DIFFICULTIES).optional(),
-  scenarioId: z.string().max(64).optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional(),
-  offset: z.coerce.number().int().min(0).max(10_000).optional(),
-});
-
 /** The language of a spoken request: recognition and the customer's voice both follow it. */
 const TranscribeQuerySchema = z.object({
   lang: z.enum(SPEECH_LANGUAGES).default(DEFAULT_SPEECH_LANGUAGE),
 });
+
+/** A customer turn is spoken in the voice the trainee chose; with none named, the old pairing is used. */
+const TurnSpeechQuerySchema = TranscribeQuerySchema.extend({
+  voice: z.enum(VOICE_IDS).optional(),
+});
+
+/** The voice preview must say which voice to try. */
+const PreviewQuerySchema = TranscribeQuerySchema.extend({ voice: z.enum(VOICE_IDS) });
+
+/** Zeroes a recording's bytes once they have been used, so they do not linger in memory. */
+const scrub = (buffer: Buffer): void => void buffer.fill(0);
 
 export function createApp(deps: AppDeps) {
   const { config, service, provider, speech, hooks, log } = deps;
@@ -152,7 +155,12 @@ export function createApp(deps: AppDeps) {
   });
 
   // Speech failures are logged without the audio, the words or anything the provider said.
-  const speechFailed = (c: Ctx, op: 'transcribe' | 'speak', started: number, error: unknown) => {
+  const speechFailed = (
+    c: Ctx,
+    op: 'transcribe' | 'speak' | 'preview',
+    started: number,
+    error: unknown,
+  ) => {
     if (!isAbortError(error)) {
       log.warn('speech.failed', {
         requestId: c.requestId,
@@ -163,6 +171,21 @@ export function createApp(deps: AppDeps) {
       });
     }
   };
+
+  // Spoken audio as a response, with headers that say what was really used.
+  const spokenReply = (spoken: SynthesizeResult): BinaryReply => ({
+    [BINARY]: true,
+    status: 200,
+    headers: {
+      'Content-Type': headerText(spoken.contentType),
+      'Cache-Control': 'no-store',
+      [SPEECH_RESPONSE_HEADERS.provider]: speech.kind,
+      [SPEECH_RESPONSE_HEADERS.voice]: headerText(spoken.voice),
+      [SPEECH_RESPONSE_HEADERS.style]: headerText(spoken.style),
+      [SPEECH_RESPONSE_HEADERS.voiceId]: spoken.voiceId ?? 'none',
+    },
+    body: spoken.audio,
+  });
 
   const routes: Route[] = [
     route('GET', '/api/health', () => ({
@@ -191,16 +214,6 @@ export function createApp(deps: AppDeps) {
       }),
       { limit: 'create', status: 201 },
     ),
-    route('GET', '/api/sessions', (c) => {
-      const f = ListFilters.parse(Object.fromEntries(c.url.searchParams));
-      return service.listSessions(c.profileId, {
-        ...(f.status ? { status: f.status } : {}),
-        ...(f.difficulty ? { difficulty: f.difficulty } : {}),
-        ...(f.scenarioId ? { scenarioId: f.scenarioId } : {}),
-        ...(f.limit ? { limit: f.limit } : {}),
-        ...(f.offset ? { offset: f.offset } : {}),
-      });
-    }),
     route('GET', '/api/sessions/:id', (c) => ({
       session: service.getSession(c.profileId, c.params.id as string),
     })),
@@ -248,64 +261,70 @@ export function createApp(deps: AppDeps) {
 
     // ---- speech ----------------------------------------------------------------------------
     // The trainee's recording in, text out. The audio is held in memory for this request only:
-    // it is never written to disk, never logged and never kept by Firefly.
+    // it is never written to disk, never logged and never kept by Firefly, and its bytes are zeroed
+    // as soon as the provider has finished with them, whatever the outcome.
     route(
       'POST',
       '/api/speech/transcribe',
       async (c): Promise<TranscribeResponse> => {
         const { lang } = TranscribeQuerySchema.parse(Object.fromEntries(c.url.searchParams));
-        if (!speech.capabilities().transcribe) {
-          throw new SpeechError('speech_unavailable', SPEECH_OFF_MESSAGES.transcribe, false);
-        }
+        requireSpeech(speech, 'transcribe');
         const upload = await readAudioBody(c.req, SPEECH_LIMITS.maxAudioBytes);
         const recording = validateWav(upload);
-        if (!recording.ok) throw new AppError(400, 'validation_failed', recording.message);
-        const started = Date.now();
         try {
-          hooks.maybeFail('transcribe');
-          const result = await speech.transcribe(
-            { audio: recording.wav, language: lang, durationMs: recording.durationMs },
-            c.signal,
-          );
-          log.info('speech.transcribed', {
-            requestId: c.requestId,
-            provider: speech.kind,
-            bytes: upload.length,
-            audioMs: recording.durationMs,
-            status: result.status,
-            ms: Date.now() - started,
-          });
-          return { status: result.status, text: result.text, durationMs: result.durationMs };
-        } catch (error) {
-          speechFailed(c, 'transcribe', started, error);
-          throw error;
+          if (!recording.ok) throw new AppError(400, 'validation_failed', recording.message);
+          const started = Date.now();
+          try {
+            hooks.maybeFail('transcribe');
+            const result = await transcribeRecording(
+              speech,
+              { audio: recording.wav, language: lang, durationMs: recording.durationMs },
+              c.signal,
+            );
+            log.info('speech.transcribed', {
+              requestId: c.requestId,
+              provider: speech.kind,
+              bytes: upload.length,
+              audioMs: recording.durationMs,
+              status: result.status,
+              ms: Date.now() - started,
+            });
+            return { status: result.status, text: result.text, durationMs: result.durationMs };
+          } catch (error) {
+            speechFailed(c, 'transcribe', started, error);
+            throw error;
+          }
+        } finally {
+          scrub(upload);
+          if (recording.ok) scrub(recording.wav);
         }
       },
       { limit: 'speech' },
     ),
     // One stored customer turn spoken aloud. The words come from the call itself, never from the
-    // request, so this cannot be used to speak anything else. The request body is not read.
+    // request, so this cannot be used to speak anything else. The request body is not read. The
+    // voice is the one the trainee chose (`voice`, one of voice-a to voice-d); with none named, the
+    // persona's old pairing is used, so calls saved before voices could be chosen sound as they did.
     route(
       'POST',
       '/api/sessions/:id/turns/:index/speech',
       async (c): Promise<BinaryReply> => {
         assertSmallBody(c.req);
-        const { lang } = TranscribeQuerySchema.parse(Object.fromEntries(c.url.searchParams));
+        const { lang, voice } = TurnSpeechQuerySchema.parse(Object.fromEntries(c.url.searchParams));
         const index = c.params.index as string;
         // Anything but a whole number cannot name a turn, so it finds none.
         const turnIndex = /^\d{1,5}$/.test(index) ? Number(index) : 0;
         const line = service.getSpeakableTurn(c.profileId, c.params.id as string, turnIndex);
-        if (!speech.capabilities().synthesize) {
-          throw new SpeechError('speech_unavailable', SPEECH_OFF_MESSAGES.synthesize, false);
-        }
+        requireSpeech(speech, 'synthesize');
+        // Whether the customer is cooling down is worked out with the mood, in the session service.
+        const recovering = (line as typeof line & { recovering?: boolean }).recovering === true;
         const started = Date.now();
         try {
           hooks.maybeFail('synthesize');
-          const spoken = await speech.synthesize(
-            {
-              text: line.text,
-              direction: voiceDirection({ speaker: line.speaker, language: lang, mood: line.mood }),
-            },
+          const spoken = await speakLine(
+            speech,
+            { text: line.text, speaker: line.speaker, mood: line.mood, recovering },
+            { language: lang, voice },
             c.signal,
           );
           log.info('speech.spoken', {
@@ -314,20 +333,37 @@ export function createApp(deps: AppDeps) {
             bytes: spoken.audio.length,
             ms: Date.now() - started,
           });
-          return {
-            [BINARY]: true,
-            status: 200,
-            headers: {
-              'Content-Type': headerText(spoken.contentType),
-              'Cache-Control': 'no-store',
-              [SPEECH_RESPONSE_HEADERS.provider]: speech.kind,
-              [SPEECH_RESPONSE_HEADERS.voice]: headerText(spoken.voice),
-              [SPEECH_RESPONSE_HEADERS.style]: headerText(spoken.style),
-            },
-            body: spoken.audio,
-          };
+          return spokenReply(spoken);
         } catch (error) {
           speechFailed(c, 'speak', started, error);
+          throw error;
+        }
+      },
+      { limit: 'speech' },
+    ),
+    // "Test voice": one fixed, neutral sentence in the chosen voice. The words are fixed on the
+    // server, so this cannot be used to speak anything else. It needs no call, is one request, and
+    // counts against the same speech limits as every other speech request.
+    route(
+      'POST',
+      '/api/speech/preview',
+      async (c): Promise<BinaryReply> => {
+        assertSmallBody(c.req);
+        const { lang, voice } = PreviewQuerySchema.parse(Object.fromEntries(c.url.searchParams));
+        requireSpeech(speech, 'synthesize');
+        const started = Date.now();
+        try {
+          const spoken = await previewVoice(speech, { language: lang, voice }, c.signal);
+          log.info('speech.previewed', {
+            requestId: c.requestId,
+            provider: speech.kind,
+            voice,
+            bytes: spoken.audio.length,
+            ms: Date.now() - started,
+          });
+          return spokenReply(spoken);
+        } catch (error) {
+          speechFailed(c, 'preview', started, error);
           throw error;
         }
       },

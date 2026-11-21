@@ -123,6 +123,30 @@ describe('server capture', () => {
     expect(() => pass.cancel()).not.toThrow();
   });
 
+  describe('says when it is listening', () => {
+    it('reports it once, just after the microphone tap is open, and then not again', async () => {
+      const { capture } = await setup();
+      const { log, handlers } = recorder();
+      capture.listen({ ...handlers, onListening: () => log.push('listening') });
+      // The tap is open straight away; the report waits for the call to return.
+      expect(env.audio.listeningWorklets()).toHaveLength(1);
+      expect(log).toEqual([]);
+      await Promise.resolve();
+      expect(log).toEqual(['listening']);
+      env.audio.speakSentence({ speechMs: 1000 });
+      expect(log).toEqual(['listening', 'start', 'end:silence', 'audio']);
+    });
+
+    it('does not report it for a pass that was ended before the report was due', async () => {
+      const { capture } = await setup();
+      const { log, handlers } = recorder();
+      const pass = capture.listen({ ...handlers, onListening: () => log.push('listening') });
+      pass.cancel();
+      await Promise.resolve();
+      expect(log).toEqual([]);
+    });
+  });
+
   it('keeps one pass open at a time: a new pass ends the old one without a word', async () => {
     const { capture } = await setup();
     const first = recorder();

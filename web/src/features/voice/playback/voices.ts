@@ -1,3 +1,4 @@
+import { VOICE_IDS, voiceChoice, type VoiceId } from '#shared/domain/voices.ts';
 import type { TemperatureBandId } from '#shared/domain/vocab.ts';
 
 // Choosing and delivering a browser voice for the customer. Nothing here knows a voice by name: a
@@ -33,16 +34,21 @@ const MOOD_PITCH_LIFT: Record<TemperatureBandId, number> = {
 };
 
 /**
- * Pace and pitch for a customer: a steady base pitch per seed, a little quicker and higher when
- * tense. A browser voice has no expressive styles, so this is all the mood can change.
+ * Pace and pitch for a customer: a little quicker and higher when tense. A browser voice has no
+ * expressive styles, so this is all the mood can change. With no voice chosen, a steady base pitch
+ * per seed keeps one customer sounding the same for the whole call. With a voice chosen, the pitch
+ * is left plain (pitch is never what tells the four choices apart) and the voice's own small pace is
+ * added to the rate, as the server's voices do.
  */
 export function deliveryFor(
   mood: TemperatureBandId,
   voiceSeed: string,
+  voice?: VoiceId,
 ): { rate: number; pitch: number } {
-  const basePitch = 0.92 + (hash(`${voiceSeed}:pitch`) % 19) / 100; // 0.92 to 1.10
+  const basePitch = voice ? 1 : 0.92 + (hash(`${voiceSeed}:pitch`) % 19) / 100; // 0.92 to 1.10
+  const pace = voice ? 1 + voiceChoice(voice).paceDelta / 100 : 1;
   return {
-    rate: clamp(MOOD_RATE[mood] ?? 1, 0.8, 1.3),
+    rate: clamp((MOOD_RATE[mood] ?? 1) * pace, 0.8, 1.3),
     pitch: clamp(basePitch + (MOOD_PITCH_LIFT[mood] ?? 0), 0.85, 1.2),
   };
 }
@@ -79,6 +85,15 @@ export function rankVoice(voice: SpeechSynthesisVoice, lang: string): number {
   );
 }
 
+/** The best-ranked voices in the language, in a fixed order (by `voiceURI`), or none. */
+function topVoices(voices: readonly SpeechSynthesisVoice[], lang: string): SpeechSynthesisVoice[] {
+  const primary = primaryLanguage(lang);
+  const pool = voices.filter((voice) => primaryLanguage(voice.lang) === primary);
+  if (pool.length === 0) return [];
+  const best = Math.max(...pool.map((voice) => rankVoice(voice, lang)));
+  return pool.filter((voice) => rankVoice(voice, lang) === best).sort(byUri);
+}
+
 /**
  * Chooses a voice for a customer. Only voices in the requested language are considered. Natural or
  * online voices rank first, then voices for the exact region asked for, then the browser's default.
@@ -91,10 +106,63 @@ export function pickVoice(
   seed: string,
   lang: string,
 ): SpeechSynthesisVoice | null {
-  const primary = primaryLanguage(lang);
-  const pool = voices.filter((voice) => primaryLanguage(voice.lang) === primary);
-  if (pool.length === 0) return null;
-  const best = Math.max(...pool.map((voice) => rankVoice(voice, lang)));
-  const top = pool.filter((voice) => rankVoice(voice, lang) === best).sort(byUri);
+  const top = topVoices(voices, lang);
   return top[hash(seed) % top.length] ?? null;
+}
+
+/**
+ * The browser voice for one of the four choices. The best-ranked voices are taken in a fixed order
+ * and the choices are dealt out to them in turn, so with four or more voices every choice has a
+ * voice of its own, with fewer some share one, and the result never depends on the order the browser
+ * lists voices in. Returns null when the browser has no voice in the language.
+ */
+export function pickVoiceForChoice(
+  voices: readonly SpeechSynthesisVoice[],
+  choice: VoiceId,
+  lang: string,
+): SpeechSynthesisVoice | null {
+  const top = topVoices(voices, lang);
+  return top.length === 0 ? null : (top[VOICE_IDS.indexOf(choice) % top.length] ?? null);
+}
+
+export interface BrowserVoiceChoice {
+  id: VoiceId;
+  /** The browser's own name for the voice that will speak, or null when it has none in the language. */
+  name: string | null;
+  /** True when the voice runs on this device, false when it is online, null when there is none. */
+  local: boolean | null;
+}
+
+export interface BrowserVoiceReport {
+  choices: BrowserVoiceChoice[];
+  /** How many different browser voices the four choices come to. */
+  distinct: number;
+  /** The four choices sound different because of the voice, and not only because of the pace. */
+  tellApart: boolean;
+  /** A plain sentence for the trainee when the choices cannot all be told apart, otherwise null. */
+  note: string | null;
+}
+
+/**
+ * What the four choices come to in this browser, said honestly: a browser with one English voice
+ * cannot give four voices, and the trainee is told so, not left to wonder why they sound alike.
+ */
+export function describeBrowserVoices(
+  voices: readonly SpeechSynthesisVoice[],
+  lang: string,
+): BrowserVoiceReport {
+  const choices = VOICE_IDS.map((id): BrowserVoiceChoice => {
+    const voice = pickVoiceForChoice(voices, id, lang);
+    return { id, name: voice?.name ?? null, local: voice ? voice.localService : null };
+  });
+  const distinct = new Set(choices.map((choice) => choice.name ?? '')).size;
+  const none = choices.every((choice) => choice.name === null);
+  const note = none
+    ? 'This browser has no English voice of its own to offer, so it will use its default voice and the four choices differ only in pace.'
+    : distinct >= VOICE_IDS.length
+      ? null
+      : distinct === 1
+        ? 'This browser has one English voice, so the four choices differ only in pace.'
+        : `This browser has ${distinct} English voices, so some of the four choices sound alike.`;
+  return { choices, distinct: none ? 0 : distinct, tellApart: note === null, note };
 }

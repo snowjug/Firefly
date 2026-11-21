@@ -1,8 +1,9 @@
 import { rmsOf } from './levels.ts';
+import { CAPTURE_TUNING } from './tuning.ts';
 
 // A voice-activity detector for one microphone, fed with blocks of samples. It is pure and
 // deterministic: time is measured in samples, never read from a clock, so the same audio always
-// gives the same result.
+// gives the same result. Every number it uses is in `CAPTURE_TUNING` (./tuning.ts).
 //
 // How it decides:
 // - Audio is cut into short frames (20 ms) and each frame's energy (RMS) is compared with a
@@ -11,10 +12,13 @@ import { rmsOf } from './levels.ts';
 //   moves while someone is speaking.
 // - Speech starts after about 120 ms of frames above the start threshold. The stop threshold is
 //   lower than the start threshold (hysteresis), so a word that dips does not end the speech.
-// - Speech ends after about 1.1 s below the stop threshold. The utterance keeps 300 ms from before
-//   the start (so the first word is not clipped) and a short tail after the last speech.
-// - An utterance shorter than 400 ms, or one whose loudest frame is barely above the noise, is
-//   dropped. An utterance reaching the maximum length is cut and emitted, and listening continues.
+// - Speech ends after `endSilenceMs` (1.4 s) below the stop threshold: long enough that a pause to
+//   think is not the end of the turn. The utterance keeps 300 ms from before the start (so the
+//   first word is not clipped) and a short tail after the last speech.
+// - What is not a turn is dropped: speech shorter than 400 ms from first sound to last, speech of
+//   which less than 250 ms is actually voiced (scattered clicks), and an utterance whose loudest
+//   frame is barely above the noise. An utterance reaching the maximum length is cut and emitted,
+//   and listening continues.
 
 export interface VadOptions {
   /** Sample rate of the blocks passed to `push`. */
@@ -30,6 +34,8 @@ export interface VadOptions {
   tailMs?: number;
   /** Speech shorter than this (first speech frame to last) is dropped. */
   minUtteranceMs?: number;
+  /** Speech of which less than this much is voiced (frames above the stop threshold) is dropped. */
+  minVoicedMs?: number;
   /** An utterance is cut and emitted when everything in it adds up to this length. */
   maxUtteranceMs?: number;
   /** An utterance whose loudest frame is quieter than this (RMS, 0 to 1) is only noise. */
@@ -43,17 +49,18 @@ export interface VadOptions {
 }
 
 export const VAD_DEFAULTS = {
-  frameMs: 20,
-  startMs: 120,
-  endSilenceMs: 1100,
-  preRollMs: 300,
-  tailMs: 300,
-  minUtteranceMs: 400,
-  maxUtteranceMs: 30_000,
-  minSpeechRms: 0.015,
-  startRatio: 3,
-  stopRatio: 1.8,
-  minStartRms: 0.006,
+  frameMs: CAPTURE_TUNING.frameMs,
+  startMs: CAPTURE_TUNING.speechStartMs,
+  endSilenceMs: CAPTURE_TUNING.endpointSilenceMs,
+  preRollMs: CAPTURE_TUNING.preRollMs,
+  tailMs: CAPTURE_TUNING.tailMs,
+  minUtteranceMs: CAPTURE_TUNING.minSpeechMs,
+  minVoicedMs: CAPTURE_TUNING.minVoicedMs,
+  maxUtteranceMs: CAPTURE_TUNING.maxUtteranceMs,
+  minSpeechRms: CAPTURE_TUNING.minSpeechRms,
+  startRatio: CAPTURE_TUNING.startRatio,
+  stopRatio: CAPTURE_TUNING.stopRatio,
+  minStartRms: CAPTURE_TUNING.minStartRms,
 } as const;
 
 export type VadDropReason = 'too-short' | 'low-level';
@@ -132,6 +139,7 @@ export function createVad(options: VadOptions): Vad {
   let utterance: Frame[] = [];
   let firstSpeech = -1;
   let lastSpeech = -1;
+  let voiced = 0; // frames of the utterance above the stop threshold
   let peak = 0;
   let silent = 0;
 
@@ -142,6 +150,7 @@ export function createVad(options: VadOptions): Vad {
     utterance = [];
     firstSpeech = -1;
     lastSpeech = -1;
+    voiced = 0;
     peak = 0;
     silent = 0;
   }
@@ -150,6 +159,7 @@ export function createVad(options: VadOptions): Vad {
     const keep = Math.min(utterance.length, lastSpeech + 1 + tailFrames);
     const frames = utterance.slice(0, Math.max(0, keep));
     const speechMs = firstSpeech < 0 ? 0 : (lastSpeech - firstSpeech + 1) * frameMs;
+    const voicedMs = voiced * frameMs;
     const loudest = peak;
     clearUtterance();
     if (reason !== 'limit') {
@@ -157,8 +167,9 @@ export function createVad(options: VadOptions): Vad {
       recent = [];
       above = 0;
     }
-    if (speechMs < cfg.minUtteranceMs) out.push({ type: 'dropped', reason: 'too-short' });
-    else if (loudest < cfg.minSpeechRms) out.push({ type: 'dropped', reason: 'low-level' });
+    if (speechMs < cfg.minUtteranceMs || voicedMs < cfg.minVoicedMs) {
+      out.push({ type: 'dropped', reason: 'too-short' });
+    } else if (loudest < cfg.minSpeechRms) out.push({ type: 'dropped', reason: 'low-level' });
     else {
       const samples = join(frames);
       out.push({
@@ -179,6 +190,7 @@ export function createVad(options: VadOptions): Vad {
       if (frame.rms >= stopThreshold()) {
         if (firstSpeech < 0) firstSpeech = index;
         lastSpeech = index;
+        voiced++;
         peak = Math.max(peak, frame.rms);
         silent = 0;
       } else {
@@ -214,6 +226,7 @@ export function createVad(options: VadOptions): Vad {
       if (candidate.rms < stop) return;
       if (firstSpeech < 0) firstSpeech = index;
       lastSpeech = index;
+      voiced++;
       peak = Math.max(peak, candidate.rms);
     });
     silent = utterance.length - 1 - lastSpeech;

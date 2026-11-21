@@ -1,5 +1,9 @@
 import { vi } from 'vitest';
+import { CAPTURE_TUNING } from '../capture/tuning.ts';
 import { silence, sine } from './signals.ts';
+
+// Silence after a sentence that is long enough for the detector to end the turn by itself.
+const END_OF_TURN_TRAIL_MS = CAPTURE_TUNING.endpointSilenceMs + 300;
 
 // Fakes for the browser's audio and speech APIs, installed on `globalThis` and driven from tests:
 // a microphone that can be allowed, refused or left hanging; an audio graph with a worklet that
@@ -409,14 +413,30 @@ class FakeSynthesis extends Emitter {
 
 export type AutoplayPolicy = 'allow' | 'block' | 'fail' | 'hang';
 
+// What a WAV blob's own size says about its length: 16 kHz, 16-bit, mono, after a 44-byte header
+// (32 bytes a millisecond). It is how the fake knows the silent unlock clip is 100 ms long. Anything
+// else (a blob that is not a WAV, or is too small to hold one) has no length the fake can know, and
+// its end is left to the test.
+const WAV_HEADER_BYTES = 44;
+const WAV_BYTES_PER_MS = 32;
+
+function wavLengthMs(blob: Blob | undefined): number | null {
+  if (!blob || blob.type !== 'audio/wav') return null;
+  const body = blob.size - WAV_HEADER_BYTES;
+  return body >= WAV_BYTES_PER_MS ? body / WAV_BYTES_PER_MS : null;
+}
+
 export class FakeAudioElement extends Emitter {
-  src = '';
   preload = '';
   paused = true;
   ended = false;
   duration = Number.NaN;
   currentTime = 0;
   readonly plays: string[] = [];
+  private source = '';
+  private endTimer: ReturnType<typeof setTimeout> | undefined;
+  // The fake set `duration` itself, from the length of a WAV blob: it forgets that with the source.
+  private lengthFromBlob = false;
   private pendingPlay: { resolve(): void; reject(error: unknown): void } | null = null;
   private readonly env: FakeEnv;
 
@@ -424,6 +444,16 @@ export class FakeAudioElement extends Emitter {
     super();
     this.env = env;
     env.elements.push(this);
+  }
+
+  get src(): string {
+    return this.source;
+  }
+
+  /** Like the real element, a new source stops what was playing, so it can no longer reach its end. */
+  set src(value: string) {
+    this.stopClock();
+    this.source = value;
   }
 
   play(): Promise<void> {
@@ -439,10 +469,12 @@ export class FakeAudioElement extends Emitter {
         this.pendingPlay = { resolve, reject };
       });
     }
+    this.startClock();
     return Promise.resolve();
   }
 
   pause(): void {
+    this.cancelEnd();
     this.paused = true;
     this.pendingPlay?.reject(domError('AbortError'));
     this.pendingPlay = null;
@@ -453,13 +485,17 @@ export class FakeAudioElement extends Emitter {
   }
 
   load(): void {
+    this.stopClock();
     this.paused = true;
   }
 
   /** Playback really begins (for the `hang` policy). */
   begin(): void {
-    this.pendingPlay?.resolve();
+    const pending = this.pendingPlay;
     this.pendingPlay = null;
+    if (!pending) return;
+    this.startClock();
+    pending.resolve();
   }
 
   /** The browser knows the length of the audio. */
@@ -470,6 +506,7 @@ export class FakeAudioElement extends Emitter {
 
   /** The audio plays to the end. */
   finish(): void {
+    this.cancelEnd();
     this.paused = true;
     this.ended = true;
     this.emit('ended');
@@ -478,6 +515,39 @@ export class FakeAudioElement extends Emitter {
   /** The browser cannot play the audio. */
   breakDown(): void {
     this.emit('error');
+  }
+
+  // A real element reports the length of what it loaded a moment after playing starts, and reaches
+  // the end of a short clip by itself, unless it is paused, cleared or given another source first.
+  // When the fake can know the length (a WAV blob) it does both, so code that mistakes the silent
+  // unlock clip's events for a reply's is caught. `env.element.autoEnd = false` leaves it to the test.
+  private startClock(): void {
+    if (!this.env.element.autoEnd) return;
+    const playing = this.source;
+    const ms = wavLengthMs(this.env.urls.blobFor(playing));
+    if (ms === null) return;
+    queueMicrotask(() => {
+      if (this.source !== playing) return;
+      this.lengthFromBlob = true;
+      this.setDuration(ms / 1000);
+    });
+    this.endTimer = setTimeout(() => {
+      this.endTimer = undefined;
+      if (!this.paused && this.source === playing) this.finish();
+    }, ms);
+  }
+
+  private cancelEnd(): void {
+    clearTimeout(this.endTimer);
+    this.endTimer = undefined;
+  }
+
+  private stopClock(): void {
+    this.cancelEnd();
+    if (this.lengthFromBlob) {
+      this.lengthFromBlob = false;
+      this.duration = Number.NaN;
+    }
   }
 }
 
@@ -541,6 +611,12 @@ export interface FakeEnv {
   readonly speech: FakeSynthesis;
   readonly element: {
     policy: AutoplayPolicy;
+    /**
+     * Whether an element that is playing a WAV blob reaches its end by itself after the length the
+     * blob's size gives (default true, as a real element does): the silent unlock clip is 100 ms.
+     * Blobs that are not WAVs have no length the fake can know, and are ended by the test.
+     */
+    autoEnd: boolean;
     noteStarted(element: FakeAudioElement): void;
     /** The most playing at once, ever. */
     maxConcurrent: number;
@@ -552,6 +628,8 @@ export interface FakeEnv {
     created: number;
     revoked: number;
     live(): string[];
+    /** What a blob URL was made from, even after it was revoked (playing goes on after a revoke). */
+    blobFor(url: string): Blob | undefined;
   };
   /** Listeners currently attached to every fake object that takes them. */
   listenerCount(): number;
@@ -567,6 +645,7 @@ export function installFakes(options: FakeOptions = {}): FakeEnv {
   const streams: FakeStream[] = [];
   const tracks: FakeTrack[] = [];
   const liveUrls = new Set<string>();
+  const blobsByUrl = new Map<string, Blob>();
   const recognitionInstances: FakeRecognition[] = [];
   let pendingMic: { resolve(stream: FakeStream): void; reject(error: unknown): void } | null = null;
   let urlCounter = 0;
@@ -603,7 +682,7 @@ export function installFakes(options: FakeOptions = {}): FakeEnv {
           for (const node of env.audio.listeningWorklets()) node.deliver(block);
         }
       },
-      speakSentence({ leadMs = 400, speechMs = 1000, trailMs = 1500 } = {}) {
+      speakSentence({ leadMs = 400, speechMs = 1000, trailMs = END_OF_TURN_TRAIL_MS } = {}) {
         const node = env.audio.listeningWorklets()[0];
         const owner = node ? contexts.find((context) => context.workletNodes.includes(node)) : null;
         const rate = owner?.sampleRate ?? 16000;
@@ -630,6 +709,7 @@ export function installFakes(options: FakeOptions = {}): FakeEnv {
     ),
     element: {
       policy: 'allow',
+      autoEnd: true,
       maxConcurrent: 0,
       noteStarted(element) {
         playingSet.add(element);
@@ -653,6 +733,7 @@ export function installFakes(options: FakeOptions = {}): FakeEnv {
       created: 0,
       revoked: 0,
       live: () => [...liveUrls],
+      blobFor: (url) => blobsByUrl.get(url),
     },
     listenerCount() {
       let total = env.speech.listenerCount();
@@ -777,9 +858,10 @@ export function installFakes(options: FakeOptions = {}): FakeEnv {
     };
     const originalCreate = urlApi.createObjectURL;
     const originalRevoke = urlApi.revokeObjectURL;
-    urlApi.createObjectURL = () => {
+    urlApi.createObjectURL = (blob: Blob) => {
       const url = `blob:fake/${++urlCounter}`;
       liveUrls.add(url);
+      blobsByUrl.set(url, blob);
       env.urls.created++;
       return url;
     };

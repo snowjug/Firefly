@@ -24,6 +24,21 @@ describe('cleanForSpeech', () => {
   it('keeps emphasis inside a sentence and ordinary punctuation', () => {
     expect(cleanForSpeech("It's *really* urgent, isn't it?")).toBe("It's really urgent, isn't it?");
   });
+
+  it('removes JSON, notes for the simulation, redaction notes, role labels and tags, as the server does', () => {
+    const cases: Array<[string, string]> = [
+      ['{"mood":"angry","text":"I want a refund"}', ''],
+      ['I want a refund. {"mood": "angry"} Please.', 'I want a refund. Please.'],
+      ['[mood: angry] I am not happy. (state=frustrated) Really.', 'I am not happy. Really.'],
+      ['Write to [email removed] or call [phone removed].', 'Write to or call.'],
+      ['Customer: Hello.\nSupport: Hi.', 'Hello. Hi.'],
+      ['**Customer:** Hello there', 'Hello there'],
+      ['<b>Hello</b> <br/> there', 'Hello there'],
+      ['```js\nconsole.log(1)\n```Please help.', 'Please help.'],
+      ['Customer service never called me back.', 'Customer service never called me back.'],
+    ];
+    for (const [text, spoken] of cases) expect(cleanForSpeech(text), text).toBe(spoken);
+  });
 });
 
 describe('splitForSpeech', () => {

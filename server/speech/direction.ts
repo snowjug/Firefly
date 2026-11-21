@@ -6,13 +6,21 @@ import type { Speaker } from './voices.ts';
 
 // What a customer's voice depends on, read from the stored call.
 
+/** The part of a scenario a voice depends on: only how the call started. */
+export interface DirectedScenario {
+  config: Pick<
+    EffectiveScenario['config'],
+    'startingTemperature' | 'difficulty' | 'callStage' | 'impact'
+  >;
+}
+
 /**
  * The customer's temperature when this turn was said: the starting temperature, then every change
  * caused by the trainee turns before it. A customer turn replies to the trainee turn before it, and
  * the engine records every temperature change, so this is exact.
  */
 export function temperatureAtTurn(
-  scenario: EffectiveScenario,
+  scenario: DirectedScenario,
   events: StateEvent[],
   turnIndex: number,
 ): number {
@@ -29,11 +37,44 @@ export function temperatureAtTurn(
 
 /** The temperature band (calm to escalating) of the customer when this turn was said. */
 export function moodAtTurn(
-  scenario: EffectiveScenario,
+  scenario: DirectedScenario,
   events: StateEvent[],
   turnIndex: number,
 ): TemperatureBandId {
   return temperatureBand(temperatureAtTurn(scenario, events, turnIndex)).id;
+}
+
+/** How far the temperature must have fallen, over the last few exchanges, to count as cooling down. */
+export const RECOVERY_DROP = 8;
+/** How many of the trainee's recent turns that changed the temperature are looked at. */
+const RECOVERY_WINDOW = 3;
+
+/**
+ * Whether the customer is cooling down when this turn is said: their temperature fell with the
+ * latest change, and is at least `RECOVERY_DROP` below where it stood before the last few. A
+ * customer who has only been getting hotter, or who has hardly moved, is not recovering. The voice
+ * then goes a little slower and calmer, gradually, as the temperature comes down.
+ */
+export function recoveringAtTurn(
+  scenario: DirectedScenario,
+  events: StateEvent[],
+  turnIndex: number,
+): boolean {
+  const changedAt = [
+    ...new Set(
+      events
+        .filter((e) => e.key === 'temperature' && e.turnIndex < turnIndex)
+        .map((e) => e.turnIndex),
+    ),
+  ]
+    .sort((a, b) => b - a)
+    .slice(0, RECOVERY_WINDOW);
+  const latest = changedAt[0];
+  if (latest === undefined) return false;
+  const now = temperatureAtTurn(scenario, events, turnIndex);
+  const before = changedAt.map((turn) => temperatureAtTurn(scenario, events, turn));
+  const justBefore = before[0] as number;
+  return now < justBefore && Math.max(...before) - now >= RECOVERY_DROP;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createVad, type VadEvent } from './vad.ts';
+import { createVad, VAD_DEFAULTS, type VadEvent } from './vad.ts';
+import { CAPTURE_TUNING } from './tuning.ts';
 import { blocks, concat, noise, silence, sine, syllables } from '../testing/signals.ts';
 
 const RATE = 16000;
@@ -48,14 +49,15 @@ describe('createVad', () => {
     expect((start?.atMs ?? 0) - 600).toBeLessThanOrEqual(150);
   });
 
-  it('ends the utterance after about a second of silence, keeping a short tail', () => {
+  it('ends the utterance after the end-of-turn silence, keeping a short tail', () => {
     const vad = createVad({ sampleRate: RATE });
-    const events = run(vad, concat(silence(600, RATE), sine(1000, RATE), silence(2000, RATE)));
+    const events = run(vad, concat(silence(600, RATE), sine(1000, RATE), silence(2500, RATE)));
     expect(types(events)).toEqual(['speech-start', 'utterance']);
     const end = events[1] as Timed;
-    // Speech ends at 1600 ms; the utterance is complete about 1.1 s later.
-    expect(end.atMs - 1600).toBeGreaterThanOrEqual(1000);
-    expect(end.atMs - 1600).toBeLessThanOrEqual(1200);
+    // Speech ends at 1600 ms; the utterance is complete one end-of-turn silence (1.4 s) later.
+    expect(VAD_DEFAULTS.endSilenceMs).toBe(CAPTURE_TUNING.endpointSilenceMs);
+    expect(end.atMs - 1600).toBeGreaterThanOrEqual(CAPTURE_TUNING.endpointSilenceMs - 40);
+    expect(end.atMs - 1600).toBeLessThanOrEqual(CAPTURE_TUNING.endpointSilenceMs + 80);
     const utterance = utterances(events)[0];
     expect(utterance?.reason).toBe('silence');
     expect(utterance?.speechMs).toBeGreaterThanOrEqual(980);
@@ -143,14 +145,60 @@ describe('createVad', () => {
 
   it('keeps two sentences apart when the pause between them is long enough', () => {
     const vad = createVad({ sampleRate: RATE });
+    const pause = CAPTURE_TUNING.endpointSilenceMs + 200;
     const audio = concat(
       silence(500, RATE),
       sine(800, RATE),
-      silence(1500, RATE),
+      silence(pause, RATE),
       sine(800, RATE),
-      silence(1500, RATE),
+      silence(pause, RATE),
     );
     expect(utterances(run(vad, audio))).toHaveLength(2);
+  });
+
+  it('does not end the turn at a pause to think: a 1.2 s hesitation stays one utterance', () => {
+    const vad = createVad({ sampleRate: RATE });
+    const audio = concat(
+      silence(500, RATE),
+      sine(900, RATE),
+      silence(1200, RATE),
+      sine(900, RATE),
+      silence(2500, RATE),
+    );
+    const events = run(vad, audio);
+    expect(types(events)).toEqual(['speech-start', 'utterance']);
+    // Both halves and the hesitation between them are in the one utterance.
+    expect(utterances(events)[0]?.speechMs).toBeGreaterThan(900 + 1200 + 900 - 60);
+  });
+
+  it('drops scattered bursts that add up to less than the voiced minimum', () => {
+    const vad = createVad({ sampleRate: RATE });
+    // A 140 ms burst starts speech and 100 ms more comes later: 240 ms voiced in a 440 ms stretch.
+    const audio = concat(
+      silence(500, RATE),
+      sine(140, RATE),
+      silence(200, RATE),
+      sine(100, RATE),
+      silence(2500, RATE),
+    );
+    const events = run(vad, audio);
+    expect(dropped(events)).toEqual(['too-short']);
+    expect(utterances(events)).toHaveLength(0);
+    expect(CAPTURE_TUNING.minVoicedMs).toBe(250);
+  });
+
+  it('keeps speech with gaps in it once enough of it is voiced', () => {
+    const vad = createVad({ sampleRate: RATE });
+    const audio = concat(
+      silence(500, RATE),
+      sine(160, RATE),
+      silence(200, RATE),
+      sine(200, RATE),
+      silence(2500, RATE),
+    );
+    const heard = utterances(run(vad, audio));
+    expect(heard).toHaveLength(1);
+    expect(heard[0]?.speechMs).toBeGreaterThanOrEqual(540);
   });
 
   it('ends the utterance at once on flush, and has nothing to flush when idle', () => {

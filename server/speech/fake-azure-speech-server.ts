@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { encodeWav } from './wav.ts';
 
 // A local stand-in for the Azure AI Speech REST endpoints, for tests only. It answers both the
 // short-audio speech-to-text endpoint and the text-to-speech endpoint, in the regional layout
@@ -74,6 +75,7 @@ const OUTPUT_FORMATS = new Set([
   'audio-24khz-160kbitrate-mono-mp3',
   'audio-48khz-96kbitrate-mono-mp3',
   'audio-48khz-192kbitrate-mono-mp3',
+  'riff-16khz-16bit-mono-pcm',
   'riff-24khz-16bit-mono-pcm',
   'ogg-24khz-16bit-mono-opus',
 ]);
@@ -86,6 +88,19 @@ export function fakeMp3(frames = 20): Buffer {
     Buffer.from('ID3\u0004\u0000\u0000\u0000\u0000\u0000\u0000', 'latin1'),
     ...Array<Buffer>(frames).fill(frame),
   ]);
+}
+
+/**
+ * A short, quiet 16 kHz, 16-bit mono WAV: what the service sends for a `riff-16khz-16bit-mono-pcm`
+ * request. It is a tone, not speech.
+ */
+export function fakeWav(milliseconds = 600): Buffer {
+  const samples = Math.round((milliseconds / 1000) * 16000);
+  const pcm = Buffer.alloc(samples * 2);
+  for (let i = 0; i < samples; i++) {
+    pcm.writeInt16LE(Math.round(2000 * Math.sin((2 * Math.PI * 220 * i) / 16000)), i * 2);
+  }
+  return encodeWav(pcm);
 }
 
 const recognitionBody = (status: RecognitionStatus, text: string) =>
@@ -205,8 +220,9 @@ export async function startFakeAzureSpeech(
           'content-type': 'application/json; charset=utf-8',
         });
       } else if ('audio' in step) {
-        write(res, 200, step.audio === true ? fakeMp3() : step.audio, {
-          'content-type': 'audio/mpeg',
+        const wav = request?.headers['x-microsoft-outputformat']?.startsWith('riff-') === true;
+        write(res, 200, step.audio === true ? (wav ? fakeWav() : fakeMp3()) : step.audio, {
+          'content-type': wav ? 'audio/x-wav' : 'audio/mpeg',
         });
       } else if (step.body !== undefined) {
         write(res, step.status, step.body, step.headers);
