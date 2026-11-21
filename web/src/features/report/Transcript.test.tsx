@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CoachingReport } from '#shared/domain/report.ts';
@@ -141,6 +141,20 @@ describe('finding in the transcript', () => {
     expect(count()).toHaveTextContent(`Match 1 of ${total}`);
     await userEvent.type(search(), '{Shift>}{Enter}{/Shift}');
     expect(count()).toHaveTextContent(`Match ${total} of ${total}`);
+  });
+
+  it('steps to the first match when Enter is pressed at once, before the matches have caught up with the typing', async () => {
+    show('strong');
+    const box = search();
+    // One batch, so the deferred matches for "workspace" have not been drawn when Enter arrives.
+    act(() => {
+      fireEvent.change(box, { target: { value: 'workspace' } });
+      fireEvent.keyDown(box, { key: 'Enter' });
+    });
+    const total = transcript().querySelectorAll('mark').length;
+    expect(total).toBeGreaterThan(2);
+    expect(count()).toHaveTextContent(new RegExp(`Match 1 of ${total}, in turn \\d+`));
+    expect(transcript().querySelectorAll('mark[data-rp-current-match]')).toHaveLength(1);
   });
 
   it('clears with Escape and goes back to no highlights', async () => {

@@ -225,14 +225,26 @@ export function TranscriptReview({
   const currentMatch = current === null ? null : (matches[current] ?? null);
 
   const step = (direction: 1 | -1) => {
-    if (matches.length === 0) return;
+    // The highlighted matches follow the box a moment late (they are deferred), and Enter can be
+    // pressed in that moment, so stepping works from what is typed now, not from what is shown.
+    const typed = query.trim();
+    const list =
+      typed === searched.trim()
+        ? matches
+        : findMatches(
+            shown.map((s) => s.turn),
+            query,
+          );
+    if (list.length === 0) return;
+    const key = `${filter}\u0000${typed}`;
+    const from = cursor && cursor.key === key && list[cursor.index] ? cursor.index : null;
     const next =
-      current === null
+      from === null
         ? direction === 1
           ? 0
-          : matches.length - 1
-        : (current + direction + matches.length) % matches.length;
-    setCursor({ key: cursorKey, index: next });
+          : list.length - 1
+        : (from + direction + list.length) % list.length;
+    setCursor({ key, index: next });
   };
 
   useEffect(() => {
