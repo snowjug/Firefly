@@ -13,9 +13,6 @@ import { silentLogger } from '../log.ts';
 import { createMockProvider } from '../providers/mock.ts';
 import type { ModelProvider } from '../providers/types.ts';
 import exemplar from '../scenarios/library/locked-out-after-password-reset.ts';
-import { createDemoService } from '../services/demo.ts';
-import { InsightsService } from '../services/insights.ts';
-import { RewardsService } from '../services/rewards.ts';
 import { SessionService, type EvaluatorFns } from '../services/sessions.ts';
 
 // Test harness: the real services and HTTP app on an in-memory database and an ephemeral port.
@@ -123,8 +120,6 @@ export const fakeEvaluators: EvaluatorFns = {
 export interface TestApp {
   baseUrl: string;
   service: SessionService;
-  insights: InsightsService;
-  rewards: RewardsService;
   hooks: ReturnType<typeof createFailureHooks>;
   repo: ReturnType<typeof createRepository>;
   close(): Promise<void>;
@@ -164,26 +159,6 @@ export async function createTestApp(
   const log = silentLogger;
 
   const service = new SessionService({ db, repo, provider, library, evaluators, log, hooks });
-  const insights = new InsightsService(repo);
-  const rewards = new RewardsService(repo, () => service.listScenarios());
-  const sampleService = new SessionService({
-    db,
-    repo,
-    provider: createMockProvider({ delayMs: 0 }),
-    library,
-    evaluators,
-    log,
-    hooks: createFailureHooks(false),
-  });
-  const demo = createDemoService({
-    repo,
-    sampleService,
-    insights,
-    provider,
-    spotlightScenarioId: null,
-    scenarioExists: (id) => library.some((s) => s.id === id),
-    log,
-  });
   const config: AppConfig = {
     port: 0,
     host: '127.0.0.1',
@@ -195,7 +170,7 @@ export async function createTestApp(
     testHooks: options.testHooks ?? true,
     provider: { config: { kind: 'mock', mockDelayMs: 0 }, problem: null },
   };
-  const app = createApp({ config, service, insights, rewards, demo, provider, repo, hooks, log });
+  const app = createApp({ config, service, provider, repo, hooks, log });
   const server: Server = createServer((req, res) => {
     void app.handler(req, res);
   });
@@ -240,8 +215,6 @@ export async function createTestApp(
   return {
     baseUrl,
     service,
-    insights,
-    rewards,
     hooks,
     repo,
     client,

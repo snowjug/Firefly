@@ -51,23 +51,11 @@ export interface TurnRow {
   createdAt: string;
 }
 
-export interface MentorRow {
-  id: number;
-  sessionId: string;
-  reviewer: string;
-  scores: Record<DimensionId, number>;
-  notes: string | null;
-  rubricVersion: string;
-  source: 'mentor' | 'sample';
-  createdAt: string;
-}
-
 export interface SessionFilters {
   status?: SessionStatus;
   difficulty?: string;
   scenarioId?: string;
   includeSamples?: boolean;
-  onlySamples?: boolean;
   limit?: number;
   offset?: number;
 }
@@ -191,8 +179,7 @@ export function createRepository(db: DatabaseSync) {
         where.push("json_extract(scenario_snapshot, '$.config.difficulty') = ?");
         params.push(f.difficulty);
       }
-      if (f.onlySamples) where.push('is_sample = 1');
-      else if (!f.includeSamples) where.push('is_sample = 0');
+      if (!f.includeSamples) where.push('is_sample = 0');
       const clause = where.join(' AND ');
       const total = Number(
         (
@@ -257,34 +244,6 @@ export function createRepository(db: DatabaseSync) {
         .prepare('DELETE FROM sessions WHERE id = ? AND profile_id = ?')
         .run(id, profileId);
       return Number(result.changes) > 0;
-    },
-
-    /** Used for labelled sample sessions so their timestamps look like real practice over time. */
-    setSessionTimes(id: string, startedAt: string, endedAt: string): void {
-      db.prepare(
-        'UPDATE sessions SET started_at = ?, ended_at = ?, updated_at = ? WHERE id = ?',
-      ).run(startedAt, endedAt, now(), id);
-    },
-
-    deleteSessions(profileId: string, scope: 'practice' | 'samples' | 'all'): number {
-      const clause =
-        scope === 'all' ? '' : scope === 'samples' ? ' AND is_sample = 1' : ' AND is_sample = 0';
-      const result = db
-        .prepare(`DELETE FROM sessions WHERE profile_id = ?${clause}`)
-        .run(profileId);
-      return Number(result.changes);
-    },
-
-    countSessions(profileId: string): { practice: number; samples: number } {
-      const rows = db
-        .prepare(
-          'SELECT is_sample, COUNT(*) AS n FROM sessions WHERE profile_id = ? GROUP BY is_sample',
-        )
-        .all(profileId) as { is_sample: number; n: number }[];
-      return {
-        practice: Number(rows.find((r) => r.is_sample === 0)?.n ?? 0),
-        samples: Number(rows.find((r) => r.is_sample === 1)?.n ?? 0),
-      };
     },
 
     stuckSessionIds(): string[] {
@@ -420,58 +379,6 @@ export function createRepository(db: DatabaseSync) {
             rubricVersion: String(row.rubric_version),
           }
         : null;
-    },
-
-    // ---- mentor reviews -------------------------------------------------------------------
-    saveMentorEvaluation(m: Omit<MentorRow, 'id' | 'createdAt'>): void {
-      db.prepare(
-        `INSERT INTO mentor_evaluations (session_id, reviewer, scores, notes, rubric_version, source, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (session_id, reviewer) DO UPDATE SET scores = excluded.scores, notes = excluded.notes,
-           rubric_version = excluded.rubric_version, source = excluded.source, created_at = excluded.created_at`,
-      ).run(m.sessionId, m.reviewer, json(m.scores), m.notes, m.rubricVersion, m.source, now());
-    },
-
-    listMentorEvaluations(
-      profileId: string,
-      includeSamples: boolean,
-    ): (MentorRow & {
-      scenarioTitle: string;
-      aiScores: Partial<Record<DimensionId, number>> | null;
-      evaluatorVersion: string | null;
-    })[] {
-      const rows = db
-        .prepare(
-          `SELECT m.*, s.scenario_title, s.dimension_scores, e.evaluator_version
-           FROM mentor_evaluations m
-           JOIN sessions s ON s.id = m.session_id
-           LEFT JOIN evaluations e ON e.session_id = m.session_id
-           WHERE s.profile_id = ? ${includeSamples ? '' : "AND m.source = 'mentor'"}
-           ORDER BY m.created_at DESC`,
-        )
-        .all(profileId) as Row[];
-      return rows.map((r) => ({
-        id: Number(r.id),
-        sessionId: String(r.session_id),
-        reviewer: String(r.reviewer),
-        scores: parse<Record<DimensionId, number>>(r.scores),
-        notes: (r.notes as string | null) ?? null,
-        rubricVersion: String(r.rubric_version),
-        source: r.source as 'mentor' | 'sample',
-        createdAt: String(r.created_at),
-        scenarioTitle: String(r.scenario_title),
-        aiScores: parseOrNull<Partial<Record<DimensionId, number>>>(r.dimension_scores),
-        evaluatorVersion: (r.evaluator_version as string | null) ?? null,
-      }));
-    },
-
-    sessionIdsWithMentorReview(profileId: string): Set<string> {
-      const rows = db
-        .prepare(
-          `SELECT DISTINCT m.session_id FROM mentor_evaluations m JOIN sessions s ON s.id = m.session_id WHERE s.profile_id = ?`,
-        )
-        .all(profileId) as { session_id: string }[];
-      return new Set(rows.map((r) => r.session_id));
     },
 
     traineeTurnCounts(sessionIds: string[]): Map<string, number> {

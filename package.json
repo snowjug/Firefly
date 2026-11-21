@@ -21,7 +21,6 @@
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
     "validate:scenarios": "node --disable-warning=ExperimentalWarning scripts/validate-scenarios.ts",
-    "calibrate": "node --disable-warning=ExperimentalWarning scripts/calibrate.ts",
     "check:secrets": "node scripts/scan-secrets.mjs",
     "check:lockfile": "node scripts/normalize-lockfile.mjs --check",
     "check:budgets": "node scripts/check-budgets.mjs",

@@ -21,7 +21,6 @@ import { ScenarioOverridesSchema, type ScenarioDefinition } from '#shared/domain
 import { startingState } from '#shared/domain/state.ts';
 import { MAX_MESSAGE_CHARS, redactSensitive } from '#shared/domain/text.ts';
 import {
-  DIMENSION_IDS,
   PRACTICE_MODES,
   type DimensionId,
   type EvaluationPhase,
@@ -85,22 +84,6 @@ export const EndSessionSchema = z.object({
   reason: z.enum(['finished', 'ended-early']).optional(),
 });
 
-export const MentorScoreSchema = z.object({
-  reviewer: z
-    .string()
-    .trim()
-    .min(1)
-    .max(40)
-    .regex(/^[\p{L}\p{N} .,'@_-]+$/u, 'Use letters, numbers and simple punctuation only.'),
-  scores: z.object(
-    Object.fromEntries(DIMENSION_IDS.map((d) => [d, z.number().int().min(1).max(5)])) as Record<
-      DimensionId,
-      z.ZodNumber
-    >,
-  ),
-  notes: z.string().trim().max(500).optional(),
-});
-
 const PROVIDER_STATUS: Record<string, number> = {
   provider_unavailable: 502,
   provider_timeout: 504,
@@ -150,11 +133,7 @@ export class SessionService {
 
   // ---- sessions ---------------------------------------------------------------------------
 
-  createSession(
-    profileId: string,
-    request: CreateSessionRequest,
-    options: { isSample?: boolean; startedAt?: string } = {},
-  ): SessionDTO {
+  createSession(profileId: string, request: CreateSessionRequest): SessionDTO {
     const { repo, provider, log } = this.deps;
     const base = this.deps.library.find((s) => s.id === request.scenarioId && s.enabled);
     if (!base) throw notFound('That scenario');
@@ -167,7 +146,7 @@ export class SessionService {
     const seed = randomInt(1, 2 ** 31 - 1);
     const scenario = applyConfig(base, request.overrides ?? {}, { mode: request.mode, seed });
     const runtime = createInitialRuntime(scenario);
-    const startedAt = options.startedAt ?? new Date().toISOString();
+    const startedAt = new Date().toISOString();
     const id = randomUUID();
     const row: SessionRow = {
       id,
@@ -180,7 +159,7 @@ export class SessionService {
       providerKind: provider.kind,
       providerLabel: provider.label,
       promptVersions: provider.prompts,
-      isSample: options.isSample ?? false,
+      isSample: false,
       status: 'active',
       evaluationPhase: null,
       evaluationError: null,
@@ -220,7 +199,7 @@ export class SessionService {
     return this.loadDTO(row);
   }
 
-  /** Only the conversation: no report, scores, markers or state, so a mentor can review it blind. */
+  /** Only the conversation: no report, scores, markers or state. */
   getTranscript(profileId: string, id: string): TranscriptDTO {
     const { repo } = this.deps;
     const row = repo.getSession(id, profileId);
@@ -246,17 +225,16 @@ export class SessionService {
       status?: SessionStatus;
       difficulty?: string;
       scenarioId?: string;
-      includeSamples?: boolean;
       limit?: number;
       offset?: number;
     },
   ): SessionListDTO {
     const { repo } = this.deps;
-    const { rows, total } = repo.listSessions(profileId, filters);
+    // Rows loaded by an earlier version's sample-data tool are never listed.
+    const { rows, total } = repo.listSessions(profileId, { ...filters, includeSamples: false });
     const counts = repo.traineeTurnCounts(rows.map((r) => r.id));
-    const reviewed = repo.sessionIdsWithMentorReview(profileId);
     return {
-      sessions: rows.map((r) => toSummary(r, counts.get(r.id) ?? 0, reviewed.has(r.id))),
+      sessions: rows.map((r) => toSummary(r, counts.get(r.id) ?? 0)),
       total,
     };
   }
@@ -672,11 +650,10 @@ export class SessionService {
     const turns = repo.getTurns(row.id);
     const events = row.status === 'completed' ? repo.getStateEvents(row.id) : [];
     const stored = row.status === 'completed' ? repo.getEvaluation(row.id)?.report : null;
-    const reviewed = repo.sessionIdsWithMentorReview(row.profileId).has(row.id);
-    return toSessionDTO(row, turns, events, stored, reviewed);
+    return toSessionDTO(row, turns, events, stored);
   }
 
-  /** Wait for any running evaluation (used by tests and the sample loader). */
+  /** Wait for any running evaluation (used by tests). */
   async settle(id: string): Promise<void> {
     await this.evalJobs.get(id);
   }

@@ -9,12 +9,8 @@ import { createFailureHooks, type FailureHooks } from './hooks.ts';
 import { createApp } from './http/app.ts';
 import { createLogger, type Logger } from './log.ts';
 import { createProvider } from './providers/index.ts';
-import { createMockProvider } from './providers/mock.ts';
 import type { ModelProvider } from './providers/types.ts';
 import { getScenarioLibrary } from './scenarios/index.ts';
-import { createDemoService, type DemoService } from './services/demo.ts';
-import { InsightsService } from './services/insights.ts';
-import { RewardsService } from './services/rewards.ts';
 import { SessionService, type EvaluatorFns } from './services/sessions.ts';
 
 export interface Runtime {
@@ -22,9 +18,6 @@ export interface Runtime {
   db: DatabaseSync;
   repo: Repository;
   service: SessionService;
-  insights: InsightsService;
-  rewards: RewardsService;
-  demo: DemoService;
   provider: ModelProvider;
   hooks: FailureHooks;
   close(): void;
@@ -54,36 +47,12 @@ export function createRuntime(options: {
   const evaluators = options.evaluators ?? defaultEvaluators;
 
   const service = new SessionService({ db, repo, provider, library, evaluators, log, hooks });
-  const insights = new InsightsService(repo);
-  const rewards = new RewardsService(repo, () => service.listScenarios());
-  // Samples always use demo mode so that loading them never calls a live model.
-  const sampleService = new SessionService({
-    db,
-    repo,
-    provider: createMockProvider({ delayMs: 0 }),
-    library,
-    evaluators,
-    log,
-    hooks: createFailureHooks(false),
-  });
-  const demo = createDemoService({
-    repo,
-    sampleService,
-    insights,
-    provider,
-    spotlightScenarioId: library.find((s) => s.enabled && s.spotlight)?.id ?? null,
-    scenarioExists: (id) => library.some((s) => s.id === id && s.enabled),
-    log,
-  });
-  const app = createApp({ config, service, insights, rewards, demo, provider, repo, hooks, log });
+  const app = createApp({ config, service, provider, repo, hooks, log });
   return {
     handler: app.handler,
     db,
     repo,
     service,
-    insights,
-    rewards,
-    demo,
     provider,
     hooks,
     close: () => db.close(),

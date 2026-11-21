@@ -422,7 +422,7 @@ describe('ending a call', () => {
   });
 });
 
-describe('history, progress and calibration', () => {
+describe('history', () => {
   it('lists, filters and deletes sessions', async () => {
     const c = app.client();
     await newSession(c, { overrides: { difficulty: 'starter' } });
@@ -437,101 +437,26 @@ describe('history, progress and calibration', () => {
     expect((await c.get('/api/sessions')).body.total).toBe(1);
   });
 
-  it('records a mentor review and computes calibration only from stored records', async () => {
-    const { client, session } = await newSession();
-    const empty = await client.get('/api/calibration');
-    expect(empty.body.metrics.sessions).toBe(0);
-    expect(empty.body.metrics.overall).toBeNull();
-
-    await say(client, session.id, 'Hello, I am Sam. What is happening?');
-    const early = await client.post(`/api/sessions/${session.id}/mentor-score`, {
-      reviewer: 'Alex',
-      scores: { 'opening-rapport': 3 },
-    });
-    expect(early.status).toBe(400);
-    await client.post(`/api/sessions/${session.id}/end`, {});
-    await app.service.settle(session.id);
-    // The review queue lists the call but carries nothing of the AI's scoring.
-    const queue = await client.get('/api/calibration');
-    expect(queue.body.reviewable).toHaveLength(1);
-    expect(queue.body.reviewable[0].id).toBe(session.id);
-    expect(queue.body.reviewable[0]).not.toHaveProperty('overallScore');
-    expect(queue.body.reviewable[0]).not.toHaveProperty('dimensionScores');
-    const scores = {
-      'opening-rapport': 4,
-      'scoping-discovery': 3,
-      'empathy-deescalation': 3,
-      clarity: 2,
-      'ownership-next-steps': 3,
-      closing: 3,
-    };
-    const saved = await client.post(`/api/sessions/${session.id}/mentor-score`, {
-      reviewer: 'Alex',
-      scores,
-      notes: 'Good start.',
-    });
-    expect(saved.status).toBe(200);
-    const cal = await client.get('/api/calibration');
-    expect(cal.body.metrics.sessions).toBe(1);
-    expect(cal.body.metrics.sampleSize).toBe('very-small');
-    expect(cal.body.metrics.overall.meanAbsoluteDifference).toBeCloseTo(0.33, 1);
-    expect(cal.body.records[0].reviewer).toBe('Alex');
-    expect(cal.body.reviewable).toHaveLength(0);
-  });
-
-  it('returns a cautious progress summary', async () => {
-    const res = await app.client().get('/api/progress');
-    expect(res.status).toBe(200);
-    expect(res.body.progress.completedSessions).toBe(0);
-    expect(res.body.progress.recentChange).toBe('not-enough-data');
-    expect(res.body.progress.note).toMatch(/not a performance rating/i);
-  });
-
-  it('leaves a call that ended early out of the progress figures, as the rewards and recommendations do', async () => {
+  it('summarises a call without any sample-data or mentor-review fields', async () => {
     const c = app.client();
-    const early = await newSession(c);
-    await say(c, early.session.id, 'Hello?');
-    await c.post(`/api/sessions/${early.session.id}/end`, {});
-    await app.service.settle(early.session.id);
-    expect((await c.get(`/api/sessions/${early.session.id}`)).body.session.completion).toBe(
-      'ended-early',
-    );
-    expect((await c.get('/api/progress')).body.progress.completedSessions).toBe(0);
+    await newSession(c);
+    const summary = (await c.get('/api/sessions')).body.sessions[0];
+    expect(summary).toMatchObject({ status: 'active', traineeTurns: 0, overallScore: null });
+    expect(summary).not.toHaveProperty('isSample');
+    expect(summary).not.toHaveProperty('mentorReviewed');
+  });
 
-    const full = await newSession(c);
-    for (const text of [
-      'Hello, this is Sam from support. What exactly do you see when you sign in?',
-      'To summarise: I will check the account and email you the steps. Is there anything else I can help with today?',
-    ]) {
-      await say(c, full.session.id, text);
+  it('no longer serves the removed progress, rewards, calibration, mentor and demo endpoints', async () => {
+    const { client, session } = await newSession();
+    for (const path of ['/api/progress', '/api/rewards', '/api/calibration', '/api/demo']) {
+      expect((await client.get(path)).status, path).toBe(404);
     }
-    await c.post(`/api/sessions/${full.session.id}/end`, {});
-    await app.service.settle(full.session.id);
-    expect((await c.get(`/api/sessions/${full.session.id}`)).body.session.completion).toBe(
-      'completed',
-    );
-    expect((await c.get('/api/progress')).body.progress.completedSessions).toBe(1);
+    expect((await client.post('/api/demo/samples')).status).toBe(404);
+    expect((await client.post(`/api/sessions/${session.id}/mentor-score`, {})).status).toBe(404);
   });
 });
 
-describe('demo and diagnostics endpoints', () => {
-  it('loads labelled sample sessions once and resets practice data on request', async () => {
-    const c = app.client();
-    await newSession(c);
-    const status = await c.get('/api/demo');
-    expect(status.body).toMatchObject({ practiceSessions: 1, sampleSessions: 0 });
-    const loaded = await c.post('/api/demo/samples');
-    expect(loaded.body.created).toBeGreaterThanOrEqual(2);
-    const sessions = await c.get('/api/sessions');
-    expect(sessions.body.sessions.some((s: { isSample: boolean }) => s.isSample)).toBe(true);
-    const again = await c.post('/api/demo/samples');
-    expect(again.body.created).toBe(0);
-    const reset = await c.post('/api/demo/reset', { scope: 'samples' });
-    expect(reset.body.deleted).toBeGreaterThanOrEqual(2);
-    expect((await c.get('/api/demo')).body.sampleSessions).toBe(0);
-    expect((await c.get('/api/demo')).body.practiceSessions).toBe(1);
-  });
-
+describe('diagnostics endpoints', () => {
   it('hides test and diagnostic endpoints unless enabled', async () => {
     const plain = await createTestApp({ testHooks: false, devDiagnostics: false });
     try {

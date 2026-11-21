@@ -5,7 +5,6 @@ import type {
   AppConfigDTO,
   ApiErrorBody,
   CreateSessionRequest,
-  MentorScoreRequest,
   SendMessageRequest,
 } from '#shared/domain/api.ts';
 import { DIFFICULTIES, SESSION_STATUSES } from '#shared/domain/vocab.ts';
@@ -17,14 +16,10 @@ import type { Logger } from '../log.ts';
 import { shortId } from '../log.ts';
 import type { ModelProvider } from '../providers/types.ts';
 import type { Repository } from '../db/repository.ts';
-import type { DemoService } from '../services/demo.ts';
-import type { InsightsService } from '../services/insights.ts';
-import type { RewardsService } from '../services/rewards.ts';
 import {
   CreateSessionSchema,
   EndSessionSchema,
   LIMITS,
-  MentorScoreSchema,
   SendMessageSchema,
   toAppError,
   type SessionService,
@@ -42,9 +37,6 @@ import { serveStatic } from './static.ts';
 export interface AppDeps {
   config: AppConfig;
   service: SessionService;
-  insights: InsightsService;
-  rewards: RewardsService;
-  demo: DemoService;
   provider: ModelProvider;
   repo: Repository;
   hooks: FailureHooks;
@@ -98,23 +90,12 @@ const ListFilters = z.object({
   status: z.enum(SESSION_STATUSES).optional(),
   difficulty: z.enum(DIFFICULTIES).optional(),
   scenarioId: z.string().max(64).optional(),
-  includeSamples: z.enum(['0', '1']).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
   offset: z.coerce.number().int().min(0).max(10_000).optional(),
 });
 
-// `Date.getTimezoneOffset()` of the browser: whole minutes, UTC minus local time.
-const RewardsQuery = z.object({
-  tzOffset: z
-    .string()
-    .regex(/^-?\d{1,3}$/, 'tzOffset must be a whole number of minutes.')
-    .transform(Number)
-    .pipe(z.number().int().min(-840).max(840))
-    .optional(),
-});
-
 export function createApp(deps: AppDeps) {
-  const { config, service, insights, rewards, demo, provider, hooks, log } = deps;
+  const { config, service, provider, hooks, log } = deps;
   const limiter = createRateLimiter();
 
   const publicConfig = (): AppConfigDTO => ({
@@ -161,7 +142,6 @@ export function createApp(deps: AppDeps) {
         ...(f.status ? { status: f.status } : {}),
         ...(f.difficulty ? { difficulty: f.difficulty } : {}),
         ...(f.scenarioId ? { scenarioId: f.scenarioId } : {}),
-        includeSamples: f.includeSamples !== '0',
         ...(f.limit ? { limit: f.limit } : {}),
         ...(f.offset ? { offset: f.offset } : {}),
       });
@@ -169,8 +149,7 @@ export function createApp(deps: AppDeps) {
     route('GET', '/api/sessions/:id', (c) => ({
       session: service.getSession(c.profileId, c.params.id as string),
     })),
-    // The conversation and nothing else: no report, scores or analysis markers. Mentor reviews use it
-    // so a review is blind by construction.
+    // The conversation and nothing else: no report, scores or analysis markers.
     route('GET', '/api/sessions/:id/transcript', (c) => ({
       transcript: service.getTranscript(c.profileId, c.params.id as string),
     })),
@@ -211,37 +190,6 @@ export function createApp(deps: AppDeps) {
     route('GET', '/api/sessions/:id/report', (c) => ({
       report: service.getReport(c.profileId, c.params.id as string),
     })),
-    route('POST', '/api/sessions/:id/mentor-score', async (c) => {
-      insights.mentorScore(
-        c.profileId,
-        c.params.id as string,
-        MentorScoreSchema.parse(await c.body()) as MentorScoreRequest,
-      );
-      return { saved: true };
-    }),
-
-    route('GET', '/api/progress', (c) => ({
-      progress: insights.progress(c.profileId, c.url.searchParams.get('includeSamples') === '1'),
-    })),
-    route('GET', '/api/calibration', (c) =>
-      insights.calibration(c.profileId, c.url.searchParams.get('includeSamples') === '1'),
-    ),
-    // Worked out from saved calls on every request, so asking twice never pays twice.
-    route('GET', '/api/rewards', (c) => {
-      const q = RewardsQuery.parse(Object.fromEntries(c.url.searchParams));
-      return rewards.rewards(c.profileId, { tzOffsetMinutes: q.tzOffset ?? 0 });
-    }),
-
-    route('GET', '/api/demo', (c) => demo.status(c.profileId)),
-    route('POST', '/api/demo/samples', async (c) => demo.loadSamples(c.profileId), {
-      limit: 'create',
-    }),
-    route('POST', '/api/demo/reset', async (c) => {
-      const body = z
-        .object({ scope: z.enum(['practice', 'samples', 'all']) })
-        .parse(await c.body());
-      return { deleted: demo.reset(c.profileId, body.scope) };
-    }),
   ];
 
   if (hooks.enabled) {
