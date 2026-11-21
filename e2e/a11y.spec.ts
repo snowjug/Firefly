@@ -8,8 +8,9 @@ import {
   endSession,
   expect,
   expectAccessible,
-  expectStage,
+  expectStatus,
   failNext,
+  holdTone,
   installFakeMicrophone,
   refuseMicrophone,
   sendLines,
@@ -19,11 +20,16 @@ import {
   test,
   watchAnnouncements,
 } from './support/a11y.ts';
+import { callScreen } from './support/call-screen.ts';
+import { libraryScenario } from './support/scenario-library.ts';
 
 // Accessibility sweeps: axe-core (WCAG 2.0, 2.1 and 2.2 A and AA rules, with best-practice rules
 // reported separately) on every page and every significant state of the real app, at a desktop and a
 // phone width, plus the semantics a browser can test (landmarks, headings, titles, live regions,
-// names and states). Zero WCAG violations is the gate; see docs/accessibility.md.
+// names and states). Zero WCAG violations is the gate; see docs/accessibility.md. Axe finds only part
+// of what can go wrong (it cannot judge reading order, focus, or whether a name makes sense), so the
+// focus and keyboard checks that need a person's judgement are in keyboard.spec.ts, and the call's
+// announcements are read here the way a screen reader receives them.
 
 const VIEWPORTS = [
   { width: 1440, height: 900 },
@@ -31,10 +37,15 @@ const VIEWPORTS = [
 ];
 
 // Each test scans several states, and the spoken call waits on the server's scripted speech.
-test.describe.configure({ timeout: 150_000 });
+test.describe.configure({ timeout: 180_000 });
 
+const HARD = libraryScenario(HARD_SCENARIO_ID);
+const EXCHANGE = 'exchange-mail-delays-follow-up'; // a follow-up: it has an earlier contact to show
+const RETIRED = 'locked-out-after-password-reset';
+
+// Every page but the call has a header and a footer. The call draws its own command bar inside
+// `main`, so it has no banner or footer landmark.
 const PUBLIC = { banner: 1, contentinfo: 1 };
-// The call draws its own command bar inside `main`, so it has no banner or footer landmark.
 const CALL = { banner: 0, contentinfo: 0 };
 
 /** Axe and the landmark and heading checks, for the page as it is now. */
@@ -48,11 +59,25 @@ async function check(
   expect(await structureProblems(page, structure), `${label}: structure`).toEqual([]);
 }
 
+/** Opens every closed disclosure on the page (more than once, for those inside others). */
+async function openEverything(page: Page) {
+  for (let round = 0; round < 3; round += 1) {
+    const closed = page.locator('main button[aria-expanded="false"]:visible');
+    const total = await closed.count();
+    if (total === 0) return;
+    // From the last to the first, so that opening one never moves the ones still to open.
+    for (let index = total - 1; index >= 0; index -= 1) await closed.nth(index).click();
+  }
+}
+
 test.afterEach(async ({ request }) => {
   await clearFailures(request);
 });
 
-test('every route has its own title and the page is in English', async ({ page, world }) => {
+test('every route has its own title, one h1 and the page is in English', async ({
+  page,
+  world,
+}) => {
   const id = await createSession(page.request, HARD_SCENARIO_ID);
   const titles = new Map<string, string>();
   for (const path of [
@@ -66,7 +91,7 @@ test('every route has its own title and the page is in English', async ({ page, 
     '/there-is-no-such-page',
   ]) {
     await page.goto(path);
-    await expect(page.getByRole('heading', { level: 1 }).first()).toBeAttached();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
     await expect(page.locator('html')).toHaveAttribute('lang', /^en/);
     const title = await page.title();
     expect(title, `${path}: a title`).not.toBe('');
@@ -82,19 +107,18 @@ test('nothing plays, listens or loads speech before the person starts the call',
 }) => {
   await installFakeMicrophone(page);
   const id = await createSession(page.request, HARD_SCENARIO_ID);
-  await page.goto(`/calls/${id}`);
-  await expect(
-    page.getByRole('heading', { level: 1, name: 'Ready to start the call?' }),
-  ).toBeVisible();
+  await page.goto(`/calls/${id}?input=voice`);
+  await expect(callScreen(page).preflight.heading).toBeVisible();
   const before = await page.evaluate(() => ({
     microphoneRequests: window.__fireflyMic?.requests ?? -1,
+    // The speech service's own addresses (the page's script for speech is code, not speech).
     speechRequests: performance
       .getEntriesByType('resource')
-      .filter((entry) => /\/speech|\/transcribe/.test(entry.name)).length,
+      .filter((entry) => /\/api\/speech\//.test(entry.name)).length,
     playing: [...document.querySelectorAll('audio')].filter((audio) => !audio.paused).length,
   }));
   expect(before).toEqual({ microphoneRequests: 0, speechRequests: 0, playing: 0 });
-  await page.getByRole('button', { name: 'Allow microphone and start' }).click();
+  await callScreen(page).preflight.startVoice.click();
   await expect
     .poll(() => page.evaluate(() => window.__fireflyMic?.requests ?? 0))
     .toBeGreaterThan(0);
@@ -105,34 +129,40 @@ test('the call announces whole sentences once and leaves transcript text to the 
 }) => {
   const announced = await watchAnnouncements(page);
   const { delays } = await startSpokenCall(page);
-  const log = page.getByRole('log', { name: 'Call transcript' });
+  const screen = callScreen(page);
   // The customer's opening line is in the transcript before its voice has finished, as text.
-  await expect(log.getByRole('listitem')).toHaveCount(1);
-  await expect(page.locator('[role="status"][aria-live="polite"]')).toHaveCount(1);
+  await expect(screen.turns).toHaveCount(1);
+  // One polite region speaks for the whole call, and nothing interrupts the person.
+  await expect(page.locator('[role="status"][aria-live="polite"].visually-hidden')).toHaveCount(1);
   await expect(page.locator('[role="alert"], [aria-live="assertive"]')).toHaveCount(0);
-  await expect(log).toHaveAttribute('aria-live', 'polite');
+  await expect(screen.transcript).toHaveAttribute('aria-live', 'polite');
 
-  await page.getByRole('button', { name: 'Interrupt' }).click();
-  await expectStage(page, 'listening');
+  await screen.stopAudio.click();
+  await expectStatus(page, 'listening');
   await speak(page, true);
-  await expectStage(page, 'hearing');
+  await expectStatus(page, 'speech-detected');
+  await holdTone(page);
   delays.transcribe = 1500;
   await speak(page, false);
-  await expectStage(page, 'speaking');
-  await expect(log.getByRole('listitem')).toHaveCount(3);
+  await expectStatus(page, 'customer-speaking', 30_000);
+  await expect(screen.turns).toHaveCount(3);
 
   // The announcer reads one sentence at a time, each held long enough to be heard, so it can lag a
   // few seconds behind the screen: wait for it rather than for the stage.
   await expect
-    .poll(async () => (await announced()).includes('Listening.'), { timeout: 20_000 })
+    .poll(async () => (await announced()).includes('Listening. Speak when you are ready.'), {
+      timeout: 20_000,
+    })
     .toBe(true);
   const said = await announced();
   expect(said, `the call announces itself: ${JSON.stringify(said)}`).toContain(
-    'The customer is speaking.',
+    'The customer is speaking. You can stop the response at any time.',
   );
-  const turns = await log.getByRole('listitem').locator('.cw-turn__text').allTextContents();
+  // "Hearing you" changes with every breath, so it is on screen and never announced.
+  expect(said.join(' ')).not.toMatch(/hearing you/i);
+  const turns = await screen.turns.locator('.cw-turn__text').allTextContents();
   for (const sentence of said) {
-    expect(sentence.length, `"${sentence}" is one short sentence`).toBeLessThan(140);
+    expect(sentence.length, `"${sentence}" is a short announcement`).toBeLessThan(140);
     for (const turn of turns) {
       expect(
         turn.includes(sentence) || sentence.includes(turn),
@@ -147,90 +177,128 @@ test('the call announces whole sentences once and leaves transcript text to the 
 test('a message that is too long says so in words, linked to the box', async ({ page }) => {
   const id = await createSession(page.request, HARD_SCENARIO_ID);
   await page.goto(`/calls/${id}?input=text`);
-  await page.getByRole('button', { name: 'Start text-only call' }).click();
-  const box = page.getByRole('textbox', { name: 'Type a reply' });
-  await box.fill('a'.repeat(1501));
-  await expect(box).toHaveAttribute('aria-invalid', 'true');
-  await expect(box).toHaveAccessibleDescription(/over the limit/);
-  await expect(page.getByRole('button', { name: 'Send' })).toBeVisible();
+  const screen = callScreen(page);
+  await screen.preflight.startText.click();
+  await screen.reply.fill('a'.repeat(1501));
+  await expect(screen.reply).toHaveAttribute('aria-invalid', 'true');
+  await expect(screen.reply).toHaveAccessibleDescription(/1 over the 1,500 character limit\./);
+  // Send waits, and stays in the tab order, with the reason attached to it.
+  await expect(screen.send).toHaveAttribute('aria-disabled', 'true');
+  await expect(screen.send).toHaveAccessibleDescription(/1 over the 1,500 character limit\./);
+  // Within the limit again, the reason goes and Send works.
+  await screen.reply.fill('a'.repeat(1500));
+  await expect(screen.reply).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(screen.send).not.toHaveAttribute('aria-disabled', 'true');
 });
 
 for (const viewport of VIEWPORTS) {
   test.describe(`at ${viewport.width} px wide`, () => {
     test.use({ viewport });
-    const narrow = viewport.width < 768;
+    const narrow = viewport.width < 1024;
 
-    test('the public pages and the not-found page', async ({ page }, testInfo) => {
+    test('the public pages, the example call and the not-found page', async ({
+      page,
+    }, testInfo) => {
       for (const [path, title] of [
-        ['/', 'Firefly: practise customer conversations'],
-        ['/responsible-ai', 'Responsible AI · Firefly'],
-        ['/about', 'About · Firefly'],
-        ['/there-is-no-such-page', 'Page not found · Firefly'],
+        ['/', 'Firefly: practise Microsoft support calls'],
+        ['/responsible-ai', 'Responsible AI \u00b7 Firefly'],
+        ['/about', 'About \u00b7 Firefly'],
+        ['/there-is-no-such-page', 'Page not found \u00b7 Firefly'],
       ] as const) {
         await page.goto(path);
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
         await expect(page).toHaveTitle(title);
         await check(page, testInfo, `${path} at ${viewport.width}`, PUBLIC);
       }
+
+      await page.goto('/');
+      const preview = page.getByRole('figure', {
+        name: 'Example call. The customer is synthetic.',
+      });
+      for (const tab of await preview.getByRole('tab').all()) {
+        await tab.click();
+        await expect(tab).toHaveAttribute('aria-selected', 'true');
+        const name = (await tab.textContent()) ?? '';
+        await check(page, testInfo, `the example call, ${name} tab`, PUBLIC);
+      }
     });
 
-    test('the scenario workspace, its filters, its sheet and recent calls', async ({
+    test('the scenario workspace: the list, the filters, the set-up, an empty list and a retired link', async ({
       page,
       world,
     }, testInfo) => {
       expect(world.reportId).toBeTruthy();
       await page.goto('/scenarios');
+      await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
       await expect(
-        page.getByRole('heading', { level: 1, name: 'Choose a scenario' }),
-      ).toBeVisible();
-      await expect(page.getByText('13 scenarios')).toBeVisible();
+        page
+          .getByRole('main')
+          .getByRole('status')
+          .filter({ hasText: /\bscenarios?$/ }),
+      ).toHaveText('16 scenarios');
       await check(page, testInfo, 'scenarios', PUBLIC);
 
-      await page.goto(`/scenarios?scenario=${HARD_SCENARIO_ID}`);
-      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       if (narrow) {
-        await expect(
-          page.getByRole('dialog', { name: 'Fourth contact, same failing uploads' }),
-        ).toBeVisible();
-        await check(page, testInfo, 'scenario sheet', PUBLIC);
-        await page.keyboard.press('Escape');
-        await expect(page.getByRole('dialog')).toHaveCount(0);
-        await page.getByRole('button', { name: /^Filters/ }).click();
-        await expect(page.getByRole('combobox', { name: 'Issue type' })).toBeVisible();
+        await page.getByRole('button', { name: 'Filters', exact: true }).click();
+        await expect(page.getByRole('combobox', { name: 'Product' })).toBeVisible();
         await check(page, testInfo, 'scenarios with the filters open', PUBLIC);
+        await page.getByRole('combobox', { name: 'Product' }).selectOption('windows-11');
+        await check(page, testInfo, 'scenarios, filtered', PUBLIC);
+
+        await page.goto(`/scenarios?scenario=${HARD_SCENARIO_ID}`);
+        await expect(page.getByRole('heading', { level: 1, name: HARD.title })).toBeVisible();
+        await check(page, testInfo, 'a scenario on its own page', PUBLIC);
+        await page.getByRole('button', { name: /^Customise/ }).click();
+        await check(page, testInfo, 'a scenario with its set-up open', PUBLIC);
       } else {
-        await expect(
-          page.getByRole('heading', { level: 2, name: 'Fourth contact, same failing uploads' }),
-        ).toBeVisible();
-        await page.getByRole('switch', { name: /Live hints during the call/ }).click();
-        await expect(page.getByText('Changed from default')).toBeVisible();
-        await check(page, testInfo, 'a scenario selected and one setting changed', PUBLIC);
+        await page.goto(`/scenarios?scenario=${HARD_SCENARIO_ID}`);
+        const pane = page.getByRole('region', { name: HARD.title, exact: true });
+        await expect(pane.getByRole('heading', { level: 2, name: HARD.title })).toBeVisible();
+        await check(page, testInfo, 'a scenario chosen', PUBLIC);
+        await pane.getByRole('button', { name: /^Customise/ }).click();
+        await pane
+          .getByRole('group', { name: /^Impact/ })
+          .getByRole('radio', { name: 'Low' })
+          .check();
+        await check(
+          page,
+          testInfo,
+          'a scenario with its set-up open and one setting changed',
+          PUBLIC,
+        );
+
+        await page.goto('/scenarios?f_product=windows-11');
+        await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
+        await check(page, testInfo, 'scenarios filtered by product', PUBLIC);
       }
 
-      await page.goto('/scenarios?q=zzzzqq');
+      await page.goto('/scenarios?f_product=dynamics-365&f_difficulty=starter');
       await expect(
         page.getByRole('heading', { level: 2, name: 'No scenarios match' }),
       ).toBeVisible();
-      await check(page, testInfo, 'no scenario matches the search', PUBLIC);
+      await check(page, testInfo, 'no scenario matches the filters', PUBLIC);
 
-      await page.goto('/scenarios');
-      await page.getByRole('button', { name: 'Recent calls' }).click();
-      await expect(page.getByRole('link', { name: /View report/ }).first()).toBeVisible();
-      await check(page, testInfo, 'recent calls dialog', PUBLIC);
-      await page.keyboard.press('Escape');
-
-      // A call in progress is announced at the top with the way back in.
-      const open = await createSession(page.request, SCENARIO_ID);
-      await page.goto('/scenarios');
-      await expect(page.getByText(/You have a call in progress/)).toBeVisible();
-      await check(page, testInfo, 'a call in progress', PUBLIC);
-      await page.request.delete(`/api/sessions/${open}`);
+      await page.goto(`/scenarios?scenario=${RETIRED}`);
+      await expect(
+        page.getByText('That scenario is no longer in the library. Choose another.'),
+      ).toBeVisible();
+      await check(page, testInfo, 'a link to a retired scenario', PUBLIC);
     });
 
-    test('the call brief and an unknown scenario', async ({ page }, testInfo) => {
+    test('the case brief, with everything opened, and an unknown scenario', async ({
+      page,
+    }, testInfo) => {
       await page.goto(`/scenarios/${HARD_SCENARIO_ID}/brief`);
-      await expect(page.getByRole('heading', { level: 1, name: 'Call brief' })).toBeVisible();
-      await check(page, testInfo, 'brief', PUBLIC);
+      await expect(page.getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Privacy notice' })).toBeVisible();
+      await check(page, testInfo, 'brief with the privacy notice', PUBLIC);
+
+      // A follow-up has an earlier contact to show, so it has the most to open.
+      await page.goto(`/scenarios/${EXCHANGE}/brief`);
+      await expect(page.getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
+      await openEverything(page);
+      await check(page, testInfo, 'brief with every disclosure opened', PUBLIC);
+
       await page.goto('/scenarios/not-a-scenario/brief');
       await expect(
         page.getByRole('heading', { level: 1, name: 'Scenario unavailable' }),
@@ -243,22 +311,22 @@ for (const viewport of VIEWPORTS) {
     }, testInfo) => {
       await installFakeMicrophone(page);
       const id = await createSession(page.request, HARD_SCENARIO_ID);
-      await page.goto(`/calls/${id}`);
-      await expect(
-        page.getByRole('heading', { level: 1, name: 'Ready to start the call?' }),
-      ).toBeVisible();
-      await expect(page).toHaveTitle(/^Call with .* · Firefly$/);
+      await page.goto(`/calls/${id}?input=voice`);
+      const screen = callScreen(page);
+      await expect(screen.preflight.heading).toBeVisible();
+      await expect(page).toHaveTitle(/^Call with .* \u00b7 Firefly$/);
       await check(page, testInfo, 'pre-flight', CALL);
 
       await refuseMicrophone(page);
-      await page.getByRole('button', { name: 'Allow microphone and start' }).click();
-      await expect(page.getByRole('button', { name: 'Start a text-only call' })).toBeVisible();
+      await screen.preflight.startVoice.click();
+      await expect(screen.problem.card).toBeVisible();
+      await expect(screen.problem.useText).toBeVisible();
       await check(page, testInfo, 'pre-flight with the microphone refused', CALL);
 
-      await page.getByRole('button', { name: 'Start a text-only call' }).click();
-      await expect(page.getByRole('heading', { level: 1, name: /^Call with / })).toBeAttached();
-      await expectStage(page, 'text');
-      await check(page, testInfo, 'a text-only call', CALL);
+      await screen.problem.useText.click();
+      await expect(screen.reply).toBeVisible();
+      await expectStatus(page, 'text-fallback');
+      await check(page, testInfo, 'a typed call', CALL);
 
       await page.goto('/calls/not-a-call');
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -267,82 +335,79 @@ for (const viewport of VIEWPORTS) {
 
     test('a spoken call, stage by stage', async ({ page }, testInfo) => {
       const { delays } = await startSpokenCall(page);
-      await expect(page.getByRole('button', { name: 'Interrupt' })).toBeVisible();
+      const screen = callScreen(page);
+      await expect(screen.stopAudio).toBeVisible();
       await check(page, testInfo, 'the customer is speaking', CALL);
 
-      await page.getByRole('button', { name: 'Interrupt' }).click();
-      await expectStage(page, 'listening');
-      await expect(page.getByRole('button', { name: 'Stop talking' })).toHaveAttribute(
-        'aria-pressed',
-        'true',
-      );
+      await screen.stopAudio.click();
+      await expectStatus(page, 'listening');
       await check(page, testInfo, 'listening', CALL);
 
       await speak(page, true);
-      await expectStage(page, 'hearing');
+      await expectStatus(page, 'speech-detected');
       await check(page, testInfo, 'hearing you', CALL);
 
       delays.transcribe = 2500;
       delays.reply = 2500;
+      await holdTone(page);
       await speak(page, false);
-      await expectStage(page, 'transcribing');
-      await check(page, testInfo, 'transcribing what you said', CALL);
+      await expectStatus(page, 'processing-speech', 30_000);
+      await check(page, testInfo, 'processing what you said', CALL);
 
-      await expectStage(page, 'thinking');
-      await check(page, testInfo, 'the customer is thinking', CALL);
+      await expectStatus(page, 'generating-reply', 30_000);
+      await check(page, testInfo, 'the customer is replying', CALL);
 
-      await expectStage(page, 'speaking');
+      await expectStatus(page, 'customer-speaking', 30_000);
       await check(page, testInfo, 'the customer is speaking again', CALL);
 
-      await page.getByRole('button', { name: 'Interrupt' }).click();
+      await screen.stopAudio.click();
       delays.transcribe = 0;
       delays.reply = 0;
-      await page.getByRole('button', { name: 'Mute' }).click();
-      await expectStage(page, 'muted');
+      await screen.mute.click();
+      await expectStatus(page, 'muted');
       await check(page, testInfo, 'muted', CALL);
-      await page.getByRole('button', { name: 'Mute' }).click();
-      await page.getByRole('button', { name: 'Pause' }).click();
-      await expectStage(page, 'paused');
+      await screen.mute.click();
+      await screen.pause.click();
+      await expectStatus(page, 'paused');
       await check(page, testInfo, 'paused', CALL);
-      await page.getByRole('button', { name: 'Resume' }).click();
+      await screen.resume.click();
     });
 
     test('a call with a problem, and the call dialogs', async ({ page }, testInfo) => {
       await startSpokenCall(page);
-      await page.getByRole('button', { name: 'Interrupt' }).click();
-      await expectStage(page, 'listening');
+      const screen = callScreen(page);
+      await screen.stopAudio.click();
+      await expectStatus(page, 'listening');
 
-      await page.getByRole('button', { name: 'End call' }).click();
-      await expect(page.getByRole('dialog', { name: 'End the call?' })).toBeVisible();
+      await screen.endCall.click();
+      await expect(screen.endDialog).toBeVisible();
       await check(page, testInfo, 'end the call dialog', CALL);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toHaveCount(0);
 
-      await page.getByRole('button', { name: 'Voice settings' }).click();
-      await expect(page.getByRole('dialog', { name: 'Voice settings' })).toBeVisible();
+      await screen.settings.click();
+      await expect(screen.settingsDialog).toBeVisible();
       await check(page, testInfo, 'voice settings dialog', CALL);
       await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
 
       if (narrow) {
-        await page.getByRole('button', { name: 'Details' }).click();
-        await expect(page.getByRole('dialog', { name: 'Call details' })).toBeVisible();
-        await check(page, testInfo, 'call details sheet', CALL);
+        await page.getByRole('button', { name: 'Case', exact: true }).click();
+        await expect(page.getByRole('dialog', { name: 'Case' })).toBeVisible();
+        await check(page, testInfo, 'the case sheet', CALL);
         await page.keyboard.press('Escape');
+        await expect(page.getByRole('dialog')).toHaveCount(0);
       }
 
       // The customer fails to reply to a typed message: the problem is said in words, with a way on.
+      await screen.text.click();
       await failNext(page.request, 'customer', 1);
-      await page
-        .getByRole('button', { name: /Type instead|Type a reply instead/ })
-        .first()
-        .click();
-      await page
-        .getByRole('textbox', { name: 'Type a reply' })
-        .fill('Can you read me the error message?');
+      await screen.reply.fill('Can you read me the error message?');
       await page.keyboard.press('Enter');
-      await expect(page.getByText('The customer has not replied').first()).toBeVisible();
-      await check(page, testInfo, 'a problem banner', CALL);
-      await expect(page.getByRole('button', { name: 'Try again' }).first()).toBeVisible();
+      await expect(screen.problem.card).toBeVisible();
+      await expect(screen.problem.title).toHaveText('The customer could not reply.');
+      await check(page, testInfo, 'a problem card', CALL);
+      await expect(screen.problem.retry).toBeVisible();
     });
 
     test('the report while it is built, and when it fails', async ({ page, world }, testInfo) => {
@@ -382,7 +447,7 @@ for (const viewport of VIEWPORTS) {
       await check(page, testInfo, 'an unknown call', PUBLIC);
     });
 
-    test('the coaching report, its transcript with markers and its dialog', async ({
+    test('the coaching report, opened out, with its transcript and its dialog', async ({
       page,
       world,
     }, testInfo) => {
@@ -390,13 +455,31 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByRole('heading', { level: 1, name: 'Coaching report' })).toBeVisible();
       await check(page, testInfo, 'report', PUBLIC);
 
-      await page.getByRole('heading', { level: 2, name: 'Transcript' }).scrollIntoViewIfNeeded();
-      // The first filter that has any turns (the others are disabled).
-      const filter = page.getByRole('group', { name: 'Filter the transcript' });
-      await filter.locator('input:enabled').nth(1).check();
-      await expect(page.getByText(/^Showing \d+ turns?/)).toBeVisible();
+      await page.getByRole('button', { name: 'Expand all' }).click();
+      await expect(page.getByRole('button', { name: /Hide details$/ })).toHaveCount(6);
+      await check(page, testInfo, 'report with every score opened', PUBLIC);
+
+      await page
+        .getByRole('button', { name: /^Show behaviours for / })
+        .first()
+        .click();
+      await page
+        .getByRole('button', { name: /^Show details for / })
+        .first()
+        .click();
+      await page.getByRole('region', { name: 'About this report' }).locator('summary').click();
+      await check(
+        page,
+        testInfo,
+        'report with behaviours, a fact and the explanation opened',
+        PUBLIC,
+      );
+
+      const transcript = page.getByRole('region', { name: 'Transcript', exact: true });
+      await transcript.scrollIntoViewIfNeeded();
+      await transcript.getByRole('radio', { name: /^Evidence/ }).check();
       await check(page, testInfo, 'transcript with a filter chosen', PUBLIC);
-      await filter.locator('input:enabled').first().check();
+      await transcript.getByRole('radio', { name: /^All turns/ }).check();
 
       await page
         .getByRole('link', { name: /^See turn \d+ in the transcript$/ })

@@ -252,6 +252,19 @@ describe('asking for the microphone', () => {
     expect(screen.getByText('No microphone was found.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Use text' })).toBeInTheDocument();
   });
+
+  it('offers no action it cannot perform: a call already at its message limit is resumed, then ended', () => {
+    const { actions } = renderCall({
+      ...FIXTURES['preflight-resume'].snapshot,
+      problem: FIXTURES['problem-turn-limit'].snapshot.problem,
+    });
+    const card = document.querySelector('.cw-recovery') as HTMLElement;
+    expect(card).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'End call' })).toBeNull();
+    // The ways in stay: picking the call up again is how it is ended.
+    fireEvent.click(screen.getByRole('button', { name: 'Resume with text' }));
+    expect(actions.begin).toHaveBeenCalledExactlyOnceWith({ voice: false });
+  });
 });
 
 describe('a call that is picked up again', () => {

@@ -224,7 +224,11 @@ export function Preflight({ snapshot, actions, provider, preferText, briefTo }: 
                 problem={problem}
                 busy={false}
                 live={problem.announce === 'assertive'}
-                options={recoveryOptions(problem, { mode: 'text', begun: false })}
+                // Only what this step can do: ending a call is done from inside it, so a call that is
+                // already at its message limit is resumed, and ended from there.
+                options={recoveryOptions(problem, { mode: 'text', begun: false }).filter(
+                  (option) => option.action === 'retry' || option.action === 'use-text',
+                )}
                 onAction={(action) => {
                   if (action === 'retry') actions.retry();
                   else if (action === 'use-text') startText();

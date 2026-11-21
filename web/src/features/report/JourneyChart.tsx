@@ -77,7 +77,7 @@ export default function JourneyChart({ journey }: { journey: Journey }) {
 
   const first = geometry.points[0];
   const last = geometry.points[geometry.points.length - 1];
-  const hit = narrow ? 13 : 12;
+  const hit = 13;
   // "Start" and "End" are written beside their markers; a label above would leave the chart at the top.
   const labelY = (y: number) => (y - plot.top < 20 ? y + 22 : y - 12);
 
