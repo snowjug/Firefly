@@ -396,7 +396,9 @@ export function createApp(deps: AppDeps) {
     const isApi = url.pathname.startsWith('/api/');
     securityHeaders(res, isApi);
     let status = 200;
-    let routeLabel = url.pathname;
+    // Logged for a request that fails before a route matches. The raw path is never used: it can
+    // hold a whole session id.
+    let routeLabel = 'unmatched';
 
     try {
       if (!isApi) {
@@ -427,7 +429,12 @@ export function createApp(deps: AppDeps) {
         pathExists = true;
         if (r.method !== method) continue;
         const params: Record<string, string> = {};
-        r.keys.forEach((key, i) => (params[key] = decodeURIComponent(m[i + 1] as string)));
+        try {
+          r.keys.forEach((key, i) => (params[key] = decodeURIComponent(m[i + 1] as string)));
+        } catch {
+          // A malformed percent-escape cannot name anything.
+          throw new AppError(404, 'not_found', 'That endpoint does not exist.');
+        }
         matched = { route: r, params };
         break;
       }
@@ -441,6 +448,9 @@ export function createApp(deps: AppDeps) {
         .replace(/\\\//g, '/')
         .replace(/^\^|\$$/g, '')}`;
       if (matched.route.limit) limiter.take(profileId, matched.route.limit);
+      // Speech reaches a metered service, and a caller without a cookie always has a fresh
+      // per-profile allowance, so every speech request also counts against one server-wide bucket.
+      if (matched.route.limit === 'speech') limiter.take('all', 'speech-all');
 
       const controller = new AbortController();
       res.on('close', () => {

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import net from 'node:net';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { ScenarioDefinitionSchema } from '#shared/domain/scenario.ts';
 import { SPEECH_RESPONSE_HEADERS, type SpeechLanguage } from '#shared/domain/speech.ts';
@@ -860,6 +861,81 @@ describe('both endpoints share one rate limit per browser profile', () => {
       expect((await speakTurn(client, id, 1)).status).toBe(429);
       expect((await transcribe(app.client(), recording(1))).status).toBe(200);
     });
+  });
+
+  it('also stops a caller that keeps dropping its cookie, with one allowance for the whole server', async () => {
+    await withApp({ speech: createMockSpeechProvider() }, async (app) => {
+      const statuses: number[] = [];
+      for (let i = 0; i < 160; i++) {
+        // A new client has no cookie, so it always starts with a full per-profile allowance.
+        statuses.push((await transcribe(app.client(), recording(1))).status);
+      }
+      const accepted = statuses.filter((status) => status === 200).length;
+      // 120 at once, plus at most a few refilled (four a second) while the loop ran.
+      expect(accepted).toBeGreaterThanOrEqual(120);
+      expect(accepted).toBeLessThanOrEqual(130);
+      expect(new Set(statuses)).toEqual(new Set([200, 429]));
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+
+describe('requests that never reach a route or that are given up on', () => {
+  it('are logged under a constant label, never with the path or the whole session id', async () => {
+    const lines: string[] = [];
+    const log = createLogger((line) => lines.push(line));
+    let sessionId = '';
+    await withApp({ speech: createMockSpeechProvider(), log }, async (app) => {
+      const client = app.client();
+      sessionId = (await startCall(client)).id;
+      // The speech route only exists for POST: a GET fails before any route matches.
+      expect((await client.raw(`/api/sessions/${sessionId}/turns/1/speech`)).status).toBe(405);
+    });
+    const events = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+    const refused = events.filter((e) => e.event === 'request' && e.status === 405);
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toMatchObject({ route: 'unmatched', sessionId: sessionId.slice(0, 8) });
+    expect(lines.join('\n')).not.toContain(sessionId);
+  });
+
+  it('answer a malformed percent-escape in the address with 404, not a server error', async () => {
+    const lines: string[] = [];
+    const log = createLogger((line) => lines.push(line));
+    await withApp({ speech: createMockSpeechProvider(), log }, async (app) => {
+      const client = app.client();
+      const { id } = await startCall(client);
+      const res = await speakTurn(client, id, '%');
+      expect(res.status).toBe(404);
+      expect(await errorOf(res)).toMatchObject({ code: 'not_found', retryable: false });
+      expect((await client.raw('/api/sessions/%zz')).status).toBe(404);
+    });
+    expect(lines.join('\n')).not.toContain('request.error');
+  });
+
+  it('log an upload the browser abandons as cancelled, not as a server error', async () => {
+    const lines: string[] = [];
+    const log = createLogger((line) => lines.push(line));
+    await withApp({ speech: createMockSpeechProvider(), log }, async (app) => {
+      const { port } = new URL(app.baseUrl);
+      await new Promise<void>((resolve) => {
+        const socket = net.connect(Number(port), '127.0.0.1', () => {
+          // Promise a large recording, send a little of it, then hang up.
+          socket.write(
+            'POST /api/speech/transcribe HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: audio/wav\r\nContent-Length: 200000\r\n\r\n' +
+              'x'.repeat(1000),
+          );
+          setTimeout(() => {
+            socket.destroy();
+            setTimeout(resolve, 200);
+          }, 100);
+        });
+        socket.on('error', () => undefined);
+      });
+    });
+    const events = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(events.some((e) => e.event === 'request.error')).toBe(false);
+    expect(events.find((e) => e.event === 'request')).toMatchObject({ status: 499 });
   });
 });
 

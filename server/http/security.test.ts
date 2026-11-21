@@ -153,4 +153,54 @@ describe('the speech rate limit', () => {
       expect.objectContaining({ status: 429, details: { retryAfterSeconds: 1 } }),
     );
   });
+
+  it('also keeps one server-wide allowance, which a flood of new profiles cannot refill', () => {
+    expect(RATE_LIMITS['speech-all']).toEqual({ capacity: 120, refillPerSecond: 4 });
+    const now = 1_000_000;
+    const limiter = createRateLimiter(() => now);
+    for (let i = 0; i < 120; i++) limiter.take('all', 'speech-all');
+    expect(() => limiter.take('all', 'speech-all')).toThrowError(
+      expect.objectContaining({ status: 429, code: 'rate_limited' }),
+    );
+    // Far more profiles than the limiter will hold: the server-wide bucket is not one of the
+    // buckets that is forgotten, so it is still empty afterwards.
+    for (let i = 0; i < 30_000; i++) limiter.take(`profile-${i}`, 'speech');
+    expect(limiter.size()).toBeLessThanOrEqual(20_000);
+    expect(() => limiter.take('all', 'speech-all')).toThrowError(
+      expect.objectContaining({ status: 429 }),
+    );
+  });
+
+  it('forgets buckets nobody has used for ten minutes, without rescanning on every request', () => {
+    let now = 1_000_000;
+    const limiter = createRateLimiter(() => now);
+    for (let i = 0; i < 6_000; i++) limiter.take(`old-${i}`, 'api');
+    expect(limiter.size()).toBe(6_000);
+    now += 11 * 60_000;
+    limiter.take('fresh', 'api');
+    expect(limiter.size()).toBe(1);
+  });
+});
+
+describe('an upload the other end gives up on', () => {
+  /** A request body that fails part-way with the error Node gives a dropped connection. */
+  const dropped = (code: string) => {
+    const body = new Readable({
+      read() {
+        this.push(Buffer.from('abc'));
+        this.destroy(Object.assign(new Error('aborted'), { code }));
+      },
+    });
+    return Object.assign(body, {
+      headers: { 'content-type': 'audio/wav', 'content-length': '200000' },
+    }) as unknown as IncomingMessage;
+  };
+
+  it('is a cancelled request, not a server error', async () => {
+    for (const code of ['ECONNRESET', 'ERR_STREAM_PREMATURE_CLOSE']) {
+      await expect(readAudioBody(dropped(code), 1_000_000)).rejects.toMatchObject({
+        name: 'AbortError',
+      });
+    }
+  });
 });

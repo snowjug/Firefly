@@ -92,11 +92,19 @@ export async function readJsonBody(req: IncomingMessage, maxBytes = 64 * 1024): 
   if (length > maxBytes) throw new AppError(413, 'payload_too_large', 'That request is too large.');
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of req) {
-    const buf = chunk as Buffer;
-    size += buf.length;
-    if (size > maxBytes) throw new AppError(413, 'payload_too_large', 'That request is too large.');
-    chunks.push(buf);
+  try {
+    for await (const chunk of req) {
+      const buf = chunk as Buffer;
+      size += buf.length;
+      if (size > maxBytes) {
+        throw new AppError(413, 'payload_too_large', 'That request is too large.');
+      }
+      chunks.push(buf);
+    }
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    if (clientGone(req, error)) throw cancelled();
+    throw error;
   }
   const text = Buffer.concat(chunks).toString('utf8');
   if (text.trim() === '') return {};
@@ -108,6 +116,27 @@ export async function readJsonBody(req: IncomingMessage, maxBytes = 64 * 1024): 
 }
 
 const AUDIO_TYPES = new Set(['audio/wav', 'audio/x-wav']);
+
+/**
+ * An upload that stops because the other end went away (the browser aborted the request, or the
+ * connection dropped) is not a server error: it is treated like any other cancelled request.
+ */
+function clientGone(req: IncomingMessage, error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  const message = (error as Error | null)?.message;
+  return (
+    req.destroyed ||
+    code === 'ECONNRESET' ||
+    code === 'ERR_STREAM_PREMATURE_CLOSE' ||
+    message === 'aborted'
+  );
+}
+
+function cancelled(): Error {
+  const error = new Error('The request was cancelled.');
+  error.name = 'AbortError';
+  return error;
+}
 
 /** Refuses a request that says its body is larger than `maxBytes`, without reading any of it. */
 export function assertSmallBody(req: IncomingMessage, maxBytes = 64 * 1024): void {
@@ -130,11 +159,17 @@ export async function readAudioBody(req: IncomingMessage, maxBytes: number): Pro
   if (Number(req.headers['content-length'] ?? 0) > maxBytes) throw tooLarge();
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of req) {
-    const buf = chunk as Buffer;
-    size += buf.length;
-    if (size > maxBytes) throw tooLarge();
-    chunks.push(buf);
+  try {
+    for await (const chunk of req) {
+      const buf = chunk as Buffer;
+      size += buf.length;
+      if (size > maxBytes) throw tooLarge();
+      chunks.push(buf);
+    }
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    if (clientGone(req, error)) throw cancelled();
+    throw error;
   }
   return Buffer.concat(chunks, size);
 }
@@ -146,7 +181,7 @@ export interface BucketSpec {
   refillPerSecond: number;
 }
 
-export type RateLimitName = 'api' | 'create' | 'message' | 'end' | 'speech';
+export type RateLimitName = 'api' | 'create' | 'message' | 'end' | 'speech' | 'speech-all';
 
 export const RATE_LIMITS: Record<RateLimitName, BucketSpec> = {
   api: { capacity: 240, refillPerSecond: 4 },
@@ -155,24 +190,38 @@ export const RATE_LIMITS: Record<RateLimitName, BucketSpec> = {
   end: { capacity: 10, refillPerSecond: 10 / 60 },
   // Both speech endpoints share it: one reply spoken and one recording sent are each a request.
   speech: { capacity: 60, refillPerSecond: 1 },
+  // All browsers together. A caller that drops its cookie gets a fresh per-profile allowance every
+  // time, so this server-wide cap is what bounds the use of a metered speech service.
+  'speech-all': { capacity: 120, refillPerSecond: 4 },
 };
+
+/** Buckets that belong to the whole server, not to one profile. They are never evicted. */
+const SERVER_WIDE: ReadonlySet<RateLimitName> = new Set<RateLimitName>(['speech-all']);
+
+const MAX_PROFILE_BUCKETS = 20_000;
+const PRUNE_AFTER_BUCKETS = 5_000;
+const PRUNE_EVERY_MS = 10_000;
+const IDLE_BUCKET_MS = 600_000;
 
 export function createRateLimiter(now: () => number = Date.now, specs = RATE_LIMITS) {
   const buckets = new Map<string, { tokens: number; at: number }>();
+  const serverWide = new Map<string, { tokens: number; at: number }>();
+  let lastPrune = 0;
   return {
     /** Throws a 429 AppError when the caller has used up the bucket. */
     take(key: string, name: RateLimitName): void {
       const spec = specs[name];
+      const store = SERVER_WIDE.has(name) ? serverWide : buckets;
       const id = `${name}:${key}`;
       const t = now();
-      const bucket = buckets.get(id) ?? { tokens: spec.capacity, at: t };
+      const bucket = store.get(id) ?? { tokens: spec.capacity, at: t };
       bucket.tokens = Math.min(
         spec.capacity,
         bucket.tokens + ((t - bucket.at) / 1000) * spec.refillPerSecond,
       );
       bucket.at = t;
       if (bucket.tokens < 1) {
-        buckets.set(id, bucket);
+        store.set(id, bucket);
         throw new AppError(
           429,
           'rate_limited',
@@ -184,10 +233,26 @@ export function createRateLimiter(now: () => number = Date.now, specs = RATE_LIM
         );
       }
       bucket.tokens -= 1;
-      buckets.set(id, bucket);
-      if (buckets.size > 5000) {
-        for (const [k, b] of buckets) if (t - b.at > 600_000) buckets.delete(k);
+      store.set(id, bucket);
+      if (store === buckets) {
+        // Forget buckets nobody has used for a while, at most every few seconds, and never let a
+        // flood of new profiles grow the map without bound: the oldest are dropped first.
+        if (buckets.size > PRUNE_AFTER_BUCKETS && t - lastPrune >= PRUNE_EVERY_MS) {
+          lastPrune = t;
+          for (const [k, b] of buckets) if (t - b.at > IDLE_BUCKET_MS) buckets.delete(k);
+        }
+        if (buckets.size > MAX_PROFILE_BUCKETS) {
+          let excess = buckets.size - MAX_PROFILE_BUCKETS;
+          for (const k of buckets.keys()) {
+            buckets.delete(k);
+            if (--excess <= 0) break;
+          }
+        }
       }
+    },
+    /** How many per-profile buckets are held (for tests). */
+    size(): number {
+      return buckets.size;
     },
   };
 }
