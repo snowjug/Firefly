@@ -192,7 +192,11 @@
 }
 .rp-meta {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Up to four columns, fewer as the space shrinks, whatever the window: larger text takes room. */
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(max(8.5rem, calc((100% - 3 * var(--sp-4)) / 4)), 1fr)
+  );
   gap: var(--sp-4);
   margin: 0;
   padding: var(--sp-4);
@@ -202,7 +206,6 @@
 }
 @media (min-width: 40em) {
   .rp-meta {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
     padding: var(--sp-5);
   }
 }
@@ -420,6 +423,11 @@
 }
 
 /* ---- Scores ------------------------------------------------------------------------------- */
+/* The table stacks into one block per skill when the space it has is small, whatever the window:
+   larger text makes a wide window a narrow one. The threshold is in rem so it grows with the text. */
+.rp-scores-box {
+  container: rp-scores / inline-size;
+}
 .rp-scores {
   inline-size: 100%;
 }
@@ -466,7 +474,7 @@
 }
 /* Narrow: each skill is one block (name and link, the score, the evidence), still a table to
    assistive technology; the header row stays for it but is not drawn. */
-@media (max-width: 47.99em) {
+@container rp-scores (max-width: 36rem) {
   .rp-scores,
   .rp-scores tbody,
   .rp-scores caption {

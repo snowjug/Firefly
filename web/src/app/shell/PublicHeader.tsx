@@ -15,7 +15,8 @@ const LINKS = [
 /**
  * The header of the public pages: the wordmark, four links, and the main action. Below 48em the
  * links collapse into a disclosure menu (aria-expanded, aria-controls, Escape closes and returns
- * focus to the button) while "Start simulation" stays in the bar.
+ * focus to the button) while "Start simulation" stays in the bar, as "Start" on the narrowest
+ * screens (the rest of its name is still read out).
  */
 export function PublicHeader() {
   const location = useLocation();
@@ -66,8 +67,8 @@ export function PublicHeader() {
           </ul>
         </nav>
         <div className="ff-header__actions">
-          <LinkButton to="/scenarios" appearance="primary">
-            Start simulation
+          <LinkButton to="/scenarios" appearance="primary" aria-label="Start simulation">
+            Start<span className="ff-header__cta-rest"> simulation</span>
           </LinkButton>
         </div>
       </div>

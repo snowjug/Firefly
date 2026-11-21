@@ -188,7 +188,7 @@ describe('the landing page', () => {
     // The drawing itself is hidden from assistive technology; its start and end are written out.
     const axis = screen.getByText('Escalating');
     expect(axis.closest('[aria-hidden="true"]')).not.toBeNull();
-    const start = screen.getAllByText('Start').find((element) => !element.closest('table'));
+    const start = screen.getAllByText('Start').find((element) => element.closest('p'));
     expect(start?.closest('p')).toHaveTextContent('StartFrustratedEndConcerned');
   });
 

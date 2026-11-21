@@ -22,6 +22,18 @@ import {
 
 test.describe.configure({ timeout: 150_000 });
 
+// A deliberately wide font for every check in this file, so the results do not depend on which fonts
+// the machine has: Verdana, or DejaVu Sans where it is missing (the fallback on the CI runner). A layout
+// that fits Segoe UI can still overflow in the wider fallback fonts of Linux and Android. The page's
+// policy forbids a style tag, so the rule goes in as a constructed style sheet.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync("* { font-family: Verdana, 'DejaVu Sans', sans-serif !important; }");
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  });
+});
+
 test.afterEach(async ({ request }) => {
   await clearFailures(request);
 });
@@ -368,22 +380,30 @@ test.describe('user preferences', () => {
     const send = page.getByRole('button', { name: 'Send' });
     await expect(send).toHaveAttribute('aria-disabled', 'true');
     await expect(page.getByText('Waiting for the customer to reply.').first()).toBeVisible();
-    const states = await page.evaluate(() => {
-      const named = (name: string) =>
-        [...document.querySelectorAll('button')].find((button) => button.textContent === name);
-      const send = named('Send');
-      const end = named('End call');
-      return {
-        sendColour: send ? getComputedStyle(send).color : '',
-        endColour: end ? getComputedStyle(end).color : '',
-        sendBorder: send ? getComputedStyle(send).borderTopStyle : '',
-      };
-    });
-    expect(
-      states.sendColour,
-      'a disabled button uses a different colour from an enabled one',
-    ).not.toBe(states.endColour);
-    expect(states.sendBorder).not.toBe('none');
+    const readStates = () =>
+      page.evaluate(() => {
+        const named = (name: string) =>
+          [...document.querySelectorAll('button')].find((button) => button.textContent === name);
+        const send = named('Send');
+        const end = named('End call');
+        return {
+          sendColour: send ? getComputedStyle(send).color : '',
+          endColour: end ? getComputedStyle(end).color : '',
+          sendBorder: send ? getComputedStyle(send).borderTopStyle : '',
+        };
+      });
+    // Buttons ease between their colours, and a computed colour read mid-way is still the old one, so
+    // read it until it settles.
+    await expect
+      .poll(
+        async () => {
+          const { sendColour, endColour } = await readStates();
+          return sendColour !== endColour;
+        },
+        { message: 'a disabled button uses a different colour from an enabled one' },
+      )
+      .toBe(true);
+    expect((await readStates()).sendBorder).not.toBe('none');
     await testInfo.attach('forced colours: call', {
       body: await page.screenshot(),
       contentType: 'image/png',

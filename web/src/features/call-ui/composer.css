@@ -17,11 +17,14 @@
 
 .cw-composer__row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: var(--sp-2);
 }
 .ff-input.cw-composer__input {
-  flex: 1 1 auto;
+  /* The box takes what Send leaves, and Send drops below it when larger text leaves no room. */
+  flex: 1 1 8rem;
+  min-inline-size: 0;
   min-block-size: var(--ctl-md);
   max-block-size: calc(6 * var(--lh-body) + 2 * var(--sp-2) + 2px);
   resize: none;

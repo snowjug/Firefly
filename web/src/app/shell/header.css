@@ -86,6 +86,13 @@
   align-items: center;
   gap: var(--sp-2);
 }
+/* The bar wraps rather than overflows: with a wide font or enlarged text the main action drops to a
+   second row, and the links wrap as whole links, so nothing is pushed past the edge of the window. */
+.ff-header--public .ff-header__bar {
+  flex-wrap: wrap;
+  row-gap: var(--sp-1);
+  padding-block: var(--sp-1);
+}
 
 /* ---- App header --------------------------------------------------------------------------- */
 .ff-header__rule {
@@ -225,6 +232,18 @@
     gap: var(--sp-2);
   }
 }
+/* On the narrowest screens the main action reads "Start"; "simulation" is still part of its name. */
+@media (max-width: 22em) {
+  .ff-header__cta-rest {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 
 /* ---- Wide ---------------------------------------------------------------------------------- */
 @media (min-width: 48em) {
@@ -239,6 +258,7 @@
     display: block;
     position: static;
     flex: 1 1 auto;
+    min-inline-size: 0;
     padding: 0;
     border: 0;
     background: transparent;
@@ -246,12 +266,14 @@
   }
   .ff-header__links {
     flex-direction: row;
+    flex-wrap: wrap;
     gap: var(--sp-1);
   }
   .ff-navlink {
     min-block-size: var(--target);
     font-size: var(--fs-body);
     line-height: var(--lh-body);
+    white-space: nowrap;
   }
   .ff-header__status {
     display: inline-flex;

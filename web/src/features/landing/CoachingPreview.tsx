@@ -107,23 +107,25 @@ function TemperatureTrace() {
           </span>
         </p>
       ) : null}
-      <table className="visually-hidden">
-        <caption>Customer mood through the fictional call</caption>
-        <thead>
-          <tr>
-            <th scope="col">Moment</th>
-            <th scope="col">Customer state</th>
-          </tr>
-        </thead>
-        <tbody>
-          {placed.map((item) => (
-            <tr key={item.moment}>
-              <th scope="row">{item.moment}</th>
-              <td>{item.state.label}</td>
+      <div className="visually-hidden">
+        <table>
+          <caption>Customer mood through the fictional call</caption>
+          <thead>
+            <tr>
+              <th scope="col">Moment</th>
+              <th scope="col">Customer state</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {placed.map((item) => (
+              <tr key={item.moment}>
+                <th scope="row">{item.moment}</th>
+                <td>{item.state.label}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

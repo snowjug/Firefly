@@ -40,41 +40,43 @@ export function ScoreSummary({ report }: { report: CoachingReport }) {
       title="Scores"
       lead="Each skill is scored from 1 to 5 against the practice rubric, using quotes from your own call. The evidence behind each score is in Skill details."
     >
-      <table className="rp-scores">
-        <caption className="rp-scores__caption">
-          Six coaching skills, each scored from 1 to 5
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Skill</th>
-            <th scope="col">Score</th>
-            <th scope="col">Evidence</th>
-            <th scope="col">
-              <VisuallyHidden>Link to the details</VisuallyHidden>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((d) => (
-            <tr key={d.id}>
-              <th scope="row" className="rp-scores__skill">
-                {dimensionLabel(d.id)}
+      <div className="rp-scores-box">
+        <table className="rp-scores">
+          <caption className="rp-scores__caption">
+            Six coaching skills, each scored from 1 to 5
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Skill</th>
+              <th scope="col">Score</th>
+              <th scope="col">Evidence</th>
+              <th scope="col">
+                <VisuallyHidden>Link to the details</VisuallyHidden>
               </th>
-              <td className="rp-scores__score" data-label="Score">
-                <ScoreBar score={d.score} label={d.label} size="small" />
-              </td>
-              <td className="rp-scores__evidence" data-label="Evidence">
-                <EvidenceLevel value={d.sufficiency} />
-              </td>
-              <td className="rp-scores__link">
-                <SectionLink to={`skill-${d.id}`}>
-                  Details <VisuallyHidden>for {dimensionLabel(d.id)}</VisuallyHidden>
-                </SectionLink>
-              </td>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((d) => (
+              <tr key={d.id}>
+                <th scope="row" className="rp-scores__skill">
+                  {dimensionLabel(d.id)}
+                </th>
+                <td className="rp-scores__score" data-label="Score">
+                  <ScoreBar score={d.score} label={d.label} size="small" />
+                </td>
+                <td className="rp-scores__evidence" data-label="Evidence">
+                  <EvidenceLevel value={d.sufficiency} />
+                </td>
+                <td className="rp-scores__link">
+                  <SectionLink to={`skill-${d.id}`}>
+                    Details <VisuallyHidden>for {dimensionLabel(d.id)}</VisuallyHidden>
+                  </SectionLink>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Section>
   );
 }
