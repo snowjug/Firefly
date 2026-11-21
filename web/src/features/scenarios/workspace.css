@@ -1,0 +1,218 @@
+/* The workspace: the page head, the list pane and the details pane. From 64em the two panes sit
+   side by side and each scrolls on its own, so the next step stays in view; below that the page is
+   the list, and the details open in a full-screen sheet. */
+
+.scn-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-block: var(--sp-6) var(--sp-10);
+}
+
+.scn-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-6);
+}
+.scn-head__text {
+  display: flex;
+  flex: 1 1 22rem;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.scn-head__lead {
+  max-inline-size: 48rem;
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+@media (min-width: 48em) {
+  .scn-head__lead {
+    font-size: var(--fs-reading);
+    line-height: var(--lh-reading);
+  }
+}
+
+.scn-split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+.scn-listpane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+.scn-listhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--ctl-sm);
+}
+.scn-count {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+}
+/* The button is 32 px tall to keep the list head slim; this keeps the area that answers a tap at 44. */
+.scn-listhead .ff-button::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--target) - var(--ctl-sm)) / -2) -0.375rem;
+}
+
+/* ---- The details pane ------------------------------------------------------------------- */
+.scn-pane {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
+  overflow: hidden;
+}
+.scn-pane--quiet {
+  background: var(--bg-quiet);
+}
+.scn-pane__scroll {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  padding: var(--sp-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.scn-pane__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  min-inline-size: 0;
+}
+.scn-pane__bar {
+  flex: none;
+  padding: var(--sp-3) var(--sp-6);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-quiet);
+}
+.scn-pane__persona {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.scn-pane--empty {
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-10) var(--sp-6);
+  color: var(--fg-3);
+  text-align: center;
+}
+.scn-pane__empty-title {
+  color: var(--fg-1);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.scn-pane__empty-text {
+  max-inline-size: 22rem;
+  color: var(--fg-2);
+}
+
+@media (min-width: 64em) {
+  .scn-page {
+    block-size: calc(100vh - var(--header-h));
+    block-size: calc(100dvh - var(--header-h));
+    min-block-size: 40rem;
+    padding-block-end: var(--sp-4);
+  }
+  .scn-split {
+    display: grid;
+    flex: 1 1 auto;
+    grid-template-columns: minmax(22rem, 2fr) minmax(0, 3fr);
+    gap: var(--sp-6);
+    min-block-size: 0;
+  }
+  .scn-listpane {
+    min-block-size: 0;
+  }
+}
+
+/* ---- Narrow: the chosen scenario, kept in reach under the list -------------------------------- */
+.scn-selected {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-3);
+  margin-inline: calc(var(--gutter) * -1);
+  margin-block-end: calc(var(--sp-10) * -1);
+  padding: var(--sp-3) var(--gutter);
+  padding-block-end: calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-canvas);
+  box-shadow: 0 -2px 8px rgb(0 0 0 / 0.08);
+}
+.scn-selected__text {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.scn-selected__label {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-selected__title {
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+}
+@media (max-width: 30em) {
+  .scn-selected .ff-button {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---- The sheet: the details and setup, full screen below 64em ---------------------------------- */
+@media (max-width: 63.99em) {
+  .ff-dialog.scn-sheet {
+    inline-size: 100%;
+    block-size: 100%;
+    max-inline-size: 100%;
+    max-block-size: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+}
+.scn-sheet__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  max-inline-size: 48rem;
+  margin-inline: auto;
+  padding-block-end: var(--sp-4);
+}
+.scn-sheet .ff-dialog__actions {
+  justify-content: stretch;
+}
+
+@media (forced-colors: active) {
+  .scn-pane,
+  .scn-selected {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+}

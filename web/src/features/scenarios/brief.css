@@ -1,0 +1,64 @@
+/* The call brief page: the briefing, with "Before you start" beside it from 64em and under it below. */
+
+.brf-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-block: var(--sp-1) var(--sp-12);
+}
+.brf-page--centred {
+  align-items: center;
+  padding-block: var(--sp-10);
+}
+.brf-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.brf-head__subtitle {
+  color: var(--fg-2);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+}
+
+.brf-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+  min-inline-size: 0;
+}
+.brf-side {
+  min-inline-size: 0;
+}
+@media (min-width: 64em) {
+  .brf-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(21rem, 25rem);
+  }
+  .brf-side {
+    position: sticky;
+    inset-block-start: calc(var(--header-h) + var(--sp-4));
+  }
+}
+
+.brf-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.brf-unavailable {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  max-inline-size: 32rem;
+}
+.brf-unavailable__icon {
+  color: var(--status-warning-fg);
+}
+.brf-unavailable__text {
+  color: var(--fg-2);
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
+}
