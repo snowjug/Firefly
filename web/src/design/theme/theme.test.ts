@@ -93,7 +93,7 @@ describe('theme preference', () => {
 });
 
 describe('applyTheme', () => {
-  it('puts the theme, the preference and the colour scheme on the page, and tints the browser chrome', () => {
+  it('puts the theme and the preference on the page and tints the browser chrome, but never sets color-scheme inline', () => {
     const meta = document.createElement('meta');
     meta.setAttribute('name', 'theme-color');
     meta.setAttribute('content', '#ffffff');
@@ -102,7 +102,9 @@ describe('applyTheme', () => {
     applyTheme(document.documentElement, 'dark', 'system');
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.documentElement.dataset.themePreference).toBe('system');
-    expect(document.documentElement.style.colorScheme).toBe('dark');
+    // The stylesheet owns color-scheme, for screens only. An inline value would also reach print, where
+    // the printed report's system colours (Canvas, CanvasText) would turn dark.
+    expect(document.documentElement.style.colorScheme).toBe('');
     expect(meta.getAttribute('content')).toBe(THEME_COLOURS.dark);
 
     applyTheme(document.documentElement, 'light', 'light');

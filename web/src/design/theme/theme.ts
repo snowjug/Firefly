@@ -74,7 +74,13 @@ export function systemPrefersDark(
   }
 }
 
-/** Puts a theme on the page: the attribute the stylesheet reads, the colour scheme and the browser chrome. */
+/**
+ * Puts a theme on the page: the attribute the stylesheet reads and the browser chrome. It does NOT set
+ * `color-scheme` on the page: the stylesheet does that, inside `@media screen` (tokens.css). An inline
+ * value would also apply to print, and there the system colours that the printed report is drawn in
+ * (`Canvas` and `CanvasText`) would turn dark, so a report printed from the dark theme would come out
+ * as white text.
+ */
 export function applyTheme(
   root: HTMLElement,
   resolved: ResolvedTheme,
@@ -82,7 +88,6 @@ export function applyTheme(
 ): void {
   root.setAttribute('data-theme', resolved);
   root.setAttribute('data-theme-preference', preference);
-  root.style.colorScheme = resolved;
   root.ownerDocument
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute('content', THEME_COLOURS[resolved]);

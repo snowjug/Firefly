@@ -92,24 +92,47 @@ test.describe('the printed report', () => {
   });
 
   test('is black on white, even when the app is dark', async ({ page }) => {
-    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    // Dark the way a person gets it: the saved choice, put on the page by the real theme script and
+    // runtime. Setting the attribute by hand missed a defect: the runtime also set `color-scheme` inline,
+    // which reaches print and turned the system colours below (Canvas, CanvasText) dark.
+    await page.evaluate(() => window.localStorage.setItem('firefly.theme', 'dark'));
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: 'Coaching report' })).toBeVisible();
+    await expect(
+      page.getByRole('group', { name: /^Customer temperature through the call/ }),
+    ).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     const onScreen = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(lightness(onScreen), 'the app is dark on screen').toBeLessThan(0.3);
 
     await page.emulateMedia({ media: 'print' });
     await beforePrint(page);
-    const paper = await page.evaluate(() => ({
-      page: getComputedStyle(document.querySelector('.rp-page') as Element).backgroundColor,
-      text: getComputedStyle(document.querySelector('.rp-page') as Element).color,
-      body: getComputedStyle(document.body).backgroundColor,
-      heading: getComputedStyle(document.querySelector('h1') as Element).color,
-    }));
+    const paper = await page.evaluate(() => {
+      const probe = document.createElement('div');
+      probe.style.cssText = 'background: Canvas; color: CanvasText';
+      document.body.append(probe);
+      const system = {
+        canvas: getComputedStyle(probe).backgroundColor,
+        text: getComputedStyle(probe).color,
+      };
+      probe.remove();
+      return {
+        page: getComputedStyle(document.querySelector('.rp-page') as Element).backgroundColor,
+        text: getComputedStyle(document.querySelector('.rp-page') as Element).color,
+        body: getComputedStyle(document.body).backgroundColor,
+        heading: getComputedStyle(document.querySelector('h1') as Element).color,
+        scheme: getComputedStyle(document.documentElement).colorScheme,
+        system,
+      };
+    });
     expect(lightness(paper.body)).toBeGreaterThan(0.95);
     expect(lightness(paper.text)).toBeLessThan(0.3);
     expect(lightness(paper.heading)).toBeLessThan(0.3);
+    expect(paper.scheme, 'the printed page is a light document').toMatch(/^(light|normal)/);
+    expect(lightness(paper.system.canvas), 'Canvas is white on paper').toBeGreaterThan(0.95);
+    expect(lightness(paper.system.text), 'CanvasText is black on paper').toBeLessThan(0.3);
     await afterPrint(page);
     await page.emulateMedia({ media: 'screen' });
-    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
   });
 
   test('hides what only works on a screen, and says what the report is and when it was printed', async ({

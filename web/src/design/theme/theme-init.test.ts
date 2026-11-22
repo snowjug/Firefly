@@ -56,7 +56,7 @@ describe('theme-init.js (runs before the first paint)', () => {
     expect(runInit({ stored: 'dark', systemDark: false })).toEqual({
       theme: 'dark',
       preference: 'dark',
-      scheme: 'dark',
+      scheme: '',
       chrome: THEME_COLOURS.dark,
     });
   });
@@ -65,7 +65,7 @@ describe('theme-init.js (runs before the first paint)', () => {
     expect(runInit({ stored: 'light', systemDark: true })).toEqual({
       theme: 'light',
       preference: 'light',
-      scheme: 'light',
+      scheme: '',
       chrome: THEME_COLOURS.light,
     });
   });
