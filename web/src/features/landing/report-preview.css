@@ -1,0 +1,251 @@
+/* The report preview: the words a score rests on, then the scores. A card of two parts: the evidence
+   for the chosen skill, and the six skills as one choice. The chosen row is marked by a bar and a tint
+   and, beside the evidence, by a short line that joins it to the words, so the choice never depends on
+   colour. The evidence is there from the start. Once the card has scrolled into view the scores follow
+   it, one row after another, by opacity and transform on the shared durations; under reduced motion
+   everything is there at once. Every word and score is in the document throughout. Tokens only. */
+
+.lp-rp {
+  margin: 0;
+}
+.lp-rp__caption {
+  margin-block-start: var(--sp-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-3);
+}
+
+.lp-rp__card {
+  --lp-rp-gap: var(--sp-5);
+  display: grid;
+  gap: var(--lp-rp-gap);
+  padding: var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+}
+@media (min-width: 48em) {
+  .lp-rp__card {
+    --lp-rp-gap: var(--sp-8);
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    padding: var(--sp-6);
+  }
+}
+.lp-rp__label {
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-3);
+}
+
+/* ---- The evidence --------------------------------------------------------------------------- */
+.lp-rp__evidence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+  padding: var(--sp-4);
+  border: var(--stroke-w) solid var(--brand-stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--brand-tint);
+}
+/* The words of all six skills share one cell, so the card is as tall as the longest of them and the
+   rows below it never move when the choice changes. The chosen words rise in as the others go: by
+   opacity and transform on the shared durations, and under reduced motion at once. The quote starts
+   where the label ends and the coaching rests on the card's floor, however tall the card stands
+   beside the six rows. */
+.lp-rp__stack {
+  display: grid;
+  flex: 1;
+}
+.lp-rp__linked {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(var(--move-xs));
+  transition:
+    opacity var(--motion-control) var(--ease-easy),
+    transform var(--motion-control) var(--ease-easy),
+    visibility 0s linear var(--motion-control);
+}
+.lp-rp__linked[data-active] {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--motion-component) var(--ease-decelerate) var(--dur-faster),
+    transform var(--motion-component) var(--ease-decelerate) var(--dur-faster);
+}
+.lp-rp__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  color: var(--fg-2);
+}
+.lp-rp__turn {
+  padding-inline: var(--sp-2);
+  border: var(--stroke-w) solid var(--brand-stroke-2);
+  border-radius: var(--r-pill);
+  background: var(--bg-raised);
+  color: var(--brand-fg-2);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.lp-rp__quote {
+  margin: 0;
+  color: var(--fg-1);
+}
+.lp-rp__quote p {
+  margin: 0;
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  text-wrap: pretty;
+}
+@media (min-width: 48em) {
+  .lp-rp__quote p {
+    font-size: var(--fs-subtitle1);
+    line-height: var(--lh-subtitle1);
+  }
+}
+.lp-rp__quote p::before {
+  content: open-quote;
+}
+.lp-rp__quote p::after {
+  content: close-quote;
+}
+.lp-rp__noted {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-block-start: auto;
+  padding-block-start: var(--sp-3);
+  border-block-start: var(--stroke-w) solid var(--brand-stroke-2);
+}
+.lp-rp__note {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+
+/* ---- The six skills: one choice, one row each ------------------------------------------------ */
+.lp-rp__skills {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+.lp-rp__rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-rp__item {
+  position: relative;
+}
+.lp-rp__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-2h) var(--sp-3) var(--sp-2h) var(--sp-4);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: background-color var(--motion-control) var(--ease-easy);
+}
+.lp-rp__row[data-active] {
+  background: var(--brand-tint);
+}
+/* The chosen row's bar: a shape, so the choice never depends on colour. */
+.lp-rp__row::before {
+  content: '';
+  position: absolute;
+  inset-block: var(--sp-2);
+  inset-inline-start: var(--sp-1);
+  inline-size: 0.1875rem;
+  border-radius: var(--r-pill);
+  background: var(--brand-stroke);
+  opacity: 0;
+  transform: scaleY(0.5);
+  transition:
+    opacity var(--motion-control) var(--ease-easy),
+    transform var(--motion-component) var(--ease-decelerate);
+}
+.lp-rp__row[data-active]::before {
+  opacity: 1;
+  transform: none;
+}
+.lp-rp__row:has(.lp-rp__input:focus-visible) {
+  outline: var(--stroke-w-thick) solid var(--focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-inner);
+}
+.lp-rp__skill {
+  min-inline-size: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+.lp-rp__row[data-active] .lp-rp__skill {
+  font-weight: var(--fw-semibold);
+}
+.lp-rp__at {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+.lp-rp__score {
+  grid-column: 1 / -1;
+  opacity: 0;
+  transform: translateY(var(--move-xs));
+  transition:
+    opacity var(--motion-component) var(--ease-decelerate),
+    transform var(--motion-component) var(--ease-decelerate);
+}
+/* The scores come after the evidence has landed, one row after another. */
+.lp-rp__card[data-revealed] .lp-rp__score {
+  opacity: 1;
+  transform: none;
+  transition-delay: calc(var(--motion-panel) + var(--dur-stagger) * var(--i));
+}
+
+/* From 48em the evidence stands beside the rows, and a short line joins the chosen row to it. */
+@media (min-width: 48em) {
+  .lp-rp__row[data-active]::after {
+    content: '';
+    position: absolute;
+    inset-inline-end: 100%;
+    inset-block-start: 50%;
+    inline-size: var(--lp-rp-gap);
+    block-size: var(--stroke-w-thick);
+    background: var(--brand-stroke);
+  }
+}
+
+@media (forced-colors: active) {
+  .lp-rp__card,
+  .lp-rp__evidence {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .lp-rp__row::before,
+  .lp-rp__row[data-active]::after {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .lp-rp__row[data-active] {
+    outline: var(--stroke-w) solid Highlight;
+  }
+}

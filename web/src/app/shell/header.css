@@ -1,14 +1,22 @@
-/* Headers: the sticky acrylic bar of the public pages and of the app. Below 48em the links collapse
-   into a disclosure panel; the primary action stays in the bar. */
+/* Headers: the sticky bar of the public pages and of the app. It is a plain surface at the top of the
+   page; once the page has scrolled (data-scrolled) it gains a hairline edge and a soft shadow, with no
+   blur and no change of size, so nothing moves. Below 48em the links collapse into a disclosure panel;
+   the primary action stays in the bar. */
 
 .ff-header {
   position: sticky;
   inset-block-start: 0;
   z-index: var(--z-header);
   background: var(--acrylic-bg);
-  -webkit-backdrop-filter: var(--acrylic-filter);
-  backdrop-filter: var(--acrylic-filter);
-  border-block-end: var(--stroke-w) solid var(--acrylic-border);
+  /* The edge is always there, transparent until the page scrolls, so it never changes the height. */
+  border-block-end: var(--stroke-w) solid transparent;
+  transition:
+    border-color var(--motion-component) var(--ease-easy),
+    box-shadow var(--motion-component) var(--ease-easy);
+}
+.ff-header[data-scrolled] {
+  border-block-end-color: var(--acrylic-border);
+  box-shadow: var(--shadow-4);
 }
 .ff-header__bar {
   display: flex;
@@ -46,18 +54,33 @@
 .ff-navlink:active {
   background: var(--bg-pressed);
 }
-/* The current page carries a line as well as a heavier colour. */
+/* The current page is heavier, and carries the sliding indicator (below) as well. */
 .ff-navlink[aria-current='page'] {
   font-weight: var(--fw-semibold);
 }
-.ff-navlink[aria-current='page']::after {
-  content: '';
+
+/* ---- The sliding indicator --------------------------------------------------------------------
+   ONE element under the navigation, moved to the current link by script (use-sliding-indicator.ts
+   writes --ind-x, --ind-w, --ind-by, --ind-cy and --ind-o). In the collapsed menu it is a bar on the
+   left edge of the current row; from 48em it is a line under the link's text. It moves with transform
+   only, it is hidden when no link is current (the home page), and under reduced motion every time
+   here is an instant, so it simply is where it should be. */
+.ff-header__indicator {
   position: absolute;
-  inset-inline: var(--sp-3);
-  inset-block-end: var(--sp-1);
-  block-size: 0.1875rem;
-  border-radius: var(--r-pill);
-  background: var(--brand);
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: 0.1875rem;
+  block-size: 1.25rem;
+  background: var(--brand-stroke);
+  opacity: var(--ind-o, 0);
+  transform: translateY(calc(var(--ind-cy, 0px) - 0.625rem));
+  pointer-events: none;
+  transition: opacity var(--motion-control) var(--ease-easy);
+}
+.ff-header__nav[data-placed] .ff-header__indicator {
+  transition:
+    transform var(--motion-component) var(--ease-decelerate),
+    opacity var(--motion-control) var(--ease-easy);
 }
 
 /* ---- Public header ------------------------------------------------------------------------ */
@@ -193,6 +216,22 @@
   font-weight: var(--fw-semibold);
 }
 
+/* The theme switch: in the bar from 48em, inside the menu below it. */
+.ff-header .ff-header__theme {
+  display: none;
+}
+.ff-header__theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-start: var(--sp-2);
+  padding-block-start: var(--sp-2);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  color: var(--fg-1);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+}
+
 /* ---- Narrow: the app header is a compact bar ---------------------------------------------- */
 @media (max-width: 47.99em) {
   /* In the dropdown the link text lines up with the text above it; its hover fill still pads it. */
@@ -232,6 +271,14 @@
     gap: var(--sp-2);
   }
 }
+/* On the narrowest phones the wordmark, the menu, the theme switch and "Start call" still share one
+   row: the gaps close up rather than the bar wrapping onto a second line. */
+@media (max-width: 23em) {
+  .ff-header__bar,
+  .ff-header__actions {
+    gap: var(--sp-1);
+  }
+}
 
 /* ---- Wide ---------------------------------------------------------------------------------- */
 @media (min-width: 48em) {
@@ -244,7 +291,8 @@
   .ff-header__nav,
   .ff-header__nav[data-open] {
     display: block;
-    position: static;
+    /* The indicator is placed against this box, so it is the offset parent of the links. */
+    position: relative;
     flex: 1 1 auto;
     min-inline-size: 0;
     padding: 0;
@@ -257,6 +305,14 @@
     flex-wrap: wrap;
     gap: var(--sp-1);
   }
+  /* A line under the current link's text: 1px wide, stretched to the measured width. */
+  .ff-header__indicator {
+    inline-size: 1px;
+    block-size: 0.1875rem;
+    transform-origin: left center;
+    transform: translate(var(--ind-x, 0px), calc(var(--ind-by, 0px) - 0.1875rem - var(--sp-1)))
+      scaleX(var(--ind-w, 0));
+  }
   .ff-navlink {
     min-block-size: var(--target);
     font-size: var(--fs-body);
@@ -265,6 +321,12 @@
   }
   .ff-header__status {
     display: inline-flex;
+  }
+  .ff-header .ff-header__theme {
+    display: inline-flex;
+  }
+  .ff-header__theme-row {
+    display: none;
   }
   .ff-header__more {
     display: none;
@@ -289,7 +351,7 @@
   .ff-header {
     border-block-end-color: CanvasText;
   }
-  .ff-navlink[aria-current='page']::after {
+  .ff-header__indicator {
     forced-color-adjust: none;
     background: Highlight;
   }

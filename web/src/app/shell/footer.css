@@ -16,6 +16,14 @@
 .ff-footer__text {
   margin: 0;
 }
+/* The links and the theme choice stay together, so a footer too narrow for all three puts the line of
+   text first and the pair after it, and does not strand the theme choice on a row of its own. */
+.ff-footer__end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-8);
+}
 .ff-footer__links {
   display: flex;
   flex-wrap: wrap;

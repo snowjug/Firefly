@@ -1,11 +1,12 @@
 import { LinkButton } from '../../design/primitives/Button.tsx';
-import { HERO } from './landing-copy.ts';
 import { CallPreview } from './CallPreview.tsx';
+import { FEATURED_ID, HERO } from './landing-copy.ts';
 import './hero.css';
 
 /**
- * The top of the page: a short promise, the way in and a real moment from a call. The region is
- * named by the title and described by the supporting line.
+ * The top of the page: a short promise, the way in, and a call that plays beside it. "Start call"
+ * goes to the scenarios; "Explore scenarios" stays on the page and scrolls to the featured ones, so
+ * the two are different things to do. The region is named by the title and described by the line.
  */
 export function Hero() {
   return (
@@ -29,7 +30,11 @@ export function Hero() {
             >
               {HERO.primary}
             </LinkButton>
-            <LinkButton to="/scenarios" appearance="outline" size="large">
+            <LinkButton
+              to={{ pathname: '/', hash: `#${FEATURED_ID}` }}
+              appearance="outline"
+              size="large"
+            >
               {HERO.secondary}
             </LinkButton>
           </div>

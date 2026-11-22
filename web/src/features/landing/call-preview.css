@@ -1,42 +1,164 @@
-/* The hero's call preview: a moment from a call, drawn with real components. Tokens only. The one
-   movement is the waveform swinging for a few seconds when a panel appears; it is switched on only
-   for people who have not asked for less motion, and it ends by itself. */
+/* The hero's call preview: a short call that plays by itself, drawn with the same parts as the call
+   screen and the report. Tokens only. What moves is a class or an attribute changing on a frame of the
+   script (see preview-script.ts); the stylesheet only says how each change looks, with transform and
+   opacity and the shared durations, so under reduced motion every change is an instant one. The
+   window turns a degree or two toward a mouse (useTilt) and not for anything else. */
 
-.cp {
+.lp-preview {
   margin: 0;
   min-inline-size: 0;
   max-inline-size: 40rem;
 }
 /* Beside the copy it fills its column, so its edge lines up with the page's. */
 @media (min-width: 64em) {
-  .cp {
+  .lp-preview {
     max-inline-size: none;
   }
 }
-.cp__tabs {
-  margin-block-end: var(--sp-3);
-}
-.cp__caption {
+.lp-preview__caption {
   margin-block-start: var(--sp-3);
   font-size: var(--fs-caption);
   line-height: var(--lh-caption);
   color: var(--fg-3);
 }
 
-.cp__window {
-  overflow: hidden;
+/* ---- The product tabs and the one line that slides between them ---------------------------- */
+.lp-preview__bar {
+  position: relative;
+  margin-block-end: var(--sp-3);
+}
+.lp-preview__tabs .lp-preview__tab {
+  padding-inline: var(--sp-3);
+  /* One weight for every tab, so choosing one never changes any width. */
+  font-weight: var(--fw-semibold);
+}
+/* The line under the chosen tab is the shared one below, not a line of each tab's own. */
+.lp-preview__tabs .lp-preview__tab.ff-tab--selected::before {
+  content: none;
+}
+.lp-preview__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.lp-preview__icon {
+  color: var(--fg-3);
+  transition: color var(--motion-control) var(--ease-easy);
+}
+.lp-preview__tab.ff-tab--selected .lp-preview__icon {
+  color: var(--accent-fg);
+}
+/* ONE element, moved to the chosen tab by script (use-sliding-indicator.ts writes --ind-x, --ind-w
+   and --ind-o). It is 1px wide and stretched to the tab's width with a transform, and takes the
+   chosen product's accent. */
+.lp-preview__line {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-end: var(--stroke-w);
+  inline-size: 1px;
+  block-size: 0.1875rem;
+  background: var(--accent-fg);
+  transform-origin: left center;
+  transform: translateX(var(--ind-x, 0px)) scaleX(var(--ind-w, 0));
+  opacity: var(--ind-o, 0);
+  pointer-events: none;
+  transition:
+    opacity var(--motion-control) var(--ease-easy),
+    background-color var(--motion-control) var(--ease-easy);
+}
+.lp-preview__bar[data-placed] .lp-preview__line {
+  transition:
+    transform var(--motion-component) var(--ease-decelerate),
+    opacity var(--motion-control) var(--ease-easy),
+    background-color var(--motion-control) var(--ease-easy);
+}
+
+/* ---- The window ----------------------------------------------------------------------------- */
+.lp-preview__window {
+  position: relative;
   border: var(--stroke-w) solid var(--stroke-2);
   border-radius: var(--r-xl);
-  background: var(--bg-canvas);
+  background: var(--bg-raised);
   box-shadow: var(--shadow-8);
+  transition:
+    transform var(--motion-control) var(--ease-easy),
+    box-shadow var(--motion-component) var(--ease-easy);
 }
-.cp__call {
+/* Keyboard focus inside gets the same lift in the shadow as the pointer does, without the tilt. */
+.lp-preview__window:focus-within {
+  box-shadow: var(--shadow-16);
+}
+/* The soft edge light: a highlight that follows the pointer along the window's edge. */
+.lp-preview__window::before {
+  content: '';
+  position: absolute;
+  inset: calc(var(--stroke-w) * -1);
+  padding: var(--stroke-w);
+  border-radius: inherit;
+  background: radial-gradient(
+    18rem circle at var(--glow-x, 50%) var(--glow-y, 0%),
+    var(--edge-light),
+    transparent
+  );
+  -webkit-mask:
+    linear-gradient(CanvasText 0 0) content-box,
+    linear-gradient(CanvasText 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(CanvasText 0 0) content-box,
+    linear-gradient(CanvasText 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-component) var(--ease-easy);
+}
+/* Pointer effects are for a mouse and only while the hook has switched them on (data-fx). */
+@media (hover: hover) and (pointer: fine) {
+  .lp-preview__window[data-fx='on']:hover {
+    box-shadow: var(--shadow-16);
+    transform: perspective(60rem) translateY(calc(var(--move-lift) * -1))
+      rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  }
+  .lp-preview__window[data-fx='on']:hover::before {
+    opacity: 1;
+  }
+}
+
+/* ---- The two faces: the call, and the report it turns into -------------------------------------
+   They sit in one cell, so the window is as tall as the taller of the two and nothing below it
+   moves when one replaces the other. Both stay in the document; only the one in front is seen. */
+.lp-panel {
   display: flex;
   flex-direction: column;
 }
+.lp-panel__stage {
+  display: grid;
+  min-inline-size: 0;
+}
+.lp-face {
+  grid-area: 1 / 1;
+  min-inline-size: 0;
+  transition:
+    opacity var(--motion-panel) var(--ease-easy),
+    transform var(--motion-panel) var(--ease-easy);
+}
+.lp-face--report {
+  transform: translateY(var(--move-xs));
+}
+.lp-panel[data-phase='call'] .lp-face--report {
+  opacity: 0;
+  pointer-events: none;
+}
+.lp-panel[data-phase='report'] .lp-face--call {
+  opacity: 0;
+  pointer-events: none;
+}
+.lp-panel[data-phase='report'] .lp-face--report {
+  transform: none;
+}
 
-/* ---- The product and the state of the call ------------------------------------------------ */
-.cp__top {
+/* ---- The call: the product, the customer and how they feel ---------------------------------- */
+.lp-call__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -44,9 +166,8 @@
   gap: var(--sp-2) var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
   border-block-end: var(--stroke-w) solid var(--stroke-3);
-  background: var(--bg-quiet);
 }
-.cp__product {
+.lp-call__product {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
@@ -56,192 +177,359 @@
   font-weight: var(--fw-semibold);
   color: var(--fg-1);
 }
-
-/* ---- The customer ---------------------------------------------------------------------------- */
-.cp__person {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-3) var(--sp-4);
-  padding: var(--sp-4) var(--sp-4) var(--sp-2);
-}
-.cp__avatar {
+.lp-call__tile {
   display: inline-flex;
   flex: none;
-  border-radius: var(--r-pill);
-  /* A still ring with a gap: this is the customer speaking. */
-  box-shadow:
-    0 0 0 2px var(--bg-canvas),
-    0 0 0 4px var(--voice-customer);
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border: var(--stroke-w) solid var(--accent-border);
+  border-radius: var(--r-md);
+  background: var(--accent-bg);
+  color: var(--accent-fg);
 }
-.cp__who {
-  flex: 1 1 8rem;
+.lp-call__mood {
+  display: inline-flex;
+}
+/* A word, an icon or a badge that changes arrives with a short rise: the old one is simply replaced. */
+.lp-call__swap {
+  display: inline-block;
+  animation: lp-swap var(--motion-component) var(--ease-decelerate) both;
+}
+@keyframes lp-swap {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-xs));
+  }
+}
+
+.lp-call__person {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-4) var(--sp-1);
+}
+.lp-call__avatar {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+/* The ring with a gap that says this person is speaking: still, and a shape as well as a colour. */
+.lp-call__avatar::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: var(--stroke-w-thick) solid var(--voice-customer);
+  border-radius: var(--r-pill);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-component) var(--ease-easy);
+}
+.lp-panel[data-speaking='customer'] .lp-call__avatar::after {
+  opacity: 1;
+}
+.lp-call__who {
   min-inline-size: 0;
 }
-.cp__name {
+.lp-call__name {
   margin: 0;
   font-size: var(--fs-subtitle2);
   line-height: var(--lh-subtitle2);
   font-weight: var(--fw-semibold);
   color: var(--fg-1);
 }
-.cp__role {
+.lp-call__role {
   margin: 0;
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
   color: var(--fg-2);
 }
 
-/* ---- The voice ------------------------------------------------------------------------------- */
-.cp__wave {
-  inline-size: calc(100% - 2 * var(--sp-4));
-  max-inline-size: 18rem;
-  block-size: auto;
-  margin-inline: var(--sp-4);
-  color: var(--voice-customer);
-  fill: currentColor;
+/* ---- The voice: the waveform and what the call is doing ---------------------------------------- */
+.lp-call__voice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-4);
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
 }
-.cp__bar {
+.lp-wave {
+  flex: 0 1 15rem;
+  min-inline-size: 0;
+  block-size: auto;
+  fill: var(--voice-customer);
+}
+.lp-wave__bar {
   transform-box: fill-box;
   transform-origin: center;
 }
+.lp-call__state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.lp-call__dot {
+  flex: none;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--r-pill);
+  background: var(--fg-3);
+  transition:
+    background-color var(--motion-component) var(--ease-easy),
+    box-shadow var(--motion-component) var(--ease-easy);
+}
+.lp-call__state[data-state='Speaking'] {
+  color: var(--fg-1);
+}
+.lp-call__state[data-state='Speaking'] .lp-call__dot {
+  background: var(--voice-customer);
+  box-shadow:
+    0 0 0 2px var(--bg-raised),
+    0 0 0 3.5px var(--voice-customer);
+}
 
-/* ---- The words so far ------------------------------------------------------------------------- */
-.cp__turns {
+/* ---- The words so far: each line arrives with a short fade and rise ------------------------ */
+.lp-call__lines {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   margin: 0;
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
   list-style: none;
 }
-.cp__turn {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-0h);
+.lp-line {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  column-gap: var(--sp-3);
+  opacity: 0;
+  transform: translateY(var(--move-xs));
+  transition:
+    opacity var(--motion-component) var(--ease-decelerate),
+    transform var(--motion-component) var(--ease-decelerate);
 }
-.cp__turn--you {
+.lp-line[data-shown] {
+  opacity: 1;
+  transform: none;
+}
+/* The trainee's own words sit on a tint, and are labelled "You": distinct without colour alone. */
+.lp-line[data-speaker='trainee'] {
   margin-inline: calc(var(--sp-3) * -1);
-  padding: var(--sp-2h) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-lg);
   background: var(--brand-tint);
 }
-.cp__meta {
-  display: flex;
-  gap: var(--sp-2);
-  margin: 0;
-  font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
-  color: var(--fg-3);
-  font-variant-numeric: tabular-nums;
-}
-.cp__speaker {
+.lp-line__who {
+  font-size: var(--fs-compact);
+  line-height: var(--lh-body);
   font-weight: var(--fw-semibold);
   color: var(--fg-2);
 }
-.cp__text {
-  margin: 0;
+.lp-line__text {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   color: var(--fg-1);
+  text-wrap: pretty;
 }
 
-/* ---- A first look at the coaching ------------------------------------------------------------- */
-.cp__coaching {
+/* ---- The report the card turns into: the words first, then the score ---------------------------- */
+.lp-face--report {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4) var(--sp-4);
-  border-block-start: var(--stroke-w) solid var(--stroke-3);
-  background: var(--bg-quiet);
+  padding: var(--sp-4);
 }
-.cp__label {
+.lp-mini__label {
   margin: 0;
   font-size: var(--fs-caption);
   line-height: var(--lh-caption);
   font-weight: var(--fw-semibold);
   color: var(--fg-3);
 }
-.cp__scores {
-  display: grid;
-  gap: var(--sp-2);
+.lp-mini__rows {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.cp__score {
+.lp-mini__row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-1) var(--sp-4);
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--sp-1);
+  padding-block: var(--sp-3);
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
 }
-/* One width for the names keeps the bars in a column; on a narrow window the name takes its own line. */
-.cp__skill {
-  flex: 0 0 6rem;
+.lp-mini__skill,
+.lp-mini__quote,
+.lp-mini__score {
+  opacity: 0;
+  transform: translateY(var(--move-xs));
+  transition:
+    opacity var(--motion-component) var(--ease-decelerate),
+    transform var(--motion-component) var(--ease-decelerate);
+}
+.lp-mini__row[data-quoted] .lp-mini__skill,
+.lp-mini__row[data-quoted] .lp-mini__quote,
+.lp-mini__row[data-scored] .lp-mini__score {
+  opacity: 1;
+  transform: none;
+}
+.lp-mini__skill {
+  margin: 0;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-2);
+}
+.lp-mini__quote {
+  margin: 0;
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   color: var(--fg-1);
+  text-wrap: pretty;
+}
+.lp-mini__turn {
+  margin-inline-end: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---- Motion: the waveform swings for a few seconds, then rests --------------------------------
-   Each bar leans on the one before it, so the swing travels along the wave. It starts when the panel
-   is selected (the attribute appears), so choosing a tab plays it again. */
-@media (prefers-reduced-motion: no-preference) {
-  .cp__panel[data-selected] .cp__bar {
-    animation: cp-swing var(--dur-wave) var(--ease-easy) 3 both;
-  }
-  .cp__panel[data-selected] .cp__bar:nth-child(4n + 2) {
-    animation-delay: var(--dur-instant);
-  }
-  .cp__panel[data-selected] .cp__bar:nth-child(4n + 3) {
-    animation-delay: calc(var(--dur-instant) * 2);
-  }
-  .cp__panel[data-selected] .cp__bar:nth-child(4n) {
-    animation-delay: calc(var(--dur-instant) * 3);
-  }
+/* ---- The foot: the microphone indicators, which are pictures and do nothing, and the one control */
+.lp-panel__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
+  border-end-start-radius: calc(var(--r-xl) - var(--stroke-w));
+  border-end-end-radius: calc(var(--r-xl) - var(--stroke-w));
+  background: var(--bg-quiet);
 }
-@keyframes cp-swing {
-  0%,
-  100% {
-    transform: scaleY(1);
-  }
-  45% {
-    transform: scaleY(0.45);
-  }
+.lp-panel__indicators {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.lp-ind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-pill);
+  background: var(--bg-raised);
+  color: var(--fg-3);
+  transition:
+    background-color var(--motion-component) var(--ease-easy),
+    border-color var(--motion-component) var(--ease-easy),
+    box-shadow var(--motion-component) var(--ease-easy),
+    color var(--motion-component) var(--ease-easy);
+}
+/* The trainee's microphone lights while the trainee speaks. */
+.lp-ind--mic[data-live] {
+  border-color: var(--voice-trainee);
+  background: var(--brand-tint);
+  color: var(--voice-trainee);
+  box-shadow:
+    0 0 0 2px var(--bg-quiet),
+    0 0 0 3.5px var(--voice-trainee);
+}
+/* Muted: shown as a state, not offered as a control. */
+.lp-ind--mute {
+  background: var(--bg-subtle);
 }
 
+/* ---- Narrow: a little less padding, and the speaker above the words ------------------------------ */
 @media (max-width: 30em) {
-  .cp__person,
-  .cp__top,
-  .cp__turns,
-  .cp__coaching {
+  .lp-call__head,
+  .lp-call__person,
+  .lp-call__voice,
+  .lp-call__lines,
+  .lp-face--report {
     padding-inline: var(--sp-3);
   }
-  .cp__wave {
-    inline-size: calc(100% - 2 * var(--sp-3));
-    margin-inline: var(--sp-3);
+  .lp-panel__foot {
+    padding-inline-start: var(--sp-3);
   }
-  .cp__turn--you {
+  .lp-line {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .lp-line[data-speaker='trainee'] {
     margin-inline: calc(var(--sp-2) * -1);
     padding-inline: var(--sp-2);
   }
+  .lp-preview__icon {
+    display: none;
+  }
 }
 
-/* ---- Forced colours: edges instead of shadows ---------------------------------------------------- */
+/* ---- Reduced motion: nothing moves, so nothing is held back. The call and the report are both
+   shown, one above the other, each complete. ------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .lp-panel__stage {
+    display: flex;
+    flex-direction: column;
+  }
+  .lp-panel[data-phase] .lp-face {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+  .lp-face--report {
+    border-block-start: var(--stroke-w) solid var(--stroke-3);
+  }
+}
+
+/* ---- Forced colours: edges and marks that survive a system palette ------------------------------ */
 @media (forced-colors: active) {
-  .cp__window {
+  .lp-preview__window {
     border-color: CanvasText;
     box-shadow: none;
   }
-  .cp__avatar {
-    box-shadow: none;
-    outline: 2px solid CanvasText;
-    outline-offset: 2px;
+  .lp-preview__window::before {
+    display: none;
   }
-  .cp__turn--you {
+  .lp-preview__line {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .lp-wave {
+    forced-color-adjust: none;
+    fill: CanvasText;
+  }
+  .lp-call__avatar::after {
+    border-color: Highlight;
+  }
+  .lp-call__dot {
+    forced-color-adjust: none;
+    background: CanvasText;
+    box-shadow: none;
+  }
+  .lp-line[data-speaker='trainee'] {
     border: var(--stroke-w) solid CanvasText;
   }
-  .cp__wave {
-    color: CanvasText;
+  .lp-ind {
+    border-color: CanvasText;
+  }
+  .lp-ind--mic[data-live] {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    color: Highlight;
+    box-shadow: none;
   }
 }

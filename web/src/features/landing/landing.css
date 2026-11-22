@@ -1,5 +1,7 @@
-/* The landing page below the hero: sections, headings and the parts of each. White and quiet bands,
-   hairlines, no gradients. Tokens only. */
+/* The landing page below the hero: the sections, their headings and the two closing parts (the
+   responsible-use line and the last action). Quiet bands, hairlines, no gradients. Tokens only. The
+   parts of each section (steps, the featured scenarios, the report preview) have stylesheets of their
+   own beside this one. */
 
 .lp-section {
   padding-block: var(--sp-8);
@@ -12,6 +14,12 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
+}
+.lp-section__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
 }
 @media (min-width: 64em) {
   .lp-section {
@@ -35,163 +43,14 @@
   font-size: var(--fs-title3);
   line-height: var(--lh-title3);
 }
-
-/* ---- Three connected steps -------------------------------------------------------------------- */
-.lp-steps {
-  --lp-icon: 2.5rem;
-  display: grid;
-  gap: var(--sp-6);
+/* The one short line under a heading. */
+.lp-lead {
   margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.lp-step {
-  position: relative;
-  display: grid;
-  grid-template-columns: var(--lp-icon) minmax(0, 1fr);
-  column-gap: var(--sp-4);
-  align-items: start;
-}
-.lp-step__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--lp-icon);
-  block-size: var(--lp-icon);
-  border-radius: var(--r-pill);
-  background: var(--brand-tint);
-  color: var(--brand-fg-2);
-}
-.lp-step__body {
-  min-inline-size: 0;
-  padding-block-start: var(--sp-0h);
-}
-.lp-step__title {
-  margin: 0;
-  font-size: var(--fs-subtitle2);
-  line-height: var(--lh-subtitle2);
-  font-weight: var(--fw-semibold);
-  color: var(--fg-1);
-}
-.lp-step__text {
-  margin: 0;
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
+  max-inline-size: 36rem;
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
   color: var(--fg-2);
-}
-/* The connector joins one step to the next: down the side on a phone, across the top on a wide screen.
-   It is decoration only. */
-.lp-step:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  inset-inline-start: calc(var(--lp-icon) / 2 - 1px);
-  inset-block-start: calc(var(--lp-icon) + var(--sp-1));
-  inset-block-end: calc(var(--sp-6) * -1 + var(--sp-1));
-  border-inline-start: var(--stroke-w-thick) solid var(--stroke-1);
-}
-@media (min-width: 48em) {
-  .lp-steps {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--sp-8);
-  }
-  .lp-step {
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: var(--sp-3);
-    align-content: start;
-  }
-  .lp-step:not(:last-child)::after {
-    inset-inline-start: calc(var(--lp-icon) + var(--sp-2));
-    inset-inline-end: calc(var(--sp-8) * -1 + var(--sp-2));
-    inset-block-start: calc(var(--lp-icon) / 2 - 1px);
-    inset-block-end: auto;
-    border-inline-start: 0;
-    border-block-start: var(--stroke-w-thick) solid var(--stroke-1);
-  }
-  .lp-step__body {
-    padding-block-start: 0;
-  }
-}
-
-/* ---- Product coverage --------------------------------------------------------------------------- */
-.lp-products {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2) var(--sp-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.lp-product {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  min-block-size: 2.25rem;
-  padding: var(--sp-1h) var(--sp-3);
-  border: var(--stroke-w) solid var(--stroke-1);
-  border-radius: var(--r-md);
-  background: var(--bg-canvas);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--fg-1);
-}
-.lp-product__icon {
-  display: inline-flex;
-  color: var(--brand-fg-2);
-}
-
-/* ---- One piece of coaching evidence ----------------------------------------------------------------- */
-.lp-evidence {
-  display: grid;
-  gap: var(--sp-3);
-  padding: var(--sp-5);
-  border: var(--stroke-w) solid var(--stroke-2);
-  border-radius: var(--r-xl);
-  background: var(--bg-canvas);
-  box-shadow: var(--shadow-2);
-}
-.lp-evidence__part {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  min-inline-size: 0;
-}
-.lp-evidence__label {
-  margin: 0;
-  font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
-  font-weight: var(--fw-semibold);
-  color: var(--fg-3);
-}
-.lp-evidence__quote {
-  margin: 0;
-  font-size: var(--fs-subtitle1);
-  line-height: var(--lh-subtitle1);
-  color: var(--fg-1);
   text-wrap: pretty;
-}
-.lp-evidence__coaching {
-  margin: 0;
-  font-size: var(--fs-subtitle1);
-  line-height: var(--lh-subtitle1);
-  font-weight: var(--fw-semibold);
-  color: var(--fg-1);
-}
-.lp-evidence__arrow {
-  color: var(--fg-3);
-  /* Down on a phone, where the quote is above the coaching. */
-  transform: rotate(90deg);
-}
-@media (min-width: 48em) {
-  .lp-evidence {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-items: center;
-    column-gap: var(--sp-6);
-    padding: var(--sp-6);
-  }
-  .lp-evidence__arrow {
-    transform: none;
-  }
 }
 
 /* ---- The responsible-use line -------------------------------------------------------------------------- */
@@ -267,16 +126,7 @@
 /* ---- Forced colours: edges and rules must survive --------------------------------------------------------------- */
 @media (forced-colors: active) {
   .lp-section--quiet,
-  .lp-section--final,
-  .lp-product,
-  .lp-evidence {
+  .lp-section--final {
     border-color: CanvasText;
-    box-shadow: none;
-  }
-  .lp-step__icon {
-    border: var(--stroke-w) solid CanvasText;
-  }
-  .lp-step:not(:last-child)::after {
-    border-color: GrayText;
   }
 }

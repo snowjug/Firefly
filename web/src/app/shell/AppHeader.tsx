@@ -1,8 +1,10 @@
 import { useCallback, useId, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router';
 import type { AppConfigDTO } from '#shared/domain/api.ts';
+import { useScrolled } from '../../design/interaction/use-scrolled.ts';
 import { Badge, type BadgeTone } from '../../design/primitives/Badge.tsx';
 import { Icon, type IconName } from '../../design/icons.tsx';
+import { ThemeToggle } from '../../design/theme/ThemeToggle.tsx';
 import { useAppConfig } from '../../lib/config.tsx';
 import { useCurrentSection } from '../section.tsx';
 import { useDismiss } from './use-dismiss.ts';
@@ -38,6 +40,7 @@ export function providerStatus(config: AppConfigDTO | null): ProviderStatus | nu
  * The header inside the app: the wordmark, the current section (set by the page with
  * `useAppSection`), the provider status and a Responsible AI link. Below 48em it is a compact bar
  * with a Back control (when the page supplies one) and a disclosure holding the status and link.
+ * Like the public header, it gains an edge and a soft shadow once the page has scrolled.
  */
 export function AppHeader() {
   const section = useCurrentSection();
@@ -51,10 +54,11 @@ export function AppHeader() {
   const open = openAt === location.key;
   const close = useCallback(() => setOpenAt(null), []);
   useDismiss(header, button, open, close);
+  const scrolled = useScrolled();
 
   const hasBack = Boolean(section?.backTo);
   return (
-    <header ref={header} className="ff-header ff-header--app">
+    <header ref={header} className="ff-header ff-header--app" data-scrolled={scrolled || undefined}>
       <div className="ff-header__bar l-page">
         {section?.backTo ? (
           <Link
@@ -93,6 +97,7 @@ export function AppHeader() {
             </Badge>
           </span>
         ) : null}
+        <ThemeToggle className="ff-header__theme" />
         <button
           ref={button}
           type="button"
@@ -129,6 +134,10 @@ export function AppHeader() {
               </li>
             </ul>
           </nav>
+          <div className="ff-header__theme-row">
+            <span>Theme</span>
+            <ThemeToggle />
+          </div>
         </div>
       </div>
     </header>
