@@ -33,7 +33,7 @@
   font-weight: var(--fw-semibold);
 }
 /* The line under the chosen tab is the shared one below, not a line of each tab's own. */
-.lp-preview__tabs .lp-preview__tab.ff-tab--selected::before {
+.lp-preview__tabs .lp-preview__tab[aria-selected='true']::before {
   content: none;
 }
 .lp-preview__name {
@@ -45,7 +45,7 @@
   color: var(--fg-3);
   transition: color var(--motion-control) var(--ease-easy);
 }
-.lp-preview__tab.ff-tab--selected .lp-preview__icon {
+.lp-preview__tab[aria-selected='true'] .lp-preview__icon {
   color: var(--accent-fg);
 }
 /* ONE element, moved to the chosen tab by script (use-sliding-indicator.ts writes --ind-x, --ind-w

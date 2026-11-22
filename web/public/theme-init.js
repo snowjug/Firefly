@@ -8,13 +8,13 @@
   try {
     var stored = window.localStorage.getItem('firefly.theme');
     if (stored === 'light' || stored === 'dark') preference = stored;
-  } catch (error) {
+  } catch (_error) {
     /* Storage can be blocked: the system preference decides. */
   }
   var systemDark = false;
   try {
     systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  } catch (error) {
+  } catch (_error) {
     /* No media queries: light. */
   }
   var dark = preference === 'dark' || (preference === 'system' && systemDark);
