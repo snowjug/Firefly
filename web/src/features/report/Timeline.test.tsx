@@ -75,14 +75,71 @@ function tamperedGreeting(): CoachingReport {
   };
 }
 
+/**
+ * The strong call, with "confirmed what the issue was" listed among the behaviours it did not show:
+ * the call needed it and never got there, so the journey has a moment that was not reached.
+ */
+function issueNeeded(): CoachingReport {
+  const { report } = CALLS.strong;
+  return {
+    ...report,
+    care: report.care?.map((p) =>
+      p.id === 'communicate'
+        ? {
+            ...p,
+            behaviours: [
+              ...p.behaviours,
+              {
+                id: 'communicate.context-confirmed',
+                principle: 'communicate',
+                label: 'Confirmed the context',
+                status: 'not-shown',
+                evidence: [],
+                note: null,
+              } as const,
+            ],
+          }
+        : p,
+    ),
+  };
+}
+
+/** A ResizeObserver that tells the page the width of the element it watches, when a test says so. */
+class FakeResizeObserver {
+  static instances: FakeResizeObserver[] = [];
+  private element: Element | null = null;
+  private readonly callback: ResizeObserverCallback;
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    FakeResizeObserver.instances.push(this);
+  }
+  observe(element: Element) {
+    this.element = element;
+  }
+  unobserve() {}
+  disconnect() {
+    this.element = null;
+  }
+  static widthOf(className: string, width: number) {
+    const observer = FakeResizeObserver.instances.find((o) =>
+      o.element?.classList.contains(className),
+    );
+    if (!observer) throw new Error(`Nothing observes .${className}`);
+    observer.callback(
+      [{ target: observer.element, contentRect: { width } } as unknown as ResizeObserverEntry],
+      observer as never,
+    );
+  }
+}
+
 describe('on a wide screen: a rail of moments', () => {
   beforeEach(wide);
 
-  it('lists the moments of the call in call order, each with its turn, or with "Not seen"', () => {
-    show('strong');
+  it('lists the moments of the call in call order, each with its turn, or with "Not reached"', () => {
+    show('strong', issueNeeded());
     expect(tabs().map((tab) => tab.textContent)).toEqual([
       'Greeting, Turn 2',
-      'Issue established, Not seen',
+      'Issue established, Not reached',
       'Impact established, Turn 2',
       'Fact found: Only sales-organised meetings are affected, Turn 4',
       'Tension eased, Turn 4',
@@ -95,6 +152,13 @@ describe('on a wide screen: a rail of moments', () => {
       'Summary, Turn 12',
       'Closing, Turn 14',
     ]);
+  });
+
+  it('draws no moment for something the call never needed', () => {
+    show('strong');
+    expect(tabs().map((tab) => tab.textContent)).not.toContain('Issue established, Not reached');
+    expect(tabs()).toHaveLength(12);
+    expect(within(rail()).queryByText(/Not reached|Not seen/)).toBeNull();
   });
 
   it('has one tab stop, with the first moment that was seen selected and its exact turn shown', () => {
@@ -129,11 +193,11 @@ describe('on a wide screen: a rail of moments', () => {
     expect(panel().querySelector('.rp-ev__turn--current')?.textContent).toContain(turnText);
   });
 
-  it('says plainly that a moment was not seen, with no words and nothing to open', async () => {
-    show('strong');
+  it('says plainly that a moment was not reached, with no words and nothing to open', async () => {
+    show('strong', issueNeeded());
     await userEvent.click(tabNamed(/^Issue established/));
     const shown = panel();
-    expect(shown).toHaveTextContent('Not seen in this call.');
+    expect(shown).toHaveTextContent('Not reached in this call.');
     expect(shown.querySelector('mark')).toBeNull();
     expect(within(shown).queryByRole('button', { name: 'Open in transcript' })).toBeNull();
     expect(shown.querySelector('blockquote')).toBeNull();
@@ -141,14 +205,14 @@ describe('on a wide screen: a rail of moments', () => {
 
   it('moves with the arrow keys, Home and End, wraps round, and selects as it goes', async () => {
     const user = userEvent.setup();
-    show('strong');
+    show('strong', issueNeeded());
     tabs()[0]?.focus();
     await user.keyboard('{ArrowRight}');
     expect(tabs()[1]).toHaveFocus();
     expect(tabs()[1]).toHaveAttribute('aria-selected', 'true');
     expect(tabs()[1]).toHaveAttribute('tabindex', '0');
     expect(tabs()[0]).toHaveAttribute('tabindex', '-1');
-    expect(panel()).toHaveTextContent('Not seen in this call.');
+    expect(panel()).toHaveTextContent('Not reached in this call.');
     await user.keyboard('{End}');
     expect(tabs().at(-1)).toHaveFocus();
     expect(panel()).toHaveTextContent('Turn 14');
@@ -184,8 +248,8 @@ describe('on a wide screen: a rail of moments', () => {
     );
   });
 
-  it('marks nothing in the transcript for a moment that was not seen', async () => {
-    show('strong');
+  it('marks nothing in the transcript for a moment that was not reached', async () => {
+    show('strong', issueNeeded());
     await userEvent.click(tabNamed(/^Fact found: Storage settings changed last week/));
     await userEvent.click(tabNamed(/^Issue established/));
     expect(document.querySelectorAll('.rp-turn--marked')).toHaveLength(0);
@@ -253,6 +317,78 @@ describe('on a wide screen: a rail of moments', () => {
   });
 });
 
+describe('a call that was ended early', () => {
+  beforeEach(wide);
+
+  it('has one moment where the call stopped, and what it never got to after it, not reached', () => {
+    show('short');
+    expect(tabs().map((tab) => tab.textContent)).toEqual([
+      'Greeting, Turn 2',
+      'Impact established, Not reached',
+      'Fact found: The calendar is shown in the Outlook desktop app, Turn 4',
+      'Call ended, After turn 5',
+      'Ownership, Not reached',
+      'Closing, Not reached',
+    ]);
+  });
+
+  it('shows the turn it stopped on when that moment is chosen', async () => {
+    show('short');
+    await userEvent.click(tabNamed(/^Call ended/));
+    const shown = panel();
+    expect(shown).toHaveTextContent('Call ended');
+    expect(shown).toHaveTextContent(/The call ended early, after \d trainee turns?\./);
+    expect(shown).toHaveTextContent(CALLS.short.session.turns.at(-1)?.text ?? '');
+    expect(within(shown).getByRole('button', { name: 'Open in transcript' })).toBeInTheDocument();
+    expect(turn(5)).toHaveClass('rp-turn--marked');
+  });
+
+  it('marks what was not reached as such, so it can be drawn quietly, and what happened as seen', () => {
+    show('short');
+    const states = tabs().map((tab) => tab.getAttribute('data-state'));
+    expect(states).toEqual(['seen', 'not-seen', 'seen', 'seen', 'not-seen', 'not-seen']);
+    expect(tabNamed(/^Call ended/)).toHaveAttribute('data-kind', 'ended');
+  });
+});
+
+describe('one row or a list: never a rail that wraps', () => {
+  beforeEach(wide);
+
+  let restore: () => void;
+  beforeEach(() => {
+    FakeResizeObserver.instances = [];
+    const original = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver;
+    restore = () => {
+      globalThis.ResizeObserver = original;
+    };
+  });
+  afterEach(() => restore());
+
+  it('is a rail when every moment fits in the row, and a list when they do not', () => {
+    show('strong');
+    // Twelve moments need 12 x 80 px.
+    act(() => FakeResizeObserver.widthOf('rp-tl__measure', 1200));
+    expect(screen.getByRole('tablist', { name: 'Moments in the call' })).toBeInTheDocument();
+    act(() => FakeResizeObserver.widthOf('rp-tl__measure', 896));
+    expect(screen.queryByRole('tablist', { name: 'Moments in the call' })).not.toBeInTheDocument();
+    expect(
+      within(section())
+        .getAllByRole('button')
+        .filter((button) => button.hasAttribute('aria-expanded')),
+    ).toHaveLength(12);
+    act(() => FakeResizeObserver.widthOf('rp-tl__measure', 960));
+    expect(screen.getByRole('tablist', { name: 'Moments in the call' })).toBeInTheDocument();
+  });
+
+  it('is a rail for a short journey in the same room, because it fits', () => {
+    show('short');
+    act(() => FakeResizeObserver.widthOf('rp-tl__measure', 640));
+    expect(screen.getByRole('tablist', { name: 'Moments in the call' })).toBeInTheDocument();
+    expect(tabs()).toHaveLength(6);
+  });
+});
+
 describe('on a narrow screen: a list of moments', () => {
   /** The button of each moment: the only buttons in the list that open and close. */
   const rows = () =>
@@ -263,12 +399,24 @@ describe('on a narrow screen: a list of moments', () => {
   it('is a list of buttons that open their turn in place, and none is open at first', () => {
     show('strong');
     expect(screen.queryByRole('tablist', { name: 'Moments in the call' })).not.toBeInTheDocument();
-    expect(rows()).toHaveLength(13);
+    expect(rows()).toHaveLength(12);
     for (const row of rows()) expect(row).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('opens one moment at a time, right under it, and opening another closes the first', async () => {
+  it('names the fact a "Fact found" moment is about, in words on its row', () => {
     show('strong');
+    const fact = rows().find((row) => row.textContent?.includes('Fact found')) as HTMLElement;
+    expect(fact.querySelector('.rp-tl__fact')).toHaveTextContent(
+      'Only sales-organised meetings are affected',
+    );
+    // Said once to a screen reader: the name has the fact, then the turn.
+    expect(fact).toHaveAccessibleName(
+      'Fact found: Only sales-organised meetings are affected, Turn 4',
+    );
+  });
+
+  it('opens one moment at a time, right under it, and opening another closes the first', async () => {
+    show('strong', issueNeeded());
     const [greeting, issue] = rows() as [HTMLElement, HTMLElement];
     await userEvent.click(greeting);
     expect(greeting).toHaveAttribute('aria-expanded', 'true');
@@ -279,7 +427,7 @@ describe('on a narrow screen: a list of moments', () => {
     expect(greeting).toHaveAttribute('aria-expanded', 'false');
     expect(issue).toHaveAttribute('aria-expanded', 'true');
     expect(document.getElementById(issue.getAttribute('aria-controls') ?? '')).toHaveTextContent(
-      'Not seen in this call.',
+      'Not reached in this call.',
     );
   });
 
@@ -332,17 +480,20 @@ describe('on a narrow screen: a list of moments', () => {
 describe('on paper', () => {
   it('lists every moment with its turn, whether the rail or the list was on screen', () => {
     wide();
-    show('strong');
+    show('strong', issueNeeded());
     act(() => {
       window.dispatchEvent(new Event('beforeprint'));
     });
     expect(screen.queryByRole('tablist', { name: 'Moments in the call' })).not.toBeInTheDocument();
+    // Nothing on paper asks the reader to choose.
+    expect(section()).not.toHaveTextContent('Choose a moment');
+    expect(section()).toHaveTextContent('The moments of the call in order');
     const items = within(section()).getAllByRole('listitem');
     expect(items).toHaveLength(13);
     expect(items[0]).toHaveTextContent('Greeting');
     expect(items[0]).toHaveTextContent('Turn 2');
     expect(items[1]).toHaveTextContent('Issue established');
-    expect(items[1]).toHaveTextContent('Not seen');
+    expect(items[1]).toHaveTextContent('Not reached');
     act(() => {
       window.dispatchEvent(new Event('afterprint'));
     });

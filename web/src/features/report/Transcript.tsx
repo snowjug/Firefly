@@ -24,7 +24,7 @@ import {
   type IconName,
 } from '../../design/index.ts';
 import { pluralise, skillName } from './copy.ts';
-import { scrollToElement } from './dom.ts';
+import { scrollToTurn } from './dom.ts';
 import { SectionLink, useEvidence } from './evidence.tsx';
 import { Section } from './parts.tsx';
 import { useTimelineSync } from './selection.tsx';
@@ -386,8 +386,9 @@ export function TranscriptReview({
     if (!target) return;
     const element = document.getElementById(turnId(target.turnIndex));
     if (!element) return;
-    scrollToElement(element);
+    const stop = scrollToTurn(element);
     element.focus({ preventScroll: true });
+    return stop;
   }, [target]);
 
   const status =

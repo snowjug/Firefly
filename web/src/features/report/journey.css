@@ -162,6 +162,12 @@
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
 }
+/* Each row names its kind with the marker the chart uses for it. */
+.rp-table__point {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
 /* Narrow: each point is one block, still a table to assistive technology. */
 @container (max-width: 47.99rem) {
   .rp-table,
@@ -245,6 +251,13 @@
   .rp-table tr,
   .rp-journey__panel {
     break-inside: avoid;
+  }
+  .rp-moment {
+    gap: var(--sp-1);
+    padding: var(--sp-2) var(--sp-3);
+  }
+  .rp-table tr {
+    padding-block: var(--sp-1);
   }
   .rp-journey__panel {
     box-shadow: none;

@@ -1,16 +1,40 @@
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { Icon } from '../../design/index.ts';
 import { BetterWording } from './BetterWording.tsx';
-import { countWords, dimensionLabel, plainUnexpectedTurn } from './copy.ts';
+import { clampWords, countWords, dimensionLabel, plainUnexpectedTurn } from './copy.ts';
 import { TurnLink, useEvidence } from './evidence.tsx';
+import { customerReplyTo } from './evidence-model.ts';
 import { ClampedText, Quote, Section, SkillTag } from './parts.tsx';
-import { wordingFor } from './report-model.ts';
+import { withoutTrend, wordingFor } from './report-model.ts';
 import './coaching.css';
 
 /** The most words a strength (its title and its reason) shows before "Show more". */
 export const STRENGTH_WORDS = 35;
 /** The most words an improvement (its title and its risk) shows before "Show more". */
 export const IMPROVEMENT_WORDS = 45;
+/** The most words of what the customer said next that a strength or an improvement quotes. */
+const REACTION_WORDS = 30;
+
+/**
+ * What the customer said next, in the customer's own words, from the transcript. It stands where the
+ * evaluator's sentence about the customer's hidden mood used to: it can be read, and followed to the
+ * turn, where a movement of temperature or trust that the chart does not show cannot. It is only
+ * given for a turn whose quote the transcript backs: a claim the transcript does not confirm gets
+ * no evidence beside it.
+ */
+function Reaction({ turnIndex, quote }: { turnIndex: number | null; quote: string | null }) {
+  const { turns, verify } = useEvidence();
+  const reply = turnIndex === null ? null : customerReplyTo(turns, turnIndex);
+  if (!reply || reply.role !== 'customer') return null;
+  if (quote !== null && !verify(turnIndex, quote)) return null;
+  const { shown } = clampWords(reply.text, REACTION_WORDS, { whole: true });
+  return (
+    <p className="rp-item__reaction">
+      <span className="rp-item__who">{reply.speaker} replied</span>{' '}
+      <span dir="auto">{`\u201c${shown}\u201d`}</span> <TurnLink turnIndex={reply.index} />
+    </p>
+  );
+}
 
 /** What the trainee did that helped, each with the words and the turn they happened at. */
 export function Strengths({ report }: { report: CoachingReport }) {
@@ -43,11 +67,12 @@ export function Strengths({ report }: { report: CoachingReport }) {
                   <h3 className="rp-item__title">{title}</h3>
                   <ClampedText
                     className="rp-item__text"
-                    text={plainUnexpectedTurn(s.whyItHelped)}
+                    text={withoutTrend(plainUnexpectedTurn(s.whyItHelped))}
                     budget={STRENGTH_WORDS - countWords(title)}
                   />
                 </div>
                 <Quote quote={s.quote} turnIndex={s.turnIndex} />
+                <Reaction turnIndex={s.turnIndex} quote={s.quote} />
               </li>
             );
           })}
@@ -113,11 +138,12 @@ export function Improvements({ report }: { report: CoachingReport }) {
                   <h3 className="rp-item__title">{title}</h3>
                   <ClampedText
                     className="rp-item__text"
-                    text={plainUnexpectedTurn(item.risk)}
+                    text={withoutTrend(plainUnexpectedTurn(item.risk))}
                     budget={IMPROVEMENT_WORDS - countWords(title)}
                   />
                 </div>
                 <ImprovementEvidence item={item} />
+                <Reaction turnIndex={item.turnIndex} quote={item.quote} />
                 {wording ? (
                   <BetterWording wording={wording} why={plainUnexpectedTurn(item.whyItWorks)} />
                 ) : null}

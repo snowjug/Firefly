@@ -1,17 +1,20 @@
 /* Better wording: what was said and what could be said instead, as a stacked pair with the words
    that went and the words that came marked in the text. The marks are real <del> and <ins>
    elements: a removed word is struck through and tinted, an added word is underlined and tinted, so
-   the meaning is never carried by colour alone, and a legend names both. Tokens only. */
+   the meaning is never carried by colour alone, and a quiet key says so in words. The block has no
+   box of its own (the item it sits in is the card): the two lines are the only boxes. Tokens only. */
 
 .rp-bw {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
   min-inline-size: 0;
-  padding: var(--sp-3);
-  border: var(--stroke-w) solid var(--stroke-2);
-  border-radius: var(--r-lg);
-  background: var(--bg-quiet);
+}
+.rp-bw__about {
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
 }
 .rp-bw__line {
   display: flex;
@@ -21,7 +24,7 @@
   padding: var(--sp-2) var(--sp-3);
   border-inline-start: 3px solid var(--stroke-1);
   border-radius: 0 var(--r-md) var(--r-md) 0;
-  background: var(--bg-raised);
+  background: var(--bg-quiet);
 }
 .rp-bw__line--before {
   border-inline-start-color: var(--diff-del-border);
@@ -64,29 +67,21 @@ ins.rp-bw__mark {
   text-underline-offset: 0.2em;
 }
 
+/* The key is two quiet chips in words, not a sample of the marks: nothing in it looks like a link. */
 .rp-bw__legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-1) var(--sp-3);
+  gap: var(--sp-1) var(--sp-2);
   margin: 0;
-  font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
 }
 .rp-bw__key {
-  padding-inline: 0.3em;
-  border-radius: var(--r-sm);
-  text-decoration-thickness: 2px;
-}
-.rp-bw__key--removed {
-  background: var(--diff-del-bg);
-  color: var(--diff-del-fg);
-  text-decoration-line: line-through;
-}
-.rp-bw__key--added {
-  background: var(--diff-add-bg);
-  color: var(--diff-add-fg);
-  text-decoration-line: underline;
-  text-underline-offset: 0.2em;
+  padding: 0 var(--sp-2);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-pill);
+  background: var(--bg-quiet);
+  color: var(--fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
 }
 .rp-bw__why {
   max-inline-size: var(--read-max);
@@ -94,11 +89,11 @@ ins.rp-bw__mark {
 }
 
 /* The two lines come in one after the other with the report's evidence spring, the first time the
-   pair scrolls into view. The lines are there to read without it: it only plays where motion is
-   not reduced, and only moves transform and opacity. */
+   pair scrolls into view. The lines are there to read without it, and at every moment of it: they
+   only slide into place (never fade), so a slow frame, a capture or a screen reader never meets a
+   blank box. It only plays where motion is not reduced. */
 @keyframes rp-bw-in {
   from {
-    opacity: 0;
     transform: translateY(var(--move-sm));
   }
 }
@@ -112,13 +107,12 @@ ins.rp-bw__mark {
 }
 
 @media (forced-colors: active) {
-  .rp-bw,
-  .rp-bw__line {
+  .rp-bw__line,
+  .rp-bw__key {
     border-color: CanvasText;
   }
   del.rp-bw__mark,
-  ins.rp-bw__mark,
-  .rp-bw__key {
+  ins.rp-bw__mark {
     forced-color-adjust: none;
     background: Canvas;
     color: CanvasText;
@@ -134,8 +128,7 @@ ins.rp-bw__mark {
     animation: none;
   }
   del.rp-bw__mark,
-  ins.rp-bw__mark,
-  .rp-bw__key {
+  ins.rp-bw__mark {
     background: Canvas;
     color: CanvasText;
   }

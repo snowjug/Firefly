@@ -1,5 +1,9 @@
 import type { CoachingReport, JourneyPoint } from '#shared/domain/report.ts';
-import { TEMPERATURE_BANDS, type TemperatureBandId } from '#shared/domain/vocab.ts';
+import {
+  TEMPERATURE_BANDS,
+  temperatureBand,
+  type TemperatureBandId,
+} from '#shared/domain/vocab.ts';
 import { plainUnexpectedTurn } from './copy.ts';
 import {
   customerReplyTo,
@@ -72,10 +76,33 @@ export function journeyListItems(journey: Journey): JourneyItem[] {
 export interface KeyMoment extends JourneyItem {
   /** How the mood moved there: "Frustrated to Concerned". */
   change: string;
+  /** The card's heading: whose turn it was and what moved, without naming the state the card already labels. */
+  title: string;
   /** What the trainee said at that turn, only when the transcript confirms the words. */
   confirmedQuote: string | null;
   /** The customer's reply, exactly as it was said (the opening line for the start of the call). */
   reaction: EvidenceTurn | null;
+}
+
+/**
+ * The heading of a point's card. The card has the customer's state as a label of its own, so the
+ * heading says what moved and whose turn it came after: "Your turn 4: temperature eased". The start
+ * and the end are called so, and the end names the trainee's last turn.
+ */
+export function momentTitle(previous: JourneyPoint | null, point: JourneyPoint): string {
+  if (point.kind === 'start') return 'Start of the call';
+  if (point.kind === 'end') return `End of the call, after your turn ${point.turnIndex}`;
+  if (point.kind === 'curveball') return `Unexpected turn, after your turn ${point.turnIndex}`;
+  const rose = previous ? point.temperature > previous.temperature : point.delta > 0;
+  const moved =
+    previous && previous.band !== point.band
+      ? `${rose ? 'rose' : 'eased'} from ${previous.band}`
+      : point.delta > 0
+        ? 'temperature rose'
+        : point.delta < 0
+          ? 'temperature eased'
+          : 'no change in mood';
+  return `Your turn ${point.turnIndex}: ${moved}`;
 }
 
 /**
@@ -89,6 +116,7 @@ export function keyMoments(journey: Journey, turns: TurnLookup): KeyMoment[] {
     const previous = index > 0 ? (journey.points[index - 1] ?? null) : null;
     return {
       ...item,
+      title: momentTitle(previous, item.point),
       change: changeText(previous, item.point),
       confirmedQuote: isVerifiedQuote(turns, item.point.turnIndex, item.point.quote)
         ? item.point.quote
@@ -100,6 +128,7 @@ export function keyMoments(journey: Journey, turns: TurnLookup): KeyMoment[] {
 
 export interface JourneyRow {
   turnIndex: number;
+  kind: PointKind;
   kindLabel: string;
   band: string;
   change: string;
@@ -110,6 +139,7 @@ export interface JourneyRow {
 export function journeyTableRows(journey: Journey): JourneyRow[] {
   return journey.points.map((point) => ({
     turnIndex: point.turnIndex,
+    kind: point.kind,
     kindLabel: POINT_KIND_LABELS[point.kind],
     band: point.band,
     change:
@@ -185,9 +215,16 @@ const PAD_TOP = 10;
 const PAD_BOTTOM = 40;
 const PAD_RIGHT = 14;
 const PAD_X = 14;
+/** How far a point keeps from the edge of its band, so none rests on the axis or on a rule. */
+const BAND_INSET = 9;
 const TICK_SPACING = 34;
+/** Whole-turn steps between the labels on the axis, from the finest to the coarsest. */
+const TICK_STEPS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 50, 100];
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+
+/** The turn a point stands at on the axis: the start of the call is shown at the first turn. */
+const turnAt = (point: Pick<JourneyPoint, 'turnIndex'>): number => Math.max(1, point.turnIndex);
 
 /** Where each band, point and axis label goes. Hot is at the top, calm at the bottom. */
 export function layoutChart(points: readonly JourneyPoint[], size: ChartSize): ChartGeometry {
@@ -206,29 +243,55 @@ export function layoutChart(points: readonly JourneyPoint[], size: ChartSize): C
     bottom: plot.top + (i + 1) * bandHeight,
   }));
 
+  // Points are spread by the turn they stand at, not by how many there are, so a gap of four turns
+  // is drawn twice as wide as a gap of two. A point keeps to the inside of its own band, a little
+  // above the floor of the calmest band, so the line never lies on the axis.
   const inner = plot.right - plot.left - 2 * PAD_X;
+  const turns = points.map(turnAt);
+  const first = Math.min(...turns);
+  const last = Math.max(...turns);
+  const span = last - first;
+  const perTurn = span === 0 ? 0 : inner / span;
+  const yFor = (temperature: number): number => {
+    const value = clamp(temperature, 0, 100);
+    const band = temperatureBand(value);
+    const place = bands.find((b) => b.id === band.id) ?? (bands[bands.length - 1] as ChartBand);
+    const span: number = band.max - band.min;
+    const share = span === 0 ? 0 : clamp((value - band.min) / span, 0, 1);
+    const room = Math.max(0, bandHeight - 2 * BAND_INSET);
+    return place.bottom - BAND_INSET - share * room;
+  };
   const laid: ChartPoint[] = points.map((point, i) => ({
     x:
-      points.length === 1
+      span === 0
         ? plot.left + (plot.right - plot.left) / 2
-        : plot.left + PAD_X + (i / (points.length - 1)) * inner,
-    y: plot.top + (1 - clamp(point.temperature, 0, 100) / 100) * (plot.bottom - plot.top),
+        : plot.left + PAD_X + ((turns[i] as number) - first) * perTurn,
+    y: yFor(point.temperature),
     kind: point.kind,
     turnIndex: point.turnIndex,
     band: point.band,
     index: i,
   }));
 
-  // Label as many turns as fit, always the first and the last.
-  const fit = Math.max(2, Math.floor(inner / TICK_SPACING));
-  const step = Math.max(1, Math.ceil(laid.length / fit));
-  const ticks: ChartTick[] = laid
-    .map((p, i) => ({ p, i }))
-    .filter(
-      ({ i }) =>
-        i === 0 || i === laid.length - 1 || (i % step === 0 && laid.length - 1 - i >= step),
-    )
-    .map(({ p }) => ({ x: p.x, label: String(p.turnIndex) }));
+  // A label for every few turns, as many as fit, always the first turn and the last.
+  const step = span === 0 ? 1 : (TICK_STEPS.find((s) => s * perTurn >= TICK_SPACING) ?? span);
+  const labelled: number[] = [];
+  if (span === 0) labelled.push(first);
+  else {
+    for (let turn = first; turn <= last; turn += step) labelled.push(turn);
+    const lastLabel = labelled[labelled.length - 1] as number;
+    if (lastLabel !== last) {
+      if ((last - lastLabel) * perTurn >= TICK_SPACING) labelled.push(last);
+      else labelled[labelled.length - 1] = last;
+    }
+  }
+  const ticks: ChartTick[] = labelled.map((turn) => ({
+    x:
+      span === 0
+        ? plot.left + (plot.right - plot.left) / 2
+        : plot.left + PAD_X + (turn - first) * perTurn,
+    label: String(turn),
+  }));
 
   const path = laid
     .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)

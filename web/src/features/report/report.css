@@ -297,6 +297,12 @@
   align-items: center;
   min-block-size: var(--target-min);
 }
+/* A finger needs the full 44 px; a mouse is fine with 24. */
+@media (pointer: coarse) {
+  .rp-turnlink {
+    min-block-size: var(--target);
+  }
+}
 .rp-quotes {
   display: flex;
   flex-direction: column;
@@ -356,6 +362,16 @@
   min-inline-size: 0;
   max-inline-size: var(--read-max);
 }
+/* The skill is the heading, with a small label over it that says what it is. */
+.rp-next__eyebrow {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.rp-next__eyebrow + .rp-next__title {
+  margin-block-start: calc(var(--sp-1) * -1);
+}
 .rp-next__title {
   font-size: var(--fs-subtitle1);
   line-height: var(--lh-subtitle1);
@@ -371,11 +387,17 @@
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
 }
+.rp-next__scenario,
 .rp-next__product {
   font-weight: var(--fw-semibold);
 }
 .rp-next__text {
+  text-wrap: pretty;
+}
+.rp-next__more {
   color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
   text-wrap: pretty;
 }
 /* Large text must not push the card wider than the screen: the label wraps inside the button. */
@@ -499,10 +521,12 @@
 }
 
 /* ---- Print: the report on paper, black on white ------------------------------------------- */
+/* A4 with real margins, whatever the app's own page is. */
+@page {
+  size: A4;
+  margin: 14mm 12mm;
+}
 @media print {
-  @page {
-    margin: 14mm 12mm;
-  }
   /* Paper is read at arm's length, not at screen distance: everything a little smaller, so a
      report is fewer sheets. */
   :root:has(.rp-page) {
@@ -569,7 +593,9 @@
   }
   .rp-section__head,
   .rp-section__title,
-  .rp-subtitle {
+  .rp-subtitle,
+  .rp-field__label,
+  .rp-skilltag {
     break-after: avoid;
   }
   .rp-quote,
@@ -577,6 +603,14 @@
   .rp-next,
   .rp-noevidence {
     break-inside: avoid;
+  }
+  /* A quote is its words and where they were said, close: the controls' room is not needed. */
+  .rp-quote {
+    gap: 0;
+    padding: var(--sp-1) var(--sp-3);
+  }
+  .rp-turnlink {
+    min-block-size: 0;
   }
   a {
     color: inherit;

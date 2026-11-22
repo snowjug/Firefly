@@ -7,12 +7,14 @@ import {
   countWords,
   customerPlayedBy,
   evaluatorByline,
+  inYourVoice,
   joinList,
   plainUnexpectedTurn,
   pluralise,
   quoteCount,
   scoreText,
   skillName,
+  splitSentences,
   unexpectedTurnDetail,
 } from './copy.ts';
 
@@ -28,6 +30,68 @@ describe('countWords', () => {
     ]) {
       expect(countWords(text), JSON.stringify(text)).toBe(wordCount(text));
     }
+  });
+});
+
+describe('splitSentences', () => {
+  it('splits where a sentence ends and a new one starts, keeping quotes and abbreviations of numbers whole', () => {
+    expect(
+      splitSentences(
+        'Keep this opening. To stretch it, ask what Marcus saw. On this call the question was: \u201cWhen did you last see it?\u201d Then 4.2 of 5 stays whole.',
+      ),
+    ).toEqual([
+      'Keep this opening.',
+      'To stretch it, ask what Marcus saw.',
+      'On this call the question was: \u201cWhen did you last see it?\u201d',
+      'Then 4.2 of 5 stays whole.',
+    ]);
+  });
+
+  it('is one sentence for text with no break, and none for empty text', () => {
+    expect(splitSentences('Just one sentence without an end')).toEqual([
+      'Just one sentence without an end',
+    ]);
+    expect(splitSentences('   ')).toEqual([]);
+  });
+});
+
+describe('clampWords with whole sentences', () => {
+  const text =
+    'You greeted Marcus and asked an open question. Core topics you asked about: when it started, recent changes, who is affected and what was already tried. One point off.';
+
+  it('shows the sentences that fit and holds the rest, never cutting inside one', () => {
+    const result = clampWords(text, 12, { whole: true });
+    expect(result.shown).toBe('You greeted Marcus and asked an open question.');
+    expect(result.clamped).toBe(true);
+    expect(result.full).toBe(text);
+    expect(result.shown).not.toContain('\u2026');
+  });
+
+  it('shows a first sentence that is longer than the budget whole', () => {
+    const long =
+      'In your first two turns you greeted Marcus, introduced yourself or offered help, asked an open question and acknowledged how the problem affected them. More.';
+    const result = clampWords(long, 10, { whole: true });
+    expect(result.shown).toBe(
+      'In your first two turns you greeted Marcus, introduced yourself or offered help, asked an open question and acknowledged how the problem affected them.',
+    );
+    expect(result.clamped).toBe(true);
+  });
+
+  it('is not clamped when there is only the one sentence, however long', () => {
+    const only =
+      'A single sentence that runs on for far longer than the small budget it was given here without any full stop in the middle';
+    expect(clampWords(only, 5, { whole: true })).toEqual({
+      shown: only,
+      full: only,
+      clamped: false,
+    });
+  });
+
+  it('takes every sentence that fits when the budget has room', () => {
+    expect(clampWords(text, 40, { whole: true }).clamped).toBe(false);
+    expect(clampWords(text, 28, { whole: true }).shown).toBe(
+      'You greeted Marcus and asked an open question. Core topics you asked about: when it started, recent changes, who is affected and what was already tried.',
+    );
   });
 });
 
@@ -99,6 +163,94 @@ describe('plainUnexpectedTurn', () => {
   it('leaves everything else exactly as written', () => {
     const text = 'You said \u201cI\u2019ll look into it\u201d at turn 4.';
     expect(plainUnexpectedTurn(text)).toBe(text);
+  });
+
+  it('speaks to the trainee as "you" where a scenario wrote "the engineer"', () => {
+    expect(
+      plainUnexpectedTurn(
+        'Without the timing, the engineer never learns that something changed while he was away and may suggest generic fixes for Outlook itself.',
+      ),
+    ).toBe(
+      'Without the timing, you never learn that something changed while he was away and may suggest generic fixes for Outlook itself.',
+    );
+  });
+});
+
+describe('inYourVoice', () => {
+  const cases: [string, string][] = [
+    [
+      'The engineer treats this as one broken script and misses that the service account itself is the common factor.',
+      'You treat this as one broken script and miss that the service account itself is the common factor.',
+    ],
+    [
+      'The engineer suggests running it as himself without knowing it breaks his change rules, or never explores an emergency route when time is short.',
+      'You suggest running it as himself without knowing it breaks his change rules, or never explore an emergency route when time is short.',
+    ],
+    [
+      'The engineer does not learn why the project charges are hard to separate, so the plan to trace them is vague.',
+      'You do not learn why the project charges are hard to separate, so the plan to trace them is vague.',
+    ],
+    [
+      'The engineer relies on the unavailable IT manager and does not check who else can review the messages before the payment run.',
+      'You rely on the unavailable IT manager and do not check who else can review the messages before the payment run.',
+    ],
+    [
+      'The engineer guesses at update times, or skips them, and the customer has to chase for news while operations control waits.',
+      'You guess at update times, or skip them, and the customer has to chase for news while operations control waits.',
+    ],
+    [
+      'The engineer either accepts her licence theory unchallenged or argues with it without evidence, and the call turns into a disagreement instead of a shared check.',
+      'You either accept her licence theory unchallenged or argue with it without evidence, and the call turns into a disagreement instead of a shared check.',
+    ],
+    [
+      'A risk to customer data goes unnoticed, and the engineer misses a reason to move quickly and to advise against sharing lists.',
+      'A risk to customer data goes unnoticed, and you miss a reason to move quickly and to advise against sharing lists.',
+    ],
+    [
+      'The engineer repeats advice that has already failed, which confirms his belief that nobody is listening and pushes his temperature up.',
+      'You repeat advice that has already failed, which confirms his belief that nobody is listening and pushes his temperature up.',
+    ],
+    [
+      'Without knowing only production fails, the engineer cannot tell a script or account fault from a permission problem on one target.',
+      'Without knowing only production fails, you cannot tell a script or account fault from a permission problem on one target.',
+    ],
+    [
+      'The pattern ties the problem to the timing, and the engineer keeps looking at accounts and licences instead of at what changed.',
+      'The pattern ties the problem to the timing, and you keep looking at accounts and licences instead of at what changed.',
+    ],
+    [
+      'The update takes all the blame, and the engineer never learns that the laptop was already struggling before it.',
+      'The update takes all the blame, and you never learn that the laptop was already struggling before it.',
+    ],
+    [
+      'The engineer has no useful next step to give her.',
+      'You have no useful next step to give her.',
+    ],
+  ];
+
+  it.each(cases)('turns "%s"', (before, after) => {
+    expect(inYourVoice(before)).toBe(after);
+  });
+
+  it('turns each sentence on its own', () => {
+    expect(
+      inYourVoice('The engineer asks him to repeat steps. The engineer tells her to wait.'),
+    ).toBe('You ask him to repeat steps. You tell her to wait.');
+  });
+
+  it('leaves a sentence it cannot turn right as it was written, in the third person', () => {
+    // "needs" is not a verb it knows: better "the engineer needs" than "you needs".
+    expect(inYourVoice('The engineer needs a name for the process.')).toBe(
+      'The engineer needs a name for the process.',
+    );
+    expect(inYourVoice("The engineer's notes say nothing.")).toBe(
+      "The engineer's notes say nothing.",
+    );
+  });
+
+  it('leaves text with no "the engineer" exactly as it was', () => {
+    const text = 'You asked about the engineers on call. Marcus keeps looking at it.';
+    expect(inYourVoice(text)).toBe(text);
   });
 });
 

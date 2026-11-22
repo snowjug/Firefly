@@ -5,9 +5,11 @@ import { CURVEBALL_LABELS } from '#shared/domain/vocab.ts';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { ReportView } from './ReportView.tsx';
 import JourneyChart from './JourneyChart.tsx';
+import { CHART_FOOTNOTE } from './copy.ts';
 import { CALLS, withReport, type CallName } from './fixtures.ts';
 import { EvidenceProvider, HIGHLIGHT_MS } from './evidence.tsx';
 import { evidenceTurns } from './evidence-model.ts';
+import { journeyListItems } from './journey-model.ts';
 import { must, renderAtReport, scriptedClient, stubScroll } from './test-utils.tsx';
 
 // The customer's experience: the temperature chart (a drawing with real controls), the important
@@ -91,6 +93,40 @@ describe('the chart', () => {
         .getAllByRole('listitem')
         .map((i) => i.textContent),
     ).toEqual(['Start', 'Turn', 'Turning point', 'Unexpected turn', 'End']);
+  });
+
+  it('says under the key that its heights show direction, not measurements, and how its points are used', async () => {
+    show('strong');
+    const drawn = await chart();
+    const note = within(section()).getByText(CHART_FOOTNOTE);
+    expect(note).toHaveTextContent(
+      'The customer is simulated, so heights show direction, not exact measurements. Select a point to see what happened there; the arrow keys move between points.',
+    );
+    // Under the key, inside the chart, so it moves with it.
+    expect(note.previousElementSibling).toBe(
+      within(section()).getByRole('list', { name: 'Chart key' }),
+    );
+    expect(drawn.closest('.rp-chart')).toContainElement(note);
+  });
+
+  it('shows which way is calmer, on the axis', async () => {
+    show('strong');
+    const drawn = await chart();
+    expect(drawn.querySelector('.rp-chart__cue')).toHaveTextContent('Calmer');
+  });
+
+  it('spreads its points by turn: the same gap in turns is the same width', async () => {
+    show('strong');
+    const drawn = await chart();
+    const xs = [...drawn.querySelectorAll('.rp-chart__point')].map((point) => {
+      const match = /translate\(([\d.]+)/.exec(point.getAttribute('transform') ?? '');
+      return Number(match?.[1]);
+    });
+    const turns = CALLS.strong.report.journey.points.map((p) => Math.max(1, p.turnIndex));
+    const perTurn = (xs[xs.length - 1]! - xs[0]!) / (turns[turns.length - 1]! - turns[0]!);
+    xs.forEach((x, i) => {
+      expect(x - xs[0]!).toBeCloseTo(((turns[i] as number) - (turns[0] as number)) * perTurn, 0);
+    });
   });
 
   it('makes every point after the start a control, named by the turn, where the customer was and what it does', async () => {
@@ -244,23 +280,43 @@ describe('the chart', () => {
 });
 
 describe('the important points', () => {
-  it('are the start, each turning point and the end, in order, each with its state and turn', () => {
+  it('are the start, each turning point and the end, in order, with whose turn it was and what moved', () => {
     show('strong');
     const rows = momentRows();
     expect(rows).toHaveLength(4);
     expect(rows.map((row) => row.querySelector('.rp-moment__title')?.textContent)).toEqual([
-      'Start of the call: Frustrated',
-      'Turn 4: Frustrated to Concerned',
-      'Turn 10: Concerned to Calm',
-      'Turn 14: Still Calm, temperature eased',
+      'Start of the call',
+      'Your turn 4: eased from Frustrated',
+      'Your turn 10: eased from Concerned',
+      'End of the call, after your turn 14',
     ]);
+  });
+
+  it('do not say the customer’s state twice: it is the label, and the heading says what moved', () => {
+    show('strong');
+    for (const row of momentRows()) {
+      const state = row.querySelector('.ff-badge')?.textContent ?? '';
+      const title = row.querySelector('.rp-moment__title')?.textContent ?? '';
+      // "Eased from Frustrated" may name the state the customer came from, never the one they are in.
+      expect(title.replace(/from \w+/, '')).not.toContain(state);
+    }
+  });
+
+  it('have the chart’s own marker for the kind of point, on every row', () => {
+    show('strong');
+    const rows = momentRows();
+    expect(rows).toHaveLength(4);
+    for (const row of rows) expect(row.querySelector('.rp-moment__head .rp-glyph')).not.toBeNull();
+    const kinds = journeyListItems(CALLS.strong.report.journey).map((i) => i.point.kind);
+    expect(kinds).toEqual(['start', 'turning-point', 'turning-point', 'end']);
   });
 
   it('give the reason, and the customer’s own words from the transcript, never a paraphrase', () => {
     show('strong');
     const [start, second] = momentRows() as [HTMLElement, HTMLElement];
     expect(second).toHaveTextContent('Asked a focused question about scope');
-    expect(within(second).getByText('Customer reaction')).toBeInTheDocument();
+    // Their reply is in turn 5, to the trainee's turn 4: the label says so.
+    expect(within(second).getByText('Their reply, turn 5')).toBeInTheDocument();
     expect(second).toHaveTextContent(turnText('strong', 5));
     expect(
       within(second).getByRole('link', { name: 'See turn 5 in the transcript' }),
@@ -391,6 +447,26 @@ describe('the table', () => {
     expect(within(table).getAllByRole('link')).toHaveLength(
       CALLS.strong.report.journey.points.length - 1,
     );
+  });
+
+  it('names the kind of every point with the marker the chart uses for it', async () => {
+    show('strong');
+    await userEvent.click(within(section()).getByText('Show as a table'));
+    const markers = section().querySelectorAll('.rp-table__point .rp-glyph');
+    expect(markers).toHaveLength(CALLS.strong.report.journey.points.length);
+  });
+
+  it('is directly under the chart, before the list of important points', async () => {
+    show('strong');
+    await chart();
+    const details = section().querySelector('details') as HTMLDetailsElement;
+    expect(details.previousElementSibling).toBe(
+      section().querySelector('.rp-journey__chart') as HTMLElement,
+    );
+    const important = within(section()).getByRole('heading', { name: 'Important points' });
+    expect(
+      details.compareDocumentPosition(important) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('is open on paper, and closed again afterwards', () => {

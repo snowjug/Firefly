@@ -1,5 +1,6 @@
 import { Fragment, useMemo } from 'react';
 import { VisuallyHidden, useInViewOnce } from '../../design/index.ts';
+import { WORDING_ABOUT } from './copy.ts';
 import { diffWords, type DiffRun } from './diff-model.ts';
 import { prefersReducedMotion } from './dom.ts';
 import { ClampedText, InsufficientEvidence } from './parts.tsx';
@@ -46,9 +47,9 @@ function Runs({ runs }: { runs: readonly DiffRun[] }) {
 /**
  * What was said and what could be said instead, as a stacked pair: "You said" with the words that
  * went marked as removed, "Try" with the words that came marked as added, a key for the marks that
- * are there and one line on why the new wording is stronger. When nothing was said (a gap) the
- * whole new sentence is added. The two lines come in with a short spring the first time they scroll
- * into view; with reduced motion they are simply there.
+ * are there and one line on why the new wording is stronger. A line at the top says what the block
+ * is. When nothing was said (a gap) the whole new sentence is added. The two lines come in with a
+ * short spring the first time they scroll into view; with reduced motion they are simply there.
  */
 export function BetterWording({ wording, why }: { wording: Wording; why: string }) {
   const { original, improved, state } = wording;
@@ -68,6 +69,7 @@ export function BetterWording({ wording, why }: { wording: Wording; why: string 
       ref={ref}
       data-revealed={revealed ? '' : undefined}
     >
+      <p className="rp-bw__about">{WORDING_ABOUT}</p>
       <div className="rp-bw__line rp-bw__line--before">
         <p className="rp-bw__label">You said</p>
         {state === 'said' && diff ? (
@@ -92,11 +94,11 @@ export function BetterWording({ wording, why }: { wording: Wording; why: string 
       </div>
       {hasRemoved || hasAdded ? (
         <p className="rp-bw__legend" aria-hidden="true">
-          {hasRemoved ? <span className="rp-bw__key rp-bw__key--removed">Removed</span> : null}
-          {hasAdded ? <span className="rp-bw__key rp-bw__key--added">Added</span> : null}
+          {hasRemoved ? <span className="rp-bw__key">Struck through: removed</span> : null}
+          {hasAdded ? <span className="rp-bw__key">Underlined: added</span> : null}
         </p>
       ) : null}
-      <ClampedText className="rp-bw__why" text={why} budget={WORDING_WORDS} />
+      <ClampedText className="rp-bw__why" text={why} budget={WORDING_WORDS} whole />
     </div>
   );
 }

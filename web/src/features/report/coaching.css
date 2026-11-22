@@ -54,6 +54,17 @@
   color: var(--fg-2);
   text-wrap: pretty;
 }
+/* What the customer said next, in a line under the evidence: their words, and the turn they are in. */
+.rp-item__reaction {
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-item__who {
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
 .rp-item > .rp-quote,
 .rp-item > .rp-gap,
 .rp-item > .rp-bw,
@@ -130,8 +141,10 @@
   gap: var(--sp-5) var(--sp-6);
   align-items: start;
 }
+/* Found and missed sit side by side only when both exist and there is room: with one of them empty
+   the other takes the whole width instead of leaving half of it blank. */
 @container (min-width: 48rem) {
-  .rp-discovery__columns {
+  .rp-discovery__columns--two {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -156,31 +169,52 @@
   overflow: hidden;
 }
 .rp-fact {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
   min-inline-size: 0;
-  padding: var(--sp-3) var(--sp-4);
 }
 .rp-fact + .rp-fact {
   border-block-start: var(--stroke-w) solid var(--stroke-2);
 }
-.rp-fact__head {
+/* A fact that was found is one line (the fact, how much it mattered, the turn) that opens in place.
+   The list draws the rules between rows, so the disclosure's own rule is left off. */
+.rp-fact .ff-disclosure--row {
+  border-block-end: 0;
+}
+.rp-fact .ff-disclosure__button {
+  min-block-size: var(--target);
+  padding-inline: var(--sp-4);
+  border-radius: 0;
+}
+.rp-fact .ff-disclosure__panel {
+  padding-inline: var(--sp-4);
+}
+.rp-fact__line {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sp-1) var(--sp-3);
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
 }
 .rp-fact__title {
-  flex: 1 1 12rem;
   min-inline-size: 0;
   font-weight: var(--fw-semibold);
 }
-.rp-fact__tags {
+.rp-fact__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+}
+/* A fact that was missed keeps its card: it is the part a trainee comes here to read. */
+.rp-fact--missed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+}
+.rp-fact__head {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-1h);
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
 }
 .rp-fact__toggle {
   min-inline-size: 0;
@@ -192,49 +226,39 @@
   background: var(--bg-quiet);
   overflow-wrap: anywhere;
 }
-.rp-suggestion {
-  padding: var(--sp-3) var(--sp-4);
-  border: var(--stroke-w) solid var(--status-success-border);
-  border-radius: var(--r-lg);
-  background: var(--status-success-bg);
-  overflow-wrap: anywhere;
-}
-.rp-suggest {
+/* The one callout: a question worth asking, in the report's own accent, for a fact not found in full. */
+.rp-ask {
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  padding: var(--sp-4) var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
   border: var(--stroke-w) solid var(--status-info-border);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--brand-tint);
+  overflow-wrap: anywhere;
 }
-.rp-suggest__label {
+.rp-ask__label {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
   font-weight: var(--fw-semibold);
 }
-.rp-suggest__label .ff-icon {
+.rp-ask__label .ff-icon {
   color: var(--brand-fg);
 }
-.rp-suggest__text {
+.rp-ask__text {
   max-inline-size: var(--read-max);
-  font-size: var(--fs-subtitle2);
-  line-height: var(--lh-subtitle2);
   text-wrap: pretty;
-}
-.rp-suggest__why {
-  color: var(--fg-2);
-  font-size: var(--fs-compact);
-  line-height: var(--lh-compact);
 }
 
 @media (forced-colors: active) {
   .rp-items,
   .rp-facts-list,
   .rp-fact__hidden,
-  .rp-suggestion,
-  .rp-suggest {
+  .rp-ask {
     border-color: CanvasText;
   }
   .rp-item + .rp-item,
@@ -262,14 +286,26 @@
   .rp-facts-list {
     overflow: visible;
   }
-  .rp-item,
+  /* A strength or improvement may run over a page: what is inside it (the quote, the wording) is kept
+     whole, and its title is kept with what follows. */
   .rp-fact,
-  .rp-suggest,
-  .rp-suggestion {
+  .rp-ask {
     break-inside: avoid;
   }
-  .rp-fact .ff-disclosure__button {
+  .rp-item__title,
+  .rp-fact__title {
+    break-after: avoid;
+  }
+  /* Found and missed side by side on paper too, as they are on a wide screen. */
+  .rp-discovery__columns--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rp-fact__toggle .ff-disclosure__button {
     display: none;
+  }
+  .rp-fact .ff-disclosure__button {
+    padding-block: var(--sp-2) 0;
+    min-block-size: 0;
   }
   .rp-ratio__seg {
     print-color-adjust: exact;

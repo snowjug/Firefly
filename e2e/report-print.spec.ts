@@ -160,11 +160,18 @@ test.describe('the printed report', () => {
     await page.emulateMedia({ media: 'print' });
     await beforePrint(page);
 
-    await test.step('every score is open, with its evidence', async () => {
+    await test.step('every score is open, with its evidence once, and nothing that only works on a screen', async () => {
       const scores = region(page, 'Scores');
       await expect(scores.getByText('Evidence from your call')).toHaveCount(6);
-      await expect(scores.getByText('To improve')).toHaveCount(6);
-      await expect(scores.getByText('Evidence confidence')).toHaveCount(6);
+      // On paper a row is its name, score and word, the reason once and one quote: what to improve and
+      // the confidence note stay on screen. Each row has them, so it is what is drawn that is counted.
+      await expect(scores.getByText('To improve').and(page.locator(':visible'))).toHaveCount(0);
+      await expect(
+        scores.getByText('Evidence confidence').and(page.locator(':visible')),
+      ).toHaveCount(0);
+      for (const quotes of await scores.locator('.rp-skill__body .rp-quotes').all()) {
+        await expect(quotes.locator('.rp-quote:visible')).toHaveCount(1);
+      }
       await expect(scores.getByRole('button', { name: /details$/ })).toHaveCount(0);
     });
 
@@ -177,7 +184,7 @@ test.describe('the printed report', () => {
       await expect(items.last()).toBeVisible();
     });
 
-    await test.step('all four CARE principles are on the page, one under another', async () => {
+    await test.step('all four CARE principles are on the page, one under another, as short blocks', async () => {
       const care = region(page, 'CARE review');
       // Three of them are out of the accessibility tree on screen (only the chosen one is read); on
       // paper they are all there, which is what is checked, by what is drawn.
@@ -189,7 +196,8 @@ test.describe('the printed report', () => {
       }
       await expect(care.locator('[role="tablist"]')).toBeHidden();
       await expect(care.getByText('Next action', { exact: true })).toHaveCount(4);
-      await expect(care.locator('.rp-behaviour').first()).toBeVisible();
+      // Each block is what was observed, the one quote and the next action: no list of behaviours.
+      await expect(care.locator('.rp-behaviour').first()).toBeHidden();
     });
 
     await test.step('the customer experience, with its table, and the unexpected turn', async () => {
@@ -279,7 +287,8 @@ test.describe('the printed report', () => {
     // A page object is `/Type /Page`, as the page tree is `/Type /Pages`.
     const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length;
     expect(pages, 'a report is more than a page').toBeGreaterThanOrEqual(3);
-    // Everything is open on paper, so a report is long; it is not allowed to sprawl.
-    expect(pages, 'and not a sprawl').toBeLessThanOrEqual(30);
+    // Everything is open on paper, so a report is long; it is not allowed to sprawl. This call, with a
+    // curveball, prints as twelve A4 sheets (the call without one as eleven, a dismissive one as nine).
+    expect(pages, 'and not a sprawl').toBeLessThanOrEqual(13);
   });
 });

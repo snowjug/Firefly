@@ -50,12 +50,21 @@ describe('the better wording', () => {
     expect(removed.map((mark) => mark.textContent).join(' ')).not.toContain('Can you tell me');
   });
 
-  it('has a key for the two marks that a screen reader does not hear', () => {
+  it('says what the block is and that its wording is a suggestion', () => {
+    render(<BetterWording wording={SAID} why="" />);
+    expect(group()).toHaveTextContent(
+      'Wording to try for this call, written by the coaching. Use your own words.',
+    );
+  });
+
+  it('has a quiet key in words for the two marks, which a screen reader does not hear twice', () => {
     render(<BetterWording wording={SAID} why="" />);
     const key = group().querySelector('.rp-bw__legend');
     expect(key).toHaveAttribute('aria-hidden', 'true');
-    expect(key).toHaveTextContent('Removed');
-    expect(key).toHaveTextContent('Added');
+    expect(key).toHaveTextContent('Struck through: removed');
+    expect(key).toHaveTextContent('Underlined: added');
+    // Nothing in the key is drawn as the marks are: it must not look like a link.
+    expect(key?.querySelector('ins, del, a')).toBeNull();
   });
 
   it('says nothing was said when the improvement is about something that never happened, and adds the whole sentence', () => {
@@ -71,8 +80,8 @@ describe('the better wording', () => {
     expect(group().querySelectorAll('.rp-bw__line--after ins').length).toBeGreaterThan(0);
     // The key names only the marks that are there: nothing was removed.
     const key = group().querySelector('.rp-bw__legend');
-    expect(key).toHaveTextContent('Added');
-    expect(key).not.toHaveTextContent('Removed');
+    expect(key).toHaveTextContent('Underlined: added');
+    expect(key).not.toHaveTextContent('removed');
   });
 
   it('names in the key only the marks that are drawn: words that were only added, or only removed', () => {
@@ -87,8 +96,8 @@ describe('the better wording', () => {
       />,
     );
     expect(group().querySelector('del')).toBeNull();
-    expect(group().querySelector('.rp-bw__legend')).toHaveTextContent('Added');
-    expect(group().querySelector('.rp-bw__legend')).not.toHaveTextContent('Removed');
+    expect(group().querySelector('.rp-bw__legend')).toHaveTextContent('Underlined: added');
+    expect(group().querySelector('.rp-bw__legend')).not.toHaveTextContent('removed');
     unmount();
     render(
       <BetterWording
@@ -101,8 +110,8 @@ describe('the better wording', () => {
       />,
     );
     expect(group().querySelector('ins')).toBeNull();
-    expect(group().querySelector('.rp-bw__legend')).toHaveTextContent('Removed');
-    expect(group().querySelector('.rp-bw__legend')).not.toHaveTextContent('Added');
+    expect(group().querySelector('.rp-bw__legend')).toHaveTextContent('Struck through: removed');
+    expect(group().querySelector('.rp-bw__legend')).not.toHaveTextContent('added');
   });
 
   it('shows "Insufficient evidence" instead of words the transcript does not back, and no marks', () => {
@@ -115,15 +124,27 @@ describe('the better wording', () => {
     expect(spoken('after')).toBe(SAID.improved);
   });
 
-  it('keeps the reason to its first words, and gives the rest behind Show more', async () => {
+  it('keeps the reason to whole sentences that fit, and gives the rest behind Show more', async () => {
     const why = 'This wording is stronger because it asks for one specific thing. '
       .repeat(8)
       .trim();
     render(<BetterWording wording={SAID} why={why} />);
     const text = group().querySelector('.rp-bw__why') as HTMLElement;
     expect(wordCount(text.textContent ?? '')).toBeLessThanOrEqual(WORDING_WORDS);
+    expect(text.textContent).toMatch(/\.$/);
     await userEvent.click(within(group()).getByRole('button', { name: 'Show more' }));
     expect(text).toHaveTextContent(why);
+  });
+
+  it('never cuts a reason in the middle: a first sentence longer than the budget is shown whole', () => {
+    const why =
+      'A short recap, a time for the next contact and a check for anything else leave no doubt about what was agreed, and they end the call on a clear, polite note that the customer can repeat to their own team. Then more.';
+    render(<BetterWording wording={SAID} why={why} />);
+    const text = group().querySelector('.rp-bw__why') as HTMLElement;
+    expect(text.textContent).toBe(
+      'A short recap, a time for the next contact and a check for anything else leave no doubt about what was agreed, and they end the call on a clear, polite note that the customer can repeat to their own team.',
+    );
+    expect(text.textContent).not.toContain('\u2026');
   });
 });
 

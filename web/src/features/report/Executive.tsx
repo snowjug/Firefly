@@ -19,7 +19,7 @@ import { STAGE_WORDS, bandOf, plainUnexpectedTurn, scoreText } from './copy.ts';
 import { jumpToSection } from './dom.ts';
 import { SectionLink } from './evidence.tsx';
 import { ClampedText } from './parts.tsx';
-import { restsOnLimitedEvidence } from './report-model.ts';
+import { restsOnLimitedEvidence, summarySays } from './report-model.ts';
 import './summary.css';
 
 /** The most words the summary shows before "Show more". */
@@ -39,8 +39,9 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
  * the scenario, the stage, how long it lasted, how the customer began and ended), the coaching
  * summary, one modest line for the practice signal and the first actions. A call saved before the
  * Microsoft scenarios has no product, and then none is shown: the page does not guess one. A short
- * or ended-early call says so here, before the scores that rest on it. The signal is the average of
- * the six skills and is never drawn large: it is coaching, not a verdict.
+ * or ended-early call says so here, once, before the scores that rest on it: in the summary's own
+ * words when it has them, and otherwise in a note under it. The signal is the average of the six
+ * skills and is never drawn large: it is coaching, not a verdict.
  */
 export function ExecutiveSummary({
   session,
@@ -56,6 +57,8 @@ export function ExecutiveSummary({
   const { overallScore, overall } = report.summary;
   const started = bandOf(report.journey.start);
   const ended = bandOf(report.journey.end);
+  const summary = plainUnexpectedTurn(overall);
+  const says = summarySays(summary);
   return (
     <header className={cx('rp-exec', accentClass(product?.id))}>
       <div className="rp-exec__top">
@@ -117,21 +120,19 @@ export function ExecutiveSummary({
         </h2>
         <ClampedText
           className="rp-exec__text t-reading"
-          text={plainUnexpectedTurn(overall)}
+          text={summary}
           budget={SUMMARY_WORDS}
           budgetKey="summary"
         />
-        <p className="rp-exec__signal">
-          {overallScore !== null ? (
-            <>
-              Practice signal <span className="rp-exec__number">{scoreText(overallScore)}</span> of
-              5, the average of six skills.
-            </>
-          ) : (
-            'No overall practice signal: not enough evidence.'
-          )}
-        </p>
-        {restsOnLimitedEvidence(report) ? (
+        {overallScore !== null ? (
+          <p className="rp-exec__signal">
+            Practice signal <span className="rp-exec__number">{scoreText(overallScore)}</span> of 5,
+            the average of six skills.
+          </p>
+        ) : says.noScore ? null : (
+          <p className="rp-exec__signal">No overall practice signal: not enough evidence.</p>
+        )}
+        {restsOnLimitedEvidence(report) && !says.short ? (
           <MessageBar intent="info" live={false}>
             {report.completion.note ??
               'This call was short, so the coaching rests on limited evidence.'}

@@ -6,7 +6,7 @@ import type {
   MilestoneId,
 } from '#shared/domain/report.ts';
 import { CURVEBALL_LABELS } from '#shared/domain/vocab.ts';
-import { CURVEBALL_STATUS_WORDS, plainUnexpectedTurn } from './copy.ts';
+import { CURVEBALL_STATUS_WORDS, plainUnexpectedTurn, pluralise } from './copy.ts';
 import { isVerifiedQuote, type TurnLookup } from './evidence-model.ts';
 import { changeText } from './journey-model.ts';
 
@@ -15,7 +15,7 @@ import { changeText } from './journey-model.ts';
 // summary, ownership, next steps and the close. Built only from what the report already carries
 // (milestones, CARE behaviours with evidence, the discovery results, the temperature points and the
 // unexpected turn), and only from evidence the transcript confirms: a moment that was not seen is a
-// quiet "Not seen", never a made-up quote.
+// quiet "Not reached", never a made-up quote.
 
 export const EVENT_KINDS = [
   'greeting',
@@ -28,13 +28,14 @@ export const EVENT_KINDS = [
   'ownership',
   'next-steps',
   'closing',
+  'ended',
 ] as const;
 export type EventKind = (typeof EVENT_KINDS)[number];
 
 /**
  * `seen`: the report points at a real turn (and its quote is in that turn). `not-seen`: the call
- * showed no such moment. `unverified`: the report claims a moment the transcript does not confirm,
- * so it is not shown as evidence.
+ * showed no such moment (the page says "Not reached"). `unverified`: the report claims a moment the
+ * transcript does not confirm, so it is not shown as evidence.
  */
 export type EventState = 'seen' | 'not-seen' | 'unverified';
 
@@ -54,9 +55,9 @@ export interface CallEvent {
   trend: 'up' | 'down' | 'flat' | null;
 }
 
-type StandardKind = Exclude<EventKind, 'tension' | 'discovery' | 'curveball'>;
+type StandardKind = Exclude<EventKind, 'tension' | 'discovery' | 'curveball' | 'ended'>;
 
-export const EVENT_LABELS: Record<StandardKind | 'curveball', string> = {
+export const EVENT_LABELS: Record<StandardKind | 'curveball' | 'ended', string> = {
   greeting: 'Greeting',
   issue: 'Issue established',
   impact: 'Impact established',
@@ -65,6 +66,7 @@ export const EVENT_LABELS: Record<StandardKind | 'curveball', string> = {
   ownership: 'Ownership',
   'next-steps': 'Next steps',
   closing: 'Closing',
+  ended: 'Call ended',
 };
 
 interface Claim {
@@ -122,12 +124,11 @@ function tensionLabel(point: JourneyPoint): string {
 /**
  * The moments of the call, in call order. A moment the report has no way to know about (an older
  * report with no CARE or milestones) is left out; one it could have seen and did not is a quiet
- * "Not seen", placed where it would usually come.
+ * "Not reached", placed where it would usually come.
  */
 export function buildCallEvents(report: CoachingReport, turns: TurnLookup): CallEvent[] {
   const milestones = report.journey.milestones ?? null;
   const care = report.care ?? null;
-  const known = milestones !== null || care !== null;
 
   const milestone = (id: MilestoneId): Milestone | null =>
     milestones?.find((m) => m.id === id) ?? null;
@@ -149,6 +150,14 @@ export function buildCallEvents(report: CoachingReport, turns: TurnLookup): Call
     ...behaviourClaims(id, ['shown']),
     ...behaviourClaims(id, ['partly']),
   ];
+  // A moment is one the call needed when the report lists the behaviour behind it (the stage asked
+  // for it, or it was shown) or the journey has a milestone for it that applies. One the report
+  // never listed is not drawn at all, so a call is not shown "missing" what it never needed.
+  const asked = (...ids: string[]): boolean => ids.some((id) => behaviour(id) !== null);
+  const applies = (id: MilestoneId): boolean => {
+    const found = milestone(id);
+    return found !== null && found.status !== 'not-applicable';
+  };
 
   const drafts: Draft[] = [];
   const add = (
@@ -163,13 +172,13 @@ export function buildCallEvents(report: CoachingReport, turns: TurnLookup): Call
     drafts.push({ event: { id, kind, label, detail, ...placed, trend }, usual });
   };
   // The moments every call is expected to have, in their usual order.
-  const standard = (kind: StandardKind, supported: boolean, claims: Claim[], usual: number) => {
-    if (supported) add(kind, kind, EVENT_LABELS[kind], null, firstConfirmed(turns, claims), usual);
+  const standard = (kind: StandardKind, needed: boolean, claims: Claim[], usual: number) => {
+    if (needed) add(kind, kind, EVENT_LABELS[kind], null, firstConfirmed(turns, claims), usual);
   };
 
   standard(
     'greeting',
-    known,
+    applies('greeting') || asked('communicate.greeting', 'communicate.introduction'),
     [
       ...milestoneClaims('greeting'),
       ...behaviourClaims('communicate.greeting', ['shown']),
@@ -177,10 +186,15 @@ export function buildCallEvents(report: CoachingReport, turns: TurnLookup): Call
     ],
     0,
   );
-  standard('issue', care !== null, shownOrPartly('communicate.context-confirmed'), 1);
+  standard(
+    'issue',
+    asked('communicate.context-confirmed'),
+    shownOrPartly('communicate.context-confirmed'),
+    1,
+  );
   standard(
     'impact',
-    known,
+    applies('impact') || asked('empathetic.business-impact', 'resourceful.impact'),
     [
       ...milestoneClaims('impact'),
       ...shownOrPartly('empathetic.business-impact'),
@@ -209,10 +223,10 @@ export function buildCallEvents(report: CoachingReport, turns: TurnLookup): Call
     add('discovery', 'discovery', 'Discovery', null, placed, 3);
   }
 
-  standard('summary', care !== null, shownOrPartly('communicate.summary'), 6);
+  standard('summary', asked('communicate.summary'), shownOrPartly('communicate.summary'), 6);
   standard(
     'ownership',
-    known,
+    applies('ownership') || asked('accountable.ownership', 'accountable.named-owner'),
     [
       ...milestoneClaims('ownership'),
       ...shownOrPartly('accountable.ownership'),
@@ -222,7 +236,7 @@ export function buildCallEvents(report: CoachingReport, turns: TurnLookup): Call
   );
   standard(
     'next-steps',
-    care !== null,
+    asked('accountable.next-action', 'accountable.update-time'),
     [
       ...behaviourClaims('accountable.update-time', ['shown']),
       ...behaviourClaims('accountable.next-action', ['shown']),
@@ -233,7 +247,7 @@ export function buildCallEvents(report: CoachingReport, turns: TurnLookup): Call
   );
   standard(
     'closing',
-    known,
+    applies('closure') || asked('communicate.professional-close'),
     [...milestoneClaims('closure'), ...shownOrPartly('communicate.professional-close')],
     9,
   );
@@ -290,13 +304,31 @@ export function buildCallEvents(report: CoachingReport, turns: TurnLookup): Call
     }
   }
 
+  // A call that was ended early says where it stopped: the last turn of the transcript.
+  const lastTurn = turns.size > 0 ? Math.max(...turns.keys()) : null;
+  if (report.completion.status === 'ended-early' && lastTurn !== null) {
+    add(
+      'ended',
+      'ended',
+      EVENT_LABELS.ended,
+      `The call ended early, after ${pluralise(report.completion.traineeTurns, 'trainee turn')}.`,
+      { state: 'seen', turnIndex: lastTurn, quote: null },
+      LATE_FROM + 90,
+    );
+  }
+
   return inCallOrder(drafts);
 }
 
+/** From this place in a call's usual order the moments come late: the recap, ownership, the close. */
+const LATE_FROM = 6;
+
 /**
- * Moments that were seen go in the order of the call. A moment that was not seen has no turn, so it
- * goes straight after the last moment before it, in the usual order of a call, that was seen: where
- * the call would normally have shown it.
+ * Moments that were seen go in the order of the call. An early moment that was not seen (the
+ * greeting, the issue, the impact, discovery) has no turn, so it goes straight after the last
+ * moment before it, in the usual order of a call, that was seen: where the call would normally have
+ * shown it. A late one (the recap, ownership, next steps, the close) goes after everything that
+ * happened, and after the call's end: the call never got there.
  */
 function inCallOrder(drafts: readonly Draft[]): CallEvent[] {
   const seen = drafts
@@ -308,20 +340,23 @@ function inCallOrder(drafts: readonly Draft[]): CallEvent[] {
         a.usual - b.usual,
     );
   const usualOrder = drafts.filter(
-    ({ event }) => event.kind !== 'tension' && event.kind !== 'curveball',
+    ({ event }) => event.kind !== 'tension' && event.kind !== 'curveball' && event.kind !== 'ended',
   );
   usualOrder.sort((a, b) => a.usual - b.usual);
 
   const waitingFor = new Map<string | null, CallEvent[]>();
+  const late: CallEvent[] = [];
   let anchor: string | null = null;
-  for (const { event } of usualOrder) {
+  for (const { event, usual } of usualOrder) {
     if (event.state === 'seen') anchor = event.id;
+    else if (usual >= LATE_FROM) late.push(event);
     else waitingFor.set(anchor, [...(waitingFor.get(anchor) ?? []), event]);
   }
 
   return [
     ...(waitingFor.get(null) ?? []),
     ...seen.flatMap(({ event }) => [event, ...(waitingFor.get(event.id) ?? [])]),
+    ...late,
   ];
 }
 

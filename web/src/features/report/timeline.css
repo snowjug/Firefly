@@ -1,10 +1,14 @@
-/* The call journey: a rail of moments in call order on a wide screen, a list down the page on a
-   narrow one, and the panel that shows the exact turn behind the chosen moment. A moment that was
-   not seen is drawn quietly (a dashed marker and the words "Not seen"); a moment is never shown by
-   colour alone: its marker has an icon, its name and where it was are written. Tokens only. */
+/* The call journey: a rail of moments in call order (one row, only when every moment fits in it) or a
+   list down the page, and the panel that shows the exact turn behind the chosen moment. A moment the
+   call never reached is drawn quietly (a dashed marker and the words "Not reached"); a moment is
+   never shown by colour alone: its marker has an icon, its name and where it was are written.
+   Tokens only. */
 
 .rp-tl {
   --_marker: 2.25rem;
+  min-inline-size: 0;
+}
+.rp-tl__measure {
   min-inline-size: 0;
 }
 
@@ -27,11 +31,15 @@
     color var(--dur-fast) var(--ease-easy),
     box-shadow var(--dur-fast) var(--ease-easy);
 }
-.rp-tl__event[data-state='not-seen'] .rp-tl__marker {
+/* A moment the call never reached is quieter than one that happened: a dashed, lighter and
+   smaller marker, and a name in a lighter weight. Its words still say what it is. */
+.rp-tl__event[data-state='not-seen'] .rp-tl__marker,
+.rp-tl__item[data-state='not-seen'] .rp-tl__marker {
   border-style: dashed;
-  border-color: var(--stroke-accessible);
+  border-color: var(--stroke-1);
   background: var(--bg-canvas);
   color: var(--fg-3);
+  transform: scale(0.85);
 }
 .rp-tl__event[data-state='unverified'] .rp-tl__marker,
 .rp-tl__item[data-state='unverified'] .rp-tl__marker {
@@ -40,11 +48,12 @@
   background: var(--bg-canvas);
   color: var(--status-warning-fg);
 }
-.rp-tl__item[data-state='not-seen'] .rp-tl__marker {
-  border-style: dashed;
-  border-color: var(--stroke-accessible);
-  background: var(--bg-canvas);
-  color: var(--fg-3);
+/* Where the call stopped is a marker of its own: neutral, not the brand's colour of a moment. */
+.rp-tl__event[data-kind='ended'] .rp-tl__marker,
+.rp-tl__item[data-kind='ended'] .rp-tl__marker {
+  border-color: var(--fg-2);
+  background: var(--bg-quiet);
+  color: var(--fg-1);
 }
 /* The chosen moment is a filled marker with a ring: a different shape of mark, not only a colour. */
 .rp-tl__event--on .rp-tl__marker {
@@ -52,6 +61,7 @@
   border-color: var(--brand);
   background: var(--brand);
   color: var(--fg-on-brand);
+  transform: none;
   box-shadow:
     0 0 0 2px var(--bg-canvas),
     0 0 0 4px var(--brand-stroke);
@@ -85,6 +95,22 @@
 .rp-tl__item[data-state='not-seen'] .rp-tl__turn {
   color: var(--fg-3);
 }
+/* The fact a "Fact found" moment is about: written out in the list, and read (not drawn) on the rail,
+   where a node has no room for it. */
+.rp-tl__fact {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  overflow-wrap: anywhere;
+}
+.rp-tl--wide .rp-tl__fact {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
 /* ---- Wide: a rail with a marker for each moment ------------------------------------------- */
 .rp-tl--wide {
@@ -92,12 +118,11 @@
   flex-direction: column;
   gap: var(--sp-4);
 }
-/* The rail wraps onto a second row when there are more moments than room, so every moment is on
-   the screen and none is hidden behind a scroll. */
+/* One row, always: the page only draws the rail when every moment fits in it. */
 .rp-tl__rail {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(5.25rem, 1fr));
-  row-gap: var(--sp-2);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
 }
 .rp-tl--wide .rp-tl__event {
   position: relative;
@@ -205,6 +230,11 @@
 .rp-tl--narrow .rp-tl__turn {
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
+}
+/* The fact goes on a line of its own under the name and the turn. */
+.rp-tl--narrow .rp-tl__fact {
+  order: 2;
+  flex: 1 0 100%;
 }
 .rp-tl__chevron {
   flex: none;
@@ -387,5 +417,28 @@
   .rp-tl__printitem,
   .rp-ev {
     break-inside: avoid;
+  }
+  /* A moment is one row: its name and turn on the left, what it was and the words on the right. */
+  .rp-tl__print {
+    gap: 0;
+  }
+  .rp-tl__printitem {
+    display: grid;
+    grid-template-columns: 9rem minmax(0, 1fr);
+    column-gap: var(--sp-3);
+    padding-block: var(--sp-1);
+  }
+  .rp-tl__printhead {
+    grid-row: 1 / span 3;
+    flex-direction: column;
+    gap: 0;
+    align-self: start;
+  }
+  .rp-tl__printitem > :not(.rp-tl__printhead) {
+    grid-column: 2;
+  }
+  /* The turn is already named on the left. */
+  .rp-tl__printitem .rp-quote__foot {
+    display: none;
   }
 }

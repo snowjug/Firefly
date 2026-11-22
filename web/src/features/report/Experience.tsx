@@ -22,6 +22,7 @@ import {
   type KeyMoment,
 } from './journey-model.ts';
 import { Field, Section, TurnQuote } from './parts.tsx';
+import { MarkerGlyph } from './marker-shape.tsx';
 import { usePrinting } from './print.tsx';
 import { useTimelineSync } from './selection.tsx';
 import './journey.css';
@@ -66,8 +67,9 @@ function UnexpectedTurn({ curveball }: { curveball: NonNullable<CoachingReport['
 }
 
 /**
- * An important point as a row: the customer's state, the turn, the reason, and what the customer
- * said next, from the transcript. "Show the exact turn" opens the same panel as the timeline, inline.
+ * An important point as a row: the chart's marker for it, the customer's state, whose turn it was
+ * and what moved, the reason, and what the customer said next, from the transcript. "Show the exact
+ * turn" opens the same panel as the timeline, inline.
  */
 function MomentRow({
   moment,
@@ -85,8 +87,9 @@ function MomentRow({
   return (
     <li className="rp-moment">
       <div className="rp-moment__head">
+        <MarkerGlyph kind={point.kind} />
         <StateBadge state={band} />
-        <p className="rp-moment__title">{moment.heading}</p>
+        <p className="rp-moment__title">{moment.title}</p>
       </div>
       {moment.reason ? (
         <Field label="Reason">
@@ -94,7 +97,11 @@ function MomentRow({
         </Field>
       ) : null}
       {reaction ? (
-        <Field label={point.kind === 'start' ? 'Customer opened with' : 'Customer reaction'}>
+        <Field
+          label={
+            point.kind === 'start' ? 'Customer opened with' : `Their reply, turn ${reaction.index}`
+          }
+        >
           <TurnQuote turn={reaction} />
         </Field>
       ) : null}
@@ -168,6 +175,53 @@ export function ExperienceSection({ report }: { report: CoachingReport }) {
       ? journey.points.find((point) => turnOf(point) === chosen.turn)
       : undefined;
 
+  const tableDetails =
+    rows.length > 0 ? (
+      <details
+        className="rp-disclosure"
+        open={tableOpen || printing}
+        onToggle={(event) => {
+          if (!printing) setTableOpen(event.currentTarget.open);
+        }}
+      >
+        <summary className="rp-disclosure__summary">Show as a table</summary>
+        <table className="rp-table">
+          <caption className="rp-table__caption">
+            Customer temperature at each point in the call
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Turn</th>
+              <th scope="col">Point</th>
+              <th scope="col">Customer</th>
+              <th scope="col">Change</th>
+              <th scope="col">What happened</th>
+              <th scope="col">
+                <VisuallyHidden>Link to the turn</VisuallyHidden>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={`${row.turnIndex}-${row.kindLabel}`}>
+                <th scope="row">{row.turnIndex}</th>
+                <td>
+                  <span className="rp-table__point">
+                    <MarkerGlyph kind={row.kind} />
+                    {row.kindLabel}
+                  </span>
+                </td>
+                <td>{row.band}</td>
+                <td>{row.change}</td>
+                <td>{row.reason ?? ''}</td>
+                <td>{row.turnIndex > 0 ? <TurnLink turnIndex={row.turnIndex} /> : null}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    ) : null;
+
   return (
     <Section
       id="experience"
@@ -190,6 +244,7 @@ export function ExperienceSection({ report }: { report: CoachingReport }) {
               <EvidencePanel moment={panelFor(underChart)} />
             </div>
           ) : null}
+          {tableDetails}
         </div>
       ) : (
         <p className="rp-empty">{journeySentence(journey)}</p>
@@ -213,47 +268,6 @@ export function ExperienceSection({ report }: { report: CoachingReport }) {
       ) : null}
 
       {curveball ? <UnexpectedTurn curveball={curveball} /> : null}
-
-      {rows.length > 0 ? (
-        <details
-          className="rp-disclosure"
-          open={tableOpen || printing}
-          onToggle={(event) => {
-            if (!printing) setTableOpen(event.currentTarget.open);
-          }}
-        >
-          <summary className="rp-disclosure__summary">Show as a table</summary>
-          <table className="rp-table">
-            <caption className="rp-table__caption">
-              Customer temperature at each point in the call
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Turn</th>
-                <th scope="col">Point</th>
-                <th scope="col">Customer</th>
-                <th scope="col">Change</th>
-                <th scope="col">What happened</th>
-                <th scope="col">
-                  <VisuallyHidden>Link to the turn</VisuallyHidden>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={`${row.turnIndex}-${row.kindLabel}`}>
-                  <th scope="row">{row.turnIndex}</th>
-                  <td>{row.kindLabel}</td>
-                  <td>{row.band}</td>
-                  <td>{row.change}</td>
-                  <td>{row.reason ?? ''}</td>
-                  <td>{row.turnIndex > 0 ? <TurnLink turnIndex={row.turnIndex} /> : null}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </details>
-      ) : null}
     </Section>
   );
 }

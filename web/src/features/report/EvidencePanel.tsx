@@ -82,7 +82,7 @@ export function EvidencePanel({ moment }: { moment: Moment }) {
       ) : state === 'unverified' ? (
         <InsufficientEvidence note="The transcript does not confirm what the report says about this moment." />
       ) : (
-        <p className="rp-ev__none">Not seen in this call.</p>
+        <p className="rp-ev__none">Not reached in this call.</p>
       )}
     </div>
   );

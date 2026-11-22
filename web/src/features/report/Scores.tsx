@@ -1,10 +1,11 @@
 import { useId, useState } from 'react';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import type { DimensionId } from '#shared/domain/vocab.ts';
-import { Button, Icon, ScoreBar, useAnnouncer, useInViewOnce } from '../../design/index.ts';
+import { Badge, Button, Icon, ScoreBar, useAnnouncer, useInViewOnce } from '../../design/index.ts';
 import {
+  EVIDENCE_LABEL,
+  FIRST_LOOK,
   SUFFICIENCY_SENTENCES,
-  clampWords,
   dimensionLabel,
   plainUnexpectedTurn,
   quoteCount,
@@ -13,7 +14,7 @@ import { prefersReducedMotion } from './dom.ts';
 import { useEvidence } from './evidence.tsx';
 import { EvidenceTag, Field, InsufficientEvidence, Quote, Section } from './parts.tsx';
 import { usePrinting } from './print.tsx';
-import { ROW_REASON_WORDS, skillRows, type SkillRow } from './report-model.ts';
+import { skillRows, type SkillRow } from './report-model.ts';
 import './scores.css';
 
 function Row({
@@ -27,30 +28,44 @@ function Row({
   revealed: boolean;
   onToggle: () => void;
 }) {
-  const { dimension, quotes } = row;
+  const { dimension, quotes, firstLook } = row;
   const name = dimensionLabel(dimension.id);
   const panel = `${useId()}-panel`;
-  const firm = dimension.sufficiency === 'sufficient';
-  const reason = plainUnexpectedTurn(dimension.rationale);
-  // The row has the reason's first words; the details have all of it only when there is more to say.
-  const longer = clampWords(reason, ROW_REASON_WORDS).clamped;
   const toggle = open ? 'Hide details' : 'Expand details';
   return (
-    <li className="rp-skill" data-rp-origin={name} data-open={open ? '' : undefined}>
+    <li
+      className="rp-skill"
+      data-rp-origin={name}
+      data-open={open ? '' : undefined}
+      data-first-look={firstLook ? '' : undefined}
+    >
       <div className="rp-skill__line">
         <h3 className="rp-skill__name">{name}</h3>
         <div className="rp-skill__score">
-          <ScoreBar score={dimension.score} size="small" animate={revealed} />
-          {firm ? null : <EvidenceTag value={dimension.sufficiency} />}
+          <ScoreBar
+            score={dimension.score}
+            size="small"
+            animate={revealed}
+            label={firstLook ? FIRST_LOOK : undefined}
+            className={firstLook ? 'rp-skill__bar--first' : undefined}
+          />
         </div>
-        <p className="rp-skill__count">{quoteCount(quotes.length)}</p>
+        <p className="rp-skill__count">
+          {firstLook ? (
+            <Badge tone="neutral" icon="info" size="small">
+              {EVIDENCE_LABEL}
+            </Badge>
+          ) : (
+            quoteCount(quotes.length)
+          )}
+        </p>
         <p className="rp-skill__why">{row.preview}</p>
         <button
           type="button"
           className="rp-skill__toggle"
           aria-expanded={open}
           aria-controls={panel}
-          aria-label={`${name} ${dimension.score} of 5 ${dimension.label} ${quoteCount(quotes.length)} ${toggle}`}
+          aria-label={`${name} ${dimension.score} of 5 ${firstLook ? FIRST_LOOK : dimension.label} ${firstLook ? EVIDENCE_LABEL : quoteCount(quotes.length)} ${toggle}`}
           onClick={onToggle}
         >
           <span>{toggle}</span>
@@ -59,9 +74,9 @@ function Row({
       </div>
       <div id={panel} className="rp-skill__panel" hidden={!open}>
         <div className="rp-skill__body">
-          {longer ? (
-            <Field label="Why this score">
-              <p className="t-reading">{reason}</p>
+          {row.rest ? (
+            <Field label="More on this score">
+              <p className="t-reading">{row.rest}</p>
             </Field>
           ) : null}
           <Field label="Evidence from your call">
@@ -79,15 +94,17 @@ function Row({
               <InsufficientEvidence note="No moment in the call backs this score." />
             )}
           </Field>
-          <Field label="To improve">
+          <Field label="To improve" className="no-print">
             <p className="t-reading">{plainUnexpectedTurn(dimension.guidance)}</p>
           </Field>
-          <Field label="Evidence confidence">
-            <p className="rp-skill__confidence">
-              <EvidenceTag value={dimension.sufficiency} />
-              <span>{SUFFICIENCY_SENTENCES[dimension.sufficiency]}</span>
-            </p>
-          </Field>
+          {firstLook ? (
+            <Field label="Evidence confidence" className="no-print">
+              <p className="rp-skill__confidence">
+                <EvidenceTag value={dimension.sufficiency} />
+                <span>{SUFFICIENCY_SENTENCES[dimension.sufficiency]}</span>
+              </p>
+            </Field>
+          ) : null}
         </div>
       </div>
     </li>
@@ -97,9 +114,10 @@ function Row({
 /**
  * The six skills as a matrix of rows, not six cards: each row has the skill, its score as five
  * segments with the number and the word, how many quotes back it, the reason in a line and a button
- * that opens the quotes, what to improve and how firm the evidence is, in place. The rows come in
- * one after another the first time the section scrolls into view; with reduced motion they are
- * simply there.
+ * that opens the rest of the reason, the quotes and what to improve, in place. A score no quote
+ * backs is drawn as a first look (dashed segments, "first look" for the word, one calm label) and
+ * never carries a word such as "Strong". The rows come in one after another the first time the
+ * section scrolls into view; with reduced motion they are simply there.
  */
 export function Scores({ report }: { report: CoachingReport }) {
   const { turns } = useEvidence();

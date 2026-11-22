@@ -357,6 +357,12 @@ describe('evidence navigation', () => {
       })[0] as HTMLElement,
     );
     expect(screen.getByRole('button', { name: 'Back to Customer experience' })).toBeInTheDocument();
+    // A fact that was found is one line: opening it shows the question and its link.
+    await userEvent.click(
+      within(region('Discovery review')).getByRole('button', {
+        name: /^Storage settings changed last week/,
+      }),
+    );
     await userEvent.click(link(6, 'Discovery review'));
     expect(
       screen.getByRole('button', { name: 'Back to Storage settings changed last week' }),

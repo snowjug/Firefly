@@ -120,7 +120,7 @@
   min-inline-size: 0;
 }
 .rp-exec__text {
-  max-inline-size: var(--read-max);
+  max-inline-size: 70ch;
   text-wrap: pretty;
 }
 /* One modest line, as small as the notes around it: the signal is the average of six skills. */

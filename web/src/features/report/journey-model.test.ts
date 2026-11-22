@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { JourneyPoint } from '#shared/domain/report.ts';
+import { temperatureBand } from '#shared/domain/vocab.ts';
 import { CALLS, CALL_NAMES } from './fixtures.ts';
 import {
   changeText,
   journeyListItems,
   journeySentence,
   journeyTableRows,
+  keyMoments,
   layoutChart,
+  momentTitle,
   pointSummary,
 } from './journey-model.ts';
+import { evidenceTurns, turnLookup } from './evidence-model.ts';
 
 describe('journeyListItems', () => {
   it('lists only the start, the turning points, the unexpected turn and the end', () => {
@@ -98,12 +102,70 @@ describe('journeyTableRows', () => {
       expect(Object.keys(row).sort()).toEqual([
         'band',
         'change',
+        'kind',
         'kindLabel',
         'reason',
         'turnIndex',
       ]);
       expect(row.band).toMatch(/^[A-Z][a-z]+$/);
     }
+  });
+});
+
+describe('momentTitle', () => {
+  const at = (
+    turnIndex: number,
+    temperature: number,
+    kind: JourneyPoint['kind'] = 'turn',
+    delta = 0,
+  ): JourneyPoint => ({
+    turnIndex,
+    temperature,
+    band: temperatureBand(temperature).label,
+    kind,
+    delta,
+    reason: null,
+    quote: null,
+  });
+
+  it('names whose turn it was and what moved, without saying the customer’s state again', () => {
+    expect(momentTitle(at(2, 10), at(4, 8, 'turning-point', -2))).toBe(
+      'Your turn 4: temperature eased',
+    );
+    expect(momentTitle(at(2, 10), at(4, 14, 'turning-point', 4))).toBe(
+      'Your turn 4: temperature rose',
+    );
+    expect(momentTitle(at(4, 30), at(6, 50, 'turning-point', 20))).toBe(
+      'Your turn 6: rose from Concerned',
+    );
+    expect(momentTitle(at(4, 50), at(6, 30, 'turning-point', -20))).toBe(
+      'Your turn 6: eased from Frustrated',
+    );
+    expect(momentTitle(at(2, 10), at(4, 10, 'turning-point', 0))).toBe(
+      'Your turn 4: no change in mood',
+    );
+  });
+
+  it('calls the start and the end so, and the end names the last turn of the trainee', () => {
+    expect(momentTitle(null, at(1, 10, 'start'))).toBe('Start of the call');
+    expect(momentTitle(at(10, 10), at(12, 8, 'end', -2))).toBe(
+      'End of the call, after your turn 12',
+    );
+    expect(momentTitle(at(2, 10), at(4, 60, 'curveball', 50))).toBe(
+      'Unexpected turn, after your turn 4',
+    );
+  });
+
+  it('gives each important point of a call its title, and the customer’s own reply', () => {
+    const call = CALLS.strong;
+    const moments = keyMoments(call.report.journey, turnLookup(evidenceTurns(call.session)));
+    expect(moments.map((m) => m.title)).toEqual([
+      'Start of the call',
+      'Your turn 4: eased from Frustrated',
+      'Your turn 10: eased from Concerned',
+      'End of the call, after your turn 14',
+    ]);
+    expect(moments.every((m) => m.reaction?.role === 'customer')).toBe(true);
   });
 });
 
@@ -177,17 +239,85 @@ describe('layoutChart', () => {
   it('labels the first and last turn and thins the rest to fit a long call', () => {
     const { points } = CALLS.long.report.journey;
     expect(points.length).toBeGreaterThan(30);
+    const first = String(Math.max(1, points[0]?.turnIndex ?? 1));
+    const last = String(points.at(-1)?.turnIndex);
     const wide = layoutChart(points, { width: 900, height: 288 });
     const narrow = layoutChart(points, { width: 320, height: 244, gutter: 92 });
     for (const chart of [wide, narrow]) {
-      expect(chart.ticks[0]?.label).toBe(String(points[0]?.turnIndex));
-      expect(chart.ticks.at(-1)?.label).toBe(String(points.at(-1)?.turnIndex));
+      expect(chart.ticks[0]?.label).toBe(first);
+      expect(chart.ticks.at(-1)?.label).toBe(last);
       expect(chart.ticks.length).toBeLessThan(points.length);
       const xs = chart.ticks.map((t) => t.x);
       for (let i = 1; i < xs.length; i += 1)
         expect((xs[i] ?? 0) - (xs[i - 1] ?? 0)).toBeGreaterThan(20);
     }
     expect(narrow.ticks.length).toBeLessThan(wide.ticks.length);
+  });
+
+  describe('with the points placed by the turn they stand at', () => {
+    const at = (turnIndex: number, temperature: number): JourneyPoint => ({
+      turnIndex,
+      temperature,
+      band: temperatureBand(temperature).label,
+      kind: 'turn',
+      delta: 0,
+      reason: null,
+      quote: null,
+    });
+
+    it('spreads them by the turn, not by how many there are: a gap of four is wider than a gap of three', () => {
+      const chart = layoutChart([at(1, 10), at(4, 10), at(8, 10), at(12, 10)], {
+        width: 640,
+        height: 288,
+      });
+      const [a, b, c, d] = chart.points.map((p) => p.x) as [number, number, number, number];
+      expect((b - a) / (c - b)).toBeCloseTo(3 / 4);
+      expect((c - b) / (d - c)).toBeCloseTo(1);
+    });
+
+    it('labels whole turns, evenly, with the first turn and the last', () => {
+      const chart = layoutChart([at(1, 10), at(4, 10), at(8, 10), at(12, 10)], {
+        width: 640,
+        height: 288,
+      });
+      expect(chart.ticks.map((t) => t.label)).toEqual(
+        Array.from({ length: 12 }, (_, i) => String(i + 1)),
+      );
+      const gaps = chart.ticks.slice(1).map((t, i) => t.x - (chart.ticks[i]?.x ?? 0));
+      for (const gap of gaps) expect(gap).toBeCloseTo(gaps[0] ?? 0);
+    });
+
+    it('keeps each point inside its own band and lifts the calmest off the axis', () => {
+      const temperatures = [0, 20, 21, 40, 41, 60, 61, 80, 81, 100];
+      const chart = layoutChart(
+        temperatures.map((t, i) => at(i + 1, t)),
+        {
+          width: 640,
+          height: 288,
+        },
+      );
+      chart.points.forEach((p, i) => {
+        const band = chart.bands.find((b) => b.id === temperatureBand(temperatures[i] ?? 0).id);
+        expect(p.y, `temperature ${temperatures[i]}`).toBeGreaterThan(band?.top ?? 0);
+        expect(p.y, `temperature ${temperatures[i]}`).toBeLessThan(band?.bottom ?? 0);
+      });
+      // The calmest point rests well above the axis, not on it.
+      expect(chart.plot.bottom - (chart.points[0]?.y ?? 0)).toBeGreaterThanOrEqual(8);
+    });
+
+    it('still puts a hotter point higher, within a band and across bands', () => {
+      const temperatures = [0, 5, 10, 20, 21, 30, 40, 41, 100];
+      const chart = layoutChart(
+        temperatures.map((t, i) => at(i + 1, t)),
+        {
+          width: 640,
+          height: 288,
+        },
+      );
+      for (let i = 1; i < chart.points.length; i += 1) {
+        expect(chart.points[i]?.y ?? 0).toBeLessThan((chart.points[i - 1]?.y ?? 0) + 0.0001);
+      }
+    });
   });
 
   it('copes with a single point', () => {

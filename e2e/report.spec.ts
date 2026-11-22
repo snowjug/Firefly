@@ -57,6 +57,35 @@ const turnOfMoment = async (tab: Locator): Promise<number> => {
   return Number(/Turn (\d+)$/.exec(name.trim())?.[1]);
 };
 
+/**
+ * A turn that a link led to ends up (once the gentle scroll and its corrections are done) clear of
+ * the sticky bars above it and of the Back control below it, and in the upper part of the window,
+ * about a third of the way down, rather than at the very edge or lower than the middle.
+ */
+async function expectLanded(turn: Locator) {
+  await expect
+    .poll(
+      () =>
+        turn.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const bottomOfSticky = (selector: string) => {
+            const bar = document.querySelector(selector);
+            return bar && getComputedStyle(bar).position === 'sticky'
+              ? bar.getBoundingClientRect().bottom
+              : 0;
+          };
+          const back = document.querySelector('.rp-back__button')?.getBoundingClientRect();
+          return {
+            clearOfBars: box.top >= Math.max(bottomOfSticky('header'), bottomOfSticky('.rp-tools')),
+            upperPart: box.top <= window.innerHeight * 0.45,
+            clearOfBack: !back || box.bottom <= back.top,
+          };
+        }),
+      { message: 'the turn settles clear of the bars and of the Back control', timeout: 10_000 },
+    )
+    .toEqual({ clearOfBars: true, upperPart: true, clearOfBack: true });
+}
+
 test.describe('the coaching report', () => {
   let call: SessionDTO;
   let report: CoachingReport;
@@ -145,7 +174,15 @@ test.describe('the coaching report', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'Discovery review' })).toBeFocused();
   });
 
-  test.describe('the call journey', () => {
+  // The journey is a rail only when every moment fits one row (at 1440 that is eleven), and a list
+  // down the page otherwise. The call above has a curveball, which makes twelve moments, so it gets the
+  // list (tested below); the rail is tested with a call of nine.
+  test.describe('the call journey as a rail', () => {
+    test.beforeEach(async ({ api, page }) => {
+      call = await api.completedCall({ lines: PARTIAL_CALL });
+      await openReport(page, call.id);
+    });
+
     test('is a rail of the moments of the call, in order, with the exact turn behind the chosen one', async ({
       page,
     }) => {
@@ -158,7 +195,7 @@ test.describe('the coaching report', () => {
 
       await test.step('each moment says which turn it was, or that it was not seen, in words', async () => {
         for (const text of await tabs.allTextContents()) {
-          expect(text).toMatch(/, (Turn \d+|Not seen|Insufficient evidence)$/);
+          expect(text).toMatch(/, (Turn \d+|After turn \d+|Not reached|Insufficient evidence)$/);
         }
       });
 
@@ -257,6 +294,97 @@ test.describe('the coaching report', () => {
       await open.click();
       const marked = await page.evaluate(() => document.activeElement?.id);
       expect(marked).toMatch(/^turn-\d+$/);
+      await expectLanded(page.locator(`#${marked}`));
+      const back = page.getByRole('button', { name: 'Back to Call journey' });
+      await expect(back).toBeVisible();
+      await back.click();
+      await expect(open).toBeFocused();
+    });
+  });
+
+  test.describe('the call journey as a list', () => {
+    // Twelve moments are more than one row holds: the same moments are a list down the page, each of
+    // which opens in place, one at a time.
+    const momentsOf = (page: Page) =>
+      region(page, 'Call journey').locator('.rp-tl--narrow .rp-tl__event');
+
+    test('is a list when the rail would not hold every moment, and a moment opens in place with its exact turn', async ({
+      page,
+    }) => {
+      const journey = region(page, 'Call journey');
+      await expect(journey.getByRole('tablist')).toHaveCount(0);
+      const moments = momentsOf(page);
+      expect(await moments.count()).toBeGreaterThanOrEqual(12);
+      await expect(moments.first()).toHaveAttribute('aria-expanded', 'false');
+      for (const text of await moments.allTextContents()) {
+        expect(text).toMatch(/, (Turn \d+|After turn \d+|Not reached|Insufficient evidence)$/);
+      }
+
+      const seen = moments.filter({ hasText: /Turn \d+$/ });
+      const open = journey.locator('.rp-tl__inline:visible');
+
+      await test.step('choosing a moment opens its turn under it, with the turns around it, and marks the turn in the transcript', async () => {
+        const choice = seen.nth(2);
+        await choice.click();
+        await expect(choice).toHaveAttribute('aria-expanded', 'true');
+        const turn = await turnOfMoment(choice);
+        const said = call.turns.find((t) => t.index === turn);
+        expect(said).toBeDefined();
+        await expect(open).toHaveCount(1);
+        await expect(open).toContainText(`Turn ${turn}`);
+        await expect(open.locator('.rp-ev__turn--current')).toContainText(
+          (said?.text ?? '').slice(0, 30),
+        );
+        await expect(open.getByRole('button', { name: 'Open in transcript' })).toBeVisible();
+        await expect(page.locator('.rp-turn--marked')).toHaveAttribute('id', `turn-${turn}`);
+      });
+
+      await test.step('one moment is open at a time, and choosing the open one closes it', async () => {
+        const first = seen.first();
+        await first.click();
+        await expect(first).toHaveAttribute('aria-expanded', 'true');
+        await expect(seen.nth(2)).toHaveAttribute('aria-expanded', 'false');
+        await expect(open).toHaveCount(1);
+        await first.click();
+        await expect(first).toHaveAttribute('aria-expanded', 'false');
+        await expect(open).toHaveCount(0);
+      });
+    });
+
+    test('moves along the moments with the arrow keys, Home and End, and opening one stays a deliberate act', async ({
+      page,
+    }) => {
+      const moments = momentsOf(page);
+      const count = await moments.count();
+      await moments.first().focus();
+      await page.keyboard.press('ArrowDown');
+      await expect(moments.nth(1)).toBeFocused();
+      await expect(moments.nth(1)).toHaveAttribute('aria-expanded', 'false');
+      await page.keyboard.press('End');
+      await expect(moments.nth(count - 1)).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(moments.first()).toBeFocused();
+      await page.keyboard.press('ArrowUp');
+      await expect(moments.nth(count - 1)).toBeFocused();
+      await page.keyboard.press('Home');
+      await expect(moments.first()).toBeFocused();
+      await expect(moments.first()).toHaveAttribute('aria-expanded', 'false');
+      await page.keyboard.press('Enter');
+      await expect(moments.first()).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    test('"Open in transcript" goes to the turn and "Back to Call journey" returns to the button', async ({
+      page,
+    }) => {
+      const journey = region(page, 'Call journey');
+      await momentsOf(page)
+        .filter({ hasText: /Turn \d+$/ })
+        .first()
+        .click();
+      const open = journey.getByRole('button', { name: 'Open in transcript' });
+      await open.click();
+      const marked = await page.evaluate(() => document.activeElement?.id);
+      expect(marked).toMatch(/^turn-\d+$/);
       const back = page.getByRole('button', { name: 'Back to Call journey' });
       await expect(back).toBeVisible();
       await back.click();
@@ -276,21 +404,24 @@ test.describe('the coaching report', () => {
     for (const dimension of report.dimensions) {
       const label = DIMENSIONS[dimension.id].label;
       const item = scoreItem(page, label);
+      const firstLook = dimension.evidence.length === 0;
+      const word = firstLook ? 'first look' : dimension.label;
       const button = scores.getByRole('button', {
-        name: new RegExp(`^${escapeRegExp(label)}\\s+${dimension.score} of 5`),
+        name: new RegExp(`^${escapeRegExp(label)}\\s+${dimension.score} of 5 ${word}`),
       });
       await expect(item).toBeVisible();
-      await expect(item).toContainText(dimension.label);
+      await expect(item).toContainText(word);
+      // A score no quote backs carries the one calm label, never a strong word; one that has quotes counts them.
       await expect(item).toContainText(
-        dimension.evidence.length === 0
-          ? 'No quotes'
+        firstLook
+          ? 'Limited evidence'
           : `${dimension.evidence.length} ${dimension.evidence.length === 1 ? 'quote' : 'quotes'}`,
       );
       await expect(button).toContainText('Expand details');
       await expect(button).toHaveAttribute('aria-expanded', 'false');
     }
 
-    await test.step('a row opens in place: the evidence, what to improve and how firm it is', async () => {
+    await test.step('a row opens in place: the evidence and what to improve (and how firm it is, when no quote backs it)', async () => {
       const first = report.dimensions[0]!;
       const label = DIMENSIONS[first.id].label;
       const row = scores.getByRole('button', { name: new RegExp(`^${escapeRegExp(label)}`) });
@@ -298,7 +429,11 @@ test.describe('the coaching report', () => {
       await expect(row).toHaveAttribute('aria-expanded', 'true');
       await expect(row).toContainText('Hide details');
       const item = scoreItem(page, label);
-      for (const heading of ['Evidence from your call', 'To improve', 'Evidence confidence']) {
+      const headings =
+        first.evidence.length === 0
+          ? ['Evidence from your call', 'To improve', 'Evidence confidence']
+          : ['Evidence from your call', 'To improve'];
+      for (const heading of headings) {
         await expect(item.getByText(heading, { exact: true })).toBeVisible();
       }
       await row.click();
@@ -382,8 +517,10 @@ test.describe('the coaching report', () => {
         const panel = care.getByRole('tabpanel');
         await expect(panel).toHaveCount(1);
         await expect(panel.getByRole('heading', { level: 3, name })).toBeVisible();
-        // The first words are always shown, whatever the budget.
-        await expect(panel).toContainText(principle.summary.split(/\s+/).slice(0, 10).join(' '));
+        // The first words of the observation are always shown, whatever the budget; the clause about
+        // what the case needed ("; it met ...") is the basis beside the level, not part of it.
+        const observed = principle.summary.split(/[;.]/)[0] ?? '';
+        await expect(panel).toContainText(observed.split(/\s+/).slice(0, 10).join(' '));
         for (const label of ['What was observed', 'Evidence', 'Next action']) {
           await expect(panel.getByText(label, { exact: true })).toBeVisible();
         }
@@ -515,7 +652,8 @@ test.describe('the coaching report', () => {
       const wording = improvements.getByRole('group', { name: 'Better wording' });
       await expect(wording).toHaveCount(report.improvements.length);
       await expect(wording.first().getByText('You said')).toBeVisible();
-      await expect(wording.first().getByText('Try')).toBeVisible();
+      await expect(wording.first().getByText('Try', { exact: true })).toBeVisible();
+      await expect(wording.first().getByText(/^Wording to try for this call/)).toBeVisible();
       for (const improvement of report.improvements) {
         const spoken = improvements
           .locator('.rp-bw__line--after .rp-bw__text')
@@ -548,30 +686,36 @@ test.describe('the coaching report', () => {
       ).toBeVisible();
     });
 
-    await test.step('each found fact shows the question that found it and what the customer answered', async () => {
+    await test.step('each found fact is one line that opens to the question that found it and what the customer answered', async () => {
       for (const result of report.discovery.results.filter(
         (item) => item.status === 'discovered',
       )) {
         const fact = discovery
           .getByRole('listitem')
           .filter({ has: page.getByRole('heading', { level: 4, name: result.label }) });
+        const row = fact.getByRole('button').first();
+        await expect(row).toHaveAttribute('aria-expanded', 'false');
+        await expect(fact.getByText('You asked')).toBeHidden();
+        await row.click();
+        await expect(row).toHaveAttribute('aria-expanded', 'true');
         await expect(fact.getByText('You asked')).toBeVisible();
         await expect(fact.getByText('The customer answered')).toBeVisible();
+        await expect(fact.getByText('Why it mattered')).toBeVisible();
         await expect(
           fact.getByRole('link', { name: `See turn ${result.revealedAtTurn} in the transcript` }),
         ).toBeVisible();
         if (result.revealingQuestion) await expect(fact).toContainText(result.revealingQuestion);
-        await expect(fact).not.toContainText('A better question');
+        await expect(fact).not.toContainText('A question worth asking');
       }
     });
 
-    await test.step('each missed fact says why it mattered and the question that would have found it, with what the customer held back behind an expand', async () => {
+    await test.step('each missed fact says why it mattered and the question worth asking, with what the customer held back behind an expand', async () => {
       for (const result of report.discovery.results.filter((item) => item.status === 'missed')) {
         const fact = discovery
           .getByRole('listitem')
           .filter({ has: page.getByRole('heading', { level: 4, name: result.label }) });
         await expect(fact.getByText('Why it mattered')).toBeVisible();
-        await expect(fact.getByText('A better question')).toBeVisible();
+        await expect(fact.getByText('A question worth asking')).toBeVisible();
         await expect(fact).toContainText(result.betterQuestion);
         // The library says the same thing about this fact.
         expect(library.facts.find((item) => item.id === result.factId)?.betterQuestion).toBe(
@@ -585,7 +729,8 @@ test.describe('the coaching report', () => {
         await expand.click();
         await expect(fact.locator('.rp-fact__hidden')).toBeVisible();
       }
-      await expect(discovery.getByText('Suggested question')).toBeVisible();
+      // One callout for a question worth asking, not a second block that says the same thing.
+      await expect(discovery.getByText('Suggested question')).toHaveCount(0);
     });
 
     await test.step('next practice names one skill and links to a scenario to practise it', async () => {
@@ -618,6 +763,10 @@ test.describe('the coaching report', () => {
       await expect(turn).toBeInViewport();
       await expect(turn.getByText('Cited', { exact: true })).toBeVisible();
       await expect(turn.locator('mark')).toContainText(quote.slice(0, 20));
+    });
+
+    await test.step('the turn lands clear of the sticky bars and of the Back control', async () => {
+      await expectLanded(turn);
     });
 
     await test.step('Back to Strengths returns focus to the very link that was followed', async () => {
@@ -798,7 +947,7 @@ test.describe('a call with a promise in it', () => {
       .first();
     await expect(wording).toBeVisible();
     await expect(wording.getByText('You said')).toBeVisible();
-    await expect(wording.getByText('Try')).toBeVisible();
+    await expect(wording.getByText('Try', { exact: true })).toBeVisible();
     // What was said is quoted whole, with what was taken out struck through.
     const before = wording.locator('.rp-bw__line--before .rp-bw__text');
     await expect(before).toContainText((said?.quote ?? '').slice(0, 20));
@@ -944,6 +1093,25 @@ test.describe('on a phone-sized screen', () => {
       await expectAccessible(page, testInfo, 'report at 390 px');
     });
   });
+
+  test('a turn that a link leads to lands whole above the Back control, however long it is, and Back returns to the link', async ({
+    api,
+    page,
+  }) => {
+    const call = await api.completedCall({ scenarioId: DEFENDER, lines: DEFENDER_CALL });
+    await openReport(page, call.id);
+    // The last turn of the call is its longest: a closing summary, which fills much of a phone's window.
+    const link = region(page, 'Strengths').getByRole('link', { name: seeTurn }).first();
+    const turn = page.locator(
+      `#turn-${/#turn-(\d+)$/.exec((await link.getAttribute('href')) ?? '')?.[1]}`,
+    );
+    await link.scrollIntoViewIfNeeded();
+    await link.click();
+    await expect(turn).toBeFocused();
+    await expectLanded(turn);
+    await page.getByRole('button', { name: 'Back to Strengths' }).click();
+    await expect(link).toBeFocused();
+  });
 });
 
 test.describe("a spoken call's report", () => {
@@ -962,7 +1130,7 @@ test.describe("a spoken call's report", () => {
 });
 
 test.describe('a call too short to judge', () => {
-  test('says in the summary that the coaching rests on limited evidence, and marks the scores it is firm about', async ({
+  test('says in the summary, once, that the call was too short to score with confidence, and marks the scores no quote backs', async ({
     page,
     api,
   }) => {
@@ -970,17 +1138,18 @@ test.describe('a call too short to judge', () => {
     const report = call.report as CoachingReport;
     expect(report.completion.evidence).not.toBe('sufficient');
     await openReport(page, call.id);
-    await expect(
-      region(page, 'Summary').getByText(report.completion.note ?? /limited evidence/i),
-    ).toBeVisible();
-    // Skills that could not be judged firmly say so on their rows.
-    const limited = report.dimensions.filter((dimension) => dimension.sufficiency !== 'sufficient');
-    if (limited.length > 0) {
-      await expect(
-        region(page, 'Scores')
-          .getByText(/(Limited|Not enough) evidence/)
-          .first(),
-      ).toBeVisible();
+    // The summary says how little the coaching rests on in its own words; the report's note is only
+    // added under it when the summary does not say it, so it is not read twice.
+    const summary = region(page, 'Summary');
+    await expect(summary).toContainText(
+      /\blimited evidence\b|\btoo few\b|\bto score with confidence\b/i,
+    );
+    expect(report.completion.note).toBeTruthy();
+    await expect(summary).not.toContainText(report.completion.note as string);
+    // Skills that no quote backs say so on their rows, with the one calm label.
+    const quoteless = report.dimensions.filter((dimension) => dimension.evidence.length === 0);
+    if (quoteless.length > 0) {
+      await expect(region(page, 'Scores').getByText('Limited evidence').first()).toBeVisible();
     }
   });
 });

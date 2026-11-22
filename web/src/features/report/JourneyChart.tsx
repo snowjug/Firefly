@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { CUSTOMER_STATE_ICONS, Icon, cx } from '../../design/index.ts';
-import { bandIdFor, plainUnexpectedTurn } from './copy.ts';
+import { bandIdFor, CHART_FOOTNOTE, plainUnexpectedTurn } from './copy.ts';
 import { useEvidence } from './evidence.tsx';
 import {
   POINT_KIND_LABELS,
@@ -208,6 +208,15 @@ export default function JourneyChart({
         >
           Turn in the conversation
         </text>
+        {/* The direction of the heights, where the eye looks for it: lower is calmer. */}
+        <g className="rp-chart__cue" aria-hidden="true">
+          <g transform={`translate(4 ${height - 19})`}>
+            <Icon name="arrow-down" size={12} />
+          </g>
+          <text x={20} y={height - 7}>
+            Calmer
+          </text>
+        </g>
 
         <path className="rp-chart__line" d={geometry.path} />
         {geometry.points.map((point) => {
@@ -284,6 +293,7 @@ export default function JourneyChart({
           </li>
         ))}
       </ul>
+      <p className="rp-chart__footnote">{CHART_FOOTNOTE}</p>
     </div>
   );
 }

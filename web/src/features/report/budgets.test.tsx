@@ -129,8 +129,8 @@ describe('strengths', () => {
       const row = item.closest('li') as HTMLElement;
       expect(within(row).getByRole('blockquote')).toBeInTheDocument();
       expect(
-        within(row).getByRole('link', { name: /See turn \d+ in the transcript/ }),
-      ).toBeInTheDocument();
+        within(row).getAllByRole('link', { name: /See turn \d+ in the transcript/ }).length,
+      ).toBeGreaterThan(0);
       await userEvent.click(within(row).getByRole('button', { name: 'Show more' }));
       expect(wordCount(copyOf(item))).toBeGreaterThan(STRENGTH_WORDS);
     }

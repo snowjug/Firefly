@@ -64,8 +64,14 @@
   padding: var(--sp-3) var(--sp-4);
   border-inline-start: 3px solid var(--stroke-1);
   border-radius: 0 var(--r-lg) var(--r-lg) 0;
-  /* A turn that is jumped to is not hidden by the header and the find bar above it. */
-  scroll-margin-block: calc(var(--header-h) + 9rem) var(--sp-16);
+  /* A turn that is jumped to lands about a third of the way down the window (never under the header
+     and the find bar above it, and well clear of the "Back to" control below it). `--rp-turn-top` is
+     how far from the top of the window it lands; the browser adds the page's scroll padding (the
+     header and a gap) to the margin, so that is taken off. A turn too tall for that sets its own. */
+  scroll-margin-block: calc(
+      var(--rp-turn-top, max(35vh, var(--header-h) + 9rem)) - var(--header-h) - var(--sp-4)
+    )
+    6rem;
   /* A long call stays smooth: the browser skips the layout and painting of turns far off screen. */
   content-visibility: auto;
   contain-intrinsic-size: auto 7rem;
@@ -203,6 +209,9 @@
 }
 
 /* ---- Back to where you came from ---------------------------------------------------------- */
+/* The control stays at the foot of the window while the turn is being read. On a wide page it sits
+   at the far end of the line, past the end of the text, and the turn that was jumped to sits a third
+   of the way down, so the control does not cover it. */
 .rp-back {
   position: sticky;
   inset-block-end: var(--sp-4);
@@ -210,6 +219,11 @@
   justify-content: center;
   padding-block-start: var(--sp-4);
   pointer-events: none;
+}
+@media (min-width: 64em) {
+  .rp-back {
+    justify-content: flex-end;
+  }
 }
 .rp-back__button {
   pointer-events: auto;
@@ -236,10 +250,26 @@
   .rp-shown {
     display: none !important;
   }
+  /* The transcript is the long part: on paper each turn is a few lines close together. */
+  .rp-turns {
+    gap: 0;
+  }
   .rp-turn {
     content-visibility: visible;
     break-inside: avoid;
-    padding-block: var(--sp-2);
+    gap: 0;
+    padding: var(--sp-1) var(--sp-3);
+  }
+  .rp-turn__head,
+  .rp-turn__text {
+    font-size: var(--fs-compact);
+    line-height: var(--lh-compact);
+  }
+  .rp-turn__tags {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--sp-0h) var(--sp-3);
+    margin: 0;
   }
   .rp-turn::before {
     display: none;

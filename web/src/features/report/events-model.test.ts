@@ -14,10 +14,9 @@ const byId = (list: readonly CallEvent[], id: string) => {
 };
 
 describe('buildCallEvents', () => {
-  it('lists a full call in the order of the call: each moment at its turn, the quiet one where it belongs', () => {
+  it('lists a full call in the order of the call: each moment at its turn', () => {
     expect(ids(events(CALLS.strong))).toEqual([
       'greeting',
-      'issue',
       'impact',
       'discovery-sales-only',
       'tension-4',
@@ -51,9 +50,42 @@ describe('buildCallEvents', () => {
     });
   });
 
-  it('marks what the call never showed as Not seen, with no turn and no quote', () => {
-    const issue = byId(events(CALLS.strong), 'issue');
-    expect(issue).toMatchObject({ state: 'not-seen', turnIndex: null, quote: null });
+  it('marks what the call needed and never reached as not seen, with no turn and no quote', () => {
+    expect(byId(events(CALLS.weak), 'greeting')).toMatchObject({
+      state: 'not-seen',
+      turnIndex: null,
+      quote: null,
+    });
+  });
+
+  it('draws no moment the report never listed as needed, and draws it as not seen once it is listed', () => {
+    // The strong call's report never lists "confirmed what the issue was": the call did not need it.
+    expect(ids(events(CALLS.strong))).not.toContain('issue');
+    const listed: CoachingReport = {
+      ...CALLS.strong.report,
+      care: CALLS.strong.report.care?.map((p) =>
+        p.id === 'communicate'
+          ? {
+              ...p,
+              behaviours: [
+                ...p.behaviours,
+                {
+                  id: 'communicate.context-confirmed',
+                  principle: 'communicate',
+                  label: 'Confirmed the context',
+                  status: 'not-shown',
+                  evidence: [],
+                  note: null,
+                } as const,
+              ],
+            }
+          : p,
+      ),
+    };
+    expect(byId(events(CALLS.strong, listed), 'issue')).toMatchObject({
+      state: 'not-seen',
+      turnIndex: null,
+    });
   });
 
   it('makes one moment for each fact found, partly found ones included, and none for a missed fact', () => {
@@ -93,39 +125,51 @@ describe('buildCallEvents', () => {
     expect(events(CALLS.strong).some((e) => e.kind === 'curveball')).toBe(false);
   });
 
-  it('puts the quiet moments first when nothing before them was seen, and keeps the one that was seen', () => {
+  it('puts the early moments nobody reached first and the late ones last, around what was seen', () => {
     const list = events(CALLS.weak);
     expect(ids(list)).toEqual([
       'greeting',
-      'issue',
       'impact',
       'discovery',
+      'curveball',
       'summary',
       'ownership',
       'next-steps',
       'closing',
-      'curveball',
     ]);
-    expect(list.filter((e) => e.state === 'not-seen')).toHaveLength(8);
+    expect(list.filter((e) => e.state === 'not-seen')).toHaveLength(7);
     expect(list.filter((e) => e.quote !== null)).toHaveLength(0);
   });
 
-  it('for a call that ended early, keeps what was seen and marks the rest where it would have come', () => {
+  it('for a call that ended early, says where it stopped and leaves what it never got to after that', () => {
     const list = events(CALLS.short);
     expect(ids(list)).toEqual([
       'greeting',
-      'issue',
       'impact',
       'discovery-which-app',
-      'summary',
+      'ended',
       'ownership',
-      'next-steps',
       'closing',
     ]);
     expect(list.filter((e) => e.state === 'seen').map((e) => e.id)).toEqual([
       'greeting',
       'discovery-which-app',
+      'ended',
     ]);
+    expect(byId(list, 'ended')).toMatchObject({
+      kind: 'ended',
+      label: 'Call ended',
+      state: 'seen',
+      turnIndex: 5,
+      quote: null,
+    });
+    expect(byId(list, 'ended').detail).toMatch(/^The call ended early, after \d trainee turns?\.$/);
+  });
+
+  it('makes no end of the call for a call that was not ended early', () => {
+    for (const name of ['strong', 'weak', 'curveball', 'legacy'] as const) {
+      expect(ids(events(CALLS[name])), name).not.toContain('ended');
+    }
   });
 
   it('for a version 1 report, shows only the moments it can support and invents no others', () => {

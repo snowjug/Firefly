@@ -210,12 +210,14 @@ describe('the scores', () => {
     for (const d of CALLS.weak.report.dimensions) {
       const label = DIMENSIONS[d.id].label;
       const item = row(label);
+      // A score no quote backs says "first look" where the rubric word would be, and never the word.
+      const word = item.hasAttribute('data-first-look') ? 'first look' : d.label;
       expect(item).toHaveTextContent(`${d.score}`);
       expect(item).toHaveTextContent(`of 5`);
-      expect(item).toHaveTextContent(d.label);
-      expect(toggleOf(item)).toHaveAccessibleName(
-        new RegExp(`^${label} ${d.score} of 5 ${d.label}`),
-      );
+      expect(item).toHaveTextContent(word);
+      if (word === 'first look')
+        expect(item.querySelector('.rp-skill__score')).not.toHaveTextContent(d.label);
+      expect(toggleOf(item)).toHaveAccessibleName(new RegExp(`^${label} ${d.score} of 5 ${word}`));
     }
   });
 
@@ -225,7 +227,9 @@ describe('the scores', () => {
     expect(row('Empathy & De-escalation')).toHaveTextContent('1 quote');
     cleanup();
     show('weak');
-    expect(row('Opening & Rapport')).toHaveTextContent('No quotes');
+    // No quote: the one calm label stands where the count would be.
+    expect(row('Opening & Rapport')).toHaveAttribute('data-first-look');
+    expect(row('Opening & Rapport')).toHaveTextContent('Limited evidence');
   });
 
   it('gives the reason in a line on the row, ending where a sentence does when it can', () => {
@@ -236,31 +240,55 @@ describe('the scores', () => {
     );
   });
 
-  it('keeps only the first words of a long reason on the row, and has the whole reason in the details', async () => {
+  it('keeps the first sentences of a long reason on the row, never cut in the middle, and the rest in the details', async () => {
     const { report } = CALLS.strong;
-    const longReason =
+    const first = 'You greeted Priya by name and introduced yourself at once.';
+    const rest =
+      'Then you named the missing recordings and the client review so that she knew she had been heard before any question was asked of her at all.';
+    showReport('strong', {
+      ...report,
+      dimensions: report.dimensions.map((d) =>
+        d.id === 'opening-rapport' ? { ...d, rationale: `${first} ${rest}` } : d,
+      ),
+    });
+    const item = row('Opening & Rapport');
+    expect(item.querySelector('.rp-skill__why')?.textContent).toBe(first);
+    expect(item.querySelector('.rp-skill__why')?.textContent).not.toContain('\u2026');
+    expect(within(item).getByText('More on this score')).not.toBeVisible();
+    await userEvent.click(toggleOf(item));
+    expect(within(item).getByText('More on this score')).toBeVisible();
+    expect(within(item).getByText(rest)).toBeVisible();
+  });
+
+  it('shows a first sentence longer than the budget whole, with nothing more to open for it', () => {
+    const { report } = CALLS.strong;
+    const long =
       'You greeted Priya by name and introduced yourself at once, then named the missing recordings and the client review so that she knew she had been heard before any question was asked of her at all.';
     showReport('strong', {
       ...report,
       dimensions: report.dimensions.map((d) =>
-        d.id === 'opening-rapport' ? { ...d, rationale: longReason } : d,
+        d.id === 'opening-rapport' ? { ...d, rationale: long } : d,
       ),
     });
     const item = row('Opening & Rapport');
-    const preview = item.querySelector('.rp-skill__why')?.textContent ?? '';
-    expect(preview.split(/\s+/).length).toBeLessThanOrEqual(20);
-    expect(preview).toMatch(/\u2026$/);
-    expect(preview).not.toBe(longReason);
-    expect(within(item).getByText('Why this score')).not.toBeVisible();
-    await userEvent.click(toggleOf(item));
-    expect(within(item).getByText('Why this score')).toBeVisible();
-    expect(within(item).getByText(longReason)).toBeVisible();
+    expect(item.querySelector('.rp-skill__why')?.textContent).toBe(long);
+    expect(within(item).queryByText('More on this score')).not.toBeInTheDocument();
   });
 
-  it('says in words when the evidence is thin, without opening anything', () => {
+  it('shows one calm label, only on a row no quote backs, and not on a row that has quotes', () => {
     show('short');
-    expect(row('Empathy & De-escalation')).toHaveTextContent('Not enough evidence');
-    expect(row('Opening & Rapport')).toHaveTextContent('Limited evidence');
+    for (const d of CALLS.short.report.dimensions) {
+      const item = row(DIMENSIONS[d.id].label);
+      if (item.hasAttribute('data-first-look')) {
+        expect(item).toHaveTextContent('Limited evidence');
+        expect(item).toHaveTextContent('first look');
+        expect(item.querySelector('.ff-badge--warning')).toBeNull();
+      } else {
+        expect(item).not.toHaveTextContent('Limited evidence');
+        expect(item).not.toHaveTextContent('Not enough evidence');
+      }
+    }
+    expect(within(region('Scores')).queryByText('Not enough evidence')).not.toBeInTheDocument();
     cleanup();
     show('strong');
     expect(within(region('Scores')).queryByText('Limited evidence')).not.toBeInTheDocument();
@@ -287,7 +315,7 @@ describe('the scores', () => {
     expect(panel).toHaveAttribute('hidden');
   });
 
-  it('shows the quotes with their turns, what to improve and how firm the evidence is when opened', async () => {
+  it('shows the quotes with their turns and what to improve when opened, and no confidence note for a row with quotes', async () => {
     show('strong');
     const item = row('Scoping & Discovery');
     await userEvent.click(toggleOf(item));
@@ -302,8 +330,7 @@ describe('the scores', () => {
       ).toHaveAttribute('href', `#turn-${e.turnIndex}`);
     }
     expect(item).toHaveTextContent(d.guidance);
-    expect(item).toHaveTextContent('Evidence confidence');
-    expect(item).toHaveTextContent('There was enough in the call to judge this skill.');
+    expect(item).not.toHaveTextContent('Evidence confidence');
   });
 
   it('says "Insufficient evidence" when nothing backs a score, and how thin evidence should be read', async () => {
@@ -399,26 +426,47 @@ describe('the CARE review', () => {
     expect(names).toEqual(Object.values(CARE_LABELS));
   });
 
-  it('shows the observation, one quote that holds up and one next action', () => {
+  it('shows the observation, one quote that holds up and fits, and one next action', () => {
     show('strong');
     const open = panel();
     expect(
       within(open).getByRole('heading', { level: 3, name: 'Communicate effectively' }),
     ).toBeInTheDocument();
     expect(open).toHaveTextContent('What was observed');
-    expect(open).toHaveTextContent(
-      'Is it happening in every meeting, or only for some organisers?',
-    );
+    // The first behaviour the report lists as shown is the one quoted, and it is named under the quote.
+    expect(open).toHaveTextContent('Hello Priya');
     expect(within(open).getAllByRole('blockquote')).toHaveLength(1);
     expect(
-      within(open).getByRole('link', { name: 'See turn 4 in the transcript' }),
-    ).toHaveAttribute('href', '#turn-4');
-    expect(open).toHaveTextContent('Shows: Asked clear, single questions');
+      within(open).getByRole('link', { name: 'See turn 2 in the transcript' }),
+    ).toHaveAttribute('href', '#turn-2');
+    expect(open).toHaveTextContent('Shown: Greeted the customer by name');
     expect(open).toHaveTextContent('Next action');
     expect(open).toHaveTextContent(
       'Confirm the organisation and one affected meeting early, so every check starts on the right tenant.',
     );
+    expect(open.querySelector('.rp-care__next')).toHaveTextContent(
+      'Confirm the organisation and one affected meeting early, so every check starts on the right tenant.',
+    );
     expect(open).toHaveTextContent('From the skill Opening & Rapport.');
+  });
+
+  it('never puts the same words under two principles', async () => {
+    show('strong');
+    const quotes: string[] = [];
+    for (const tab of tabs()) {
+      await userEvent.click(tab);
+      const text = panel().querySelector('.rp-care__panel blockquote, blockquote')?.textContent;
+      if (text) quotes.push(text);
+    }
+    expect(quotes).toHaveLength(4);
+    expect(new Set(quotes).size).toBe(4);
+  });
+
+  it('sets what the level rests on beside the level: the behaviours shown, and how the case was met', () => {
+    show('strong');
+    const head = panel().querySelector('.rp-care__head') as HTMLElement;
+    expect(head).toHaveTextContent('Strong');
+    expect(head.querySelector('.rp-care__basis')).toHaveTextContent('5 of 5 behaviours shown');
   });
 
   it('moves with the arrow keys, Home and End, and shows the matching section', async () => {
@@ -455,19 +503,27 @@ describe('the CARE review', () => {
     expect(list.style.getPropertyValue('--care-x')).not.toBe('');
   });
 
-  it('counts the behaviours shown, partly shown and not shown, and keeps them closed', async () => {
+  it('is one row at every width: the same weight of name whether chosen or not', () => {
+    show('strong');
+    // Nothing about a tab's name changes when it is chosen, so choosing one never reflows the others.
+    for (const name of document.querySelectorAll('.rp-care__tabname')) {
+      expect(name.className).toBe('rp-care__tabname');
+    }
+  });
+
+  it('counts the behaviours shown beside the level, and keeps them closed', async () => {
     show('strong');
     await userEvent.click(tabs()[2] as HTMLElement);
     const open = panel();
-    expect(open).toHaveTextContent('2 shown');
-    expect(open).toHaveTextContent('1 partly shown');
-    expect(open).toHaveTextContent('1 not shown');
+    expect(open.querySelector('.rp-care__basis')).toHaveTextContent(
+      '2 of 4 behaviours shown (1 partly)',
+    );
     expect(
       within(open).getByRole('button', { name: 'Show behaviours for Be resourceful' }),
     ).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('shows each behaviour with its status in words, its note and its quote when opened', async () => {
+  it('shows each behaviour with its status in words, its note and at most one quote when opened', async () => {
     show('strong');
     await userEvent.click(tabs()[2] as HTMLElement);
     const open = panel();
@@ -482,6 +538,9 @@ describe('the CARE review', () => {
     expect(
       within(open).getAllByRole('link', { name: /See turn \d+ in the transcript/ }).length,
     ).toBeGreaterThanOrEqual(3);
+    for (const item of open.querySelectorAll('.rp-behaviour')) {
+      expect(item.querySelectorAll('blockquote').length).toBeLessThanOrEqual(1);
+    }
   });
 
   it('says "Insufficient evidence" for a principle no quote backs, and still gives a next action', async () => {
@@ -499,8 +558,12 @@ describe('the CARE review', () => {
     expect(within(panel()).queryByRole('button', { name: /behaviours/ })).not.toBeInTheDocument();
   });
 
-  it('keeps the CBCF position honest, in the report’s own words, and never claims alignment', () => {
+  it('keeps the CBCF position honest: said plainly first, then in the report’s own words, and never claims alignment', () => {
     show('strong');
+    const note = region('CARE review').querySelector('.rp-care__cbcf') as HTMLElement;
+    expect(note.textContent).toMatch(
+      /^Firefly does not map this review to CBCF\.\s*CBCF mapping is not applied: awaiting authoritative source confirmation\.$/,
+    );
     expect(region('CARE review')).toHaveTextContent(
       'CBCF mapping is not applied: awaiting authoritative source confirmation.',
     );
@@ -599,6 +662,13 @@ describe('strengths and improvement opportunities', () => {
 });
 
 describe('discovery review', () => {
+  const found = (name: RegExp | string) =>
+    within(region('Discovery review'))
+      .getByRole('heading', { level: 4, name })
+      .closest('li') as HTMLElement;
+  /** The button that opens a fact that was found: the whole line is its name. */
+  const rowButton = (item: HTMLElement) => within(item).getByRole('button');
+
   it('says how many hidden facts were found, and splits them into found, partly found and missed', () => {
     show('strong');
     const section = region('Discovery review');
@@ -608,11 +678,8 @@ describe('discovery review', () => {
         .getAllByRole('heading', { level: 3 })
         .map((h) => h.textContent),
     ).toEqual(['Found (3)', 'Partly found (1)', 'Missed (1)']);
-    expect(
-      within(section)
-        .getAllByRole('heading', { level: 4 })
-        .map((h) => h.textContent),
-    ).toEqual([
+    // Within a group, the facts that mattered most come first.
+    expect([...section.querySelectorAll('.rp-fact__title')].map((t) => t.textContent)).toEqual([
       'Storage settings changed last week',
       'Only sales-organised meetings are affected',
       'The first recording went missing on Monday',
@@ -621,15 +688,27 @@ describe('discovery review', () => {
     ]);
   });
 
-  it('shows a found fact with the question that found it and what the customer answered', () => {
+  it('makes each fact that was found one line, with how much it mattered and the turn, closed at first', () => {
     show('strong');
-    const item = within(region('Discovery review'))
-      .getByRole('heading', { level: 4, name: 'Storage settings changed last week' })
-      .closest('li') as HTMLElement;
-    expect(item).toHaveTextContent('Critical');
-    expect(within(item).getByText('You asked')).toBeInTheDocument();
+    const item = found(/^Storage settings changed last week/);
+    const button = rowButton(item);
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button).toHaveTextContent('Storage settings changed last week');
+    expect(button).toHaveTextContent('Critical');
+    expect(button).toHaveTextContent('Turn 6');
+    expect(within(item).getByText('You asked')).not.toBeVisible();
+    expect(within(item).queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('opens a found fact in place to the question that found it, what the customer answered and why it mattered', async () => {
+    show('strong');
+    const item = found(/^Storage settings changed last week/);
+    const button = rowButton(item);
+    await userEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(within(item).getByText('You asked')).toBeVisible();
     expect(item).toHaveTextContent('Did anything change recently, such as a licence update');
-    expect(within(item).getByText('The customer answered')).toBeInTheDocument();
+    expect(within(item).getByText('The customer answered')).toBeVisible();
     // The customer's reply to turn 6 is turn 7, exactly as it was said.
     expect(item).toHaveTextContent(
       "Our admin changed the storage settings last week, but I don't know exactly what.",
@@ -640,16 +719,33 @@ describe('discovery review', () => {
     expect(
       within(item).getByRole('link', { name: 'See turn 7 in the transcript' }),
     ).toBeInTheDocument();
-    expect(item).not.toHaveTextContent('A better question');
+    expect(within(item).getByText('Why it mattered')).toBeVisible();
+    expect(item).toHaveTextContent('The cause sat in a recent change');
+    expect(item).not.toHaveTextContent('A question worth asking');
+    await userEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('shows a missed fact with why it mattered and a better question, and the customer’s words behind an expand', async () => {
+  it('shows how much a fact mattered in a different shape for each: critical strongest, with an icon', () => {
     show('strong');
-    const item = within(region('Discovery review'))
-      .getByRole('heading', { level: 4, name: 'Two organisers lost their OneDrive licence' })
-      .closest('li') as HTMLElement;
+    const critical = found(/^Storage settings changed last week/).querySelector('.ff-badge');
+    expect(critical).toHaveTextContent('Critical');
+    expect(critical?.querySelector('svg')).not.toBeNull();
+    const important = found(/^Only sales-organised meetings are affected/).querySelector(
+      '.ff-badge',
+    );
+    expect(important).toHaveTextContent('Important');
+    expect(important?.className).not.toBe(critical?.className);
+    const helpful = found(/^Most missing recordings/).querySelector('.ff-tag');
+    expect(helpful).toHaveTextContent('Helpful');
+  });
+
+  it('shows a missed fact with why it mattered and a question worth asking, and the customer’s words behind an expand', async () => {
+    show('strong');
+    const item = found('Two organisers lost their OneDrive licence');
     expect(within(item).queryByRole('link')).not.toBeInTheDocument();
     expect(within(item).getByText('Why it mattered')).toBeInTheDocument();
+    expect(within(item).getByText('A question worth asking')).toBeInTheDocument();
     expect(item).toHaveTextContent(
       'Do the organisers with missing recordings still have their OneDrive licence?',
     );
@@ -664,37 +760,72 @@ describe('discovery review', () => {
     expect(within(item).getByText(hidden)).toBeVisible();
   });
 
-  it('shows a partly found fact with both: what was found and what was still missing', () => {
+  it('shows a partly found fact with both: what was found and what was still missing', async () => {
     show('strong');
-    const item = within(region('Discovery review'))
-      .getByRole('heading', {
-        level: 4,
-        name: 'Most missing recordings were meetings with external guests',
-      })
-      .closest('li') as HTMLElement;
+    const item = found(/^Most missing recordings were meetings with external guests/);
     expect(item).toHaveTextContent('Partly found');
-    expect(within(item).getByText('You asked')).toBeInTheDocument();
-    expect(within(item).getByText('A better question')).toBeInTheDocument();
+    await userEvent.click(rowButton(item));
+    expect(within(item).getByText('You asked')).toBeVisible();
+    expect(within(item).getByText('A question worth asking')).toBeVisible();
   });
 
-  it('suggests one question: the one for the most important fact that was not found', () => {
+  it('has one callout for a question worth asking, and no second one that says the same', () => {
     show('strong');
-    const block = within(region('Discovery review'))
-      .getByText('Suggested question')
-      .closest('div') as HTMLElement;
-    expect(block).toHaveTextContent(
-      '\u201cDo the organisers with missing recordings still have their OneDrive licence?\u201d',
-    );
-    expect(block).toHaveTextContent('To find out: Two organisers lost their OneDrive licence');
+    const section = region('Discovery review');
+    expect(within(section).queryByText('Suggested question')).not.toBeInTheDocument();
+    expect(within(section).queryByText('A better question')).not.toBeInTheDocument();
+    // One for the missed fact and one for the partly found fact: never one for a fact that was found.
+    expect(section.querySelectorAll('.rp-ask')).toHaveLength(2);
+    expect(
+      [...section.querySelectorAll('.rp-ask')].some((ask) =>
+        ask.textContent?.includes(
+          '\u201cDo the organisers with missing recordings still have their OneDrive licence?\u201d',
+        ),
+      ),
+    ).toBe(true);
   });
 
-  it('suggests nothing when every fact was found, and says when there was nothing to find', () => {
-    const found = CALLS.strong.report.discovery.results.filter((r) => r.status === 'discovered');
+  it('speaks to the trainee in one voice: "You asked", and no "the engineer"', async () => {
+    show('strong');
+    await userEvent.click(rowButton(found(/^Storage settings changed last week/)));
+    expect(region('Discovery review')).toHaveTextContent('You asked');
+    expect(region('Discovery review').textContent).not.toMatch(/\bthe engineer\b/i);
+  });
+
+  it('gives the whole width to the found or the missed facts when the other has none', () => {
+    show('strong');
+    expect(region('Discovery review').querySelector('.rp-discovery__columns')).toHaveClass(
+      'rp-discovery__columns--two',
+    );
+    cleanup();
+    show('weak');
+    const columns = region('Discovery review').querySelector('.rp-discovery__columns');
+    expect(columns).not.toHaveClass('rp-discovery__columns--two');
+    expect(columns?.querySelectorAll('.rp-discovery__column')).toHaveLength(1);
+    expect(region('Discovery review')).toHaveTextContent('Missed (3)');
+  });
+
+  it('opens every fact for paper, and closes them again afterwards', () => {
+    show('strong');
+    const button = rowButton(found(/^Storage settings changed last week/));
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    act(() => {
+      window.dispatchEvent(new Event('beforeprint'));
+    });
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    act(() => {
+      window.dispatchEvent(new Event('afterprint'));
+    });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('has no callout when every fact was found, and says when there was nothing to find', () => {
+    const results = CALLS.strong.report.discovery.results.filter((r) => r.status === 'discovered');
     showReport('strong', {
       ...CALLS.strong.report,
-      discovery: { results: found, found: 3, partial: 0, missed: 0, total: 3 },
+      discovery: { results, found: 3, partial: 0, missed: 0, total: 3 },
     });
-    expect(screen.queryByText('Suggested question')).not.toBeInTheDocument();
+    expect(screen.queryByText('A question worth asking')).not.toBeInTheDocument();
     cleanup();
     showReport('strong', {
       ...CALLS.strong.report,
@@ -705,7 +836,7 @@ describe('discovery review', () => {
     );
   });
 
-  it('shows no answer when the call ended on the trainee’s question, and no question the turn does not say', () => {
+  it('shows no answer when the call ended on the trainee’s question, and no question the turn does not say', async () => {
     const { report, session } = CALLS.strong;
     const results = report.discovery.results.map((r) =>
       r.factId === 'first-missing'
@@ -720,9 +851,8 @@ describe('discovery review', () => {
         reveal={false}
       />,
     );
-    const item = within(region('Discovery review'))
-      .getByRole('heading', { level: 4, name: 'The first recording went missing on Monday' })
-      .closest('li') as HTMLElement;
+    const item = found(/^The first recording went missing on Monday/);
+    await userEvent.click(rowButton(item));
     expect(item).toHaveTextContent('Insufficient evidence');
     expect(item).not.toHaveTextContent('a question nobody asked');
     expect(within(item).queryByText('The customer answered')).not.toBeInTheDocument();
@@ -730,15 +860,17 @@ describe('discovery review', () => {
 });
 
 describe('next practice', () => {
-  it('recommends one scenario by title, product and difficulty, with the target skill and the learning focus', async () => {
+  it('recommends one scenario by title, product and difficulty, with the target skill as its heading and the learning focus', async () => {
     show('strong');
     const section = region('Next practice');
+    // The skill it is for is the heading; the scenario is named under it.
     expect(within(section).getByRole('heading', { level: 3 })).toHaveTextContent(
-      'Staff locked out after an MFA change',
+      'Scoping & Discovery',
     );
+    expect(section).toHaveTextContent('Target skill');
+    expect(section).toHaveTextContent('Staff locked out after an MFA change');
     await within(section).findByText('Microsoft Entra ID');
     expect(section).toHaveTextContent('Standard');
-    expect(section).toHaveTextContent('Target skill: Scoping & Discovery');
     expect(section).toHaveTextContent('Learning focus');
     expect(section).toHaveTextContent(CALLS.strong.report.nextPractice.recommendation);
     expect(within(section).getByRole('link', { name: 'Practise this scenario' })).toHaveAttribute(
@@ -747,13 +879,42 @@ describe('next practice', () => {
     );
   });
 
-  it('shows the title from the report while the scenario list is still on its way', () => {
+  it('makes the way on the primary button', () => {
+    show('strong');
+    const cta = within(region('Next practice')).getByRole('link', {
+      name: 'Practise this scenario',
+    });
+    expect(cta).toHaveClass('ff-button--primary');
+  });
+
+  it('gives the learning focus as one sentence shown whole, with no "Show more" and nothing cut', () => {
+    const { report } = CALLS.strong;
+    const focus =
+      'In your next call, ask about three different areas before you suggest any fix (what exactly happens, when it started, what changed), then ask what the customer has already tried.';
+    const example =
+      'From this call, a question worth practising: \u201cDid anything change while you were away?\u201d';
+    showReport('strong', {
+      ...report,
+      nextPractice: { ...report.nextPractice, recommendation: `${focus} ${example}` },
+    });
+    const section = region('Next practice');
+    expect(section.querySelector('.rp-next__text')?.textContent).toBe(focus);
+    expect(section.querySelector('.rp-next__more')?.textContent).toBe(example);
+    expect(within(section).queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
+    expect(section.textContent).not.toContain('\u2026');
+  });
+
+  it('shows the skill and the title from the report while the scenario list is still on its way', () => {
     const waiting = scriptedClient(CALLS.weak.session);
     waiting.scenarios.mockReturnValue(new Promise(() => undefined));
     show('weak', waiting);
-    expect(within(region('Next practice')).getByRole('heading', { level: 3 })).toHaveTextContent(
-      'Shared calendar is not updating',
+    const section = region('Next practice');
+    expect(within(section).getByRole('heading', { level: 3 })).toHaveTextContent(
+      CALLS.weak.report.nextPractice.dimension === 'empathy-deescalation'
+        ? 'Empathy & De-escalation'
+        : /.+/,
     );
+    expect(section).toHaveTextContent('Shared calendar is not updating');
   });
 
   it('offers the scenario list instead when the suggested scenario no longer exists', async () => {

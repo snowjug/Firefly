@@ -171,11 +171,11 @@ export function TurnQuote({ turn, className }: { turn: EvidenceTurn; className?:
 
 const SUFFICIENCY_ICON: Record<Sufficiency, { icon: IconName; tone: BadgeTone }> = {
   sufficient: { icon: 'check-circle', tone: 'success' },
-  limited: { icon: 'warning', tone: 'warning' },
+  limited: { icon: 'info', tone: 'neutral' },
   insufficient: { icon: 'info', tone: 'neutral' },
 };
 
-/** How firm a score is: an icon and words, never a colour alone. */
+/** How firm a score is: an icon and words, never a colour alone. A soft score is information, not a warning. */
 export function EvidenceTag({
   value,
   size = 'small',
@@ -224,21 +224,27 @@ export function BehaviourBadge({ status }: { status: CareBehaviourResult['status
 
 /**
  * Text kept to a word budget at first, with the rest behind "Show more". Nothing is removed: a
- * longer text from the evaluator is complete once opened (and always complete on paper).
+ * longer text from the evaluator is complete once opened (and always complete on paper). With
+ * `whole` the first view only ever ends at the end of a sentence.
  */
 export function ClampedText({
   text,
   budget,
   budgetKey,
   className,
+  whole = false,
 }: {
   text: string;
   budget: number;
   /** Names the budget this text is held to, so it can be measured in a test or a probe. */
   budgetKey?: string;
   className?: string;
+  whole?: boolean;
 }) {
-  const { shown, full, clamped } = useMemo(() => clampWords(text, budget), [text, budget]);
+  const { shown, full, clamped } = useMemo(
+    () => clampWords(text, budget, { whole }),
+    [text, budget, whole],
+  );
   const [open, setOpen] = useState(false);
   const printing = usePrinting();
   const id = useId();

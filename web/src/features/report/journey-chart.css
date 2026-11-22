@@ -60,9 +60,14 @@
 .rp-chart__bandicon--escalating {
   color: var(--state-escalating-fg);
 }
+/* The rules between the bands are the edges a reader needs to tell one state from the next, so they
+   are drawn at the strength of a control's edge (3:1 and more against the ground), dotted to stay
+   quiet. */
 .rp-chart__rule {
-  stroke: var(--chart-grid);
+  stroke: var(--stroke-accessible);
   stroke-width: 1;
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
 }
 .rp-chart__axis,
 .rp-chart__tick {
@@ -73,10 +78,14 @@
 .rp-chart__label,
 .rp-chart__tick-label,
 .rp-chart__axis-title,
-.rp-chart__note {
+.rp-chart__note,
+.rp-chart__cue text {
   fill: var(--chart-axis);
   font-family: inherit;
   font-size: 12px;
+}
+.rp-chart__cue {
+  color: var(--chart-axis);
 }
 .rp-chart__label {
   fill: var(--fg-1);
@@ -181,6 +190,15 @@
   align-items: center;
   gap: var(--sp-1h);
 }
+/* What the heights mean and how a point is used: said once, under the key. */
+.rp-chart__footnote {
+  max-inline-size: var(--read-max);
+  margin-block-start: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  text-wrap: pretty;
+}
 
 @media (forced-colors: active) {
   .rp-chart__stripe,
@@ -199,8 +217,12 @@
   .rp-chart__label,
   .rp-chart__tick-label,
   .rp-chart__axis-title,
-  .rp-chart__note {
+  .rp-chart__note,
+  .rp-chart__cue text {
     fill: CanvasText;
+  }
+  .rp-chart__cue {
+    color: CanvasText;
   }
   .rp-chart__line {
     stroke: CanvasText;
@@ -245,8 +267,12 @@
   .rp-chart__label,
   .rp-chart__tick-label,
   .rp-chart__axis-title,
-  .rp-chart__note {
+  .rp-chart__note,
+  .rp-chart__cue text {
     fill: CanvasText;
+  }
+  .rp-chart__cue {
+    color: CanvasText;
   }
   .rp-chart__line {
     stroke: CanvasText;
