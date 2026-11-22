@@ -127,9 +127,10 @@ export function scrollToTurn(element: HTMLElement): () => void {
  * Moves to a section named by its id: opens it if it is a closed disclosure (or holds one marked
  * `data-rp-disclosure`), scrolls to it and puts keyboard and screen-reader focus on its heading (or
  * its summary), so the next thing read is the section itself. A heading is not a control, so it
- * gets no focus ring, as in the rest of the app.
+ * gets no focus ring, as in the rest of the app. The page's own navigation asks for the scroll to be
+ * `smooth`, which it is unless the person has asked for less motion; everything else lands at once.
  */
-export function jumpToSection(id: string): void {
+export function jumpToSection(id: string, options: { smooth?: boolean } = {}): void {
   const section = document.getElementById(id);
   if (!section) return;
   const disclosure =
@@ -137,7 +138,11 @@ export function jumpToSection(id: string): void {
       ? section
       : section.querySelector<HTMLDetailsElement>('details[data-rp-disclosure]');
   if (disclosure && !disclosure.open) disclosure.open = true;
-  section.scrollIntoView?.({ block: 'start', inline: 'nearest' });
+  section.scrollIntoView?.({
+    block: 'start',
+    inline: 'nearest',
+    behavior: options.smooth && !prefersReducedMotion() ? 'smooth' : 'auto',
+  });
   const target =
     section instanceof HTMLDetailsElement
       ? section.querySelector<HTMLElement>('summary')

@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,7 +29,7 @@ import {
   RESPONSIBLE_NOTE,
   STEPS,
 } from './landing-copy.ts';
-import { makeScenario } from './test-utils.ts';
+import { makeScenario, stubIntersection, watching } from './test-utils.ts';
 import { LANDING_TITLE } from './use-landing-title.ts';
 
 // The first test to visit the page compiles it; give a busy machine room.
@@ -38,6 +38,8 @@ vi.setConfig({ testTimeout: 30_000 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const LIBRARY = PRODUCT_IDS.map((product) => makeScenario(`${product}-a`, product));
@@ -294,6 +296,105 @@ describe('the landing page and the server', () => {
   });
 });
 
+describe('the landing page: how it comes in', () => {
+  it('shows the hero at once: none of its parts waits to be seen, and they stand in the order they come in', () => {
+    stubIntersection();
+    renderLanding();
+    const hero = screen.getByRole('region', { name: HERO.title });
+    // The promise is the largest thing on the page: it is never held back by an observer.
+    expect(hero.querySelectorAll('[data-reveal]')).toHaveLength(0);
+    const parts = ['.lp-hero__title', '.lp-hero__lead', '.lp-hero__actions', '.lp-hero__art'].map(
+      (selector) => hero.querySelector(selector),
+    );
+    for (const part of parts) expect(part).not.toBeNull();
+    const everything = [...hero.querySelectorAll('*')];
+    const places = parts.map((part) => everything.indexOf(part as Element));
+    expect(places).toEqual([...places].sort((a, b) => a - b));
+    // The call is the last part, in a column of its own, and plays as before.
+    expect(parts[3]).toContainElement(
+      screen.getByRole('figure', { name: 'Example call. The customer is synthetic.' }),
+    );
+  });
+
+  it('brings every part below the hero in once, as it scrolls into view, and keeps it', () => {
+    stubIntersection();
+    renderLanding();
+    const waiting = [
+      ...document.querySelectorAll(
+        '.lp-featured__head, .lp-section__inner > .lp-section__head, .lp-note, .lp-final',
+      ),
+    ];
+    // The featured heading, the heads of "How it works" and the evidence, the note and the last action.
+    expect(waiting.length).toBeGreaterThanOrEqual(5);
+    for (const element of waiting) {
+      expect(element, element.className).toHaveAttribute('data-reveal');
+      expect(element, element.className).not.toHaveAttribute('data-revealed');
+    }
+    for (const element of waiting) watching(element)?.report(true);
+    for (const element of waiting)
+      expect(element, element.className).toHaveAttribute('data-revealed');
+    // Seen once, seen for good: scrolling away does not put it back.
+    for (const element of waiting) expect(watching(element)).toBeUndefined();
+  });
+
+  it('follows each heading with what the section holds a beat later, and shows the heading first', () => {
+    stubIntersection();
+    renderLanding();
+    const region = screen.getByRole('region', { name: 'How it works' });
+    const head = region.querySelector('.lp-section__head') as HTMLElement;
+    const body = head.nextElementSibling as HTMLElement;
+    expect(body).toHaveAttribute('data-reveal');
+    expect(body.style.getPropertyValue('--reveal-i')).toBe('1');
+    expect(head.style.getPropertyValue('--reveal-i')).toBe('');
+    expect(body).toContainElement(within(region).getByRole('list'));
+  });
+
+  it('hides nothing where the browser cannot say what is in view', () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    renderLanding();
+    const waiting = [...document.querySelectorAll('[data-reveal]')];
+    expect(waiting.length).toBeGreaterThan(0);
+    for (const element of waiting)
+      expect(element, element.className).toHaveAttribute('data-revealed');
+  });
+
+  it('asks the page to glide, for a moment, when "Explore scenarios" is pressed, and then lets it jump again', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const root = document.documentElement;
+    root.removeAttribute('data-glide');
+    renderLanding();
+    expect(root).not.toHaveAttribute('data-glide');
+    fireEvent.click(screen.getByRole('link', { name: HERO.secondary }));
+    expect(root).toHaveAttribute('data-glide');
+    vi.advanceTimersByTime(1500);
+    expect(root).not.toHaveAttribute('data-glide');
+  });
+
+  it('stops asking the moment the page is left, so the next page’s scrolling is never smoothed', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const root = document.documentElement;
+    root.removeAttribute('data-glide');
+    const { unmount } = renderLanding();
+    fireEvent.click(screen.getByRole('link', { name: HERO.secondary }));
+    expect(root).toHaveAttribute('data-glide');
+    unmount();
+    expect(root).not.toHaveAttribute('data-glide');
+  });
+
+  it('does not ask for it from any other link: only the one that scrolls on the page glides', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const root = document.documentElement;
+    root.removeAttribute('data-glide');
+    renderLanding();
+    fireEvent.click(
+      within(screen.getByRole('region', { name: HERO.title })).getByRole('link', {
+        name: HERO.primary,
+      }),
+    );
+    expect(root).not.toHaveAttribute('data-glide');
+  });
+});
+
 describe('the landing page’s stylesheets', () => {
   const folder = join(process.cwd(), 'web/src/features/landing');
   const stripped = (path: string) => readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -422,6 +523,76 @@ describe('the landing page’s stylesheets', () => {
     // Both sizes the sheet asks for exist: a missing token would leave the title at its inherited size.
     expect(tokens).toMatch(/--fs-display-wide:\s*3rem;/);
     expect(tokens).toMatch(/--fs-display-widest:\s*3\.25rem;/);
+  });
+
+  it('brings the hero in a beat at a time, the promise first, and is done within about half a second', () => {
+    const css = sheet('hero.css');
+    // The entrance is the screen, motion-allowed block that names its keyframes (the glide has one too).
+    const queries = [
+      ...css.matchAll(/@media screen and \(prefers-reduced-motion: no-preference\)/g),
+    ].map((match) => block(css.slice(match.index), '@media'));
+    const entrance = queries.find((query) => query.includes('lp-hero-in')) ?? '';
+    expect(entrance, 'the entrance has a screen, motion-allowed query of its own').not.toBe('');
+    // Nothing outside that query starts it: paper and reduced motion keep every part where it is.
+    expect(css.replace(entrance, '')).not.toMatch(/animation:\s*lp-hero-in/);
+
+    const duration = token('dur-slow');
+    const step = token('dur-stagger');
+    expect(entrance).toMatch(/animation:\s*lp-hero-in var\(--motion-panel\)/);
+    expect(entrance).toMatch(
+      /animation-delay:\s*calc\(var\(--lp-beat, 0\) \* var\(--dur-stagger\) \* ([\d.]+)\)/,
+    );
+    const beatLength = step * Number(/--dur-stagger\) \* ([\d.]+)\)/.exec(entrance)?.[1]);
+    const beats = Object.fromEntries(
+      ['title', 'lead', 'actions', 'art'].map((name) => [
+        name,
+        Number(
+          new RegExp(`\\.lp-hero__${name}\\s*\\{\\s*--lp-beat:\\s*(\\d+)`).exec(entrance)?.[1] ?? 0,
+        ),
+      ]),
+    );
+    // The promise has no beat of its own, so it starts at once: it is the largest thing on the page.
+    expect(beats.title).toBe(0);
+    expect([beats.title, beats.lead, beats.actions, beats.art]).toEqual([0, 1, 2, 3]);
+    // Each part starts a few tens of milliseconds after the one before it, and the last one ends by 600.
+    expect(beatLength).toBeGreaterThanOrEqual(30);
+    expect(beatLength).toBeLessThanOrEqual(100);
+    expect((beats.art ?? 0) * beatLength + duration).toBeLessThanOrEqual(600);
+  });
+
+  it('glides to the featured row only while the page asks to and motion is allowed, never for good', () => {
+    const css = sheet('hero.css');
+    expect(css).toMatch(
+      /@media screen and \(prefers-reduced-motion: no-preference\)\s*\{\s*html\[data-glide\]\s*\{\s*scroll-behavior:\s*smooth;\s*\}/,
+    );
+    // Smooth scrolling for good would also animate the router's restoration and its jump to the top.
+    expect(css.replace(/html\[data-glide\]\s*\{[^}]*\}/, '')).not.toMatch(/scroll-behavior/);
+    expect(stripped(join(process.cwd(), 'web/src/design/base.css'))).toMatch(
+      /html\s*\{[^}]*scroll-behavior:\s*auto/,
+    );
+  });
+
+  it('moves the hero by opacity and a small rise only, and waits for no one: the call keeps its own clock', () => {
+    const css = sheet('hero.css');
+    const keyframes = block(css, '@keyframes lp-hero-in');
+    expect([...keyframes.matchAll(/([a-z-]+)\s*:/g)].map((match) => match[1]).sort()).toEqual([
+      'opacity',
+      'transform',
+    ]);
+    expect(keyframes).toMatch(/transform:\s*translateY\(var\(--move-sm\)\)/);
+    // It fills backwards only, so once a part has arrived nothing of the animation is left on it.
+    expect(css).not.toMatch(/lp-hero-in[^;]*(forwards|both)/);
+    expect(sheet('call-preview.css')).not.toMatch(/lp-hero-in/);
+  });
+
+  it('starts the promise faint, not at nothing, so the largest contentful paint is not held back by its fade', () => {
+    const css = sheet('hero.css');
+    expect(block(css, '@keyframes lp-hero-in')).toMatch(/opacity:\s*var\(--lp-from, 0\)/);
+    const start = Number(/\.lp-hero__title\s*\{\s*--lp-from:\s*([\d.]+);/.exec(css)?.[1]);
+    expect(start, 'the promise names where it starts').toBeGreaterThan(0);
+    expect(start).toBeLessThan(1);
+    // Only the promise: the other parts are not what the page is waiting to paint.
+    expect(css.match(/--lp-from:/g)).toHaveLength(1);
   });
 
   it('moves the hero action by transform only: it compresses 1 to 2 px and the arrow leans', () => {

@@ -278,6 +278,70 @@ test.describe('the printed report', () => {
     await page.emulateMedia({ media: 'screen' });
   });
 
+  test('holds nothing back: what waits on a screen to be scrolled to, counted or drawn is there whole on paper, and nothing moves', async ({
+    page,
+  }) => {
+    // Printed from the top, as it is by most people: nothing below the first screen has been scrolled to.
+    expect(
+      await page.locator('[data-reveal]:not([data-revealed])').count(),
+      'on a screen the parts below the first screen wait to be scrolled to',
+    ).toBeGreaterThan(0);
+    await page.emulateMedia({ media: 'print' });
+    await beforePrint(page);
+    const held = await page.evaluate(() => {
+      const found: string[] = [];
+      const name = (element: Element) => `${element.localName}.${[...element.classList].join('.')}`;
+      const all = (selector: string) => [...document.querySelectorAll(selector)];
+      for (const element of all('[data-reveal]')) {
+        const style = getComputedStyle(element);
+        if (style.opacity !== '1') found.push(`faded: ${name(element)}`);
+        if (style.animationName !== 'none') found.push(`animating: ${name(element)}`);
+      }
+      for (const element of all('.rp-chart__marker, .rp-chart__note')) {
+        if (getComputedStyle(element).opacity !== '1') found.push(`not drawn: ${name(element)}`);
+      }
+      for (const element of all('.rp-chart__reveal')) {
+        if (getComputedStyle(element).transform !== 'none') found.push(`covered: ${name(element)}`);
+      }
+      for (const element of all('.rp-ratio__seg')) {
+        if (getComputedStyle(element, '::before').transform !== 'none')
+          found.push(`not filled: ${name(element)}`);
+      }
+      for (const element of all('.rp-quote')) {
+        const style = getComputedStyle(element);
+        const drawn = getComputedStyle(element, '::before').content;
+        if (
+          parseFloat(style.borderInlineStartWidth) < 3 ||
+          style.borderInlineStartColor === 'rgba(0, 0, 0, 0)'
+        )
+          found.push(`no edge: ${name(element)}`);
+        if (drawn !== 'none' && drawn !== 'normal')
+          found.push(`line drawn over it: ${name(element)}`);
+      }
+      for (const element of all('.rp-count__value')) {
+        if (getComputedStyle(element).clipPath !== 'none') found.push(`clipped: ${name(element)}`);
+      }
+      // Only keyframe animations count: a transition that starts as the emulated media changes the
+      // colours is the emulation's, and a printed page has none.
+      const moving = document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation instanceof CSSAnimation &&
+            animation.playState === 'running' &&
+            Number.isFinite(animation.effect?.getComputedTiming().endTime),
+        )
+        .map((animation) => {
+          const target = (animation.effect as KeyframeEffect | null)?.target;
+          return `moving: ${(animation as CSSAnimation).animationName} on ${target ? name(target) : '?'}`;
+        });
+      return [...found, ...moving];
+    });
+    expect(held).toEqual([]);
+    await afterPrint(page);
+    await page.emulateMedia({ media: 'screen' });
+  });
+
   test('makes a PDF of several pages, from the whole report', async ({ page }) => {
     await page.emulateMedia({ media: 'print' });
     await beforePrint(page);

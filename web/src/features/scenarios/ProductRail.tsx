@@ -148,7 +148,7 @@ function Chip({ name, label, count, value, checked, disabled, product, onChoose 
       <span className="scn-chip__face">
         {product ? <ProductIcon product={product} size={18} /> : null}
         <span className="scn-chip__label">{label}</span>
-        <span className="scn-chip__count" aria-hidden="true">
+        <span className="scn-chip__count scn-n" key={count} aria-hidden="true">
           {count}
         </span>
         <VisuallyHidden>

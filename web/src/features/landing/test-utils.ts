@@ -18,7 +18,8 @@ export class FakeObserver {
   static all: FakeObserver[] = [];
   readonly callback: IntersectionObserverCallback;
   readonly options: IntersectionObserverInit | undefined;
-  private target: Element | null = null;
+  /** What it was asked to watch. */
+  target: Element | null = null;
   disconnected = false;
 
   constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
@@ -54,6 +55,18 @@ export function stubIntersection(): typeof FakeObserver {
 
 /** The observers that are still watching something, oldest first. */
 export const live = () => FakeObserver.all.filter((observer) => !observer.disconnected);
+
+/** The live observer watching this element: the one that decides when it counts as seen. */
+export const watching = (element: Element) =>
+  live().find((observer) => observer.target === element);
+
+/**
+ * The live observers that wait for their element to be a little way up the window (a negative
+ * bottom margin): the ones that light or release something once it is well in view, not the ones
+ * that bring a block in the moment its edge shows.
+ */
+export const wellInView = () =>
+  live().filter((observer) => /-\d+%/.test(observer.options?.rootMargin ?? ''));
 
 /**
  * Steps the fake animation frames 100 ms apart, as a browser would, so the loop clock advances by

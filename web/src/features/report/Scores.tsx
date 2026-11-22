@@ -1,7 +1,16 @@
 import { useId, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import type { DimensionId } from '#shared/domain/vocab.ts';
-import { Badge, Button, Icon, ScoreBar, useAnnouncer, useInViewOnce } from '../../design/index.ts';
+import {
+  Badge,
+  Button,
+  Icon,
+  ScoreBar,
+  useAnnouncer,
+  useReveal,
+  type RevealProps,
+} from '../../design/index.ts';
 import {
   EVIDENCE_LABEL,
   FIRST_LOOK,
@@ -10,22 +19,26 @@ import {
   plainUnexpectedTurn,
   quoteCount,
 } from './copy.ts';
-import { prefersReducedMotion } from './dom.ts';
 import { useEvidence } from './evidence.tsx';
 import { EvidenceTag, Field, InsufficientEvidence, Quote, Section } from './parts.tsx';
 import { usePrinting } from './print.tsx';
 import { skillRows, type SkillRow } from './report-model.ts';
+import { stagger } from './reveal.ts';
 import './scores.css';
 
 function Row({
   row,
   open,
-  revealed,
+  reveal,
+  place,
   onToggle,
 }: {
   row: SkillRow;
   open: boolean;
-  revealed: boolean;
+  /** The group's reveal: spread on the row, so the six come in one after another when the list is seen. */
+  reveal: RevealProps;
+  /** Where the row stands in the list. */
+  place: CSSProperties;
   onToggle: () => void;
 }) {
   const { dimension, quotes, firstLook } = row;
@@ -38,6 +51,8 @@ function Row({
       data-rp-origin={name}
       data-open={open ? '' : undefined}
       data-first-look={firstLook ? '' : undefined}
+      {...reveal}
+      style={place}
     >
       <div className="rp-skill__line">
         <h3 className="rp-skill__name">{name}</h3>
@@ -45,7 +60,7 @@ function Row({
           <ScoreBar
             score={dimension.score}
             size="small"
-            animate={revealed}
+            animate={reveal['data-revealed'] !== undefined}
             label={firstLook ? FIRST_LOOK : undefined}
             className={firstLook ? 'rp-skill__bar--first' : undefined}
           />
@@ -116,8 +131,9 @@ function Row({
  * segments with the number and the word, how many quotes back it, the reason in a line and a button
  * that opens the rest of the reason, the quotes and what to improve, in place. A score no quote
  * backs is drawn as a first look (dashed segments, "first look" for the word, one calm label) and
- * never carries a word such as "Strong". The rows come in one after another the first time the
- * section scrolls into view; with reduced motion they are simply there.
+ * never carries a word such as "Strong". The rows come in one after another, and each bar fills from
+ * empty to its own length, the first time the list scrolls into view (one watcher for the six, each
+ * row a step behind the one above it); with reduced motion they are simply there.
  */
 export function Scores({ report }: { report: CoachingReport }) {
   const { turns } = useEvidence();
@@ -125,8 +141,7 @@ export function Scores({ report }: { report: CoachingReport }) {
   const printing = usePrinting();
   const announce = useAnnouncer();
   const [open, setOpen] = useState<ReadonlySet<DimensionId>>(new Set());
-  const [ref, seen] = useInViewOnce<HTMLDivElement>();
-  const revealed = seen || prefersReducedMotion();
+  const [list, reveal] = useReveal<HTMLDivElement>();
   const all = rows.length > 0 && rows.every((r) => open.has(r.dimension.id));
   const toggle = (id: DimensionId) =>
     setOpen((current) => {
@@ -149,7 +164,7 @@ export function Scores({ report }: { report: CoachingReport }) {
         </Button>
       }
     >
-      <div className="rp-skills" ref={ref} data-revealed={revealed ? '' : undefined}>
+      <div className="rp-skills" ref={list}>
         <p className="rp-skills__head" aria-hidden="true">
           <span>Skill</span>
           <span>Score</span>
@@ -157,12 +172,13 @@ export function Scores({ report }: { report: CoachingReport }) {
           <span>Details</span>
         </p>
         <ul className="rp-skills__list" role="list">
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <Row
               key={row.dimension.id}
               row={row}
               open={printing || open.has(row.dimension.id)}
-              revealed={revealed}
+              reveal={reveal}
+              place={stagger(index + 2)}
               onToggle={() => toggle(row.dimension.id)}
             />
           ))}

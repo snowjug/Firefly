@@ -4,29 +4,59 @@ import { formatEstimate } from '../shared/domain/duration.ts';
 import {
   CALL_STAGE_LABELS,
   CURVEBALL_LABELS,
+  DIFFICULTIES,
   DIMENSIONS,
   IMPACT_LABELS,
   PROFICIENCY_LABELS,
   START_TEMPERATURE_LABELS,
 } from '../shared/domain/vocab.ts';
 import { expect, test } from './support/fixtures.ts';
-import { leakedSecrets, libraryScenarios } from './support/scenario-library.ts';
+import { settled } from './support/page-probes.ts';
+import {
+  cardOrder,
+  countText,
+  emptyFilter,
+  leakedSecrets,
+  libraryCount,
+  libraryScenario,
+  libraryScenarios,
+  libraryWhere,
+  scenarioNoun,
+  timeoutFor,
+} from './support/scenario-library.ts';
 
 // Choosing a scenario, setting up the call, and reading the case brief. The workspace is one page in
 // three areas: the product rail, a carousel of the scenarios it leaves, and the details of the chosen
 // one (what it is on the left, how to run it and "Start configuration" on the right). What is chosen
 // lives in the address, so a view can be shared and survives a refresh. How the carousel itself
 // behaves (keys, dragging, touch, the peek, themes) is in carousel.spec.ts.
+//
+// How many scenarios there are, how many of a product or a difficulty, and which card comes first are
+// read from the library (support/scenario-library.ts), never typed: the library grows.
 
 const MARCUS = 'outlook-shared-mailbox-missing'; // starter, first contact, calm, terse, novice
 const EXCHANGE = 'exchange-mail-delays-follow-up'; // standard, a follow-up with an earlier contact
 const RETIRED = 'locked-out-after-password-reset'; // a scenario of the old library, which is gone
 
-const countText = (shown: number, total: number) =>
-  shown === total ? `${total} scenarios` : `${shown} of ${total} scenarios`;
-
 const productLine = (scenario: PublicScenarioDTO) =>
   [scenario.product.name, scenario.product.area].filter(Boolean).join(' \u00b7 ');
+
+/** The card's line under its title: the impact, the mood and the call stage the scenario starts as. */
+const STAGE_WORDS = {
+  'first-contact': 'First contact',
+  'follow-up': 'Follow-up',
+  escalated: 'Escalated',
+  closure: 'Closure',
+} as const;
+const metaLine = (scenario: PublicScenarioDTO) =>
+  [
+    `${IMPACT_LABELS[scenario.impact].label} impact`,
+    START_TEMPERATURE_LABELS[scenario.startingTemperature].label.split(/[\s/]/)[0],
+    STAGE_WORDS[scenario.callStage],
+  ].join(' \u00b7 ');
+
+/** The name of a rail chip or a filter option that would show `n` scenarios: its label, then the count. */
+const withCount = (label: string, n: number) => new RegExp(`^${label}\\b.*\\b${scenarioNoun(n)}$`);
 
 /** What a card calls a scenario: the short title. It is also the name of the card's radio button. */
 const cardName = (scenario: Pick<PublicScenarioDTO, 'title' | 'shortTitle'>) =>
@@ -106,15 +136,16 @@ test.describe('choose a scenario', () => {
     api,
   }) => {
     const scenarios = await api.scenarios();
-    expect(scenarios).toHaveLength(16);
+    const total = libraryCount();
+    expect(scenarios, 'the server lists every scenario of the library').toHaveLength(total);
     await openWorkspace(page);
     await expect(page).toHaveTitle('Scenarios \u00b7 Firefly');
     await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
 
     await test.step('the count, and one card with one radio button for each scenario', async () => {
-      await expect(count(page)).toHaveText('16 scenarios');
-      await expect(gallery(page).getByRole('radio')).toHaveCount(16);
-      await expect(gallery(page).getByRole('listitem')).toHaveCount(16);
+      await expect(count(page)).toHaveText(countText(total));
+      await expect(gallery(page).getByRole('radio')).toHaveCount(total);
+      await expect(gallery(page).getByRole('listitem')).toHaveCount(total);
       for (const scenario of scenarios) {
         const card = cardOf(page, scenario);
         await expect(
@@ -142,16 +173,13 @@ test.describe('choose a scenario', () => {
     });
 
     await test.step('the first scenario is "Selected" in words, the others invite "Use scenario"', async () => {
-      const first = scenarios.find(
-        (scenario) => scenario.id === 'teams-cannot-join-external-meetings',
-      );
-      expect(first, 'the library has the Teams scenario').toBeDefined();
+      // The cards are laid out by product, then easiest first, then title: the first one is chosen.
+      const first = scenarios.find((scenario) => scenario.id === cardOrder()[0]?.id);
+      expect(first, 'the server lists the scenario that comes first').toBeDefined();
       const chosen = first as PublicScenarioDTO;
       await expect(radioOf(page, chosen)).toBeChecked();
       await expect(cardOf(page, chosen)).toContainText('Selected');
-      await expect(cardOf(page, chosen).locator('.scn-card__meta')).toHaveText(
-        'High impact \u00b7 Anxious \u00b7 First contact',
-      );
+      await expect(cardOf(page, chosen).locator('.scn-card__meta')).toHaveText(metaLine(chosen));
       await expect(gallery(page).getByRole('radio', { checked: true })).toHaveCount(1);
       await expect(page.locator('[data-scenario]:not([data-selected])').first()).toContainText(
         'Use scenario',
@@ -162,26 +190,32 @@ test.describe('choose a scenario', () => {
       const chips = rail(page).getByRole('radio');
       const products = new Set(scenarios.map((scenario) => scenario.product.id));
       await expect(chips).toHaveCount(products.size + 1);
-      await expect(chips.first()).toHaveAccessibleName(/^All\b.*16 scenarios$/);
+      await expect(chips.first()).toHaveAccessibleName(withCount('All', total));
       await expect(chips.first()).toBeChecked();
+      // Power Platform has a scenario, and the rail puts it last.
       await expect(chips.last()).toHaveAccessibleName(/^Power Platform\b/);
-      await expect(
-        rail(page).getByRole('radio', { name: /^Windows\b.*2 scenarios$/ }),
-      ).toBeAttached();
-      await expect(rail(page).getByRole('radio', { name: /^Teams\b.*1 scenario$/ })).toBeAttached();
+      for (const [label, product] of [
+        ['Windows', 'windows-11'],
+        ['Teams', 'teams'],
+      ] as const) {
+        const own = libraryWhere({ product }).length;
+        await expect(
+          rail(page).getByRole('radio', { name: withCount(label, own) }),
+          `${label} would show ${own}`,
+        ).toBeAttached();
+      }
     });
 
     await test.step('the difficulty filter, with the number of scenarios each choice would show', async () => {
       await expect(difficulty(page).getByRole('radio', { name: /^All\b/ })).toBeChecked();
-      await expect(
-        difficulty(page).getByRole('radio', { name: /^Starter\b.*4 scenarios$/ }),
-      ).toBeAttached();
-      await expect(
-        difficulty(page).getByRole('radio', { name: /^Standard\b.*8 scenarios$/ }),
-      ).toBeAttached();
-      await expect(
-        difficulty(page).getByRole('radio', { name: /^Challenge\b.*4 scenarios$/ }),
-      ).toBeAttached();
+      for (const level of DIFFICULTIES) {
+        const own = libraryWhere({ difficulty: level }).length;
+        const label = level.charAt(0).toUpperCase() + level.slice(1);
+        await expect(
+          difficulty(page).getByRole('radio', { name: withCount(label, own) }),
+          `${label} would show ${own}`,
+        ).toBeAttached();
+      }
     });
 
     await test.step('there is no issue-type filter any more', async () => {
@@ -191,7 +225,7 @@ test.describe('choose a scenario', () => {
 
     await test.step('the details of the first scenario are below the carousel, and nothing else is hidden away', async () => {
       const chosen = scenarios.find(
-        (scenario) => scenario.id === 'teams-cannot-join-external-meetings',
+        (scenario) => scenario.id === cardOrder()[0]?.id,
       ) as PublicScenarioDTO;
       const pane = paneFor(page, chosen);
       await expect(pane.getByRole('heading', { level: 2, name: chosen.title })).toBeVisible();
@@ -268,9 +302,9 @@ test.describe('choose a scenario', () => {
 
   test('has no search box: an old search link opens the whole library', async ({ page }) => {
     await page.goto('/scenarios?q=checkout');
-    await expect(count(page)).toHaveText('16 scenarios');
+    await expect(count(page)).toHaveText(countText(libraryCount()));
     await expect(page.getByRole('searchbox')).toHaveCount(0);
-    await expect(gallery(page).getByRole('radio')).toHaveCount(16);
+    await expect(gallery(page).getByRole('radio')).toHaveCount(libraryCount());
     // The address is tidied to what the workspace understands.
     await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBeNull();
   });
@@ -279,8 +313,8 @@ test.describe('choose a scenario', () => {
     page,
   }) => {
     await page.goto('/scenarios?f_issue=permissions');
-    await expect(count(page)).toHaveText('16 scenarios');
-    await expect(gallery(page).getByRole('radio')).toHaveCount(16);
+    await expect(count(page)).toHaveText(countText(libraryCount()));
+    await expect(gallery(page).getByRole('radio')).toHaveCount(libraryCount());
     await expect.poll(() => new URL(page.url()).searchParams.get('f_issue')).toBeNull();
   });
 
@@ -341,20 +375,22 @@ test.describe('choose a scenario', () => {
   });
 
   test('a filter that leaves nothing says so, and Clear filters is there', async ({ page }) => {
-    await page.goto('/scenarios?f_product=dynamics-365&f_difficulty=starter');
+    // A product and a difficulty that no scenario has both of: which pair it is depends on the library.
+    const empty = emptyFilter();
+    await page.goto(`/scenarios?f_product=${empty.product}&f_difficulty=${empty.difficulty}`);
     await expect(page.getByRole('heading', { level: 2, name: 'No scenarios match' })).toBeVisible();
-    await expect(count(page)).toHaveText('0 of 16 scenarios');
+    await expect(count(page)).toHaveText(countText(0));
     await expect(page.getByText('No scenario selected')).toBeVisible();
     await page.getByRole('button', { name: 'Clear filters' }).first().click();
-    await expect(count(page)).toHaveText('16 scenarios');
-    await expect(gallery(page).getByRole('radio')).toHaveCount(16);
+    await expect(count(page)).toHaveText(countText(libraryCount()));
+    await expect(gallery(page).getByRole('radio')).toHaveCount(libraryCount());
   });
 
   test('a link to a scenario that has been retired says so once and shows the library', async ({
     page,
   }) => {
     await page.goto(`/scenarios?scenario=${RETIRED}`);
-    await expect(count(page)).toHaveText('16 scenarios');
+    await expect(count(page)).toHaveText(countText(libraryCount()));
     const notice = page.getByText('That scenario is no longer in the library. Choose another.');
     await expect(notice).toBeVisible();
     // The first scenario is chosen instead, and the address says so.
@@ -371,7 +407,7 @@ test.describe('choose a scenario', () => {
     await api.completedCall();
     await api.createCall({ scenarioId: EXCHANGE });
     await openWorkspace(page);
-    await expect(count(page)).toHaveText('16 scenarios');
+    await expect(count(page)).toHaveText(countText(libraryCount()));
     await expect(page.getByRole('button', { name: /recent calls|history/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /recent calls|history|view report/i })).toHaveCount(
       0,
@@ -969,7 +1005,7 @@ test.describe('nothing the customer keeps back is shown before it is asked for',
   }
 
   test('the check can see a leak (a control, so that "nothing leaked" is not an empty result)', async () => {
-    const first = libraryScenarios()[0]!;
+    const first = libraryScenario(MARCUS);
     expect(first.secrets.length).toBeGreaterThan(4);
     expect(leakedSecrets(`Intro. ${first.secrets[0]} Outro.`, first.secrets)).toEqual([
       first.secrets[0],
@@ -977,7 +1013,7 @@ test.describe('nothing the customer keeps back is shown before it is asked for',
   });
 
   test('the brief of every scenario, with every disclosure open', async ({ page }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(timeoutFor(10_000));
     for (const scenario of libraryScenarios()) {
       await test.step(scenario.title, async () => {
         // Guided practice is the brief that says the most; a call back has its earlier contact too.
@@ -997,7 +1033,7 @@ test.describe('nothing the customer keeps back is shown before it is asked for',
   test('the carousel and the scenario details of every scenario, with the setup open', async ({
     page,
   }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(timeoutFor(10_000));
     for (const scenario of libraryScenarios()) {
       await test.step(scenario.title, async () => {
         await openWorkspace(page, `?scenario=${scenario.id}`);
@@ -1019,4 +1055,117 @@ test.describe('nothing the customer keeps back is shown before it is asked for',
       });
     }
   });
+});
+
+test.describe('motion', () => {
+  /**
+   * Notes each card as its arrival begins, from the first script on every page, so that no test has
+   * to catch an animation in flight: the browser says when one starts, however slow the run.
+   */
+  const noteArrivals = (page: Page) =>
+    page.addInitScript(() => {
+      const noted: string[] = [];
+      (window as unknown as { __arrived: string[] }).__arrived = noted;
+      document.addEventListener(
+        'animationstart',
+        (event) => {
+          if (event.animationName !== 'scn-card-arrive') return;
+          const card = (event.target as Element).closest('[data-scenario]');
+          noted.push(card?.getAttribute('data-scenario') ?? '');
+        },
+        true,
+      );
+    });
+  const arrived = (page: Page) =>
+    page.evaluate(() => (window as unknown as { __arrived: string[] }).__arrived.slice());
+
+  test('a filter brings in only the cards it adds: the cards that stay do not move, and only the first few arrive', async ({
+    page,
+  }) => {
+    const teams = libraryWhere({ product: 'teams' });
+    const staying = new Set(teams.map((scenario) => scenario.id));
+    await noteArrivals(page);
+    await openWorkspace(page);
+    await settled(page);
+
+    const first = await arrived(page);
+    await test.step('the first time there are cards, the first few arrive', async () => {
+      expect(first.length, 'some cards arrive').toBeGreaterThan(0);
+      expect(first.length, 'no more than eight arrive').toBeLessThanOrEqual(8);
+    });
+
+    await test.step('narrowing the row adds nothing, so nothing arrives', async () => {
+      await rail(page)
+        .getByRole('radio', { name: /^Teams\b/ })
+        .check();
+      await expect(gallery(page).getByRole('radio')).toHaveCount(teams.length);
+      await expect(page.locator('.scn-card[data-arrive]')).toHaveCount(0);
+      await settled(page);
+      expect(await arrived(page)).toEqual(first);
+    });
+
+    await test.step('widening it again brings in the other cards, one after another, and not the ones that stayed', async () => {
+      await rail(page)
+        .getByRole('radio', { name: /^All\b/ })
+        .check();
+      await expect(gallery(page).getByRole('radio')).toHaveCount(libraryCount());
+      const marked = await page.locator('.scn-card[data-arrive]').count();
+      expect(marked, 'the new cards are marked').toBeGreaterThan(0);
+      expect(marked, 'only the first eight arrive').toBeLessThanOrEqual(8);
+      expect(marked).toBeLessThanOrEqual(libraryCount() - teams.length);
+      for (const scenario of teams) {
+        await expect(cardOf(page, scenario)).not.toHaveAttribute('data-arrive', /.*/);
+      }
+      // The browser really animated them (the stylesheet and the markup agree), each once, and never a card that stayed.
+      await settled(page);
+      const started = (await arrived(page)).slice(first.length);
+      expect(started.length, 'the browser started their arrival').toBe(marked);
+      expect(new Set(started).size, 'each card arrives once').toBe(started.length);
+      for (const id of started) expect(staying.has(id), `${id} stayed`).toBe(false);
+    });
+  });
+
+  test.describe('with reduced motion', () => {
+    test.use({ reducedMotion: 'reduce' });
+
+    test('shows every card at once: nothing arrives', async ({ page }) => {
+      await noteArrivals(page);
+      await openWorkspace(page);
+      await expect(gallery(page).getByRole('radio')).toHaveCount(libraryCount());
+      await rail(page)
+        .getByRole('radio', { name: /^Teams\b/ })
+        .check();
+      await rail(page)
+        .getByRole('radio', { name: /^All\b/ })
+        .check();
+      await expect(gallery(page).getByRole('radio')).toHaveCount(libraryCount());
+      await settled(page);
+      expect(await arrived(page)).toEqual([]);
+    });
+  });
+
+  for (const motion of ['no-preference', 'reduce'] as const) {
+    test(`the chosen card ${motion === 'reduce' ? 'does not rise when motion is reduced' : 'sits a little higher than the others'}`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ reducedMotion: motion });
+      await openWorkspace(page);
+      await settled(page);
+      /** How far a card is moved up the page by its transform, in pixels (0 for none). */
+      const rise = (selector: string) =>
+        page
+          .locator(selector)
+          .first()
+          .evaluate((card) => {
+            const value = getComputedStyle(card).transform;
+            const numbers = value === 'none' ? [] : value.replace(/^matrix\(|\)$/g, '').split(',');
+            return numbers.length === 6 ? -Number(numbers[5]) : 0;
+          });
+      const chosen = await rise('.scn-card[data-selected]');
+      const other = await rise('.scn-card:not([data-selected])');
+      expect(other, 'a card nobody points at is flat').toBeCloseTo(0);
+      if (motion === 'reduce') expect(chosen).toBeCloseTo(0);
+      else expect(chosen).toBeGreaterThan(0);
+    });
+  }
 });

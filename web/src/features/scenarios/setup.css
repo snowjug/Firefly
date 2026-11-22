@@ -132,3 +132,16 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
 }
+
+/* ---- Arriving as a setting changes: the word "Changed", the explanation a "?" opens, the complications
+   to choose from and the note about what a lower preset trimmed fade in (and rise a few pixels) where
+   they stand, so a change is seen and nothing around them moves. For someone who asked for less they are
+   simply there. ------------------------------------------------------------------------------- */
+.scn-cf__changed {
+  animation: ff-fade var(--dur-normal) var(--ease-easy) backwards;
+}
+.scn-cf__help:not([hidden]),
+.scn-picks,
+.scn-note:not([hidden]) {
+  animation: ff-enter var(--dur-normal) var(--ease-decelerate) backwards;
+}

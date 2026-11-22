@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DESKTOP_MOUSE, stubMedia } from '../../design/interaction/test-utils.ts';
 import { STEPS } from './landing-copy.ts';
 import { Steps } from './Steps.tsx';
-import { live, stubIntersection } from './test-utils.ts';
+import { stubIntersection, wellInView } from './test-utils.ts';
 
 afterEach(() => {
   cleanup();
@@ -38,16 +38,16 @@ describe('the three steps', () => {
     stubIntersection();
     render(<Steps />);
     expect(list()).not.toHaveAttribute('data-active');
-    live()[0]?.report(false);
+    wellInView()[0]?.report(false);
     expect(list()).not.toHaveAttribute('data-active');
   });
 
   it('light once it has, and stay lit when it scrolls away again', () => {
     stubIntersection();
     render(<Steps />);
-    live()[0]?.report(true);
+    wellInView()[0]?.report(true);
     expect(list()).toHaveAttribute('data-active');
-    expect(live(), 'it stops watching once it has been seen').toHaveLength(0);
+    expect(wellInView(), 'it stops watching once it has been seen').toHaveLength(0);
     cleanup();
   });
 
@@ -61,9 +61,9 @@ describe('the three steps', () => {
   });
 
   it('is not lit by a sliver at the edge of the window: it waits until its top is a little way up', () => {
-    const Observer = stubIntersection();
+    stubIntersection();
     render(<Steps />);
-    expect(Observer.all[0]?.options?.rootMargin).toMatch(/-\d+%/);
+    expect(wellInView(), 'the lighting waits for a margin').toHaveLength(1);
   });
 
   it('shows all three lit at once for a visitor who has asked for less motion', () => {

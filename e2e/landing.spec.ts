@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expectAccessible, focusStop, type FocusStop } from './support/a11y.ts';
 import { expect, test } from './support/fixtures.ts';
-import { readProbe } from './support/page-probes.ts';
+import { readProbe, settled } from './support/page-probes.ts';
 
 // The landing page and the pages around it, as someone arriving for the first time: the hero and its
 // call preview, the featured scenarios, the header's moving parts, the themes and a phone.
@@ -60,6 +60,9 @@ async function walkTheSkills(page: Page) {
       };
     });
   await skills.first().focus();
+  // The card rises into place as it scrolls into view, and a box measured in mid-air carries the
+  // rounding of a fractional offset: measure it at rest.
+  await settled(page);
   const seen = [await geometry()];
   for (let index = 1; index < (await skills.count()); index += 1) {
     await page.keyboard.press('ArrowDown');
@@ -197,6 +200,99 @@ test.describe('landing', () => {
         .click();
       await expect(page).toHaveURL(/\/scenarios(\?.*)?$/);
       await expect(page.getByRole('heading', WORKSPACE)).toBeVisible();
+    });
+  });
+
+  test.describe('the hero’s entrance', () => {
+    /** Records, on every frame from the one a part first exists, how opaque it is, and the layout shift. */
+    const watchEntrance = (page: Page) =>
+      page.addInitScript(() => {
+        const w = window as unknown as {
+          __entrance: { shift: number; opacity: Record<string, number[]> };
+        };
+        w.__entrance = { shift: 0, opacity: {} };
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries() as unknown as {
+            value: number;
+            hadRecentInput: boolean;
+          }[]) {
+            if (!entry.hadRecentInput) w.__entrance.shift += entry.value;
+          }
+        }).observe({ type: 'layout-shift', buffered: true });
+        const parts = {
+          title: '.lp-hero__title',
+          lead: '.lp-hero__lead',
+          actions: '.lp-hero__actions',
+          call: '.lp-hero__art',
+        };
+        const tick = () => {
+          for (const [name, selector] of Object.entries(parts)) {
+            const element = document.querySelector(selector);
+            const seen = (w.__entrance.opacity[name] ??= []);
+            if (element && seen.length < 300) seen.push(Number(getComputedStyle(element).opacity));
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    const readEntrance = (page: Page) =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __entrance: { shift: number; opacity: Record<string, number[]> };
+            }
+          ).__entrance,
+      );
+    /** The first frame on which a part is on screen at all. */
+    const firstSeen = (frames: number[] | undefined) =>
+      (frames ?? []).findIndex((opacity) => opacity > 0);
+
+    test('comes in a beat at a time, the promise first and on screen from its first frame, and moves nothing else', async ({
+      page,
+    }) => {
+      await watchEntrance(page);
+      await page.goto('/');
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(TITLE);
+      await settled(page);
+      const { shift, opacity } = await readEntrance(page);
+
+      // The promise is the largest thing on the page: it is on screen from the first frame it exists
+      // (faint, then whole), because text held at nothing is not counted as painted until its fade ends.
+      const order = ['title', 'lead', 'actions', 'call'].map((name) => firstSeen(opacity[name]));
+      expect(order[0], 'the promise is on screen on its first frame').toBe(0);
+      // Each part is on screen no earlier than the one before it: the order they come in.
+      for (let index = 1; index < order.length; index += 1) {
+        expect(order[index], `part ${index} is seen at all`).toBeGreaterThanOrEqual(0);
+        expect(
+          order[index] as number,
+          `part ${index} comes after part ${index - 1}`,
+        ).toBeGreaterThanOrEqual(order[index - 1] as number);
+      }
+      // And they all end whole.
+      for (const frames of Object.values(opacity)) expect(frames.at(-1)).toBe(1);
+      // Opacity and a rise are all that moves: no layout shift.
+      expect(shift, 'layout shift').toBeLessThan(0.02);
+    });
+
+    test.describe('with reduced motion', () => {
+      test.use({ reducedMotion: 'reduce' });
+
+      test('has every part whole on its first frame, and moves nothing', async ({ page }) => {
+        await watchEntrance(page);
+        await page.goto('/');
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(TITLE);
+        const { shift, opacity } = await readEntrance(page);
+        for (const [name, frames] of Object.entries(opacity)) {
+          expect(frames.length, `${name} was watched`).toBeGreaterThan(0);
+          expect(
+            frames.every((value) => value === 1),
+            `${name} is whole on every frame`,
+          ).toBe(true);
+        }
+        expect(shift).toBeLessThan(0.02);
+        expect(await longAnimations(page)).toEqual([]);
+      });
     });
   });
 
@@ -457,6 +553,43 @@ test.describe('landing', () => {
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(TITLE);
     });
 
+    for (const motion of ['no-preference', 'reduce'] as const) {
+      test(`"Explore scenarios" ${motion === 'reduce' ? 'jumps to the featured row when motion is reduced' : 'glides to the featured row, and the page goes back to jumping once it has arrived'}`, async ({
+        page,
+      }) => {
+        await page.emulateMedia({ reducedMotion: motion });
+        await page.goto('/');
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText(TITLE);
+        await settled(page);
+        // Where the page is on every frame from the press.
+        const sampling = page.evaluate(
+          () =>
+            new Promise<number[]>((resolve) => {
+              const values: number[] = [];
+              const tick = () => {
+                values.push(Math.round(window.scrollY));
+                if (values.length < 45) requestAnimationFrame(tick);
+                else resolve(values);
+              };
+              requestAnimationFrame(tick);
+            }),
+        );
+        await page.getByRole('link', { name: 'Explore scenarios' }).click();
+        const values = await sampling;
+        const end = values.at(-1) ?? 0;
+        expect(end, 'it arrives at the featured row').toBeGreaterThan(200);
+        const onTheWay = values.filter((value) => value > 0 && value < end - 1);
+        if (motion === 'reduce') expect(onTheWay, 'it jumps').toEqual([]);
+        else expect(onTheWay.length, 'it glides: some frames are on the way').toBeGreaterThan(0);
+        // The page is asked to glide only for the moment the press needs.
+        await expect
+          .poll(() => page.evaluate(() => document.documentElement.hasAttribute('data-glide')), {
+            timeout: 4_000,
+          })
+          .toBe(false);
+      });
+    }
+
     test('say so quietly when the server cannot give them, with a way to try again and a link to all of them', async ({
       page,
       problems,
@@ -578,6 +711,8 @@ test.describe('landing', () => {
       await page.goto('/');
       const region = page.getByRole('region', { name: 'Coaching evidence' });
       await region.scrollIntoViewIfNeeded();
+      // The card rises into place as it scrolls into view: measure it at rest.
+      await settled(page);
       const rows = await region.locator('.lp-rp__row').evaluateAll((elements) =>
         elements.map((row) => {
           const box = row.getBoundingClientRect();
@@ -620,6 +755,9 @@ test.describe('landing', () => {
       await page.goto('/');
       const region = page.getByRole('region', { name: 'Coaching evidence' });
       await region.scrollIntoViewIfNeeded();
+      // The card rises into place as it scrolls into view; a click on a one-pixel radio is aimed at
+      // where the radio is when it is made, so wait until nothing moves.
+      await settled(page);
       const gaps = [];
       const skills = region.getByRole('group', { name: 'Skills' }).getByRole('radio');
       for (let index = 0; index < 6; index += 1) {

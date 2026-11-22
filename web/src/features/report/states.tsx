@@ -21,6 +21,23 @@ import './states.css';
 
 type Failed = Extract<ReportViewState, { kind: 'failed' }>;
 
+/**
+ * How long a wait is before there is anything to show for it, in milliseconds. A page that comes in
+ * faster than this never shows its placeholder at all, which is better than a grey flash. It is not
+ * motion, so it does not shrink when motion is reduced: a flash is as unwelcome there.
+ */
+export const WAIT_MS = 150;
+
+/** False until `ms` have passed. */
+function useAfter(ms: number): boolean {
+  const [past, setPast] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setPast(true), ms);
+    return () => window.clearTimeout(timer);
+  }, [ms]);
+  return past;
+}
+
 function Title({ children }: { children: string }) {
   return (
     <h1 id="report-title" className="t-title2" tabIndex={-1}>
@@ -29,15 +46,24 @@ function Title({ children }: { children: string }) {
   );
 }
 
-/** While the call is being fetched: the shape of the page, and a name for assistive technology. */
+/**
+ * While the call is being fetched: the page's name, a name for assistive technology and, only if the
+ * wait lasts, the shape of the page (see `WAIT_MS`).
+ */
 export function LoadingView() {
+  const waited = useAfter(WAIT_MS);
   return (
     <div className="rp-state l-page" aria-busy="true">
       <Title>Coaching report</Title>
       <div role="status">
         <VisuallyHidden>Loading your coaching report</VisuallyHidden>
       </div>
-      <div className="rp-state__skeleton" aria-hidden="true">
+      <div
+        className="rp-state__skeleton"
+        aria-hidden="true"
+        data-guarded=""
+        data-waiting={waited ? undefined : ''}
+      >
         <Skeleton variant="text" width="50%" />
         <Skeleton variant="rect" height={72} />
         <Skeleton variant="text" lines={3} />
@@ -106,7 +132,8 @@ function StepIcon({ status }: { status: StepStatus }) {
 /**
  * The call has ended and the server is building the report. The five steps are the ones the
  * server reports, each with an icon and a word. After a long wait it says so, and offers the
- * transcript, which is already saved.
+ * transcript, which is already saved. The list is not drawn for the first moment (see `WAIT_MS`: a
+ * report that is ready at once never shows it); it is in the page, and read, from the first.
  */
 export function EvaluatingView({
   session,
@@ -118,6 +145,7 @@ export function EvaluatingView({
   slowAfterMs: number;
 }) {
   const [slow, setSlow] = useState(false);
+  const waited = useAfter(WAIT_MS);
   const announce = useAnnouncer();
   const statuses = stepStatuses(session.evaluationPhase);
   const turns = useMemo(() => evidenceTurns(session), [session]);
@@ -136,12 +164,18 @@ export function EvaluatingView({
     <div className="rp-state l-page">
       <Title>Building your coaching report</Title>
       <p className="rp-state__lead">Your transcript is saved.</p>
-      <ol className="rp-steps" role="list" aria-label="Report progress">
+      <ol
+        className="rp-steps"
+        role="list"
+        aria-label="Report progress"
+        data-guarded=""
+        data-waiting={waited ? undefined : ''}
+      >
         {PHASE_STEPS.map((step, index) => {
           const status = statuses[index] ?? 'waiting';
           return (
             <li className="rp-step" data-status={status} key={step.phase}>
-              <StepIcon status={status} />
+              <StepIcon key={status} status={status} />
               <span className="rp-step__title">
                 {step.title}
                 <VisuallyHidden>, </VisuallyHidden>

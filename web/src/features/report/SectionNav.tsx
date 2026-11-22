@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSlidingIndicator } from '../../app/shell/use-sliding-indicator.ts';
 import { SectionLink } from './evidence.tsx';
 import type { SectionItem } from './report-model.ts';
 import './report.css';
@@ -41,17 +42,26 @@ export function useActiveSection(ids: readonly string[]): string {
   return active;
 }
 
-/** "On this page" for wide screens: always in view beside the report, with the current part marked. */
+/**
+ * "On this page" for wide screens: always in view beside the report, with the current part marked.
+ * The mark is one line that slides to the part the reader has reached (transform only, from the
+ * shell's `useSlidingIndicator`), and a click on an entry scrolls to it smoothly unless motion is
+ * reduced.
+ */
 export function SectionNav({ items }: { items: readonly SectionItem[] }) {
   const active = useActiveSection(items.map((item) => item.id));
+  const nav = useRef<HTMLElement>(null);
+  useSlidingIndicator(nav, '[aria-current="location"]', active);
   return (
-    <nav className="rp-nav no-print" aria-label="On this page">
+    <nav className="rp-nav no-print" aria-label="On this page" ref={nav}>
       <p className="rp-nav__title">On this page</p>
+      <span className="rp-nav__indicator" aria-hidden="true" />
       <ul className="rp-nav__list" role="list">
         {items.map((item) => (
           <li key={item.id}>
             <SectionLink
               to={item.id}
+              smooth
               className="rp-nav__link"
               aria-current={active === item.id ? 'location' : undefined}
             >
@@ -76,6 +86,7 @@ export function JumpTo({ items }: { items: readonly SectionItem[] }) {
             <li key={item.id}>
               <SectionLink
                 to={item.id}
+                smooth
                 className="rp-jump__link"
                 onClick={() => box.current?.removeAttribute('open')}
               >

@@ -124,12 +124,19 @@
   white-space: nowrap;
   transition:
     background-color var(--motion-instant) var(--ease-easy),
-    color var(--motion-instant) var(--ease-easy);
+    color var(--motion-instant) var(--ease-easy),
+    transform var(--motion-instant) var(--ease-easy);
 }
 @media (hover: hover) {
   .scn-chip:hover .scn-chip__face {
     background: var(--bg-hover);
   }
+}
+/* A press settles the chip a pixel and darkens it, as a button's does: the answer to a click is at once.
+   The radio covers the chip, so it is the radio that is pressed (and a disabled one never is). */
+.scn-chip__input:not(:disabled):active + .scn-chip__face {
+  background: var(--bg-pressed);
+  transform: translateY(var(--press-shift));
 }
 .scn-chip__input:checked + .scn-chip__face {
   color: var(--fg-1);

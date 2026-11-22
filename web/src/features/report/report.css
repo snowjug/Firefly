@@ -84,10 +84,32 @@
   color: var(--fg-1);
   text-decoration: none;
 }
+/* The section the reader is in is heavier and darker, and carries the indicator (below), which is the
+   line that slides to it from the one before. */
 .rp-nav__link[aria-current='location'] {
-  border-inline-start-color: var(--brand-stroke);
   color: var(--fg-1);
   font-weight: var(--fw-semibold);
+}
+/* ONE element at the left of the list, moved to the current link by script (use-sliding-indicator.ts
+   writes --ind-cy and --ind-o on the navigation). It moves with transform only, it is hidden until
+   there is a place to put it, and under reduced motion every time here is an instant, so it simply is
+   where it should be. */
+.rp-nav__indicator {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  inline-size: var(--stroke-w-thick);
+  block-size: 1.25rem;
+  background: var(--brand-stroke);
+  opacity: var(--ind-o, 0);
+  transform: translateY(calc(var(--ind-cy, 0px) - 0.625rem));
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-easy);
+}
+.rp-nav[data-placed] .rp-nav__indicator {
+  transition:
+    transform var(--dur-normal) var(--ease-decelerate),
+    opacity var(--dur-fast) var(--ease-easy);
 }
 
 .rp-jump {
@@ -267,6 +289,7 @@
 
 /* ---- Quotes: the trainee's words, set apart as evidence ----------------------------------- */
 .rp-quote {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--sp-1h);
@@ -342,6 +365,7 @@
 
 /* ---- Next practice ------------------------------------------------------------------------ */
 .rp-next {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -352,6 +376,24 @@
   border-radius: var(--r-xl);
   background: var(--bg-raised);
   box-shadow: var(--shadow-2);
+  transition:
+    transform var(--dur-fast) var(--ease-decelerate),
+    box-shadow var(--dur-fast) var(--ease-easy);
+}
+/* The card answers a press as the scenario cards do (nothing at all when motion is reduced), and a
+   mouse as well: it rises a little. The mouse part needs a fine, hovering pointer and the flag
+   `usePointerFx` sets, so a touch screen, reduced motion and a slow display never get it. */
+.rp-next:active {
+  transform: scale(calc(1 - var(--press-grow)));
+}
+@media (hover: hover) and (pointer: fine) {
+  .rp-next[data-fx='on']:hover {
+    transform: translateY(calc(var(--move-lift) * -1));
+    box-shadow: var(--shadow-8);
+  }
+  .rp-next[data-fx='on']:hover:active {
+    transform: scale(calc(1 - var(--press-grow)));
+  }
 }
 .rp-next__body {
   display: flex;
@@ -400,11 +442,26 @@
   line-height: var(--lh-compact);
   text-wrap: pretty;
 }
-/* Large text must not push the card wider than the screen: the label wraps inside the button. */
+/* Large text must not push the card wider than the screen: the label wraps inside the button. The
+   whole card is the button's target (its edge is the card's), so the lift and the press the card
+   shows are the lift and the press of the thing that will be followed. */
 .ff-button.rp-next__cta {
   --_px: var(--sp-4);
+  position: static;
   max-inline-size: 100%;
   overflow-wrap: anywhere;
+}
+.rp-next__cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-xl);
+}
+/* A button compresses itself a pixel when it is pressed, and a transform makes the button the box its
+   stretched edge is measured from: the target would shrink to the button as the press began, and
+   a press away from it would be let go outside it and follow nothing. The card is what settles. */
+.rp-next .ff-button.rp-next__cta:active {
+  transform: none;
 }
 
 /* ---- Actions ------------------------------------------------------------------------------ */
@@ -482,33 +539,64 @@
   color: var(--fg-2);
 }
 
-/* ---- Motion: only where it is not reduced, and only transform and opacity ----------------- */
-@keyframes rp-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(var(--move-sm));
+/* ---- Motion: only on a screen, only where motion is not reduced, and only transform and opacity ----
+   Nothing here is held once it ends (every fill is backwards only), and whatever a rule starts a
+   thing from (a line at nothing, a block a little to one side) is only ever drawn inside this one
+   media query: on paper, for a person who asked for less and for a script that never runs, the page is
+   still and whole. ---------------------------------------------------------------------------- */
+@media screen and (prefers-reduced-motion: no-preference) {
+  /* A report made while the page was open comes in over the progress that stood there. */
+  .rp-reveal {
+    animation: ff-fade var(--dur-slow) var(--ease-easy) backwards;
   }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .rp-reveal .rp-exec,
-  .rp-reveal .rp-main > * {
-    animation: rp-reveal var(--dur-slow) var(--ease-decelerate) both;
+
+  /* A number that counts up (count-up.tsx). Its real text stays in the page and is only clipped, the
+     way a visually hidden element is, while it counts; the digits that are seen come from the
+     attribute, as generated content that is not spoken. */
+  .rp-count[data-counting] .rp-count__value {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
-  .rp-reveal .rp-main > :nth-child(1) {
-    animation-delay: var(--dur-stagger);
+  .rp-count[data-counting]::after {
+    content: attr(data-shown);
+    content: attr(data-shown) / '';
   }
-  .rp-reveal .rp-main > :nth-child(2) {
-    animation-delay: calc(var(--dur-stagger) * 2);
+
+  /* The line beside a quote draws itself, from the top, the first time the quote is seen. It stands
+     where the quote's edge is (the edge is clear until it is drawn), and on paper the edge is the
+     border it always was. */
+  .rp-quote {
+    border-inline-start-color: transparent;
   }
-  .rp-reveal .rp-main > :nth-child(n + 3) {
-    animation-delay: calc(var(--dur-stagger) * 3);
+  .rp-quote::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: -3px;
+    inline-size: 3px;
+    background: var(--stroke-accessible);
+    transform-origin: top;
+    transition: transform var(--dur-slow) var(--ease-decelerate);
+  }
+  .rp-quote:not([data-drawn])::before {
+    transform: scaleY(0);
+  }
+
+  /* What About holds comes in with a fade when it is opened, as a disclosure's panel does. */
+  .rp-about__details[open] .rp-about__body {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate) backwards;
   }
 }
 
 /* ---- Forced colours: the system draws borders and text; fills and the chosen edge need help --- */
 @media (forced-colors: active) {
-  .rp-nav__link[aria-current='location'] {
-    border-inline-start-color: Highlight;
+  .rp-nav__indicator {
+    forced-color-adjust: none;
+    background: Highlight;
   }
   .rp-more {
     color: LinkText;
@@ -517,6 +605,9 @@
   .rp-noevidence,
   .rp-next {
     border-color: CanvasText;
+  }
+  .rp-quote::before {
+    display: none;
   }
 }
 
@@ -563,6 +654,14 @@
     --status-success-border: CanvasText;
     --status-warning-fg: CanvasText;
     --status-info-border: CanvasText;
+  }
+  /* Paper does not move. A part of the design system (a score bar, the panel of a disclosure) starts an
+     animation when the page is made ready to print, and print would take it on its first frame: a bar
+     at nothing, a panel not yet there. None of it plays, so everything is as it ends. */
+  .rp-page *,
+  .rp-page *::before,
+  .rp-page *::after {
+    animation: none !important;
   }
   .rp-layout {
     display: block;
@@ -615,9 +714,5 @@
   a {
     color: inherit;
     text-decoration: none;
-  }
-  .rp-reveal .rp-exec,
-  .rp-reveal .rp-main > * {
-    animation: none;
   }
 }

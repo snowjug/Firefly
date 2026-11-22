@@ -1,11 +1,20 @@
 import { useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { SessionDTO } from '#shared/domain/api.ts';
-import { Button, Dialog, Icon, LinkButton, MessageBar, useAnnouncer } from '../../design/index.ts';
+import {
+  Button,
+  Dialog,
+  Icon,
+  LinkButton,
+  MessageBar,
+  useAnnouncer,
+  useReveal,
+} from '../../design/index.ts';
 import { errorMessage } from '../../lib/api.ts';
 import { SCENARIO_LIST, repeatLink } from './brief-href.ts';
 import { jumpToSection } from './dom.ts';
 import { Section } from './parts.tsx';
+import { stagger } from './reveal.ts';
 import type { ScenarioIndex } from './scenario-index.ts';
 import type { ReportClient } from './useReportSession.ts';
 import './report.css';
@@ -100,9 +109,10 @@ export function Actions({
 }) {
   const repeat = repeatLink(session, index);
   const note = useId();
+  const [ref, reveal] = useReveal<HTMLDivElement>();
   return (
     <Section id="actions" title="Actions">
-      <div className="rp-actions">
+      <div className="rp-actions" ref={ref} {...reveal} style={stagger(1)}>
         <LinkButton to={SCENARIO_LIST} appearance="primary" icon="phone">
           Try another call
         </LinkButton>
@@ -124,14 +134,14 @@ export function Actions({
         </LinkButton>
       </div>
       {repeat.available ? null : (
-        <p id={note} className="rp-actions__note">
+        <p id={note} className="rp-actions__note" {...reveal} style={stagger(2)}>
           <Icon name="info" size={16} />
           <span>
             This scenario is no longer available, so Repeat scenario opens the scenario list.
           </span>
         </p>
       )}
-      <div className="rp-actions rp-actions--danger">
+      <div className="rp-actions rp-actions--danger" {...reveal} style={stagger(3)}>
         <DeleteCall sessionId={session.id} client={client} />
       </div>
     </Section>

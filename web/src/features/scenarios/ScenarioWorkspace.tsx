@@ -18,6 +18,7 @@ import {
   type Filters,
 } from './catalogue.ts';
 import { briefPath, defaultConfig, parseConfig, type CallConfig } from './config-params.ts';
+import { useArrivals } from './arrival.ts';
 import { DifficultyFilter } from './DifficultyFilter.tsx';
 import { GalleryEmpty, GallerySkeleton, RailSkeleton } from './GalleryStates.tsx';
 import { cardTitle } from './labels.ts';
@@ -140,6 +141,8 @@ export function ScenarioWorkspace() {
   const selectedIndex = selected
     ? visible.findIndex((scenario) => scenario.id === selected.id)
     : -1;
+  // The cards a filter brings in fade and rise, one after another; the ones that stay do not move.
+  const arrivals = useArrivals(visible.map((scenario) => scenario.id));
 
   if (failed) {
     return (
@@ -165,16 +168,20 @@ export function ScenarioWorkspace() {
   } else {
     gallery = (
       <Carousel label="Scenarios" noun="scenarios" mode="select" selectedIndex={selectedIndex}>
-        {visible.map((scenario) => (
-          <ScenarioCard
-            key={scenario.id}
-            scenario={scenario}
-            mode="select"
-            name={group}
-            selected={scenario.id === selected?.id}
-            onSelect={select}
-          />
-        ))}
+        {visible.map((scenario) => {
+          const place = arrivals.get(scenario.id);
+          return (
+            <ScenarioCard
+              key={scenario.id}
+              scenario={scenario}
+              mode="select"
+              name={group}
+              selected={scenario.id === selected?.id}
+              onSelect={select}
+              arrive={place === undefined ? undefined : { index: place }}
+            />
+          );
+        })}
       </Carousel>
     );
   }
@@ -214,7 +221,7 @@ export function ScenarioWorkspace() {
             />
           ) : null}
           {filtered ? (
-            <Button size="small" appearance="subtle" onClick={clearFilters}>
+            <Button size="small" appearance="subtle" className="u-fade" onClick={clearFilters}>
               Clear filters
             </Button>
           ) : null}

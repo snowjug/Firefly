@@ -6,12 +6,14 @@ import { AnnouncerProvider } from '../../design/primitives/LiveRegion.tsx';
 import { ApiError, api } from '../../lib/api.ts';
 import { FEATURED } from './landing-copy.ts';
 import { FeaturedScenarios } from './FeaturedScenarios.tsx';
-import { makeScenario } from './test-utils.ts';
+import { ARRIVAL_STEPS } from '../scenarios/arrival.ts';
+import { makeScenario, stubIntersection, watching } from './test-utils.ts';
 import { PRODUCT_IDS } from '#shared/domain/vocab.ts';
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 // The first test to show the gallery compiles it; give a busy machine room.
@@ -96,6 +98,60 @@ describe('the featured scenarios: loaded', () => {
     vi.spyOn(api, 'scenarios').mockResolvedValue(library());
     setUp();
     expect(await gallery()).toHaveAttribute('aria-roledescription', 'carousel');
+  });
+});
+
+describe('the featured scenarios: how the cards arrive', () => {
+  const cards = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('.scn-card')];
+  const step = (card: HTMLElement) => Number(card.style.getPropertyValue('--reveal-i'));
+
+  it('rest on their first frame until the row has been seen, then arrive together, one after another', async () => {
+    stubIntersection();
+    vi.spyOn(api, 'scenarios').mockResolvedValue(library());
+    setUp();
+    const row = await gallery();
+    const shown = cards(row);
+    expect(shown).toHaveLength(12);
+    const arriving = shown.filter((card) => card.hasAttribute('data-arrive'));
+    expect(arriving.length).toBeGreaterThan(0);
+    for (const card of arriving) expect(card).toHaveAttribute('data-arrive', 'waiting');
+
+    // One observer watches the whole row, not one for each card.
+    const observer = watching(row.parentElement as HTMLElement);
+    expect(observer).toBeDefined();
+    observer?.report(false);
+    for (const card of arriving) expect(card).toHaveAttribute('data-arrive', 'waiting');
+    observer?.report(true);
+    for (const card of arriving) expect(card).toHaveAttribute('data-arrive', 'now');
+    // They stop watching once the row has been seen: it arrives once.
+    expect(watching(row.parentElement as HTMLElement)).toBeUndefined();
+  });
+
+  it('come in a beat apart, in the order they are shown, and only the first few: the rest are simply there', async () => {
+    stubIntersection();
+    vi.spyOn(api, 'scenarios').mockResolvedValue(library());
+    setUp();
+    const shown = cards(await gallery());
+    shown.forEach((card, index) => {
+      if (index < ARRIVAL_STEPS) expect(step(card), `card ${index}`).toBe(index);
+      else expect(card, `card ${index}`).not.toHaveAttribute('data-arrive');
+    });
+  });
+
+  it('do not wait where the browser cannot say what is in view, so nothing stays hidden', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    vi.spyOn(api, 'scenarios').mockResolvedValue(library());
+    setUp();
+    const shown = cards(await gallery());
+    for (const card of shown) expect(card.getAttribute('data-arrive')).not.toBe('waiting');
+  });
+
+  it('keep every card a link into the workspace, whether or not it has arrived', async () => {
+    stubIntersection();
+    vi.spyOn(api, 'scenarios').mockResolvedValue(library());
+    setUp();
+    const row = await gallery();
+    expect(within(row).getAllByRole('link', { name: /Use scenario/ })).toHaveLength(12);
   });
 });
 

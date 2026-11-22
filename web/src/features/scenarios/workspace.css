@@ -127,6 +127,15 @@
 }
 
 /* ---- Loading and empty -------------------------------------------------------------------------- */
+/* The grey stand-ins wait a moment before they show, so a quick load never flashes them, and then they
+   fade in. A person who asked for less motion has them at once, and so does paper. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .scn-gallery-loading,
+  .scn-rail-loading {
+    animation: ff-fade var(--dur-normal) var(--ease-easy) backwards;
+    animation-delay: var(--dur-fast);
+  }
+}
 .scn-gallery-loading__row {
   display: flex;
   gap: var(--sp-4);

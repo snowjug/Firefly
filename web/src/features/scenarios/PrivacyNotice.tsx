@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Icon } from '../../design/icons.tsx';
+import { mergeRefs } from '../../design/interaction/merge-refs.ts';
+import { useReveal } from '../../design/interaction/use-reveal.ts';
 import { Button } from '../../design/primitives/Button.tsx';
 import { Disclosure } from '../../design/primitives/Disclosure.tsx';
 import { MICROPHONE_NOTICE, PRIVACY_DETAILS_LABEL, type NoticeDetail } from './privacy.ts';
@@ -32,11 +34,13 @@ function Details({ details }: { details: readonly NoticeDetail[] }) {
 /**
  * Before the first spoken call: one sentence about the microphone, with the details behind it and a
  * way to say it has been read. Afterwards, and for a call that is only typed, a closed row. It only
- * tells: nothing here opens the microphone.
+ * tells: nothing here opens the microphone. Whichever it is, it rises into place the first time it
+ * scrolls into view, and stays in place when it turns into the closed row.
  */
 export function PrivacyNotice({ details, introduce, onAcknowledge }: PrivacyNoticeProps) {
-  const row = useRef<HTMLDivElement>(null);
+  const row = useRef<HTMLElement>(null);
   const readIt = useRef(false);
+  const [seen, reveal] = useReveal<HTMLElement>();
 
   // "Got it" removes the button that has focus. The notice has become a closed row, so focus goes to
   // the row, which is where the details went, instead of falling back to the top of the page.
@@ -48,7 +52,7 @@ export function PrivacyNotice({ details, introduce, onAcknowledge }: PrivacyNoti
 
   if (!introduce) {
     return (
-      <div ref={row}>
+      <div ref={mergeRefs(row, seen)} {...reveal}>
         <Disclosure
           summary={PRIVACY_DETAILS_LABEL}
           icon="shield"
@@ -61,7 +65,7 @@ export function PrivacyNotice({ details, introduce, onAcknowledge }: PrivacyNoti
     );
   }
   return (
-    <section className="brf-notice" aria-label="Privacy notice">
+    <section ref={seen} {...reveal} className="brf-notice" aria-label="Privacy notice">
       <Icon name="shield" size={20} className="brf-notice__icon" />
       <div className="brf-notice__body">
         <p className="brf-notice__text">{MICROPHONE_NOTICE}</p>

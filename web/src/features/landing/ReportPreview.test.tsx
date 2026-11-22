@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DESKTOP_MOUSE, stubMedia } from '../../design/interaction/test-utils.ts';
 import { REPORT_FIRST, REPORT_PREVIEW, REPORT_ROWS } from './landing-copy.ts';
 import { ReportPreview } from './ReportPreview.tsx';
-import { live, stubIntersection } from './test-utils.ts';
+import { stubIntersection, wellInView } from './test-utils.ts';
 import { DIMENSIONS, DIMENSION_IDS } from '#shared/domain/vocab.ts';
 
 afterEach(() => {
@@ -172,9 +172,9 @@ describe('the report preview: the scores come after the evidence', () => {
 
   it('reveals the scores once the card has scrolled into view, and keeps them', () => {
     setUp();
-    live()[0]?.report(true);
+    wellInView()[0]?.report(true);
     expect(card()).toHaveAttribute('data-revealed');
-    live()[0]?.report(false);
+    wellInView()[0]?.report(false);
     expect(card()).toHaveAttribute('data-revealed');
   });
 
@@ -199,8 +199,8 @@ describe('the report preview: the scores come after the evidence', () => {
   });
 
   it('is not revealed by a sliver at the edge of the window', () => {
-    const Observer = stubIntersection();
+    stubIntersection();
     render(<ReportPreview />);
-    expect(Observer.all[0]?.options?.rootMargin).toMatch(/-\d+%/);
+    expect(wellInView(), 'the scores wait for a margin').toHaveLength(1);
   });
 });

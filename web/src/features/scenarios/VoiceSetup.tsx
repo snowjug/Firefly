@@ -160,8 +160,12 @@ export function MicRow({
   return (
     <div className="brf-ready" data-tone={readiness.tone}>
       <p className="brf-ready__status" id={statusId} role="status">
-        <Icon name={readiness.icon} size={18} />
-        <span>{readiness.text}</span>
+        {/* A new line of readiness fades in where the old one was: the icon and the words change
+            together, and the row keeps its height, so nothing below it moves. */}
+        <span className="brf-ready__message" key={readiness.text}>
+          <Icon name={readiness.icon} size={18} />
+          <span>{readiness.text}</span>
+        </span>
       </p>
       {canSpeak ? (
         <div className="brf-ready__check">

@@ -40,7 +40,7 @@ export function GalleryEmpty({
   onRetry(): void;
 }) {
   return (
-    <div className="scn-empty">
+    <div className="scn-empty u-enter">
       <Icon name="search" size={28} className="scn-empty__icon" />
       <h2 className="scn-empty__title">
         {filtered ? 'No scenarios match' : 'No scenarios available'}

@@ -14,6 +14,8 @@ import {
   TabPanels,
   Tabs,
   VisuallyHidden,
+  mergeRefs,
+  useReveal,
 } from '../../design/index.ts';
 import {
   behaviourEvidence,
@@ -35,6 +37,7 @@ import {
   Section,
 } from './parts.tsx';
 import { careCounts } from './report-model.ts';
+import { stagger } from './reveal.ts';
 import './scores.css';
 
 /** The most words a CARE observation shows before "Show more". */
@@ -251,11 +254,13 @@ export function CareReview({ report }: { report: CoachingReport }) {
   const care = useMemo(() => report.care ?? [], [report.care]);
   const [selected, setSelected] = useState<CareBehaviour>(care[0]?.id ?? 'communicate');
   const strip = useTabStrip(selected);
+  const [revealed, reveal] = useReveal<HTMLDivElement>();
+  const box = useMemo(() => mergeRefs(strip, revealed), [strip, revealed]);
   const quotes = useMemo(() => careQuotes(care, turns), [care, turns]);
   if (care.length === 0) return null;
   return (
     <Section id="care" title="CARE review" lead="How the four CARE principles showed in this call.">
-      <div className="rp-care" ref={strip}>
+      <div className="rp-care" ref={box} {...reveal} style={stagger(2)}>
         <Tabs<CareBehaviour> value={selected} onValueChange={setSelected}>
           <TabList label="CARE principles" className="rp-care__tabs">
             {care.map((principle) => (

@@ -34,6 +34,54 @@
   gap: var(--sp-3);
   margin-block-start: var(--sp-2);
 }
+/* The call has a column of its own, so it can come in as one piece after the words. */
+.lp-hero__art {
+  min-inline-size: 0;
+}
+
+/* "Explore scenarios" glides to the featured row instead of jumping there: Hero.tsx puts data-glide on
+   the page for the moment the press needs. Only while motion is allowed, and only then: smooth scrolling
+   for good would also animate the router's scroll restoration. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  html[data-glide] {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ---- The way in: each part of the hero comes in a beat after the one before it (the promise, the
+   line, the actions, the call): a fade and a rise of a few pixels, about half a second in all. The
+   promise starts at once and starts faint, not at nothing (--lp-from): it is the largest thing on the
+   page, and a browser does not count text at nothing as painted until its fade has ended, which put the
+   largest contentful paint back by the length of the fade. The call plays its own script as it always
+   has. Only while motion is allowed and only on a screen: for someone who asked for less, and on
+   paper, nothing is hidden or moved. ------------------------------------------------------------ */
+@keyframes lp-hero-in {
+  from {
+    opacity: var(--lp-from, 0);
+    transform: translateY(var(--move-sm));
+  }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  .lp-hero__title,
+  .lp-hero__lead,
+  .lp-hero__actions,
+  .lp-hero__art {
+    animation: lp-hero-in var(--motion-panel) var(--ease-decelerate) backwards;
+    animation-delay: calc(var(--lp-beat, 0) * var(--dur-stagger) * 1.5);
+  }
+  .lp-hero__title {
+    --lp-from: 0.4;
+  }
+  .lp-hero__lead {
+    --lp-beat: 1;
+  }
+  .lp-hero__actions {
+    --lp-beat: 2;
+  }
+  .lp-hero__art {
+    --lp-beat: 3;
+  }
+}
 
 /* On a phone the two actions fill the row, so each is easy to hit. */
 @media (max-width: 30em) {

@@ -52,6 +52,42 @@ describe('loading and not found', () => {
     ).not.toBeNull();
   });
 
+  it('draws no placeholder for the first moment, and the shape of the page once the wait is not short', async () => {
+    vi.useFakeTimers();
+    renderAtReport(page(clientWith({})));
+    await settle();
+    const placeholder = () => document.querySelector('.rp-state__skeleton') as HTMLElement;
+    expect(placeholder()).toHaveAttribute('data-waiting');
+    // The name is there from the start, for assistive technology.
+    expect(screen.getByText('Loading your coaching report')).toBeInTheDocument();
+    await settle(149);
+    expect(placeholder()).toHaveAttribute('data-waiting');
+    await settle(1);
+    expect(placeholder()).not.toHaveAttribute('data-waiting');
+  });
+
+  it('holds the placeholder back in the same way when motion is reduced: a flash is as unwelcome', async () => {
+    vi.useFakeTimers();
+    const restore = stubMatchMedia((query) => query.includes('prefers-reduced-motion'));
+    try {
+      renderAtReport(page(clientWith({})));
+      await settle();
+      expect(document.querySelector('.rp-state__skeleton')).toHaveAttribute('data-waiting');
+      await settle(150);
+      expect(document.querySelector('.rp-state__skeleton')).not.toHaveAttribute('data-waiting');
+    } finally {
+      restore();
+    }
+  });
+
+  it('never draws the placeholder for a report that arrives before the wait is over', async () => {
+    vi.useFakeTimers();
+    renderAtReport(page(scriptedClient(strong.session)));
+    await settle();
+    expect(screen.getByRole('navigation', { name: 'On this page' })).toBeInTheDocument();
+    expect(document.querySelector('.rp-state__skeleton')).toBeNull();
+  });
+
   it('says plainly that an unknown call was not found, and links to the scenarios', async () => {
     const client = clientWith({
       getSession: vi.fn(() =>
@@ -118,6 +154,33 @@ describe('the evaluation under way', () => {
     expect(steps()[0]).toHaveTextContent('Done');
     expect(steps()[2]).toHaveTextContent('In progress');
     expect(steps()[3]).toHaveTextContent('Waiting');
+  });
+
+  it('makes the list of steps clear only once the wait is not short, and reads it from the first', async () => {
+    vi.useFakeTimers();
+    renderAtReport(page(scriptedClient(evaluatingSession(strong, 'scoring'))));
+    await settle();
+    const list = screen.getByRole('list', { name: 'Report progress' });
+    expect(list).toHaveAttribute('data-waiting');
+    expect(steps()).toHaveLength(5);
+    await settle(150);
+    expect(list).not.toHaveAttribute('data-waiting');
+  });
+
+  it('gives a step a new icon when its state changes, so a spinner that becomes a tick fades in rather than swaps', async () => {
+    vi.useFakeTimers();
+    const client = scriptedClient(
+      evaluatingSession(strong, 'scoring'),
+      evaluatingSession(strong, 'building_report'),
+    );
+    renderAtReport(page(client));
+    await settle();
+    const icon = () => steps()[2]?.querySelector('.rp-step__icon');
+    const before = icon();
+    expect(before).not.toBeNull();
+    await settle(800);
+    expect(steps()[2]).toHaveAttribute('data-status', 'done');
+    expect(icon()).not.toBe(before);
   });
 
   it('asks again every 800 ms and moves each step on as the server reports it', async () => {

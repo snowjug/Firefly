@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type CSSProperties } from 'react';
 import { Link, type To } from 'react-router';
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
 import { formatEstimate } from '#shared/domain/duration.ts';
@@ -8,6 +8,7 @@ import { useTilt } from '../../design/interaction/use-tilt.ts';
 import { accentClass } from '../../design/product-accent.ts';
 import { ProductIcon } from '../../design/primitives/ProductIcon.tsx';
 import { Skeleton } from '../../design/primitives/Skeleton.tsx';
+import { arrivalStep } from './arrival.ts';
 import { PRODUCT_SHORT, cardTitle, metaLine } from './labels.ts';
 import { Level } from './Level.tsx';
 import './scenario-card.css';
@@ -17,9 +18,19 @@ export function scenarioHref(id: string): string {
   return `/scenarios?scenario=${encodeURIComponent(id)}`;
 }
 
+/** A card that is new to its row: where it comes in the sequence of cards arriving together. */
+export interface Arrival {
+  /** 0 is first. Only the first eight arrive one after another (see `arrivalStep`); a later one is simply there. */
+  index: number;
+  /** Rests at the start of its arrival until this is false: the row has not been seen yet. */
+  waiting?: boolean;
+}
+
 interface CardBase {
   scenario: PublicScenarioDTO;
   className?: string;
+  /** Fades in and rises a few pixels, a beat after the card before it. Leave out for a card that is already there. */
+  arrive?: Arrival;
 }
 
 /**
@@ -52,10 +63,12 @@ function Wave() {
  * customer state, call stage), how long it takes, how hard it is, and the way on. Nothing else: no
  * summary, so a row of cards can be scanned. It carries its product's accent as a small mark and
  * works in both themes with tokens only. Pointed at with a mouse it rises, tilts a degree or so and
- * its edge catches a soft light; keyboard focus gives the same prominence without the tilt.
+ * its edge catches a soft light; keyboard focus gives the same prominence without the tilt. A card
+ * that is new to its row (`arrive`) fades in and rises a few pixels, a beat after the one before it.
  */
 export function ScenarioCard(props: ScenarioCardProps) {
-  const { scenario, className } = props;
+  const { scenario, className, arrive } = props;
+  const step = arrive ? arrivalStep(arrive.index) : null;
   const base = useId();
   const tilt = useTilt<HTMLDivElement>();
   const ids = {
@@ -77,6 +90,8 @@ export function ScenarioCard(props: ScenarioCardProps) {
       data-scenario={scenario.id}
       data-mode={props.mode}
       data-selected={selected ? 'true' : undefined}
+      data-arrive={step === null ? undefined : arrive?.waiting ? 'waiting' : 'now'}
+      style={step === null ? undefined : ({ '--reveal-i': step } as CSSProperties)}
     >
       <span className="scn-card__edge" aria-hidden="true" />
       <span className="scn-card__accent" aria-hidden="true" />

@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react';
 import { Icon } from '../../design/icons.tsx';
+import { useReveal } from '../../design/interaction/use-reveal.ts';
 import { Button } from '../../design/primitives/Button.tsx';
 import { useAnnouncer } from '../../design/primitives/LiveRegion.tsx';
 import { Skeleton } from '../../design/primitives/Skeleton.tsx';
@@ -69,11 +70,13 @@ class Contain extends Component<{ fallback: ReactNode; children: ReactNode }, { 
  * The featured scenarios, the one part of the landing page that asks the server for anything. The
  * rest of the page never waits for it. While it loads there are grey cards; if it fails, or the
  * visitor is offline, there is one quiet line with a way to try again and a plain link to all the
- * scenarios, never an empty or broken block.
+ * scenarios, never an empty or broken block. The heading rises into place as it scrolls into view;
+ * the cards arrive one after another the first time the row is seen (see FeaturedCarousel).
  */
 export function FeaturedScenarios() {
   const { data, error, loading, reload } = useApi((signal) => api.scenarios(signal), []);
   const online = useOnline();
+  const [head, headReveal] = useReveal<HTMLDivElement>();
   const scenarios = useMemo(() => (data ? pickFeatured(data) : []), [data]);
   const failed = !loading && (error !== null || scenarios.length === 0);
   const message = online ? FEATURED.failed : FEATURED.offline;
@@ -89,7 +92,7 @@ export function FeaturedScenarios() {
       aria-labelledby="lp-featured-title"
     >
       <div className="l-page lp-section__inner">
-        <div className="lp-featured__head">
+        <div ref={head} {...headReveal} className="lp-featured__head">
           <div className="lp-section__head">
             <h2 id="lp-featured-title" className="lp-title">
               {FEATURED.title}

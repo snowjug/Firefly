@@ -34,6 +34,15 @@
 .rp-state__para + .rp-state__para {
   margin-block-start: var(--sp-1);
 }
+/* What stands for a wait is only drawn once the wait is not short (the page sets `data-waiting` for
+   the first moment): it holds its place, so nothing moves when it arrives, and a page that comes in
+   at once never shows it. The list of steps is only made clear, so it is read from the first. */
+.rp-state__skeleton[data-waiting] {
+  visibility: hidden;
+}
+.rp-steps[data-waiting] {
+  opacity: 0;
+}
 
 /* ---- The five steps ----------------------------------------------------------------------- */
 .rp-steps {
@@ -93,6 +102,35 @@
 }
 .rp-step[data-status='waiting'] .rp-step__title {
   color: var(--fg-2);
+}
+
+/* ---- Motion: only on a screen and only where motion is allowed ----------------------------------
+   The page comes in calmly: the heading, then the line under it, then the rest, a step apart (the
+   shared ff-enter), and whatever arrives later (a note that the wait is long, the transcript, a
+   failed retry) comes in the same way as it arrives. The placeholder fades in by itself (the shared
+   skeleton waits a moment first), the list of steps fades in when the wait is not short, and a step's
+   icon fades in when its state changes, so a spinner that becomes a tick is not a swap. Nothing is
+   held when it ends. ---------------------------------------------------------------------------- */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .rp-state > :not([data-guarded]):not(section) {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate) backwards;
+    animation-delay: calc(var(--rp-step, 0) * var(--dur-stagger));
+  }
+  .rp-state > :nth-child(2) {
+    --rp-step: 1;
+  }
+  .rp-state > :nth-child(n + 3) {
+    --rp-step: 2;
+  }
+  .rp-steps {
+    transition: opacity var(--dur-normal) var(--ease-easy);
+  }
+  .rp-step {
+    transition: background-color var(--dur-normal) var(--ease-easy);
+  }
+  .rp-step__icon {
+    animation: ff-fade var(--dur-normal) var(--ease-easy) backwards;
+  }
 }
 
 @media (forced-colors: active) {

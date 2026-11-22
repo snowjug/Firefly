@@ -15,6 +15,7 @@ import type * as ApiModule from '../../lib/api.ts';
 import { detectFeatures, type VoiceFeatures } from '../voice/support.ts';
 import type * as SupportModule from '../voice/support.ts';
 import { sortScenarios } from './catalogue.ts';
+import { ARRIVAL_STEPS } from './arrival.ts';
 import { cardTitle } from './labels.ts';
 import {
   AZURE_SPEECH,
@@ -380,6 +381,83 @@ describe('the difficulty filter and "Clear filters"', () => {
     await waitFor(() => expect(app.query().get('f_issue')).toBeNull());
     expect(app.query().get('f_product')).toBe('azure');
     expect(app.query().get('f_difficulty')).toBe('starter');
+  });
+});
+
+describe('the cards a filter brings in', () => {
+  /** The cards on screen by scenario, in the order they are shown. */
+  const shown = () =>
+    new Map(
+      [...document.querySelectorAll<HTMLElement>('.scn-card')].map((element) => [
+        element.getAttribute('data-scenario') as string,
+        element,
+      ]),
+    );
+  const step = (element: HTMLElement) => Number(element.style.getPropertyValue('--reveal-i'));
+
+  it('arrive one after another when the library first shows: the first few, and the rest are simply there', async () => {
+    renderApp('/scenarios');
+    await gallery();
+    const cardsNow = [...shown().values()];
+    expect(cardsNow).toHaveLength(all.length);
+    cardsNow.forEach((element, index) => {
+      if (index < ARRIVAL_STEPS) {
+        expect(element, `card ${index}`).toHaveAttribute('data-arrive', 'now');
+        expect(step(element), `card ${index}`).toBe(index);
+      } else {
+        expect(element, `card ${index}`).not.toHaveAttribute('data-arrive');
+      }
+    });
+  });
+
+  it('leave the cards that stay exactly where they are, and bring in only the ones the filter adds', async () => {
+    const user = userEvent.setup();
+    renderApp('/scenarios');
+    await gallery();
+    const before = shown();
+
+    await user.click(chip(/^Teams/));
+    await waitFor(() => expect(shown().size).toBeLessThan(before.size));
+    const kept = shown();
+    expect(kept.size).toBeGreaterThan(0);
+    // Filtering down brings nothing in: the cards that stay are the same elements and are not arriving.
+    for (const [id, element] of kept) {
+      expect(element, id).toBe(before.get(id));
+      expect(element, id).not.toHaveAttribute('data-arrive');
+    }
+
+    await user.click(chip(/^All/));
+    await waitFor(() => expect(shown().size).toBe(before.size));
+    const after = shown();
+    const arriving = [...after].filter(([id]) => !kept.has(id)).map(([, element]) => element);
+    expect(arriving.length).toBe(before.size - kept.size);
+    // The ones that stayed are still the same elements, and still not arriving.
+    for (const [id, element] of kept) {
+      expect(after.get(id), id).toBe(element);
+      expect(element, id).not.toHaveAttribute('data-arrive');
+    }
+    // The new ones come in from the first step, in the order they are shown, as many as there are steps.
+    arriving.forEach((element, index) => {
+      if (index < ARRIVAL_STEPS) {
+        expect(element, `new card ${index}`).toHaveAttribute('data-arrive', 'now');
+        expect(step(element), `new card ${index}`).toBe(index);
+      } else {
+        expect(element, `new card ${index}`).not.toHaveAttribute('data-arrive');
+      }
+    });
+  });
+
+  it('do not start again when another card is chosen', async () => {
+    const user = userEvent.setup();
+    renderApp('/scenarios');
+    await gallery();
+    const marks = () => [...shown()].map(([id, element]) => [id, element.dataset.arrive ?? '']);
+    const before = marks();
+    await user.click(await card(second));
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: cardTitle(second) })).toBeChecked(),
+    );
+    expect(marks()).toEqual(before);
   });
 });
 
