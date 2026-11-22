@@ -807,20 +807,22 @@ describe('scenario provenance stays internal', () => {
       bodies.push(list.body);
       for (const scenario of list.body.scenarios as { id: string; shortTitle: string }[]) {
         expect(scenario.shortTitle, scenario.id).toEqual(expect.any(String));
-        const one = await client.get(`/api/scenarios/${scenario.id}`);
-        const created = await client.post('/api/sessions', { scenarioId: scenario.id });
+        // Each scenario is visited as a new profile: one profile may start twenty calls in a burst,
+        // and the library may hold more scenarios than that.
+        const visitor = full.client();
+        const one = await visitor.get(`/api/scenarios/${scenario.id}`);
+        const created = await visitor.post('/api/sessions', { scenarioId: scenario.id });
         const id = created.body.session.id as string;
         bodies.push(
           one.body,
           created.body,
-          (await client.get(`/api/sessions/${id}`)).body,
-          (await client.get(`/api/sessions/${id}/transcript`)).body,
-          (await client.get(`/api/sessions/${id}/closing-check`)).body,
+          (await visitor.get(`/api/sessions/${id}`)).body,
+          (await visitor.get(`/api/sessions/${id}/transcript`)).body,
+          (await visitor.get(`/api/sessions/${id}/closing-check`)).body,
         );
       }
       // A finished call carries a report as well.
-      const first = list.body.scenarios[0].id as string;
-      const { body } = await client.post('/api/sessions', { scenarioId: first });
+      const { body } = await client.post('/api/sessions', { scenarioId: SCENARIO });
       await client.post(`/api/sessions/${body.session.id}/messages`, {
         text: 'Hello, I am Sam. What is happening?',
         clientMessageId: randomUUID(),

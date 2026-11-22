@@ -13,6 +13,11 @@ import {
   START_TEMPERATURES,
   STYLES,
 } from '#shared/domain/vocab.ts';
+import {
+  leakedSecrets,
+  secretsBesidesAreas,
+  secretsOf,
+} from '../../e2e/support/scenario-library.ts';
 import { toPublicScenario } from '../services/dto.ts';
 import {
   distinctiveTokens,
@@ -28,7 +33,16 @@ import { provenanceLeaks } from './provenance.ts';
 // server/engine/library.test.ts.
 
 const library = getScenarioLibrary();
-const first = library[0] as ScenarioDefinition;
+
+/** A scenario of the library, by id: the checks on authored text are written against these. */
+const scenarioOf = (id: string): ScenarioDefinition => {
+  const found = library.find((s) => s.id === id);
+  if (!found) throw new Error(`The library has no scenario "${id}", which these checks need.`);
+  return found;
+};
+// The smallest scenario, named by its id so that adding or reordering scenarios cannot change what
+// the checks on authored text are run against.
+const exemplar = scenarioOf('outlook-shared-mailbox-missing');
 
 /** Every string in a value. */
 function strings(value: unknown): string[] {
@@ -36,6 +50,35 @@ function strings(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(strings);
   if (value && typeof value === 'object') return Object.values(value).flatMap(strings);
   return [];
+}
+
+/** Every string in a value, and where it is, so that a failure says which field shows what. */
+function leaves(value: unknown, path = ''): { path: string; text: string }[] {
+  if (typeof value === 'string') return [{ path, text: value }];
+  if (Array.isArray(value)) return value.flatMap((item, i) => leaves(item, `${path}[${i}]`));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, item]) =>
+      leaves(item, path ? `${path}.${key}` : key),
+    );
+  }
+  return [];
+}
+
+/**
+ * Where what a trainee can read before a call (`toPublicScenario`) says something the customer keeps
+ * back, ignoring case and spacing. The areas to explore are published on purpose, so a secret that is
+ * exactly one of them is not one; a secret that is only part of an area ("Who edits the document" in
+ * "Who edits the document, and how") is. The secrets and the rule are those of the call-page checks in
+ * the browser specs (e2e/support/scenario-library.ts), so that a leak they would find is found here.
+ */
+function secretsShown(s: ScenarioDefinition): string[] {
+  const secrets = secretsBesidesAreas({
+    secrets: secretsOf(s),
+    areas: [...s.expectedDiscoveryAreas],
+  });
+  return leaves(toPublicScenario(s)).flatMap(({ path, text }) =>
+    leakedSecrets(text, secrets).map((secret) => `${path} shows "${secret}"`),
+  );
 }
 
 /** Every wording a hidden fact can have, across impact levels. */
@@ -52,15 +95,17 @@ function wordings(fact: ScenarioDefinition['hiddenFacts'][number]): string[] {
 }
 
 const copy = (patch: (s: ScenarioDefinition) => void): ScenarioDefinition => {
-  const clone = structuredClone(first);
+  const clone = structuredClone(exemplar);
   patch(clone);
   return clone;
 };
 
-// On 22 November 2026 an AI assistant read every scenario against current public Microsoft pages and
-// revised the wording it could not stand behind. That was not a mentor's review, and the internal
-// supportability wiki was not available to it. These are the verdicts it reached, so that no
-// scenario's provenance record can claim more, or less, than that review found.
+// On 22 November 2026 an AI assistant read the sixteen scenarios the library held then (the first
+// sixteen: the ones in this table) against current public Microsoft pages and revised the wording it
+// could not stand behind. That was not a mentor's review, and the internal supportability wiki was
+// not available to it. These are the verdicts it reached, so that none of those sixteen provenance
+// records can claim more, or less, than that review found. A scenario written after the review is not
+// in the table: "what a record may claim" below says what its record may say.
 const GROUNDING_REVIEW: Record<string, { check: string; sources: string[] }> = {
   'teams-cannot-join-external-meetings': {
     check: 'checked-partly',
@@ -136,6 +181,18 @@ describe('the library', () => {
     expect(used((s) => s.issueType).size).toBeGreaterThanOrEqual(8);
   });
 
+  it('has a how-to question, and more than one customer who speaks English as a second language', () => {
+    // The first sixteen had neither a how-to question nor more than one such customer; the second
+    // batch was written to bring them, so the library is not to lose them again.
+    const howTo = library.filter((s) => s.issueType === 'how-to').map((s) => s.id);
+    const secondLanguage = library.filter((s) => s.style === 'non-native').map((s) => s.id);
+    expect(howTo.length, `how-to scenarios: ${howTo.join(', ')}`).toBeGreaterThanOrEqual(1);
+    expect(
+      secondLanguage.length,
+      `non-native speakers: ${secondLanguage.join(', ')}`,
+    ).toBeGreaterThanOrEqual(4);
+  });
+
   it('keeps people, organisations and case numbers fictional, distinct and well formed', () => {
     const names = library.map((s) => s.persona.name);
     expect(new Set(names).size).toBe(names.length);
@@ -208,7 +265,7 @@ describe('the library', () => {
 });
 
 describe('the grounding review', () => {
-  it('records the assistant review of 22 November 2026 for every scenario it covered, and never claims a mentor', () => {
+  it('records the assistant review of 22 November 2026 for each scenario it covered (the sixteen in the table), and never claims a mentor', () => {
     for (const [id, expected] of Object.entries(GROUNDING_REVIEW)) {
       const scenario = library.find((s) => s.id === id);
       expect(scenario, id).toBeDefined();
@@ -223,6 +280,95 @@ describe('the grounding review', () => {
       // The notes say whose review it was, so that nobody reads it as a mentor's.
       expect(grounding.notes, id).toMatch(/AI-assisted review, not a mentor's\.$/);
     }
+  });
+});
+
+describe('what a provenance record may claim', () => {
+  // The day the latest scenarios were written. A record dated after it claims what has not happened
+  // yet; a scenario written on a later day raises this on purpose.
+  const LATEST_RECORD_DATE = '2026-11-22';
+  const isRealDate = (date: string) => {
+    const parsed = new Date(`${date}T00:00:00Z`);
+    return (
+      /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+      !Number.isNaN(parsed.getTime()) &&
+      parsed.toISOString().startsWith(date)
+    );
+  };
+  const overclaims = (s: ScenarioDefinition): string[] => {
+    const g = s.grounding;
+    const problems: string[] = [];
+    for (const [field, date] of [
+      ['authoredOn', g.authoredOn],
+      ['revisedOn', g.revisedOn],
+      ['checkedOn', g.checkedOn],
+    ] as const) {
+      if (date === undefined) continue;
+      if (!isRealDate(date)) problems.push(`${field} ${date} is not a real date`);
+      else if (date > LATEST_RECORD_DATE) problems.push(`${field} ${date} is in the future`);
+    }
+    if (g.syntheticConfirmed !== true) problems.push('syntheticConfirmed is not true');
+    if (g.review === 'mentor-reviewed') problems.push('says a mentor reviewed it');
+    if (g.review === 'assistant-reviewed') {
+      if (!g.revisedOn) problems.push('says an assistant reviewed it, with no revisedOn');
+      if (!g.notes || !/AI-assisted review, not a mentor's\.$/.test(g.notes)) {
+        problems.push("says an assistant reviewed it, but its notes do not end as an assistant's");
+      }
+    }
+    if (g.behaviourCheck !== 'not-checked') {
+      if (!g.checkedOn) problems.push(`says ${g.behaviourCheck}, with no checkedOn`);
+      if (g.sourceCategories.every((category) => category === 'author-experience')) {
+        problems.push(`says ${g.behaviourCheck}, against no public source`);
+      }
+    }
+    if (g.behaviourCheck === 'checked-current' && !g.notes) {
+      problems.push('says checked-current, with no notes to say what showed it');
+    }
+    return problems;
+  };
+
+  it('holds for every scenario that the review of 22 November 2026 did not cover', () => {
+    // A scenario written later starts unreviewed, and is raised only by work that was done: an
+    // assistant's review leaves a revision date and its closing words, and a check leaves a date and
+    // a public source. Nobody has given a mentor's review to any.
+    for (const s of library.filter((item) => !Object.hasOwn(GROUNDING_REVIEW, item.id))) {
+      expect(overclaims(s), s.id).toEqual([]);
+    }
+  });
+
+  it('refuses a record that says more than was done, and accepts one that says what was', () => {
+    const say = (patch: Partial<ScenarioDefinition['grounding']>) => {
+      const clone = copy((s) => void (s.grounding = { ...s.grounding, ...patch }));
+      return overclaims(clone).join('\n');
+    };
+    // The reviewed Outlook scenario says exactly what its review found.
+    expect(overclaims(exemplar)).toEqual([]);
+    // A new scenario's honest record: written today, never checked, not reviewed.
+    expect(
+      say({
+        authoredOn: '2026-11-22',
+        revisedOn: undefined,
+        behaviourCheck: 'not-checked',
+        checkedOn: undefined,
+        sourceCategories: ['author-experience'],
+        review: 'unreviewed',
+        notes: undefined,
+      }),
+    ).toBe('');
+    expect(say({ review: 'mentor-reviewed' })).toMatch(/a mentor reviewed it/);
+    expect(say({ authoredOn: '2026-11-23' })).toMatch(/authoredOn 2026-11-23 is in the future/);
+    expect(say({ checkedOn: '2026-02-30' })).toMatch(/checkedOn 2026-02-30 is not a real date/);
+    expect(say({ revisedOn: undefined })).toMatch(/an assistant reviewed it, with no revisedOn/);
+    expect(say({ notes: 'Two current pages agree with the report.' })).toMatch(
+      /notes do not end as an assistant's/,
+    );
+    expect(say({ checkedOn: undefined })).toMatch(/checked-current, with no checkedOn/);
+    expect(say({ sourceCategories: ['author-experience'] })).toMatch(
+      /checked-current, against no public source/,
+    );
+    expect(say({ review: 'unreviewed', revisedOn: undefined, notes: undefined })).toMatch(
+      /checked-current, with no notes/,
+    );
   });
 });
 
@@ -255,6 +401,38 @@ describe('what a trainee can read before a call', () => {
         }
       }
     }
+  });
+
+  it('shows nothing the customer keeps back, unless it is exactly an area to explore', () => {
+    for (const s of library) {
+      expect(secretsOf(s).length, `${s.id} has nothing to look for`).toBeGreaterThan(0);
+      expect(secretsShown(s), s.id).toEqual([]);
+    }
+  });
+
+  it('finds a hidden fact inside a longer area or any other field, whatever its case and spacing, and lets an area that is exactly its words stand', () => {
+    const shown = (patch: (s: ScenarioDefinition) => void) => secretsShown(copy(patch));
+    expect(shown(() => {})).toEqual([]);
+    // As the Word scenario once had it: the label of a fact is the start of a longer area.
+    expect(
+      shown((s) => {
+        s.hiddenFacts[0].label = 'Who edits the document';
+        s.expectedDiscoveryAreas[2] = 'Who edits the document, and how';
+      }),
+    ).toEqual(['expectedDiscoveryAreas[2] shows "Who edits the document"']);
+    // The same words as an area, apart from case and spacing, are the area and nothing else.
+    expect(
+      shown((s) => {
+        s.hiddenFacts[0].label = 'WHO edits  the document, and how';
+        s.expectedDiscoveryAreas[2] = 'Who edits the document, and how';
+      }),
+    ).toEqual([]);
+    // Case and spacing do not hide a secret in a field that is not an area.
+    expect(
+      shown((s) => {
+        s.summary = `${s.summary}   ${s.hiddenFacts[1].label.toUpperCase()}`;
+      }),
+    ).toEqual([`summary shows "${exemplar.hiddenFacts[1].label}"`]);
   });
 
   it('presents no customer claim as fact and gives away no workaround in what is shown or said at the start', () => {
@@ -391,7 +569,7 @@ describe('the checks on authored text', () => {
   });
 
   it('rejects a hidden fact that is repeated, by wording or by number, in anything shown earlier', () => {
-    const fact = first.hiddenFacts[0] as ScenarioDefinition['hiddenFacts'][number];
+    const fact = exemplar.hiddenFacts[0] as ScenarioDefinition['hiddenFacts'][number];
     const repeated = copy((s) => {
       s.listSummary = `The customer says: ${fact.statement}`.split(/\s+/).slice(0, 16).join(' ');
     });
@@ -439,7 +617,7 @@ describe('the checks on authored text', () => {
 
   it('requires what the schema promises: a product, a stage opening for call-backs, an allowlist', () => {
     const missing = (patch: (s: Record<string, unknown>) => void) => {
-      const raw = structuredClone(first) as unknown as Record<string, unknown>;
+      const raw = structuredClone(exemplar) as unknown as Record<string, unknown>;
       patch(raw);
       return ScenarioDefinitionSchema.safeParse(raw).success;
     };
@@ -461,12 +639,12 @@ describe('the checks on authored text', () => {
   });
 
   it('rejects a short title that is longer than the title, shares no word with it or adds to what it says', () => {
-    const issuesFor = (shortTitle: string, id = first.id) => {
+    const issuesFor = (shortTitle: string, id = exemplar.id) => {
       const s = structuredClone(library.find((item) => item.id === id) as ScenarioDefinition);
       s.shortTitle = shortTitle;
       return semanticIssues(s).join('\n');
     };
-    // The first scenario's title is "Shared team mailbox missing from Outlook".
+    // The exemplar's title is "Shared team mailbox missing from Outlook".
     expect(issuesFor('Shared mailbox missing')).toBe('');
     expect(issuesFor('The shared team mailbox is missing from Outlook again')).toMatch(
       /longer than the title/,
@@ -487,21 +665,21 @@ describe('the checks on authored text', () => {
       s.id = 'a-second-scenario';
       s.caseReference = 'SIM-999999';
     });
-    expect(loadScenarios([first, twin]).errors.join('\n')).toMatch(/persona name/);
+    expect(loadScenarios([exemplar, twin]).errors.join('\n')).toMatch(/persona name/);
     // Two cards with the same short title could not be told apart.
     const lookalike = copy((s) => {
       s.id = 'a-third-scenario';
       s.caseReference = 'SIM-999998';
       s.persona.name = 'Someone Else';
     });
-    expect(loadScenarios([first, lookalike]).errors.join('\n')).toMatch(
+    expect(loadScenarios([exemplar, lookalike]).errors.join('\n')).toMatch(
       /shortTitle "Shared mailbox missing" is already used by outlook-shared-mailbox-missing/,
     );
     const outside = copy((s) => {
       s.allowedCurveballs = ['go-silent'];
     });
     expect(ScenarioDefinitionSchema.safeParse(outside).success).toBe(
-      first.curveballs.every((c) => c.type === 'go-silent'),
+      exemplar.curveballs.every((c) => c.type === 'go-silent'),
     );
     const noRef = copy((s) => {
       delete (s as { caseReference?: string }).caseReference;

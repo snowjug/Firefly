@@ -10,28 +10,54 @@ import {
 import azureDeploymentFails from './library/azure-deployment-fails-permissions.ts';
 import azureUnexpectedCharges from './library/azure-unexpected-charges.ts';
 import azureVmUnreachable from './library/azure-vm-unreachable-production.ts';
+import defenderContractHeld from './library/defender-contract-attachment-held-escalated.ts';
 import defenderInvoices from './library/defender-invoices-quarantined.ts';
+import dynamicsDashboardSlow from './library/dynamics-dashboard-slow-to-load.ts';
 import dynamicsRecords from './library/dynamics-records-not-visible-after-role-change.ts';
 import entraNewHires from './library/entra-new-hires-blocked-sign-in.ts';
+import entraPasswordReset from './library/entra-password-reset-unavailable.ts';
+import entraSignInCheck from './library/entra-cannot-complete-sign-in-check.ts';
 import exchangeMailDelays from './library/exchange-mail-delays-follow-up.ts';
+import exchangePartnerBounced from './library/exchange-partner-email-bounced-follow-up.ts';
 import intuneDevices from './library/intune-devices-not-compliant-closure.ts';
+import intuneEnrolmentFails from './library/intune-company-portal-enrolment-fails.ts';
 import m365AppsExcel from './library/m365-apps-excel-crashes-after-update.ts';
+import m365AppsLicence from './library/m365-apps-licence-not-found.ts';
+import onedriveCloudIcons from './library/onedrive-files-show-cloud-icons.ts';
 import onedriveSync from './library/onedrive-sync-closure.ts';
+import outlookDelegateCalendar from './library/outlook-delegate-calendar-closure.ts';
+import outlookPasswordPrompts from './library/outlook-keeps-asking-for-password.ts';
 import outlookSharedMailbox from './library/outlook-shared-mailbox-missing.ts';
+import powerAppsConnection from './library/power-apps-connection-error-follow-up.ts';
 import powerAutomate from './library/power-automate-approvals-stopped.ts';
 import sharepointAccess from './library/sharepoint-site-access-escalated.ts';
+import sharepointSharedLink from './library/sharepoint-shared-link-not-opening.ts';
+import teamsChoppyAudio from './library/teams-choppy-audio-on-calls.ts';
 import teamsExternalMeetings from './library/teams-cannot-join-external-meetings.ts';
+import teamsRecordingMissing from './library/teams-meeting-recording-missing-follow-up.ts';
 import windowsBitlocker from './library/windows-bitlocker-recovery-prompt.ts';
 import windowsSlow from './library/windows-11-slow-after-update.ts';
+import windowsWifiDrops from './library/windows-wifi-keeps-dropping.ts';
+import wordDuplicateCopies from './library/word-document-duplicate-copies-escalated.ts';
 
 // Registry of the built-in synthetic Microsoft support scenarios, easiest first. Add a scenario by
 // creating a file in ./library and listing it here; `npm run validate:scenarios` checks everything.
+// A new scenario goes after the ones already listed for its difficulty: the order here is the order
+// of `GET /api/scenarios`, and it breaks the tie when the report suggests what to practise next, so
+// the scenarios that are listed already keep their place. The scenarios page sorts its own cards.
 const LIBRARY_INPUT: unknown[] = [
   // Starter
   outlookSharedMailbox,
   onedriveSync,
   powerAutomate,
   windowsSlow,
+  teamsChoppyAudio,
+  sharepointSharedLink,
+  onedriveCloudIcons,
+  entraPasswordReset,
+  intuneEnrolmentFails,
+  windowsWifiDrops,
+  dynamicsDashboardSlow,
   // Standard
   teamsExternalMeetings,
   exchangeMailDelays,
@@ -41,11 +67,20 @@ const LIBRARY_INPUT: unknown[] = [
   windowsBitlocker,
   azureUnexpectedCharges,
   dynamicsRecords,
+  teamsRecordingMissing,
+  outlookPasswordPrompts,
+  outlookDelegateCalendar,
+  m365AppsLicence,
+  powerAppsConnection,
   // Challenge
   sharepointAccess,
   entraNewHires,
   azureVmUnreachable,
   azureDeploymentFails,
+  exchangePartnerBounced,
+  entraSignInCheck,
+  defenderContractHeld,
+  wordDuplicateCopies,
 ];
 
 export interface LoadedScenarios {
