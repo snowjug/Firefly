@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyConfig } from '#shared/domain/config.ts';
 import type { ScenarioDefinition, ScenarioOverrides } from '#shared/domain/scenario.ts';
+import { fold, sentences } from '#shared/domain/text.ts';
 import { factPolicy } from '../prompts/facts.ts';
 import { getScenarioLibrary } from '../scenarios/index.ts';
 import { processTraineeTurn } from './pipeline.ts';
@@ -1566,5 +1567,34 @@ describe('the customer’s name, role and organisation', () => {
     );
     expect(reply(sim, 1)).toContain('SIM-');
     expect(reply(sim, 1)).not.toMatch(/first time|called before/i);
+  });
+});
+
+describe('a hidden fact the customer starts to say', () => {
+  // A filler that is a sentence of its own ("Let me think.") counts against the sentence limit. On a
+  // reply already at the limit it used to push the last sentence of the fact out, so the customer
+  // said most of it and the fact was not recorded. These two facts have the length that is exposed:
+  // three sentences, for a customer whose limit is three or whose reply has another sentence it must say.
+  it('is said whole and recorded, whichever way the customer opens', async () => {
+    for (const [id, factId, style] of [
+      ['onedrive-files-show-cloud-icons', 'hf-new-laptop', 'vague'],
+      ['m365-apps-excel-crashes-after-update', 'hf-colleague-works', 'talkative'],
+    ] as const) {
+      let recorded = 0;
+      for (let seed = 1; seed <= 60; seed++) {
+        const scenario = onTheLibrary(id, { style }, seed);
+        const fact = scenario.hiddenFacts.find((f) => f.id === factId);
+        if (!fact) throw new Error(`${id} has no hidden fact ${factId} at this difficulty`);
+        const sim = await simulate(scenario, [GREET, fact.betterQuestion]);
+        const said = fold(reply(sim, 1));
+        const started = said.includes(fold(sentences(fact.statement)[0] as string));
+        const whole = said.includes(fold(fact.statement));
+        const found = sim.runtime.discovery[factId]?.status === 'discovered';
+        // Never half said, and recorded exactly when said whole.
+        expect([started, found], `${id}/${seed}: ${reply(sim, 1)}`).toEqual([whole, whole]);
+        if (found) recorded += 1;
+      }
+      expect(recorded, `${id}: the question never reached the fact`).toBeGreaterThan(30);
+    }
   });
 });

@@ -186,8 +186,12 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
       rng() < fillerChance(style, tone)
     ) {
       const filler = pick(rng, P.FILLERS);
-      used.push(filler);
-      text = filler.endsWith('.') ? `${filler} ${text}` : `${filler} ${lowerFirst(text)}`;
+      // A filler that is a sentence of its own counts against the limit, so a reply already at it
+      // goes without, rather than lose its last sentence to the cut.
+      if (!filler.endsWith('.') || sentences(text).length < limit) {
+        used.push(filler);
+        text = filler.endsWith('.') ? `${filler} ${text}` : `${filler} ${lowerFirst(text)}`;
+      }
     }
     if (simple) text = expandContractions(text);
     const said = conformCustomerReply(text, { maxSentences: limit }).text || text;
