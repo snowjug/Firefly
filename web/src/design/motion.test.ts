@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 // Other features have their own owners and their own tests; this covers the parts shared by all.
 
 const web = join(dirname(fileURLToPath(import.meta.url)), '..');
-const OWNED = ['design', 'app', 'features/landing', 'features/content'];
+const OWNED = ['design', 'app', 'features'];
 
 function stylesheets(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -135,6 +135,23 @@ describe('motion in the shared stylesheets', () => {
 
   it('declares will-change nowhere, and never for everything', () => {
     for (const file of files) expect(file.css, file.name).not.toMatch(/will-change\s*:\s*all/);
+  });
+
+  // Spring is for four things only: a dragged carousel item settling, a tip card released after a
+  // drag, a call control being pressed and the report's evidence moving into view. Dialogs, pages,
+  // the theme change, transcript entry and report expansion use plain easing.
+  it('uses the spring easing only where the interaction system allows it', () => {
+    const allowed = [
+      /^design\/carousel\//,
+      /^features\/tips\//,
+      /^features\/call-ui\/controls\.css$/,
+      /^features\/report\//,
+    ];
+    const misuse = files
+      .filter((file) => /var\(--ease-spring\)/.test(file.css))
+      .filter((file) => !allowed.some((pattern) => pattern.test(file.name)))
+      .map((file) => file.name);
+    expect(misuse).toEqual([]);
   });
 
   it('keeps the base rule that ends every animation and transition under reduced motion', () => {

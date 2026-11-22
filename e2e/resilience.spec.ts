@@ -388,7 +388,9 @@ test.describe('a long call', () => {
       await expect
         .poll(() => scroller.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
         .toBeLessThan(60);
-      await scroller.evaluate((el) => el.scrollTo({ top: 0 }));
+      // A person scrolling away, with the wheel: only a manual scroll offers the way back.
+      await scroller.hover();
+      await page.mouse.wheel(0, -100_000);
       await expect(page.getByRole('button', { name: 'Jump to latest' })).toBeVisible();
       await page.getByRole('button', { name: 'Jump to latest' }).click();
       await expect(page.getByRole('button', { name: 'Jump to latest' })).toBeHidden();

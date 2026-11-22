@@ -29,6 +29,36 @@ test.afterEach(async ({ request }) => {
 
 const activeId = (page: Page) => page.evaluate(() => document.activeElement?.id ?? '');
 
+const exactly = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+
+interface ShownCard {
+  id: string;
+  /** The card's name, which is also the name of its radio button. */
+  name: string;
+  title: string;
+  difficulty: string;
+}
+
+/** The scenario cards in the order the carousel shows them, with what a card is called. */
+async function cardsInOrder(page: Page): Promise<ShownCard[]> {
+  const ids = await page
+    .locator('.scn-card')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-scenario') ?? ''));
+  const { scenarios } = (await (await page.request.get('/api/scenarios')).json()) as {
+    scenarios: { id: string; title: string; shortTitle: string; difficulty: string }[];
+  };
+  const byId = new Map(scenarios.map((scenario) => [scenario.id, scenario]));
+  return ids.map((id) => {
+    const scenario = byId.get(id)!;
+    return {
+      id,
+      name: scenario.shortTitle.trim() ? scenario.shortTitle : scenario.title,
+      title: scenario.title,
+      difficulty: scenario.difficulty,
+    };
+  });
+}
+
 /**
  * Focus is on an element outside the dialog. Focus on nothing (the browser's own controls, which a
  * native modal dialog lets Tab reach) is not a leak: the page behind a modal is inert.
@@ -111,32 +141,35 @@ test('a keyboard-only journey from the landing page, through a voice call, to a 
   await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
   expect(await activeId(page), 'a new page puts focus on main').toBe('main');
 
-  // The scenario list is one radio group: one Tab stop, and the arrow keys move and choose.
-  await tabTo(page, /^Scenarios: /);
-  const first = (await focusStop(page))!.name.replace('Scenarios: ', '');
-  await expect(page.getByRole('heading', { level: 2, name: first })).toBeVisible();
-  await page.keyboard.press('ArrowDown');
-  const second = (await focusStop(page))!.name.replace('Scenarios: ', '');
-  expect(second).not.toBe(first);
-  await expect(page.getByRole('heading', { level: 2, name: second })).toBeVisible();
-  await expect(page.getByRole('radio', { name: second, exact: true })).toBeChecked();
-  await page.keyboard.press('ArrowUp');
-  await expect(page.getByRole('radio', { name: first, exact: true })).toBeChecked();
+  // The cards are one radio group: one Tab stop on the chosen card, and the arrow keys move and choose.
+  // The workspace tidies its address once the scenarios have arrived; a key pressed before is lost.
+  await expect(page).toHaveURL(/[?&]scenario=/);
+  const shown = await cardsInOrder(page);
+  const cards = page.getByRole('region', { name: 'Scenarios', exact: true }).getByRole('radio');
+  await tabTo(page, exactly(shown[0]!.name));
+  await expect(cards.first()).toBeChecked();
+  await page.keyboard.press('ArrowRight');
+  await expect(cards.nth(1)).toBeChecked();
+  expect((await focusStop(page))!.name).toBe(shown[1]!.name);
+  await expect(page.getByRole('heading', { level: 2, name: shown[1]!.title })).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(cards.first()).toBeChecked();
   await page.keyboard.press('Tab');
   expect(
     (await focusStop(page))!.name,
-    'Tab leaves the list instead of stepping through every scenario',
-  ).not.toMatch(/^Scenarios: /);
+    'Tab leaves the cards instead of stepping through every scenario',
+  ).toBe('Previous scenarios');
   await page.keyboard.press('Shift+Tab');
-  expect((await focusStop(page))!.name).toBe(`Scenarios: ${first}`);
-  // The second scenario, an Outlook shared mailbox, is the one that is called.
-  await page.keyboard.press('ArrowDown');
-  await expect(
-    page.getByRole('heading', { level: 2, name: 'Shared team mailbox missing from Outlook' }),
-  ).toBeVisible();
+  expect((await focusStop(page))!.name).toBe(shown[0]!.name);
+  // A Standard scenario starts in Assessment practice: no tips on screen, and "End the call?" at the end.
+  const standard = shown.findIndex((card) => card.difficulty === 'standard');
+  expect(standard, 'the library has a Standard scenario').toBeGreaterThanOrEqual(0);
+  for (let step = 0; step < standard; step += 1) await page.keyboard.press('ArrowRight');
+  await expect(cards.nth(standard)).toBeChecked();
+  await expect(page.getByRole('heading', { level: 2, name: shown[standard]!.title })).toBeVisible();
 
   // ---- the brief ----
-  await tabTo(page, /^Review brief$/);
+  await tabTo(page, /^Start configuration$/);
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
   expect(await activeId(page)).toBe('main');
@@ -203,9 +236,9 @@ test('a keyboard-only journey from the landing page, through a voice call, to a 
     .poll(() => page.evaluate(() => document.activeElement?.getAttribute('href')))
     .toBe(href);
 
-  // "Review transcript" lands on the transcript's heading; the next stop is the search box, and
+  // "Review full transcript" lands on the transcript's heading; the next stop is the search box, and
   // Enter and Shift+Enter step through the matches.
-  await tabTo(page, /^Review transcript$/, 120);
+  await tabTo(page, /^Review full transcript$/, 120);
   await page.keyboard.press('Enter');
   await expect
     .poll(() => page.evaluate(() => document.activeElement?.textContent?.trim()))
@@ -337,32 +370,21 @@ test('every dialog opens from the keyboard, traps focus, closes on Escape and gi
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 375, height: 740 } });
 
-  test('a scenario opens from the keyboard on a page of its own, and Back puts focus on its row', async ({
+  test('the cards are one Tab stop on a phone too, an arrow key keeps the chosen card in view, and Start configuration opens the brief', async ({
     page,
   }) => {
     await page.goto('/scenarios');
     await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
-    const row = page.getByRole('link', {
-      name: 'Shared team mailbox missing from Outlook',
-      exact: true,
-    });
-    await row.focus();
-    // The arrow keys move between the rows as an extra on top of Tab.
-    await page.keyboard.press('ArrowUp');
-    await expect(
-      page.getByRole('list', { name: 'Scenarios' }).getByRole('link').first(),
-    ).toBeFocused();
-    await row.focus();
+    await expect(page).toHaveURL(/[?&]scenario=/);
+    const cards = page.getByRole('region', { name: 'Scenarios', exact: true }).getByRole('radio');
+    await cards.first().focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(cards.nth(1)).toBeChecked();
+    await expect(cards.nth(1)).toBeFocused();
+    expect((await focusStop(page))?.inView, 'the chosen card is in view').toBe(true);
+    await tabTo(page, /^Start configuration$/);
     await page.keyboard.press('Enter');
-    const title = page.getByRole('heading', {
-      level: 1,
-      name: 'Shared team mailbox missing from Outlook',
-    });
-    await expect(title).toBeVisible();
-    await expect(title).toBeFocused();
-    await page.getByRole('button', { name: 'Scenarios', exact: true }).focus();
-    await page.keyboard.press('Enter');
-    await expect(row).toBeFocused();
+    await expect(page.getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
   });
 
   test('the header menu opens from the keyboard, closes on Escape and keeps focus', async ({
