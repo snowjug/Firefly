@@ -21,10 +21,10 @@ The probe and the timing tests give numbers that belong to one machine in one si
 
 | Limit (gzip)                                               | Budget | One reading, 22 November 2026 |
 | ---------------------------------------------------------- | ------ | ----------------------------- |
-| First-load JavaScript (entry and the chunk loaded with it) | 114 kB | 112.3 kB                      |
-| First-load CSS                                             | 11 kB  | 9.5 kB                        |
-| Largest lazy JavaScript chunk                              | 38 kB  | 36.0 kB (the call page)       |
-| Largest CSS file                                           | 9 kB   | 8.1 kB (the entry stylesheet) |
+| First-load JavaScript (entry and the chunk loaded with it) | 114 kB | 112.5 kB                      |
+| First-load CSS                                             | 11 kB  | 9.7 kB                        |
+| Largest lazy JavaScript chunk                              | 38 kB  | 36.3 kB (the call page)       |
+| Largest CSS file                                           | 9 kB   | 8.2 kB (the entry stylesheet) |
 
 The readings come from running `scripts/check-budgets.mjs` on a production build of the working tree on 22 November 2026, so they move with every change. Each limit is the measured value plus roughly 1 to 2 kB, so growth shows up in review instead of being absorbed quietly.
 

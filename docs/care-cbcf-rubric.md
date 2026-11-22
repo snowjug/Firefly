@@ -64,6 +64,8 @@ Starts from the share of hidden facts found, weighted by importance (critical 3,
 
 Then 1 point is taken off for each of: fewer than three of the core topics asked about (what is happening, when it started, recent changes, who is affected, business impact, the exact error, what was already tried, environment); repeated questions in two or more turns; fixes offered before the problem was scoped. The score stays between 1 and 5.
 
+The rationale also says how the critical and important facts went, in counts and never as a percentage, for example "and 2 of the 3 that mattered most". It leaves that out when it would only repeat the count of all facts: no fact found, every fact found, or no fact of lesser weight to tell it apart from (`keyFactsClause` in `server/evaluator/parts.ts`, tested in `rules.test.ts`).
+
 ### 3. Empathy and De-escalation
 
 Starts at 2.
@@ -139,6 +141,8 @@ The simulation keeps the customer's temperature, trust and patience on a 0 to 10
 
 Trust and patience use "rose a little", "rose noticeably" (10 or more), "rose a lot" (20 or more), "fell a little" and "fell sharply" (10 or more).
 
+These sentences are in the report's data. The report page does not show the closing "After this, ..." sentence of a strength or an improvement, because its chart shows bands and not trust or small movements. It shows what the customer said next, quoted from the transcript (the customer's name and "replied", with the turn), and leaves that out when the quote it follows is not backed by the transcript (`Reaction` in `web/src/features/report/Coaching.tsx`, `withoutTrend` in `web/src/features/report/report-model.ts`).
+
 ### How firm each score is
 
 | Trainee turns | Evidence for each skill | Overall score |
@@ -148,6 +152,8 @@ Trust and patience use "rose a little", "rose noticeably" (10 or more), "rose a 
 | 0 to 2        | insufficient            | not shown     |
 
 If a call was ended before any closing behaviour appeared, Closing is at most `limited`, and `insufficient` with three trainee turns or fewer. A call that ends before a natural close is marked `ended-early`. The report then says it rests only on what was said. A call with no trainee turns scores 1 everywhere with `insufficient`.
+
+On the report page a skill shows its rubric word (for example "Strong") only when at least one verified quote backs it. A skill with none is a "first look": its segments are dashed, "first look" stands where the rubric word would be, and the row carries one neutral label, "Limited evidence", for `limited` and `insufficient` alike (`web/src/features/report/Scores.tsx`, `SUFFICIENCY_WORDS` in `copy.ts`).
 
 ## CARE
 
@@ -201,7 +207,7 @@ Each behaviour has a stable id, a plain label and one of three statuses: `shown`
 Some traps are deliberate. They are checked in `server/evaluator/care/` and by the CARE tests (`server/evaluator/care*.test.ts`).
 
 - **"I understand" on its own earns nothing.** Empathy earns credit when it is tied to something the customer said or to what is at stake, or when an action follows it. The same sentence said twice, the same lead twice with nothing specific, or three bare phrases is a harm, and it lowers the principal.
-- **Ownership must be first person.** "I'll take this on and call you back by 3pm" is ownership. "Someone from the team will look" is not.
+- **Ownership must be first person.** "I'll take this on and call you back by 3pm" is ownership. "Someone will look at it soon." is not.
 - **An introduction needs a name plus a team or role.** A name alone, or a team alone, is partly. A name is read from the introduction itself ("I'm Sam", "my name is Sam", "this is Sam from support", "Sam speaking"). "I'm Will" and "my name is May" give a name even though will and may are also ordinary words. "I will help you", "may I ask" and "it's May 5th" do not.
 - **Reflecting needs the customer's own words.** At least three shared content words, or two with a reflecting phrase.
 - **A recap is checked against what the customer said.** One with details the customer never gave is not credited in full.
@@ -239,7 +245,7 @@ Each scenario lists, for each principle, one to four things a good call looks li
 
 ## The customer journey
 
-The report shows six milestones, in call order, each "reached" at a trainee turn with a verified quote, or "not reached". They are read from the same detection as CARE, the discovery records and the curveball record, never from a model (`server/evaluator/milestones.ts`).
+The report carries six milestones (`journey.milestones`), in call order, each "reached" at a trainee turn with a verified quote, or "not reached". They are read from the same detection as CARE, the discovery records and the curveball record, never from a model (`server/evaluator/milestones.ts`). The report page does not draw the six as rows, and it does not show the labels in the table below. Its **Call journey** timeline lists the moments of the call in call order, each with the turn that shows it: Greeting, Issue established, Impact established, Fact found (or Fact partly found), Summary, Ownership, Next steps, Closing, Tension eased or Tension rose, and Unexpected turn. A call that ended early also has a Call ended moment, "After turn N". The moments come from the milestones, the CARE behaviours, the discovery results, the turning points described below and the unexpected turn. A moment is drawn only when the call needed it: the report lists the behaviour behind it, or its milestone applies. One the call never reached says "Not reached". An early one (the greeting, the issue, the impact, discovery) stays where the call would usually have shown it, and a late one (the recap, ownership, next steps and the close) comes after everything that happened, and after the end of the call. On a screen 48 em wide or more the moments are a rail when they all fit in one row (at least 80 px each), and otherwise a list down the page (`web/src/features/report/events-model.ts`, `Timeline.tsx`).
 
 | Milestone               | Reached when                                                                                                         |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------- |
@@ -250,17 +256,17 @@ The report shows six milestones, in call order, each "reached" at a trainee turn
 | Ownership               | Clear or partial ownership was shown.                                                                                |
 | Closure                 | At least two of: a recap, a time for the next update, a check for anything else, a polite goodbye in the final turn. |
 
-The journey chart shows the customer's temperature after each trainee turn. A point is a turning point when the temperature moved by 6 or more, or changed band.
+The **Customer experience** section of the report page draws the customer's temperature after each trainee turn as a chart, with every point also in a table ("Show as a table") as its text alternative. Under the chart it says "The customer is simulated, so heights show direction, not exact measurements." (`CHART_FOOTNOTE` in `web/src/features/report/copy.ts`). A point is a turning point when the temperature moved by 6 or more, or changed band. The last point is the end of the call, and any other turn that carried the unexpected turn is marked as that instead (`buildJourney` in `server/evaluator/parts.ts`). When an unexpected turn came, the section also names it, says after which turn it came and whether it was resolved, and links to the turn.
 
 ## What else the report contains
 
 - **Strengths** (up to three): only behaviours with a quote. A turn that also blamed or dismissed the customer is never praised.
-- **Improvements** (up to three): real findings first, ranked by harm, each with a quote (or none when something never happened), the risk for this customer, a suggested line and why it works. With five or more trainee turns and fewer than two real findings, the report offers a **stretch** instead and says plainly that nothing went wrong.
-- **Better wording**: a suggested rewrite of a quoted line, built from templates and the customer's own words.
-- **Discovery**: each hidden fact as found, partly found or missed, with the question that revealed it, what was hidden (shown only after the call), a better question and what missing it cost.
-- **Curveball**: what the trainee did and whether it was resolved.
+- **Improvement opportunities** (`improvements`, up to three): real findings first, ranked by harm, each with a quote (or none when something never happened), the risk for this customer, a suggested line and why it works. With five or more trainee turns and fewer than two real findings, the report offers a **stretch** instead and says plainly that nothing went wrong.
+- **Better wording** (`betterPhrasing` on an improvement): a suggested rewrite of a quoted line, or of something that was never said. The rules evaluator builds it from templates with slots for the customer's first name, the impact wording, the customer's own words about a deadline (only when they are in the transcript) and the scenario's own better questions. Where the trainee has to supply a detail, a template leaves it in square brackets, and some carry an example update time ("in 20 minutes") (`server/evaluator/phrasing.ts`). In live mode the model drafts it, and the server drops an improvement whose quote is not in the transcript, removes markup and any sentence that gives a raw mood score or names CBCF, and cuts the wording to 45 words (`merge.ts`, `conform.ts`). The report page opens the block with "Wording to try for this call, written by the coaching. Use your own words.", then shows "You said" above "Try", with the words that went struck through and the words that came underlined, and a key for the marks that are drawn ("Struck through: removed", "Underlined: added"). Under "You said" it says "Not said in this call" when the improvement is about something that never happened, and "Insufficient evidence" in place of words the transcript does not back. It is wording to try, not a prescribed script.
+- **Discovery review** (`discovery`): how many hidden facts were found, then each fact as found, partly found or missed, with the most important first (critical, then important, then helpful). A found or partly found fact is one line that opens to "You asked" (the question that found it, quoted from the transcript), "The customer answered" (from the transcript) and why it mattered. A missed fact says why it mattered, which is what missing it cost, and offers "A question worth asking" (the fact's better question). What the customer would have said stays behind "Show what the customer would have said", and the report only exists after the call.
+- **Unexpected turn** (the engine's curveball), inside Customer experience: what it was, after which turn, what the trainee did and whether it was resolved, with a stronger response when it was not. It is shown only when one came.
 - **Next practice**: the lowest-scoring skill, one concrete action, and a suggested difficulty: one step harder when the overall score is 4 or more, one step easier when it is 2.5 or less, otherwise the same. A scenario that practises the skill is suggested from the library.
-- **Summary and note**: a short summary and a closing note that this is automatic practice coaching and a mentor's review adds what it cannot.
+- **Summary** and **About this report**: a short summary, and a closing note that this is automatic practice coaching and a mentor's review adds what it cannot.
 
 ### Word budgets
 
@@ -309,7 +315,7 @@ A model can write the words. It cannot change a number the engine recorded, or a
 What exists instead is a placeholder (`server/evaluator/cbcf-mapping.ts`):
 
 - **A versioned configuration.** `CBCF_MAPPING` has version `0.1.0-pending`, the status `awaiting-authoritative-source`, no source, no call stages and no behaviours.
-- **A status in every version 2 report.** The report's `cbcf` object says `awaiting-authoritative-source`, with the mapping version and the note "CBCF mapping is not applied: awaiting authoritative source confirmation." The "About this report" section of the report page says so in one line.
+- **A status in every version 2 report.** The report's `cbcf` object says `awaiting-authoritative-source`, with the mapping version and the note "CBCF mapping is not applied: awaiting authoritative source confirmation." The CARE review of the report page says "Firefly does not map this review to CBCF." and then that note, and the "About this report" section says so in one line ("CBCF mapping is not applied: it is awaiting an authoritative source.").
 - **An empty list on every scenario.** The scenario schema allows no `cbcfBehaviours` at all until authorised material exists (`shared/domain/scenario.ts`).
 - **No CBCF wording from a model.** A model-written sentence that names CBCF is dropped.
 

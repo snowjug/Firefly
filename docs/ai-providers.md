@@ -2,7 +2,7 @@
 
 Firefly runs in one of two modes.
 
-- **Demo mode** (the default) uses Firefly's built-in rules engine. It needs no credentials and makes no network calls. It is labelled "Demo mode" everywhere in the app and is never presented as a model.
+- **Demo mode** (the default) uses Firefly's built-in rules engine. It needs no credentials and makes no network calls. It is labelled as demo mode in the app (on the call bar from 360 px wide, in Voice settings and on the pre-flight page, and in the report) and is never presented as a model.
 - **Live mode** uses a chat model for three judgement calls: classifying what the trainee did, writing the customer's replies, and drafting the coaching report. Three providers are supported: Azure OpenAI, Google's Gemini API, and any OpenAI-compatible chat-completions endpoint.
 
 This page is about the language model. Speaking and listening are a separate boundary with their own providers (none, a labelled demo voice, and Azure AI Speech), described in [voice-architecture.md](voice-architecture.md). Neither choice depends on the other.
@@ -20,7 +20,7 @@ This page is about the language model. Speaking and listening are a separate bou
 
 **What the status column means.** The adapters are written against each vendor's documentation and tested against a local fake. CI uses the fake servers and the mock. "Not run" means Firefly has not been run against that service.
 
-**The Gemini smoke check.** Gemini (model `gemini-3.5-flash-lite`, free tier, key supplied locally by the user) got a limited live smoke check on 21 Nov 2026 through the real HTTP API: two scripted calls (Outlook shared mailbox, 7 engineer turns; Teams external meetings, 10 engineer turns) with live customer replies and a model-written v2 report for each; no errors, no retries, no coaching or list-style replies detected by simple automatic checks. That is a smoke check, not a quality evaluation: it says nothing about voice, about other scenarios, or about paid-tier behaviour.
+**The Gemini smoke check.** Gemini (model `gemini-3.5-flash-lite`, free tier, key supplied locally by the user) got a limited live smoke check on 21 Nov 2026 through the real HTTP API: two scripted calls (Outlook shared mailbox, 7 engineer turns; Teams external meetings, 10 engineer turns) with live customer replies and a model-written v2 report for each; no errors, no retries, no coaching or list-style replies detected by simple automatic checks. That is a smoke check, not a quality evaluation: it says nothing about voice, about other scenarios, or about paid-tier behaviour. It ran before the customer prompt became `customer-4`, so the live model has not been exercised with the newest prompt or with the guards added with it (stock assistant phrases, the engineer's name, recaps of the case and a repeated bare "Okay."): those have met only the local fake model.
 
 These two calls were a re-run. An earlier live run the same day exposed four customer-engine faults: a reveal the customer had earned was rejected as bad output, a repeated question got a wrong answer, the customer pushed too hard, and it repeated lines word for word. They were fixed before the re-run, with tests.
 
@@ -119,6 +119,8 @@ Node's built-in `fetch` ignores `HTTP_PROXY` and `HTTPS_PROXY` unless asked. If 
 
 A trainee message therefore costs two model calls, and ending the call costs one. A repair or regeneration adds one more call for that step.
 
+These three are the only calls to a model (`ModelProvider` in `server/providers/types.ts`). The closing check shown in Guided practice reads the transcript so far by rules alone (`server/evaluator/closingCheck.ts`), and the practice tips are fixed text chosen in the browser (`web/src/features/tips/`). Neither calls a model, in demo mode or with a live provider.
+
 The model never decides the customer's state. Customer temperature, trust and patience, which hidden facts are revealed, when a curveball fires and quote verification are all computed in code, and so are CARE, the milestones, discovery and the overall score. The classifier _describes_ what the trainee did; the engine decides what that means. The coaching draft is the one place where a model proposes numbers: it scores the six skills, and the server then checks every quote and lowers a score that lacks evidence (see [care-cbcf-rubric.md](care-cbcf-rubric.md#when-a-model-writes-the-evaluation)). Every model output is validated before it is used:
 
 - **JSON answers** are read leniently (code fences, text around the object) and then checked against the shared schemas. Unknown intents, behaviours and fact names are dropped, numbers are clamped, long strings are trimmed, and quotes must appear verbatim in the trainee's message. If the result is still invalid, Firefly sends one corrective message naming the problem, then fails with `provider_bad_output`.
@@ -134,7 +136,7 @@ The model never decides the customer's state. Customer temperature, trust and pa
 
 **After the call (coaching draft)**
 
-- The scenario's grounding notes (including what a strong call looks like for each CARE principle), the settings used for the call, the full transcript with turn numbers, the discovery results (the call is over, so what the customer held back is included), the customer-state timeline, and facts about how the call ended. Only the customer's first name is sent. The CARE results, milestones and discovery are computed by the server, and the prompt tells the model to leave them alone and never to mention CBCF.
+- The scenario's coaching notes (the author's evaluator notes, success criteria, good and poor approaches, expected outcome and what a strong call looks like for each CARE principle), the settings used for the call, the full transcript with turn numbers, the discovery results (the call is over, so what the customer held back is included), the customer-state timeline, and facts about how the call ended. Only the customer's first name is sent. The CARE results, milestones and discovery are computed by the server, and the prompt tells the model to leave them alone and never to mention CBCF. The scenario's internal provenance record (`grounding`) is never sent: no prompt reads it.
 
 **Never sent**
 
@@ -179,7 +181,7 @@ Models differ in the parameters they accept. If a 400 response says so, Firefly 
 
 ## Prompt versions
 
-Prompts are plain functions in `server/prompts/` with exported version constants: `CUSTOMER_PROMPT_VERSION` (`customer-4`), `CLASSIFIER_PROMPT_VERSION` (`classifier-2`) and `EVALUATOR_PROMPT_VERSION` (`evaluator-3`). The versions are stored with every session. Change the version whenever you change a prompt's wording or sampling. The evaluator prompt's guidance for each dimension follows [the rubric](care-cbcf-rubric.md); update both together. A model-written coaching draft is verified and merged by `server/evaluator/merge.ts`, as described in that page.
+Prompts are plain functions in `server/prompts/` with exported version constants: `CUSTOMER_PROMPT_VERSION` (`customer-4`), `CLASSIFIER_PROMPT_VERSION` (`classifier-2`) and `EVALUATOR_PROMPT_VERSION` (`evaluator-3`). The versions are stored with every session. In demo mode the stored versions are the rules versions in `MOCK_PROMPTS` (`server/providers/mock.ts`): `rules-customer-4`, `rules-classifier-3` and `rules-evaluator-1`. Change the version whenever you change a prompt's wording or sampling. The evaluator prompt's guidance for each dimension follows [the rubric](care-cbcf-rubric.md); update both together. A model-written coaching draft is verified and merged by `server/evaluator/merge.ts`, as described in that page.
 
 ## Optional manual smoke test
 
@@ -210,8 +212,8 @@ This is for the maintainer and is not required. It needs your own key, makes two
    if (ctx) console.log((await provider.generateCustomer(ctx)).text);
    ```
 
-3. In the app, start "Shared team mailbox missing from Outlook" (Starter) and send three or four messages. Check that:
-   - the provider label is the live one, not "Demo mode";
+3. In the app, choose the card "Shared mailbox missing" (the Outlook scenario at Starter; its details give the full title, "Shared team mailbox missing from Outlook"), press "Start configuration", start the call from the brief ("Start voice call", or "Start a text-only call") and send three or four messages. Check that:
+   - the call is live, not demo: the "Customer AI" row on the pre-flight page (and in Voice settings) names your provider, as "Live model:" and its label, and the call bar says "Live model" rather than "Demo mode" (from 360 px wide);
    - the customer stays in character and never mentions being an AI;
    - asking what he has already tried gets an answer from the scenario (see `hf-tried-restart` in `server/scenarios/library/outlook-shared-mailbox-missing.ts`), and the customer does not volunteer facts you have not asked about;
    - ending the call produces a coaching report whose quotes match your messages.

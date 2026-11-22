@@ -29,7 +29,7 @@ Windows is blocking PowerShell scripts. Run npm through the command shell instea
 ## AI provider (the customer and the coaching)
 
 **The app says "Demo mode" but I configured a model.**
-Look at the server's start-up output. If a required variable is missing or `FIREFLY_PROVIDER` is misspelt, Firefly prints a notice naming the problem (never the values) and runs in demo mode instead. The header, the pre-flight page, the call bar and the report show which mode is running, and the header carries the notice. Fix `.env`, then restart the server: settings are read only at start-up.
+Look at the server's start-up output. If a required variable is missing or `FIREFLY_PROVIDER` is misspelt, Firefly prints a notice naming the problem (never the values) and runs in demo mode instead. The header, the pre-flight page, the call bar (from 360 px wide up; below that, **Settings** says it) and the report show which mode is running, and the header carries the notice. Fix `.env`, then restart the server: settings are read only at start-up.
 
 **"This call was started with a different AI setting than the server is using now."**
 A call keeps the provider it was started with. If you change `FIREFLY_PROVIDER` while a call is open, start a new call.
@@ -69,7 +69,7 @@ Speech recognition can mishear words, and the report says so for spoken calls. I
 The server has no working speech provider (none is configured, or its settings are wrong, or the service is down), or your connection dropped. Nothing was sent. Type your reply, or choose **Retry**. If you run Firefly, look at the start-up output: a notice names any wrong `AZURE_SPEECH_*` variable (never its value). [speech-providers.md](speech-providers.md) lists every setting.
 
 **I can't hear the customer.**
-Check the pre-flight page and **Voice settings** on the call: they name the voice that is in use. With the **scripted demo speech** provider the customer's "voice" is a short placeholder sound, not speech, so read the transcript. With browser voices, the voices on the device decide what you hear; a Windows laptop may have no British English voice and will use another English voice. If your browser blocks sound until you interact with the page, choose **Replay**. If the customer's voice cannot be made or played, choose **Continue without audio** and read the transcript: the customer's words are there before their voice plays.
+Check the pre-flight page and **Voice settings** on the call: they name the voice that is in use. With the **scripted demo speech** provider the customer's "voice" is a short placeholder sound, not speech (the pre-flight page says "A demo sound, not a voice"), so read the transcript. With browser voices, the voices on the device decide what you hear; a Windows laptop may have no British English voice and will use another English voice. If your browser blocks sound until you interact with the page, choose **Replay**. If the customer's voice cannot be made or played, choose **Continue without audio** and read the transcript: the customer's words are there before their voice plays.
 
 **The four voices sound the same.**
 A browser with one English voice cannot make four voices sound different, and some speech services have fewer than four voices in a language. The brief says so ("Some of these voices share one synthetic voice and differ only in pace.", or the browser's equivalent).
@@ -81,7 +81,7 @@ After an empty pass the microphone reopens by itself, up to three times in a row
 **Talk** stays disabled while the customer's voice is being prepared or played: Firefly does not support talking over the customer. Press **Stop customer audio**, then talk, or wait for the voice to end.
 
 **The microphone indicator is still on.**
-While a spoken call is live and not paused, the browser shows that the microphone is in use, even though Firefly only listens while it is your turn. **Pause**, or **End and review** in the "End the call?" dialog, releases it. **End call** alone only opens that dialog. If the indicator stays on after the call has ended, close the tab and tell the maintainers.
+While a spoken call is live and not paused, the browser shows that the microphone is in use, even though Firefly only listens while it is your turn. **Pause**, or **End and review** in the "End the call?" dialog (titled "Ready to close?" in Guided practice), releases it. **End call** alone only opens that dialog. If the indicator stays on after the call has ended, close the tab and tell the maintainers.
 
 **The call paused when I switched to another tab or window.**
 A spoken call pauses by itself when the browser reports the page as hidden, so that the microphone is never open out of sight. The microphone is released and the customer's voice stops. Coming back does not open the microphone again: press **Resume**. A text call is not paused.
@@ -91,8 +91,11 @@ A spoken call pauses by itself when the browser reports the page as hidden, so t
 **A card says "The customer could not reply." or "The customer is taking too long."**
 Your message was saved or is kept. Choose **Retry**: it sends the same message once, never twice. After a page reload the card comes back. If another notice covers it (for example, a failed attempt to end the call), the card returns when that notice is put away: a message that did not send always keeps its Retry.
 
-**The Send button is disabled.**
-The message is empty, over the length limit, or the customer is still replying. At the message limit ("This call reached its message limit."), end the call to get your report.
+**The Send button is dimmed, or pressing it does nothing.**
+The line under the box says why. "Waiting for the customer." means the customer is replying: the box holds the message you just sent, dimmed and read-only, and empties when the reply arrives. "N over the M character limit." means the message is too long: shorten it. "Message limit reached." means the call has taken every message it allows (the notice says "This call reached its message limit."): end the call to get your report. "You are offline." and "Retry your last message first." mean a notice on the call page needs handling first. An empty box does not dim Send: pressing it sends nothing and says "Type a message first."
+
+**The call bar does not say "Demo mode" (or "Live model").**
+The label is on the bar from 360 px wide up. Below that there is no room for it: choose **Settings** and read the "Customer AI" row. The pre-flight page, before the call starts, has the same row.
 
 **I left the call page.**
 The call stays open on the server and keeps its transcript. Open its address again (browser Back, or the address bar's history): the pre-flight page says **Resume call** and offers **Resume voice call** and **Resume with text**. Firefly has no screen that lists open calls.
@@ -105,6 +108,23 @@ You ended a call in which no message was sent, so there is nothing to score. Cho
 
 **The coaching report did not finish.**
 Your transcript is saved. Choose **Retry evaluation** on the report page. If it keeps failing with a live model, check the provider configuration; the same call can be evaluated again at any time.
+
+**There are no tips on the call screen.**
+Tips belong to Guided practice. Assessment practice (the default at Standard and Challenge) never shows them, and the mode cannot be changed during a call: start a new call and choose **Guided practice** on the scenarios page. The case brief names the mode. In Guided practice the strip ("During the call") is left out of a window that is both narrower than about 1,024 px and no taller than about 704 px (a phone held on its side, say), and, on a narrow window, while the on-screen keyboard is open: widen or heighten the window, or close the keyboard. If only **Show tips** is there, **Hide tips** was pressed: choose **Show tips**. Nothing is saved, so a reload also brings the strip back.
+
+**"Ready to close?" shows no checks.**
+In Guided practice the dialog asks for four neutral checks (plan, owner, update time, the customer's agreement) when it opens. If the answer takes more than about a second, or fails, the rows and the line above them ("What the call has covered so far. This is not a score.") are left out without a message and the dialog works as usual. The checks never hold up ending: choose **End and review**.
+
+**The report says "Insufficient evidence" where I expected a quote.**
+The page checks every quote again against the saved transcript and shows words only if the turn it names says them (case, punctuation and spacing aside). Otherwise it says "Insufficient evidence" and shows no words. A score that no verified quote backs is drawn as a first look: dashed segments, "first look" in place of a rubric word, and a "Limited evidence" label. Read the Transcript section, or make a longer call. If a quote that is plainly in your transcript is missing, tell the maintainers.
+
+## The interface
+
+**The theme does not follow my system's light or dark setting.**
+The choice saved on this device wins. Choosing **Light** or **Dark** in the footer, or pressing the theme toggle in the header, saves that choice in this browser's local storage (key `firefly.theme`), and the system setting is ignored from then on. Choose **System** in the footer: it removes the saved choice, and the page follows the device again, including when the device's setting changes while the page is open. A choice made in another tab of the same browser applies here too. The footer confirms a kept choice with "Saved on this device". If the browser blocks site data, it says "Not saved: storage is blocked": the page uses the choice until you reload and then returns to the system setting. The call screen has no theme control, so change the theme on the landing page or the scenarios page first.
+
+**The call preview on the landing page is paused, or has stopped.**
+The preview pauses by itself while it is scrolled out of view or its tab is hidden, and carries on when you come back. **Pause** (named "Pause preview") stops it until you choose **Play** (named "Play preview"). After three runs it rests on the finished call and the button reads **Replay** (named "Replay preview"); choosing it starts again. If the system asks for reduced motion, the preview shows the finished call from the start and has no button, because nothing moves; its product tabs still work. It never plays sound or asks for the microphone.
 
 ## Data
 
