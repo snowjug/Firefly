@@ -8,6 +8,13 @@
   gap: var(--sp-4);
   padding-block: var(--sp-4) var(--sp-8);
 }
+/* Where the way on is pinned to the bottom it is the last thing on the page and brings its own
+   padding, so nothing more is kept below it. */
+@media (max-width: 63.99em) {
+  .scn-page:has(.scn-detail__bar) {
+    padding-block-end: 0;
+  }
+}
 .scn-title {
   font-family: var(--font-display);
   font-size: var(--fs-subtitle1);
@@ -72,11 +79,45 @@
   font-weight: var(--fw-regular);
   font-variant-numeric: tabular-nums;
 }
-/* On the narrowest phones four choices do not fit in one row: two by two, so none wraps alone. */
-@media (max-width: 22em) {
+/* On a tablet and below, the segments are as tall as a thumb needs (40 px). On a phone the filter is
+   as wide as the column and its four choices share the width equally, in one row; where that is about
+   70 px each, the count goes under the name so that no name is squeezed or wraps. The cells are never
+   narrower than their name (in rem, so larger text makes fewer, wider cells in more rows rather than
+   names that run into each other). */
+@media (max-width: 48em) {
+  .scn-diff.ff-segmented .ff-segmented__item {
+    min-block-size: 2.5rem;
+  }
+  .scn-head__tools .ff-button {
+    min-block-size: var(--target);
+  }
+}
+@media (max-width: 47.99em) {
+  .scn-diff {
+    flex: 1 1 100%;
+  }
   .scn-diff.ff-segmented .ff-segmented__track {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(3.75rem, 1fr));
+  }
+  .scn-diff.ff-segmented .ff-segmented__face {
+    padding-inline: var(--sp-1);
+  }
+}
+@media (max-width: 30em) {
+  .scn-diff.ff-segmented .ff-segmented__face {
+    padding-inline: 0;
+  }
+  .scn-diff .ff-segmented__label {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    font-size: var(--fs-compact);
+    line-height: var(--lh-compact);
+  }
+  .scn-diff .scn-n {
+    font-size: var(--fs-caption);
+    line-height: var(--lh-caption);
   }
 }
 

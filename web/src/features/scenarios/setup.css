@@ -31,6 +31,26 @@
   line-height: var(--lh-compact);
 }
 
+/* ---- Thumb-sized: from a tablet down every control here is 40 px or more. The small "?" buttons keep
+   their look and their place; the box that takes the tap is 44 px, and the negative margin gives back
+   what it adds, so nothing moves. ------------------------------------------------------------------ */
+@media (max-width: 48em) {
+  .scn-preset .ff-segmented--segments .ff-segmented__item,
+  .scn-custom .ff-segmented--segments .ff-segmented__item {
+    min-block-size: 2.5rem;
+  }
+  .scn-preset .scn-preset__help,
+  .scn-cf__head .ff-button {
+    inline-size: var(--target);
+    min-inline-size: var(--target);
+    min-block-size: var(--target);
+    margin: -0.375rem;
+  }
+  .scn-custom__head .ff-button {
+    min-block-size: var(--target);
+  }
+}
+
 /* ---- Customise ---------------------------------------------------------------------------------- */
 .scn-custom__head {
   display: flex;

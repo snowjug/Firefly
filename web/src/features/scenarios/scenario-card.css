@@ -172,19 +172,26 @@
 }
 
 .scn-card__title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  /* Two lines are always reserved, so cards in a row are the same height whatever the title. */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  /* Two lines are always reserved, so cards in a row are the same height whatever the title. A title
+     of one line sits at the bottom of them, next to the line that describes it, so the space between
+     the two is the same on every card. */
   min-block-size: calc(var(--lh-subtitle2) * 2);
   margin-block-start: var(--sp-1);
-  overflow: hidden;
   color: var(--fg-1);
   font-size: var(--fs-subtitle2);
   line-height: var(--lh-subtitle2);
   font-weight: var(--fw-semibold);
   text-wrap: balance;
+}
+.scn-card__title > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 .scn-card__meta {
   color: var(--fg-3);
@@ -217,15 +224,21 @@
   margin-block-start: auto;
   padding-block-start: var(--sp-3);
   border-block-start: var(--stroke-w) solid var(--stroke-3);
-  color: var(--brand-fg-2);
+  color: var(--fg-2);
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   font-weight: var(--fw-semibold);
-  text-decoration: none;
+  transition: color var(--motion-control) var(--ease-easy);
 }
-.scn-card__go:hover {
+/* Brand blue says which card is chosen, and that the card on the landing page is a link (and
+   underlined, as every link is). The other cards of the gallery keep their action quiet, so four or
+   five of them do not compete with the one primary action below. */
+.scn-card[data-selected] .scn-card__go,
+.scn-card__link {
   color: var(--brand-fg-2);
-  text-decoration: none;
+}
+.scn-card__link:hover {
+  color: var(--brand-fg-2);
 }
 .scn-card__go .ff-icon {
   transition: transform var(--motion-control) var(--ease-decelerate);
@@ -264,6 +277,9 @@
 }
 .scn-card:has(:focus-visible) .scn-card__meta {
   color: var(--fg-2);
+}
+.scn-card[data-mode='select']:not([data-selected]):has(:focus-visible) .scn-card__go {
+  color: var(--fg-1);
 }
 .scn-card:has(:focus-visible) .scn-card__go .ff-icon {
   transform: translateX(var(--move-xs));
@@ -310,6 +326,9 @@
   }
   .scn-card[data-fx='on']:hover .scn-card__meta {
     color: var(--fg-2);
+  }
+  .scn-card[data-fx='on'][data-mode='select']:not([data-selected]):hover .scn-card__go {
+    color: var(--fg-1);
   }
   .scn-card[data-fx='on']:hover .scn-card__go .ff-icon {
     transform: translateX(var(--move-xs));

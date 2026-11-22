@@ -237,9 +237,12 @@ test.describe('the keyboard', () => {
     expect(await scrolled(page)).toBe(0);
 
     await next(page).focus();
+    // Only the end that has more beyond it is marked, so only that end fades.
+    await expect(scroller(page)).toHaveAttribute('data-more', 'end');
     await page.keyboard.press('Enter');
     await expect.poll(() => scrolled(page)).toBeGreaterThan(200);
     await expect.poll(() => offSnap(page)).toBeLessThan(3);
+    await expect(scroller(page)).toHaveAttribute('data-more', 'start end');
     await expect(previous(page)).not.toHaveAttribute('aria-disabled', 'true');
     // Moving the window is not choosing: the first card is still the one chosen.
     await expect(radios(page).first()).toBeChecked();
@@ -273,6 +276,8 @@ test.describe('the pointer', () => {
       await expect(radios(page).first()).toBeChecked();
       await expect(gallery(page).getByRole('radio', { checked: true })).toHaveCount(1);
       expect(new URL(page.url()).searchParams.get('scenario')).toBe(ids[0]);
+      // The count says so in words, so it does not look wrong beside the bar that did move.
+      await expect(gallery(page).locator('.ff-carousel__count')).toHaveText('Selected 1 of 16');
     });
 
     await test.step('a click (no movement) on a card chooses it', async () => {
@@ -514,6 +519,18 @@ test.describe('a phone', () => {
       const peek = await share(page, ids[1] as string);
       expect(peek, 'the second card shows a little').toBeGreaterThan(0.04);
       expect(peek, 'but not all of it').toBeLessThan(0.5);
+    });
+
+    await test.step('the row runs out to the edge of the window, with about 48 px of the next card, fading out', async () => {
+      const width = page.viewportSize()?.width ?? 0;
+      const row = await boxOf(scroller(page));
+      expect(row.x).toBeLessThanOrEqual(0.5);
+      expect(row.x + row.width).toBeGreaterThanOrEqual(width - 0.5);
+      const slice = width - (await boxOf(cardOf(page, ids[1] as string))).x;
+      expect(slice).toBeGreaterThan(44);
+      expect(slice).toBeLessThan(52);
+      await expect(scroller(page)).toHaveAttribute('data-more', 'end');
+      await expect(scroller(page)).not.toHaveCSS('mask-image', 'none');
     });
 
     await test.step('the buttons are big enough to touch, and the way on is in view', async () => {

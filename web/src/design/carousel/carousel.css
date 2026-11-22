@@ -5,9 +5,14 @@
 
 .ff-carousel {
   /* How far the first item sits in from the viewport's edge. The viewport is wider than the page
-     column by this much on each side, so the items line up with the column and what they draw
-     outside themselves (a shadow, the focus ring) is not clipped. */
-  --ff-carousel-inset: var(--sp-2);
+     column by this much on each side, so the items line up with the column while the row runs out
+     into the page's side padding (to the edge of the window on a phone): what an item draws outside
+     itself (a shadow, the focus ring) is not clipped, and the fades at either end sit where no
+     snapped item is. A gallery inside something with side padding of its own gives that padding here. */
+  --ff-carousel-inset: var(--gutter);
+  /* How far the end that has more beyond it fades out, and, on a phone, how much of the next item shows. */
+  --ff-carousel-fade: 2rem;
+  --ff-carousel-peek: 3rem;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
@@ -39,6 +44,51 @@
    arrived (the browser would otherwise snap at once, with no glide). */
 .ff-carousel__viewport[data-settling='true'] {
   scroll-snap-type: none;
+}
+
+/* An edge that has more beyond it fades out, as the product rail's does, so an item that is cut by
+   the edge is not cut mid-word at full strength. The start edge fades over the inset only, which is
+   empty when an item has snapped, so a chosen item is never dimmed. The fade is a mask: only its
+   opacity matters, so it takes no colour of its own. */
+.ff-carousel__viewport[data-more='end'] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    currentColor calc(100% - var(--ff-carousel-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    currentColor calc(100% - var(--ff-carousel-fade)),
+    transparent
+  );
+}
+.ff-carousel__viewport[data-more='start'] {
+  -webkit-mask-image: linear-gradient(
+    to left,
+    currentColor calc(100% - var(--ff-carousel-inset)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to left,
+    currentColor calc(100% - var(--ff-carousel-inset)),
+    transparent
+  );
+}
+.ff-carousel__viewport[data-more='start end'] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    currentColor var(--ff-carousel-inset),
+    currentColor calc(100% - var(--ff-carousel-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    currentColor var(--ff-carousel-inset),
+    currentColor calc(100% - var(--ff-carousel-fade)),
+    transparent
+  );
 }
 
 .ff-carousel__track {
@@ -73,10 +123,14 @@
   flex: 1 1 auto;
   min-inline-size: 0;
 }
-/* On a phone one item leads and the next shows beside it, so the row plainly scrolls. */
+/* On a phone one item leads and a slice of the next shows beside it, so the row plainly scrolls. The
+   item is what is left of the row after the inset, the gap and the slice, up to a comfortable width. */
 @media (max-width: 47.99em) {
   .ff-carousel__item {
-    flex-basis: min(82cqw, 22rem);
+    flex-basis: min(
+      calc(100cqw - var(--ff-carousel-inset) - var(--sp-4) - var(--ff-carousel-peek)),
+      22rem
+    );
   }
 }
 
@@ -106,6 +160,11 @@
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
   font-variant-numeric: tabular-nums;
+}
+/* "Selected 10 of 16" is longer than "1–4 of 12"; the room is kept so the bar beside it does not shift
+   as the number grows. */
+.ff-carousel__count[data-kind='selected'] {
+  min-inline-size: 7.5rem;
 }
 .ff-carousel__bar {
   position: relative;

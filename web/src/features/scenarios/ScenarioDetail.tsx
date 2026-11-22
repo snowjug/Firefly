@@ -65,6 +65,8 @@ export interface ScenarioDetailProps {
 }
 
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+/** Under 360 px the recap beside the way on does not fit: it is left out of sight, not out of reach. */
+const NARROWEST = '(max-width: 22.49em)';
 
 /** Guided practice first: it is the one that adds something. */
 const MODES: readonly PracticeMode[] = ['guided', 'immersive'];
@@ -72,18 +74,15 @@ const MODES: readonly PracticeMode[] = ['guided', 'immersive'];
 function Fact({
   term,
   wide,
-  lines,
   children,
 }: {
   term: string;
   /** Spans the whole row. */
   wide?: boolean;
-  /** Keeps room for two lines, so a longer sentence for another scenario moves nothing below it. */
-  lines?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className={cx('scn-fact', wide && 'scn-fact--wide', lines && 'scn-fact--lines')}>
+    <div className={cx('scn-fact', wide && 'scn-fact--wide')}>
       <dt>{term}</dt>
       <dd>{children}</dd>
     </div>
@@ -113,8 +112,9 @@ function Meter({ label, level }: { label: string; level: Rating }) {
  * customer and how they start, the call stage, the difficulty, how long it takes and what it
  * practises. On the right, how to run it: the preset, the practice mode, the rest of the setup
  * behind "Customise", and the way on. The values that a setting changes fade in, so a change is seen
- * rather than jumped to. Below 64em everything stacks and the way on is pinned to the bottom of the
- * screen. Nothing here says what the customer keeps back.
+ * rather than jumped to. Below 64em everything stacks; the way on is pinned to the bottom of the
+ * screen, across the page below 64em and in the right-hand column from 64em. Nothing here says what
+ * the customer keeps back.
  */
 export function ScenarioDetail({
   scenario,
@@ -133,6 +133,7 @@ export function ScenarioDetail({
   const [presetHelp, setPresetHelp] = useState(false);
   // A view transition between this page and the brief only where the person allows motion.
   const reduced = useMediaQuery(REDUCED_MOTION);
+  const slim = useMediaQuery(NARROWEST);
   const tile = useTileTransition(briefTo);
 
   const mode: PracticeMode = hintsOn(config) ? 'guided' : 'immersive';
@@ -190,10 +191,10 @@ export function ScenarioDetail({
         </header>
 
         <dl className="scn-facts">
-          <Fact term="Issue" wide lines>
+          <Fact term="Issue" wide>
             {scenario.publicBrief.issue}
           </Fact>
-          <Fact term="Business impact" wide lines>
+          <Fact term="Business impact" wide>
             <span className="scn-swap" key={config.impact}>
               <strong>{impactLabel(config.impact)}</strong>
               {impactText ? <> &middot; {impactText}</> : null}
@@ -311,7 +312,7 @@ export function ScenarioDetail({
         </div>
 
         <div className="scn-detail__bar">
-          <p className="scn-detail__summary-line">
+          <p className={cx('scn-detail__summary-line', slim && 'visually-hidden')}>
             <span
               className="scn-swap"
               key={`${config.difficulty}-${config.impact}-${config.temperature}-${mode}`}

@@ -73,6 +73,33 @@ async function openWorkspace(page: Page, search = '') {
   await expect(page).toHaveURL(/[?&]scenario=/);
 }
 
+/**
+ * What a thumb has to find on the page (inside `main`: the shell's header and footer are not this
+ * page's) that is under `min` px either way. A radio or a checkbox is drawn by what it sits in, so
+ * the box of its option, or its label, is the one measured.
+ */
+async function smallTargets(page: Page, min: number): Promise<string[]> {
+  return page.evaluate((limit) => {
+    const found: string[] = [];
+    const controls = document.querySelectorAll<HTMLElement>(
+      'main a[href], main button, main select, main summary, main input:not([type="hidden"])',
+    );
+    for (const control of controls) {
+      if (control.closest('[hidden], .visually-hidden') || !control.checkVisibility()) continue;
+      let box = control.getBoundingClientRect();
+      if (control.matches('input[type="radio"], input[type="checkbox"]') && box.width < 2) {
+        box = (control.closest('label') ?? control).getBoundingClientRect();
+      }
+      if (box.width === 0 || box.height === 0 || Math.min(box.width, box.height) >= limit) continue;
+      const name = control.getAttribute('aria-label') ?? control.textContent ?? '';
+      found.push(
+        `${control.tagName.toLowerCase()} "${name.replace(/\s+/g, ' ').trim().slice(0, 30)}" ${Math.round(box.width)}x${Math.round(box.height)}`,
+      );
+    }
+    return found;
+  }, min);
+}
+
 test.describe('choose a scenario', () => {
   test('the library is one carousel of cards with the product, the short title, how it starts, the time and the level, and the first is chosen', async ({
     page,
@@ -816,6 +843,116 @@ test.describe('the case brief', () => {
     }
     await page.getByRole('link', { name: 'Choose a scenario' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
+  });
+
+  test('puts the two ways to start in one block with the way back apart, the notice under the case, and the note beside the title, so the columns end about level', async ({
+    page,
+  }) => {
+    await page.goto(`/scenarios/${MARCUS}/brief`);
+    const side = page.getByRole('complementary', { name: 'Voice call' });
+    const notice = page.getByRole('region', { name: 'Privacy notice' });
+    await expect(notice).toBeVisible();
+
+    const box = async (locator: Locator) => {
+      const found = await locator.boundingBox();
+      if (!found) throw new Error('The element has no box on screen.');
+      return found;
+    };
+    await test.step('the main way to start, the typed one right under it, and the way back apart', async () => {
+      const main = await box(side.getByRole('button', { name: 'Start voice call' }));
+      const typed = await box(side.getByRole('button', { name: 'Start a text-only call' }));
+      const back = await box(side.getByRole('link', { name: 'Edit scenario' }));
+      const together = typed.y - (main.y + main.height);
+      expect(together, 'the typed call comes right after the main one').toBeGreaterThanOrEqual(0);
+      expect(together).toBeLessThan(12);
+      expect(back.y - (typed.y + typed.height), 'the way back is further off').toBeGreaterThan(
+        together,
+      );
+    });
+
+    await test.step('the notice is under the case rows, in their column', async () => {
+      await expect(side.getByRole('region', { name: 'Privacy notice' })).toHaveCount(0);
+      const rows = await box(page.getByRole('region', { name: 'Support case' }));
+      const under = await box(notice);
+      expect(under.y).toBeGreaterThanOrEqual(rows.y + rows.height);
+      expect(under.x).toBeCloseTo(rows.x, 0);
+      // Neither column leaves the other a block of empty page.
+      const left = under.y + under.height;
+      const card = await box(side);
+      expect(Math.abs(left - (card.y + card.height))).toBeLessThan(100);
+    });
+
+    await test.step('the note that the scenario is made up stands beside the title', async () => {
+      const title = await box(page.getByRole('heading', { level: 1, name: 'Case brief' }));
+      const note = await box(page.getByText('Synthetic scenario', { exact: true }));
+      expect(note.x - (title.x + title.width)).toBeLessThan(40);
+      expect(Math.abs(note.y + note.height / 2 - (title.y + title.height / 2))).toBeLessThan(12);
+    });
+
+    await test.step('the rules under the optional rows run from edge to edge of the card', async () => {
+      const rows = await box(page.getByRole('region', { name: 'Support case' }));
+      const known = await box(
+        page.getByRole('region', { name: 'Support case' }).locator('.ff-disclosure--row').first(),
+      );
+      expect(known.x).toBeLessThanOrEqual(rows.x + 2);
+      expect(known.x + known.width).toBeGreaterThanOrEqual(rows.x + rows.width - 2);
+    });
+  });
+});
+
+test.describe('a phone, 320 px wide', () => {
+  test.use({ viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true });
+
+  test('every control on the workspace is at least 40 px, the difficulty filter is four equal cells in one row, and the way on is the button alone', async ({
+    page,
+  }) => {
+    await openWorkspace(page, `?scenario=${MARCUS}`);
+    await page.getByRole('button', { name: /^Customise/ }).tap();
+
+    await test.step('nothing is under 40 px, with the setup open', async () => {
+      expect(await smallTargets(page, 40)).toEqual([]);
+    });
+
+    await test.step('the difficulty filter is one native group of four cells as wide as the column', async () => {
+      await expect(difficulty(page).getByRole('radio')).toHaveCount(4);
+      const cells = await difficulty(page)
+        .locator('.ff-segmented__item')
+        .evaluateAll((items) =>
+          items.map((item) => {
+            const { x, y, width, height } = item.getBoundingClientRect();
+            return { x, y, width, height };
+          }),
+        );
+      expect(new Set(cells.map((cell) => Math.round(cell.y))).size, 'one row').toBe(1);
+      for (const cell of cells) expect(cell.height).toBeGreaterThanOrEqual(40);
+      const widths = cells.map((cell) => cell.width);
+      expect(Math.max(...widths) - Math.min(...widths), 'equal cells').toBeLessThan(1.5);
+      const group = await difficulty(page).boundingBox();
+      expect(group?.width, 'as wide as the column (320 less 16 each side)').toBeGreaterThan(280);
+      const first = cells[0]!;
+      const last = cells.at(-1)!;
+      expect(last.x + last.width - first.x, 'the cells fill the group').toBeGreaterThan(
+        (group?.width ?? 0) - 12,
+      );
+    });
+
+    await test.step('the way on is the button alone, about 70 px high, and the words it would say are still there', async () => {
+      const bar = page.locator('.scn-detail__bar');
+      const barBox = await bar.boundingBox();
+      expect(barBox?.height).toBeLessThan(80);
+      const start = await bar.getByRole('link', { name: 'Start configuration' }).boundingBox();
+      expect(start?.height).toBeGreaterThanOrEqual(44);
+      expect(start?.width).toBeGreaterThan(280);
+      const recap = bar.locator('.scn-detail__summary-line');
+      await expect(recap).toContainText('Starter');
+      expect(await recap.evaluate((line) => getComputedStyle(line).display)).not.toBe('none');
+    });
+  });
+
+  test('every control on the brief is at least 40 px', async ({ page }) => {
+    await page.goto(`/scenarios/${MARCUS}/brief`);
+    await expect(page.getByRole('region', { name: 'Privacy notice' })).toBeVisible();
+    expect(await smallTargets(page, 40)).toEqual([]);
   });
 });
 

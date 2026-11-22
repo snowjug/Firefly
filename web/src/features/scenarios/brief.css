@@ -40,6 +40,13 @@
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
 }
+/* The title and the note that the scenario is made up stand together, so the note is read with it. */
+.brf-titlerow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+}
 .brf-title {
   font-family: var(--font-display);
   font-size: var(--fs-subtitle1);
@@ -63,6 +70,13 @@
 }
 .brf-layout {
   display: grid;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+/* What the case is, and under it what is said about privacy: the left column. */
+.brf-main {
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-4);
   min-inline-size: 0;
 }
@@ -154,8 +168,17 @@
   gap: var(--sp-1) var(--sp-2);
 }
 .brf-more {
-  padding: var(--sp-1) var(--sp-4);
+  padding-block: var(--sp-1);
   border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+/* The rules under the rows run from edge to edge of the card; what is written on them lines up with
+   the terms of the six rows above (20 px in), and the button's own highlight and focus ring stay inside. */
+.brf-more .ff-disclosure__button {
+  inline-size: calc(100% - var(--sp-6));
+  margin-inline: var(--sp-3);
+}
+.brf-more .ff-disclosure__panel {
+  padding-inline: var(--sp-5);
 }
 .brf-more .ff-disclosure:last-child {
   border-block-end: 0;
@@ -307,8 +330,26 @@
   grid-column: 2;
   justify-self: start;
 }
+/* Wide enough, the way to say it has been read goes beside the words rather than under them. */
+@media (min-width: 36em) {
+  .brf-notice {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .brf-notice__icon {
+    align-self: start;
+  }
+  .brf-notice > .ff-button {
+    grid-column: 3;
+    justify-self: end;
+  }
+}
+/* Once the notice has been read, the details are a closed row of their own, in a card like the case's. */
 .brf-privacy {
-  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  padding-inline: var(--sp-2);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
 }
 ul.brf-details {
   display: flex;
@@ -374,6 +415,14 @@ ul.brf-details {
   flex: none;
   white-space: nowrap;
 }
+/* From a tablet down the small buttons and the toggle in these two blocks are as tall as a thumb needs. */
+@media (max-width: 48em) {
+  .brf-notice > .ff-button,
+  .brf-ready__check .ff-button,
+  .brf-notice .ff-disclosure--inline .ff-disclosure__button {
+    min-block-size: var(--target);
+  }
+}
 /* The level while the microphone is being checked: a bar that grows from its left end. It sits
    after the button, so while it is hidden it leaves nothing to push the button sideways. */
 .brf-meter {
@@ -410,6 +459,20 @@ ul.brf-details {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+}
+/* The two ways to start are one block: the main one, and the typed one quietly under it. */
+.brf-actions__start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.brf-actions .brf-actions__text {
+  color: var(--brand-fg-2);
+}
+/* The way back is apart from both, under a rule. */
+.brf-actions__edit {
+  padding-block-start: var(--sp-2);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
 }
 
 /* ---- Loading and unavailable ------------------------------------------------------------ */
@@ -450,6 +513,7 @@ ul.brf-details {
   .brf-side,
   .brf-ready,
   .brf-notice,
+  .brf-privacy,
   .brf-unavailable {
     border-color: ButtonText;
     box-shadow: none;

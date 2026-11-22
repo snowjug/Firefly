@@ -124,6 +124,10 @@ describe('the support case', () => {
     expect(within(head).getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
     expect(head).toHaveTextContent(standard.title);
     expect(within(head).getByText('Synthetic scenario')).toBeVisible();
+    // The note that the scenario is made up stands next to the title, not at the far end of the row.
+    expect(within(head).getByText('Synthetic scenario').closest('.brf-titlerow')).toContainElement(
+      within(head).getByRole('heading', { level: 1 }),
+    );
   });
 
   it('names the practice mode and says what it means on screen, by the preset or the choice made', async () => {
@@ -685,6 +689,17 @@ describe('the privacy notice', () => {
     expect(wordCount(MICROPHONE_NOTICE)).toBeLessThanOrEqual(24);
   });
 
+  it('sits under the case rows, apart from the voice card, so the two columns are about as tall', async () => {
+    renderApp(briefPath());
+    const notice = await screen.findByRole('region', { name: 'Privacy notice' });
+    const caseFile = screen.getByRole('region', { name: 'Support case' });
+    expect(screen.getByRole('complementary', { name: 'Voice call' })).not.toContainElement(notice);
+    expect(notice.parentElement).toBe(caseFile.parentElement);
+    expect(
+      caseFile.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('keeps the details behind a button, and tells the truth about this setup', async () => {
     const user = userEvent.setup();
     mockApi({ config: appConfig({ speech: AZURE_SPEECH }) });
@@ -940,6 +955,19 @@ describe('starting a call', () => {
       mode: 'immersive',
     });
     expect(vi.mocked(api.createSession).mock.calls[0]?.[0]).not.toHaveProperty('voice');
+  });
+
+  it('keeps the two ways to start together, the typed one right after the main one, and the way back apart', async () => {
+    renderApp(briefPath());
+    const main = await startVoice();
+    const typed = screen.getByRole('button', { name: 'Start a text-only call' });
+    const edit = screen.getAllByRole('link', { name: 'Edit scenario' }).at(-1) as HTMLElement;
+    const follows = (first: HTMLElement, second: HTMLElement) =>
+      Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(typed.parentElement).toBe(main.parentElement);
+    expect(edit.parentElement).not.toBe(main.parentElement);
+    expect(follows(main, typed)).toBe(true);
+    expect(follows(typed, edit)).toBe(true);
   });
 
   it('opens a text-only call from the quieter action', async () => {

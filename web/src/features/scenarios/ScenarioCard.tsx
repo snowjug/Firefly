@@ -107,7 +107,7 @@ export function ScenarioCard(props: ScenarioCardProps) {
           <Wave />
         </div>
         <p className="scn-card__title" id={ids.title}>
-          {cardTitle(scenario)}
+          <span>{cardTitle(scenario)}</span>
         </p>
         <p className="scn-card__meta" id={ids.meta}>
           {metaLine(scenario)}

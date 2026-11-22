@@ -1,6 +1,8 @@
 /* The chosen scenario, below the carousel. From 64em it is one panel of two columns (what it is on the
    left, how to run it on the right, with the way on under the setup); below that there is no panel:
-   everything stacks in the page and the way on is pinned to the bottom of the screen. */
+   everything stacks in the page. At every width the way on is pinned to the bottom of the screen
+   (across the page on a phone, in the right-hand column from 64em) until the end of what it belongs to
+   is reached. */
 
 .scn-detail {
   display: flex;
@@ -76,7 +78,7 @@
 .scn-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  gap: var(--sp-3) var(--sp-5);
+  gap: var(--sp-4) var(--sp-5);
   align-content: start;
   min-inline-size: 0;
 }
@@ -97,11 +99,6 @@
   flex-direction: column;
   gap: var(--sp-0h);
   color: var(--fg-1);
-}
-/* Two lines are always kept for the sentences that change with the scenario or a setting, so
-   choosing another scenario does not move what is below. */
-.scn-fact--lines > dd {
-  min-block-size: calc(var(--lh-body) * 2);
 }
 .scn-sub {
   color: var(--fg-2);
@@ -143,6 +140,8 @@
   gap: var(--sp-2);
 }
 .scn-meter__label {
+  /* The same width for both names, so the bars and the words after them line up one under the other. */
+  min-inline-size: 4.5em;
   color: var(--fg-3);
   font-size: var(--fs-caption);
   line-height: var(--lh-caption);
@@ -180,6 +179,11 @@
   gap: var(--sp-4);
   min-inline-size: 0;
 }
+/* The way on is pinned to the bottom of the screen, so a control that takes focus is scrolled to
+   above it, not left behind it. */
+.scn-setup :is(input, select, button, a) {
+  scroll-margin-block-end: 7rem;
+}
 .scn-mode .ff-segmented__legend {
   color: var(--fg-3);
   font-size: var(--fs-caption);
@@ -214,6 +218,9 @@
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
 }
+/* On a phone the button takes the whole width of the bar, with the recap of the setup over it. On the
+   narrowest phones (under 360 px) the recap is out of sight, kept for a screen reader (ScenarioDetail
+   does that), so a second line of words does not make the bar a fifth of the screen. */
 @media (max-width: 30em) {
   .scn-detail__bar .ff-button {
     flex: 1 1 100%;
@@ -271,11 +278,13 @@
     gap: var(--sp-5);
     min-inline-size: 0;
   }
+  /* The way on stays in view as the page scrolls, as it does on a phone: it is pinned to the bottom
+     of the screen while the right-hand column runs on below it, and settles under the setup where
+     the column ends. It is as wide as the column, and opaque, so the setup does not show through. */
   .scn-detail__bar {
-    position: static;
     margin: 0;
-    padding: var(--sp-4) 0 0;
-    background: transparent;
+    padding-inline: 0;
+    background: var(--bg-raised);
   }
 }
 

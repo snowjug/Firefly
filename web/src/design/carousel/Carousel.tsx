@@ -38,7 +38,11 @@ export interface CarouselProps {
    * go to the first and the last item, and the item moved to is brought into view.
    */
   mode?: 'select' | 'link';
-  /** Where the chosen item is, for a gallery that has a choice. Left out for a gallery of links. */
+  /**
+   * Where the chosen item is, for a gallery that has a choice; the count then reads "Selected 3 of 12"
+   * (the bar beside it is what follows the scroll). Left out for a gallery of links, whose count is
+   * the range in view, "1–4 of 12".
+   */
   selectedIndex?: number | null;
   /** The items, in order. Each child becomes one item of a standard list. */
   children: ReactNode;
@@ -312,6 +316,10 @@ export function Carousel({
   }, [mode, reveal]);
 
   if (total === 0) return null;
+  // With a choice the count says which item is chosen, not which are in view: the bar beside it is
+  // what follows the scroll, and a count that looked like it did would seem stale after a drag.
+  const chosen = selectedIndex !== null && selectedIndex >= 0;
+  const more = [!edges.atStart && 'start', !edges.atEnd && 'end'].filter(Boolean).join(' ');
   return (
     <section
       className={cx('ff-carousel', className)}
@@ -319,7 +327,7 @@ export function Carousel({
       aria-label={label}
       aria-describedby={countId}
     >
-      <div className="ff-carousel__viewport" ref={viewport}>
+      <div className="ff-carousel__viewport" ref={viewport} data-more={more || undefined}>
         <ul className="ff-carousel__track" role="list" id={trackId} ref={list}>
           {items.map((child, index) => (
             <li
@@ -334,7 +342,12 @@ export function Carousel({
         </ul>
       </div>
       <div className="ff-carousel__controls">
-        <p className="ff-carousel__count" id={countId}>
+        <p className="ff-carousel__count" id={countId} data-kind={chosen ? 'selected' : 'range'}>
+          {chosen ? (
+            <>
+              <span className="ff-carousel__kind">Selected</span>{' '}
+            </>
+          ) : null}
           {positionLabel(total, selectedIndex, range)}
         </p>
         <div className="ff-carousel__bar" ref={bar} aria-hidden="true">

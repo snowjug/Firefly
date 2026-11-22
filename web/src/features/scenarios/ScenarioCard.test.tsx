@@ -276,9 +276,22 @@ describe('what its stylesheet promises', () => {
     expect(css).toMatch(/var\(--glow-x, 50%\) var\(--glow-y, 0%\)/);
   });
 
-  it('keeps the title to two lines, with room for two', () => {
+  it('keeps the title to two lines, with room for two, and sits a shorter title at the bottom of it', () => {
     expect(css).toMatch(/-webkit-line-clamp:\s*2/);
     expect(css).toMatch(/min-block-size:\s*calc\(var\(--lh-subtitle2\) \* 2\)/);
+    const title = css.match(/\.scn-card__title\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(title).toMatch(/flex-direction:\s*column/);
+    expect(title).toMatch(/justify-content:\s*flex-end/);
+    expect(css).toMatch(/\.scn-card__title > span\s*\{[^}]*-webkit-line-clamp:\s*2/);
+  });
+
+  it('keeps brand blue for the chosen card and for the link on the landing page, and the action of every other card quiet', () => {
+    expect(css).toMatch(/\.scn-card__go\s*\{[^}]*color:\s*var\(--fg-2\)/);
+    expect(css).toMatch(
+      /\.scn-card\[data-selected\] \.scn-card__go,\s*\.scn-card__link\s*\{\s*color:\s*var\(--brand-fg-2\)/,
+    );
+    // A link is underlined, so the card's is left to the page's own rule for links.
+    expect(css).not.toMatch(/text-decoration:\s*none/);
   });
 
   it('uses no spring, and no colour of its own', () => {

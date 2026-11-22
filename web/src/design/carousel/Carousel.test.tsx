@@ -150,6 +150,7 @@ describe('what it is to a screen reader', () => {
     render(<Links />);
     const region = screen.getByRole('region', { name: 'Featured scenarios' });
     expect(count()).toHaveTextContent('1\u20134 of 12');
+    expect(count()).not.toHaveTextContent('Selected');
     expect(region).toHaveAttribute('aria-describedby', count().id);
     expect(count().closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
   });
@@ -172,9 +173,34 @@ describe('what it is to a screen reader', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('counts the chosen item\u2019s place when there is a choice', () => {
+  it('counts the chosen item\u2019s place when there is a choice, and says that it is the choice', () => {
     render(<Choices start={2} />);
-    expect(count()).toHaveTextContent('3 of 12');
+    expect(count()).toHaveTextContent('Selected 3 of 12');
+    expect(count().querySelector('.ff-carousel__kind')).toHaveTextContent('Selected');
+    expect(screen.getByRole('region', { name: 'Scenarios' })).toHaveAccessibleDescription(
+      'Selected 3 of 12',
+    );
+  });
+});
+
+describe('the edge that has more beyond it', () => {
+  it('is marked, so it can fade: the end at first, both ends part-way, the start at the far end', async () => {
+    const user = userEvent.setup();
+    render(<Links />);
+    expect(viewport()).toHaveAttribute('data-more', 'end');
+    await user.click(next());
+    raf.frame(16);
+    expect(viewport()).toHaveAttribute('data-more', 'start end');
+    await user.click(next());
+    raf.frame(32);
+    await user.click(next());
+    raf.frame(48);
+    expect(viewport()).toHaveAttribute('data-more', 'start');
+  });
+
+  it('is not marked when everything fits', () => {
+    render(<Links total={3} />);
+    expect(viewport()).not.toHaveAttribute('data-more');
   });
 });
 
@@ -685,6 +711,26 @@ describe('what its stylesheet promises', () => {
   it('holds snapping off while it glides to where a drag comes to rest', () => {
     expect(css).toMatch(
       /\.ff-carousel__viewport\[data-settling='true'\]\s*\{\s*scroll-snap-type:\s*none;\s*\}/,
+    );
+  });
+
+  it('fades an edge that has more beyond it with a mask, the start only as wide as the room before the first item', () => {
+    for (const edge of ['end', 'start', 'start end']) {
+      expect(css).toMatch(new RegExp(`\\[data-more='${edge}'\\]\\s*\\{[^}]*mask-image:`));
+    }
+    const start = css.match(/\[data-more='start'\]\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(start).toContain('var(--ff-carousel-inset)');
+    expect(start).not.toContain('var(--ff-carousel-fade)');
+  });
+
+  it('runs out into the page\u2019s side padding, and on a phone leaves a slice of the next item showing', () => {
+    expect(css).toMatch(/--ff-carousel-inset:\s*var\(--gutter\)/);
+    const flat = css.replace(/\s+/g, ' ');
+    expect(flat).toMatch(
+      /@media \(max-width: 47\.99em\) \{ \.ff-carousel__item \{ flex-basis: min\(/,
+    );
+    expect(flat).toContain(
+      'calc(100cqw - var(--ff-carousel-inset) - var(--sp-4) - var(--ff-carousel-peek))',
     );
   });
 

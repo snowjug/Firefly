@@ -964,6 +964,20 @@ describe('one page at every width', () => {
     await waitFor(() => expect(app.query().get('scenario')).toBe(SAMPLE.starter));
     expect(app.router.state.historyAction).toBe('REPLACE');
   });
+
+  it('keeps the recap beside the way on in sight, and on the narrowest phones out of sight but not out of reach', async () => {
+    renderApp(`/scenarios?scenario=${SAMPLE.challenge}`);
+    await detailFor(scenarioById(SAMPLE.challenge));
+    const recap = () => document.querySelector('.scn-detail__summary-line') as HTMLElement;
+    expect(recap()).not.toHaveClass('visually-hidden');
+    cleanup();
+
+    stubMedia({ '(max-width: 22.49em)': true });
+    renderApp(`/scenarios?scenario=${SAMPLE.challenge}`);
+    await detailFor(scenarioById(SAMPLE.challenge));
+    expect(recap()).toHaveClass('visually-hidden');
+    expect(recap()).toHaveTextContent('Challenge');
+  });
 });
 
 describe('a server that does not send every field yet', () => {

@@ -99,10 +99,11 @@ function Unavailable() {
 }
 
 /**
- * The case brief: the support case in six short rows, the customer's voice, the microphone, and the
- * way to start. What the trainee chose on the scenario page is read from the address. Starting the
- * call creates it once, however many times the button is pressed or retried, and it opens a spoken
- * call or a typed one; a typed one is always possible.
+ * The case brief: the support case in six short rows with the privacy notice under it, and beside
+ * them the customer's voice, the microphone and the way to start. What the trainee chose on the
+ * scenario page is read from the address. Starting the call creates it once, however many times the
+ * button is pressed or retried, and it opens a spoken call or a typed one; a typed one is always
+ * possible.
  */
 export function CallBrief() {
   const { id = '' } = useParams();
@@ -227,14 +228,16 @@ export function CallBrief() {
         </span>
         <div className="brf-head__text">
           <p className="brf-product">{productLine(scenario.product)}</p>
-          <h1 className="brf-title">Case brief</h1>
+          <div className="brf-titlerow">
+            <h1 className="brf-title">Case brief</h1>
+            <Tag size="small">Synthetic scenario</Tag>
+          </div>
           <p className="brf-subtitle">{scenario.title}</p>
           <p className="brf-mode">
             <strong>{PRACTICE_MODE_LABELS[practiceMode].label}.</strong>{' '}
             {MODE_SENTENCE[practiceMode]}.
           </p>
         </div>
-        <Tag size="small">Synthetic scenario</Tag>
       </header>
       {read.ignored.length > 0 ? (
         <MessageBar intent="info">
@@ -243,7 +246,16 @@ export function CallBrief() {
         </MessageBar>
       ) : null}
       <div className="brf-layout">
-        <CaseRows scenario={scenario} config={read.config} />
+        <div className="brf-main">
+          <CaseRows scenario={scenario} config={read.config} />
+          {speechState === 'loading' ? null : (
+            <PrivacyNotice
+              details={details}
+              introduce={speechState === 'voice' && !notice.seen}
+              onAcknowledge={notice.markSeen}
+            />
+          )}
+        </div>
         <aside className="brf-side" aria-labelledby="brf-side-title">
           <h2 className="brf-side__title" id="brf-side-title">
             Voice call
@@ -268,13 +280,6 @@ export function CallBrief() {
               preview={preview}
             />
           ) : null}
-          {speechState === 'loading' ? null : (
-            <PrivacyNotice
-              details={details}
-              introduce={speechState === 'voice' && !notice.seen}
-              onAcknowledge={notice.markSeen}
-            />
-          )}
           <MicRow
             readiness={readiness}
             status={check.status}
