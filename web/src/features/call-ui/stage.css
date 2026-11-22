@@ -2,6 +2,8 @@
    words and the waveform. Colour is never the only cue: every state has a word and an icon. */
 
 .cw-person {
+  /* The ring round the avatar is drawn behind everything here: the text is never under it. */
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -38,12 +40,62 @@
   gap: var(--sp-2);
 }
 
+/* The screen comes in quietly when the call opens: the customer, how they feel, then the status
+   rise a few pixels and fade in, one step (a stagger) after another. Nothing waits for it: every
+   control works while it plays, and under reduced motion the distance and the time are nothing. */
+.cw-person__card,
+.cw-person__meta,
+.cw-trail,
+.cw-status {
+  animation: cw-rise var(--motion-panel) var(--ease-decelerate) backwards;
+  animation-delay: calc(var(--cw-i, 0) * var(--dur-stagger));
+}
+.cw-person__meta {
+  --cw-i: 1;
+}
+.cw-trail {
+  --cw-i: 2;
+}
+.cw-status {
+  --cw-i: 3;
+}
+@keyframes cw-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-sm));
+  }
+}
+
 /* How the customer feels: the old state fades out as the new one fades in (colour, icon and word
-   together), so a change is seen without anything moving or flashing. */
+   together), so a change is seen without anything moving or flashing. When the tone changes, and only
+   then, one soft ring goes out from the chip, once, in the state's own colour. */
 .cw-mood {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
+}
+.cw-mood__chip {
+  position: relative;
+  display: inline-grid;
+}
+.cw-mood__cue {
+  position: absolute;
+  inset: 0;
+  border: var(--stroke-w-thick) solid currentColor;
+  border-radius: var(--r-pill);
+  opacity: 0;
+  pointer-events: none;
+  animation: cw-mood-cue var(--dur-slow) var(--ease-decelerate) both;
+}
+@keyframes cw-mood-cue {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.12);
+  }
 }
 .cw-fade {
   display: inline-grid;
@@ -110,22 +162,28 @@
 .cw-trace__now {
   fill: currentColor;
 }
-.cw-trace[data-tone='calm'] {
+.cw-trace[data-tone='calm'],
+.cw-mood[data-tone='calm'] {
   color: var(--state-calm-fg);
 }
-.cw-trace[data-tone='concerned'] {
+.cw-trace[data-tone='concerned'],
+.cw-mood[data-tone='concerned'] {
   color: var(--state-concerned-fg);
 }
-.cw-trace[data-tone='frustrated'] {
+.cw-trace[data-tone='frustrated'],
+.cw-mood[data-tone='frustrated'] {
   color: var(--state-frustrated-fg);
 }
-.cw-trace[data-tone='angry'] {
+.cw-trace[data-tone='angry'],
+.cw-mood[data-tone='angry'] {
   color: var(--state-angry-fg);
 }
-.cw-trace[data-tone='escalating'] {
+.cw-trace[data-tone='escalating'],
+.cw-mood[data-tone='escalating'] {
   color: var(--state-escalating-fg);
 }
-.cw-trace[data-tone='recovering'] {
+.cw-trace[data-tone='recovering'],
+.cw-mood[data-tone='recovering'] {
   color: var(--state-recovering-fg);
 }
 /* The caption that names the line, beside it. */

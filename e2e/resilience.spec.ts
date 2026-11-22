@@ -11,6 +11,7 @@ import {
 import { lengthenCustomerVoice } from './support/a11y.ts';
 import { isMockUtterance } from './support/mock-speech.ts';
 import { expectNoRawFailureText } from './support/raw-text.ts';
+import { countText, libraryCount } from './support/scenario-library.ts';
 
 // Resilience: a page that is reloaded, an address that is stale, a connection that drops and a call
 // that has grown long. Each of these must leave the person with what they had and a way on: the
@@ -282,7 +283,7 @@ test.describe('a connection that drops', () => {
         .getByRole('main')
         .getByRole('status')
         .filter({ hasText: /scenarios$/ }),
-    ).toHaveText('16 scenarios');
+    ).toHaveText(countText(libraryCount()));
     await page.getByRole('link', { name: 'Firefly home' }).click();
     await expect(page.getByRole('heading', { level: 1 })).toContainText(
       'Practise Microsoft support calls',
@@ -303,7 +304,7 @@ test.describe('a connection that drops', () => {
         .getByRole('main')
         .getByRole('status')
         .filter({ hasText: /scenarios$/ }),
-    ).toHaveText('16 scenarios');
+    ).toHaveText(countText(libraryCount()));
   });
 
   test('a scenario list that the server cannot give says so in words, and Try again loads it', async ({
@@ -338,7 +339,7 @@ test.describe('a connection that drops', () => {
         .getByRole('main')
         .getByRole('status')
         .filter({ hasText: /scenarios$/ }),
-    ).toHaveText('16 scenarios');
+    ).toHaveText(countText(libraryCount()));
   });
 
   test('a page whose code cannot be fetched offline says so in its own words, and loads once back online', async ({

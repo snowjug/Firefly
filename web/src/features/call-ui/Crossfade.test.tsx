@@ -70,6 +70,17 @@ describe('the crossfade', () => {
     expect(before).toHaveTextContent('Calm and steady');
   });
 
+  it('fades out what was last drawn, not what it began as, when words grow under one name', () => {
+    const { container, rerender } = render(<Crossfade id="line">Which</Crossfade>);
+    rerender(<Crossfade id="line">Which headset</Crossfade>);
+    rerender(<Crossfade id="line">Which headset and version</Crossfade>);
+    rerender(<Crossfade id="next">Thank you</Crossfade>);
+    const { incoming, leaving } = layers(container);
+    expect(leaving).toHaveLength(1);
+    expect(leaving[0]).toHaveTextContent('Which headset and version');
+    expect(incoming).toHaveTextContent('Thank you');
+  });
+
   it('does not replay the entrance of the word that was already there when a third one arrives', () => {
     const { container, rerender } = render(<Crossfade id="calm">Calm</Crossfade>);
     rerender(<Crossfade id="concerned">Concerned</Crossfade>);

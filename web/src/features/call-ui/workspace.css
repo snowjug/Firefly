@@ -262,6 +262,27 @@
   overscroll-behavior: contain;
 }
 
+/* The call comes in quietly when it opens: the customer's own parts rise first (stage.css), then the
+   controls, the transcript and the case follow, one stagger apart (`cw-rise` is the same few pixels and
+   fade as theirs). Every control works while it plays, and under reduced motion it is not there. */
+.cw-stage__zone,
+.cw-dock,
+.cw-transcript,
+.cw-case {
+  animation: cw-rise var(--motion-panel) var(--ease-decelerate) backwards;
+  animation-delay: calc(var(--cw-i, 0) * var(--dur-stagger));
+}
+.cw-transcript {
+  --cw-i: 1;
+}
+.cw-case {
+  --cw-i: 2;
+}
+.cw-stage__zone,
+.cw-dock {
+  --cw-i: 4;
+}
+
 .cw-transcript__title,
 .cw-case__title {
   flex: none;

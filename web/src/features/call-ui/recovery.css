@@ -10,6 +10,17 @@
 .ff-message.cw-recovery.ff-message--actions .ff-message__actions {
   margin-block-start: var(--sp-1);
 }
+/* A card that says something went wrong comes in with a short fade and a small rise, so it is seen to
+   arrive rather than to be there: it is never the only sign (the status says it in words). */
+.ff-message.cw-recovery {
+  animation: cw-recovery-in var(--dur-normal) var(--ease-decelerate);
+}
+@keyframes cw-recovery-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-xs));
+  }
+}
 .cw-recovery__text {
   margin: 0;
 }

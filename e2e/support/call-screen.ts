@@ -6,8 +6,21 @@ import type { CreateCallOptions, FireflyApi } from './api.ts';
 // Every locator is a role or a label with the name the person hears. The exceptions are the status
 // line (it is deliberately not a live region, so it has no role: it is found by its `data-status`,
 // inside the "Customer" region), the problem card, which is found by its class so that "Retry"
-// and "Replay" on the card are never mixed up with the "Replay" control of the call, and the tips
-// strip's card in hand and window (the cards are all in the page; the one in hand is `aria-current`).
+// and "Replay" on the card are never mixed up with the "Replay" control of the call, the tips
+// strip's card in hand and window (the cards are all in the page; the one in hand is `aria-current`),
+// and the presence ring and live captions, which are drawn for the eye and hidden from assistive
+// technology, so they have no role to be found by: their `data-presence`, `data-live` and class are
+// the way, and the status line's words are what a test asserts about the state itself.
+//
+// A hands-free spoken call (the default) is a call and not a walkie-talkie, so some controls are only
+// there when a press is for something: `talk` is not drawn at all while the microphone opens by
+// itself (it is back only where nothing will: after repeated empty recognitions, or in push to talk),
+// `done` ("Done speaking") only while the trainee's speech has been heard, `stopAudio` only while the
+// customer speaks, and `resume` takes the place of `pause` while the call is held. They all live in
+// the first row of the controls, `slot`, which is always there and always the same height. So assert
+// what the screen is doing (the status words, `presence`'s `data-presence`), and a count of 0 for a
+// control that is not for this moment; do not wait for a control that a quiet moment never draws.
+// `turnHandsFreeOff(screen)` gives the push-to-talk screen, which is as it always was.
 //
 //   const screen = callScreen(page);
 //   await screen.preflight.startVoice.click();
@@ -38,6 +51,12 @@ export const STATUS = {
   typing: 'Your turn',
 } as const;
 
+/** The soft guidance under the controls of a spoken call. It is not an error and not announced. */
+export const HINT = {
+  stillListening: 'Still listening. Speak when you are ready.',
+  idlePaused: 'Paused after 10 minutes without sound. Press Resume to carry on.',
+} as const;
+
 /** The status line's `data-status`, for the states that a spoken call moves through. */
 export const STATUS_ID = {
   micReady: 'mic-ready',
@@ -59,16 +78,31 @@ export function callScreen(page: Page) {
   const transcript = page.getByRole('log', { name: 'Call transcript' });
   const controls = page.getByRole('group', { name: 'Call controls' });
   const card = page.locator('.cw-recovery');
+  const ending = page.getByRole('dialog', { name: 'Ending and preparing your review' });
   return {
     customer,
     /** The status line: "Listening to you", "Hearing you", "Customer speaking" ... */
     status: customer.locator('[data-status] .cw-status__label'),
     /** The status line itself: its `data-status` says which state the call is in. */
     statusLine: customer.locator('[data-status]'),
+    /**
+     * The ring round the customer's initials, hidden from assistive technology. Its `data-presence`
+     * is what the call is doing: connecting, working, listening, hearing, speaking, held or still.
+     */
+    presence: customer.locator('.cw-presence'),
+    /** The live captions under the customer (wide screens only): `data-live` is "true" while they say something. */
+    captions: customer.locator('.cw-captions'),
     transcript,
     /** Every turn so far, the customer's greeting first. */
     turns: transcript.getByRole('listitem'),
     controls,
+    /**
+     * The first row of a hands-free call's controls: it holds one thing at a time (Talk where nothing
+     * opens the microphone, Resume, Done speaking, Stop customer audio) and is empty otherwise.
+     */
+    slot: controls.locator('.cw-ctl__slot'),
+    /** The soft guidance that is showing under the controls: "Still listening. Speak when you are ready." */
+    hint: controls.locator('.cw-ctl__hint[data-visible="true"]'),
     talk: controls.getByRole('button', { name: 'Talk', exact: true }),
     done: controls.getByRole('button', { name: 'Done speaking', exact: true }),
     stopAudio: controls.getByRole('button', { name: 'Stop customer audio', exact: true }),
@@ -85,7 +119,13 @@ export function callScreen(page: Page) {
     /** The customer's mood, and in guided practice how much context has been found. */
     state: page.getByRole('group', { name: 'Customer state' }),
     endDialog: page.getByRole('dialog', { name: /^(?:End the call\?|Ready to close\?)$/ }),
-    endingDialog: page.getByRole('dialog', { name: 'Ending and preparing your review' }),
+    endingDialog: ending,
+    /** What the ending dialog shows: the call-ended moment, with how long the call was and the progress. */
+    ended: {
+      title: ending.getByText('Call ended', { exact: true }),
+      time: ending.locator('.cw-ended__time'),
+      progress: ending.getByRole('progressbar'),
+    },
     settingsDialog: page.getByRole('dialog', { name: 'Voice settings' }),
     /** The tips strip of Guided practice, and what is in it. It is not on any other call. */
     tips: {
@@ -188,6 +228,17 @@ export async function startTypedCall(
 export async function sendTyped(screen: CallScreen, text: string): Promise<void> {
   await screen.reply.fill(text);
   await screen.send.click();
+}
+
+/**
+ * Switches Hands-free off in Voice settings, so that the person decides when the microphone opens:
+ * Talk, then Done speaking. A spoken call is hands-free until this is done.
+ */
+export async function turnHandsFreeOff(screen: CallScreen): Promise<void> {
+  await screen.settings.click();
+  await screen.settingsDialog.getByRole('switch', { name: /Hands-free/ }).uncheck();
+  await screen.settingsDialog.getByRole('button', { name: 'Done' }).click();
+  await expect(screen.settingsDialog).toBeHidden();
 }
 
 /**

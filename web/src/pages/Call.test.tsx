@@ -1,5 +1,6 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useSyncExternalStore } from 'react';
 import { RouterProvider, createMemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigDTO } from '#shared/domain/api.ts';
@@ -326,6 +327,52 @@ describe('starting and ending from the page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'End and review' }));
     await waitFor(() => expect(actions.endCall).toHaveBeenCalled());
     expect(router.state.location.pathname).toBe(CALL_PATH);
+  });
+
+  it('does not open the report under the call-ended moment: the engine saying the call is over waits for the screen', async () => {
+    const base = FIXTURES['mic-ready'].snapshot;
+    const actions = fakeActions();
+    let finish!: (value: { sessionId: string }) => void;
+    actions.endCall.mockReturnValue(
+      new Promise<{ sessionId: string }>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    // The engine, as the page sees it: a snapshot that can change while the page is open.
+    let current = { snapshot: base, actions };
+    const listeners = new Set<() => void>();
+    mockedUseCall.mockImplementation(() =>
+      useSyncExternalStore(
+        (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        () => current,
+      ),
+    );
+    const { router } = renderPage();
+    await userEvent.click(within(bar()).getByRole('button', { name: 'End call' }));
+    await userEvent.click(screen.getByRole('button', { name: 'End and review' }));
+
+    // The call is closed on the server, a moment before the screen has finished with its own ending.
+    current = {
+      snapshot: {
+        ...base,
+        phase: 'completed',
+        stage: 'completed',
+        session: { ...base.session!, status: 'completing' },
+      },
+      actions,
+    };
+    await act(async () => listeners.forEach((listener) => listener()));
+    expect(router.state.location.pathname).toBe(CALL_PATH);
+    expect(screen.getByRole('dialog', { name: 'Ending and preparing your review' })).toBeVisible();
+
+    await act(async () => finish({ sessionId: 'ses_finished' }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/sessions/ses_finished/report'),
+    );
+    expect(router.state.historyAction).toBe('REPLACE');
   });
 
   it('leaves an empty call without a report: it closes the call and goes back to the scenarios', async () => {

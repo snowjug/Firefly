@@ -14,14 +14,17 @@ import { VOICE_STATE_TEXT } from '../voice/states.ts';
 import {
   adviceIsLong,
   briefPathFor,
+  captionWords,
   clock,
   clockSince,
   composerGate,
   customerTurnCount,
+  describeCaption,
   describeCase,
   describeConnection,
   describeControls,
   describeCustomerState,
+  describePresence,
   describeStatus,
   describeTrace,
   isEndFailure,
@@ -31,6 +34,7 @@ import {
   recoveryOptions,
   SHORT_CALL_TURNS,
   stateChangeSentence,
+  STATUS_IDS,
   timeMarks,
   traceShape,
   TRACE_POINTS,
@@ -636,8 +640,255 @@ describe('the controls', () => {
       controls().talk.label,
       controls({ stage: 'listening', phase: 'listening' }).talk.label,
       controls({ mode: 'text' }).talk.label,
+      controlsOf({}).talk.label,
     ];
     for (const label of labels) expect(wordCount(label), label).toBeLessThanOrEqual(3);
+  });
+});
+
+/** A hands-free spoken call in `listening`, which each test changes a little. */
+const controlsOf = (overrides: Partial<ControlsInput> = {}) =>
+  describeControls({
+    phase: 'listening',
+    stage: 'listening',
+    mode: 'voice',
+    muted: false,
+    paused: false,
+    audio: 'on',
+    canReplay: true,
+    blocked: false,
+    limitReached: false,
+    micOpen: true,
+    handsFree: true,
+    autoListening: true,
+    ...overrides,
+  });
+
+describe('the controls of a hands-free call', () => {
+  const TURN: ReadonlyArray<readonly [ControlsInput['phase'], ControlsInput['stage']]> = [
+    ['ready', 'ready'],
+    ['ready-for-next-turn', 'ready'],
+    ['listening', 'listening'],
+    ['listening', 'endpointing'],
+    ['transcribing', 'transcribing'],
+    ['processing', 'processing'],
+    ['customer-speaking', 'customer-speaking'],
+  ];
+
+  it('has no big Talk at any stage of a turn: the microphone opens by itself', () => {
+    for (const [phase, stage] of TURN) {
+      const view = controlsOf({ phase, stage, micOpen: phase === 'listening' });
+      expect(view.slot, `${phase} ${stage}`).toBe(true);
+      expect(view.talk.kind, `${phase} ${stage}`).toBe('none');
+    }
+  });
+
+  it('is exactly the push-to-talk screen when hands-free is off, which is what it was', () => {
+    const pushToTalk = controlsOf({ handsFree: false, autoListening: false });
+    expect(pushToTalk.slot).toBe(false);
+    expect(pushToTalk.talk).toMatchObject({ kind: 'done', label: 'Done speaking' });
+    expect(pushToTalk.finish.visible).toBe(false);
+    expect(pushToTalk.stopAudio).toEqual({ visible: true, disabled: true });
+    expect(pushToTalk.pause.visible).toBe(true);
+    // Left out altogether it is off, as every caller before hands-free had it.
+    expect(controlsOf({ handsFree: undefined }).slot).toBe(false);
+  });
+
+  it('offers Done speaking only while speech has been heard, and disabled while the sentence is finished', () => {
+    expect(controlsOf().finish).toEqual({ visible: false, disabled: false });
+    expect(controlsOf({ speechHeard: true }).finish).toEqual({ visible: true, disabled: false });
+    // A microphone that is still starting has heard nothing.
+    expect(controlsOf({ speechHeard: true, micOpen: false }).finish.visible).toBe(false);
+    expect(controlsOf({ stage: 'endpointing', speechHeard: true }).finish).toEqual({
+      visible: true,
+      disabled: true,
+    });
+    for (const [phase, stage] of TURN.filter(
+      ([, name]) => !/^(listening|endpointing)$/.test(name),
+    )) {
+      expect(controlsOf({ phase, stage, speechHeard: true }).finish.visible, stage).toBe(false);
+    }
+  });
+
+  it('shows Stop customer audio only while the customer speaks', () => {
+    const speaking = controlsOf({ phase: 'customer-speaking', stage: 'customer-speaking' });
+    expect(speaking.stopAudio).toEqual({ visible: true, disabled: false });
+    for (const [phase, stage] of TURN.filter(([name]) => name !== 'customer-speaking')) {
+      expect(controlsOf({ phase, stage }).stopAudio.visible, `${phase} ${stage}`).toBe(false);
+    }
+  });
+
+  it('puts Resume in the slot of a call that is held, once: Pause is not drawn beside it', () => {
+    const held = controlsOf({ paused: true, stage: 'paused', phase: 'ready-for-next-turn' });
+    expect(held.talk).toMatchObject({ kind: 'resume', label: 'Resume', disabled: false });
+    expect(held.pause.visible).toBe(false);
+    expect(held.replay.disabled).toBe(true);
+    // Not held: Pause is where it was and the slot has nothing for it.
+    expect(controlsOf().pause).toEqual({ visible: true, resume: false, disabled: false });
+    // A held call cannot be resumed before it has begun or once it is closing.
+    expect(controlsOf({ paused: true, phase: 'ending' }).talk.disabled).toBe(true);
+  });
+
+  it('brings Talk back only where the microphone will not open by itself, on the trainee’s turn', () => {
+    const turn = { phase: 'ready-for-next-turn', stage: 'ready' } as const;
+    // Hands-free gave up (repeated empty recognitions): only Talk opens the microphone again.
+    expect(controlsOf({ ...turn, autoListening: false }).talk).toMatchObject({
+      kind: 'talk',
+      label: 'Talk',
+      disabled: false,
+    });
+    // A snapshot that does not say is read as having given up, so it can never be a dead end.
+    expect(controlsOf({ ...turn, autoListening: undefined }).talk.kind).toBe('talk');
+    // A problem card is showing: the microphone waits for it, and Talk is there beside it.
+    expect(controlsOf({ ...turn, cardShown: true }).talk).toMatchObject({
+      kind: 'talk',
+      disabled: false,
+    });
+    // Not the trainee's turn, or hands-free is carrying on: nothing to press.
+    expect(controlsOf({ ...turn }).talk.kind).toBe('none');
+    expect(controlsOf({ autoListening: false }).talk.kind).toBe('none');
+    expect(
+      controlsOf({ phase: 'customer-speaking', stage: 'customer-speaking', autoListening: false })
+        .talk.kind,
+    ).toBe('none');
+  });
+
+  it('keeps Talk off for a trainee who is muted, and takes it away for one who is blocked or out of messages', () => {
+    const turn = { phase: 'ready-for-next-turn', stage: 'ready', autoListening: false } as const;
+    expect(controlsOf({ ...turn, muted: true, stage: 'muted' }).talk).toMatchObject({
+      kind: 'talk',
+      disabled: true,
+    });
+    // The card has the way on for these: a dimmed Talk beside it would only be noise.
+    expect(controlsOf({ ...turn, blocked: true }).talk.kind).toBe('none');
+    expect(controlsOf({ ...turn, limitReached: true }).talk.kind).toBe('none');
+  });
+
+  it('shows the microphone being asked for again as Talk, working', () => {
+    expect(
+      controlsOf({ phase: 'ready-for-next-turn', stage: 'mic-permission' }).talk,
+    ).toMatchObject({
+      kind: 'talk',
+      disabled: true,
+      busy: true,
+    });
+  });
+
+  it('keeps Mute, Text, Replay and Settings where they were, and leaves a typed call alone', () => {
+    const view = controlsOf();
+    expect(view.mute).toEqual({ visible: true, pressed: false, disabled: false });
+    expect(view.text).toEqual({ visible: true, disabled: false });
+    expect(view.replay).toEqual({ visible: true, disabled: false });
+    const typed = controlsOf({ mode: 'text', phase: 'ready-for-next-turn', stage: 'ready' });
+    expect(typed.slot).toBe(false);
+    expect(typed.talk).toMatchObject({ kind: 'voice', label: 'Return to voice' });
+    expect(typed.finish.visible).toBe(false);
+  });
+});
+
+describe('the presence', () => {
+  it('has a ring for every status, so a state added later cannot be left undrawn', () => {
+    for (const id of STATUS_IDS) expect(describePresence(id), id).toBeTruthy();
+  });
+
+  it('turns while the call connects, breathes while listening, and follows the voice while it is heard', () => {
+    expect(describePresence('connecting')).toBe('connecting');
+    expect(describePresence('requesting-permission')).toBe('connecting');
+    expect(describePresence('listening')).toBe('listening');
+    expect(describePresence('speech-detected')).toBe('hearing');
+    expect(describePresence('customer-speaking')).toBe('speaking');
+  });
+
+  it('turns quietly while something is worked out, and is still when held or when nothing is going on', () => {
+    for (const id of ['processing-speech', 'generating-reply', 'retrying', 'ending'] as const) {
+      expect(describePresence(id), id).toBe('working');
+    }
+    expect(describePresence('paused')).toBe('held');
+    for (const id of [
+      'muted',
+      'mic-ready',
+      'text-fallback',
+      'retry-required',
+      'offline',
+    ] as const) {
+      expect(describePresence(id), id).toBe('still');
+    }
+  });
+});
+
+describe('the captions', () => {
+  const customer = (key: string, text: string): CallTurn => ({
+    key,
+    index: 1,
+    role: 'customer',
+    text,
+    inputMode: 'text',
+    createdAt: '2026-11-21T09:00:00.000Z',
+    status: 'sent',
+    clientMessageId: null,
+    interrupted: false,
+  });
+  const turns = [customer('t1', 'Hello, this is Priya.'), customer('t3', 'Since Monday.  ')];
+
+  it('are the customer’s latest line while it is spoken, trimmed', () => {
+    expect(describeCaption({ statusId: 'customer-speaking', turns, interim: 'ignored' })).toEqual({
+      who: 'customer',
+      key: 'customer:t3',
+      text: 'Since Monday.',
+    });
+  });
+
+  it('are the trainee’s own words while they are heard and while the sentence is finished', () => {
+    for (const statusId of ['listening', 'speech-detected', 'processing-speech'] as const) {
+      expect(describeCaption({ statusId, turns, interim: '  Which headset ' })).toEqual({
+        who: 'you',
+        key: 'you',
+        text: 'Which headset',
+      });
+    }
+  });
+
+  it('keep one key while one turn’s words grow, and take a new one for each customer line', () => {
+    const first = describeCaption({ statusId: 'listening', turns, interim: 'Which' });
+    const later = describeCaption({ statusId: 'listening', turns, interim: 'Which headset' });
+    expect(first?.key).toBe(later?.key);
+    const other = describeCaption({
+      statusId: 'customer-speaking',
+      turns: [...turns, customer('t5', 'Yes.')],
+      interim: '',
+    });
+    expect(other?.key).toBe('customer:t5');
+  });
+
+  it('say nothing between turns, or when there are no words to say', () => {
+    for (const statusId of [
+      'mic-ready',
+      'generating-reply',
+      'paused',
+      'muted',
+      'text-fallback',
+    ] as const) {
+      expect(describeCaption({ statusId, turns, interim: 'words' }), statusId).toBeNull();
+    }
+    expect(describeCaption({ statusId: 'listening', turns, interim: '   ' })).toBeNull();
+    expect(describeCaption({ statusId: 'customer-speaking', turns: [], interim: '' })).toBeNull();
+    expect(
+      describeCaption({
+        statusId: 'customer-speaking',
+        turns: [customer('t1', '  ')],
+        interim: '',
+      }),
+    ).toBeNull();
+  });
+
+  it('are cut into words, whatever the white space between them', () => {
+    expect(captionWords('  Which   headset\nand version ')).toEqual([
+      'Which',
+      'headset',
+      'and',
+      'version',
+    ]);
+    expect(captionWords('')).toEqual([]);
   });
 });
 

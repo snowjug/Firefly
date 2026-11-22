@@ -22,7 +22,12 @@ import {
   watchAnnouncements,
 } from './support/a11y.ts';
 import { callScreen } from './support/call-screen.ts';
-import { libraryScenario } from './support/scenario-library.ts';
+import {
+  countText,
+  emptyFilter,
+  libraryCount,
+  libraryScenario,
+} from './support/scenario-library.ts';
 
 // Accessibility sweeps: axe-core (WCAG 2.0, 2.1 and 2.2 A and AA rules, with best-practice rules
 // reported separately) on every page and every significant state of the real app, at a desktop and a
@@ -236,7 +241,7 @@ for (const viewport of VIEWPORTS) {
           .getByRole('main')
           .getByRole('status')
           .filter({ hasText: /\bscenarios?$/ }),
-      ).toHaveText('16 scenarios');
+      ).toHaveText(countText(libraryCount()));
       await check(page, testInfo, 'scenarios', PUBLIC);
 
       // One stacked page at every width: the product rail, the carousel, then the chosen scenario.
@@ -268,7 +273,9 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
       await check(page, testInfo, 'scenarios filtered by product', PUBLIC);
 
-      await page.goto('/scenarios?f_product=dynamics-365&f_difficulty=starter');
+      // A product and a difficulty that no scenario has both of (which pair is the library's to say).
+      const empty = emptyFilter();
+      await page.goto(`/scenarios?f_product=${empty.product}&f_difficulty=${empty.difficulty}`);
       await expect(
         page.getByRole('heading', { level: 2, name: 'No scenarios match' }),
       ).toBeVisible();

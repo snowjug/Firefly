@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button, cx, ToggleButton } from '../../design/index.ts';
 import type { CallActions } from '../call/contract.ts';
 import type { ControlsView } from './call-model.ts';
@@ -26,35 +27,55 @@ export interface ControlsProps {
 }
 
 /**
- * The call controls. Microphone is the one large control: Talk on the trainee's turn and Done
- * speaking while the microphone is open. In a typed call the typed reply is the main thing, so the
- * way back, Return to voice, is a quiet button. Mute, Stop customer audio and
- * Text sit under it; Pause, Replay and settings are quieter. A control that cannot be used right
- * now is disabled but keeps its place and its focus, and the status label says why. Barge-in is not
- * supported: the microphone never opens while the customer's voice plays, so the trainee stops the
- * audio first, or waits for it to end.
+ * Soft guidance. It rises into place and fades away, and keeps the last words while it fades. Where
+ * `keep` is set (the slot of a hands-free call) it is always there, at one line, so that it appearing
+ * and leaving moves nothing; elsewhere it is only there while it has something to say. It is not a
+ * live region: the call's announcer says what needs saying, once.
+ */
+function HintLine({ hint, keep }: { hint: string | null; keep: boolean }) {
+  const [last, setLast] = useState(hint);
+  if (hint && hint !== last) setLast(hint);
+  if (!keep && !hint) return null;
+  return (
+    <p
+      className="cw-ctl__hint"
+      data-visible={hint !== null}
+      aria-hidden={hint === null ? true : undefined}
+    >
+      {hint ?? last}
+    </p>
+  );
+}
+
+/**
+ * The call controls. In a hands-free call the microphone opens by itself, so there is no big
+ * microphone control: the first row is a slot that holds only what a press is for (Resume on a call
+ * that is held, Talk where the microphone will not open by itself, Done speaking while the trainee
+ * has been heard, Stop customer audio while the customer speaks) and, when it holds nothing, the
+ * soft guidance. With push to talk the microphone is the one large control: Talk on the trainee's
+ * turn and Done speaking while the microphone is open. In a typed call the typed reply is the main
+ * thing, so the way back, Return to voice, is a quiet button. Mute, Text, Pause, Replay and
+ * settings are the same everywhere. A control that cannot be used right now is disabled but keeps
+ * its place and its focus, and the status label says why. Barge-in is not supported: the microphone
+ * never opens while the customer's voice plays, so the trainee stops the audio first, or waits for
+ * it to end.
  */
 export function Controls({ layout, view, statusId, hint, actions, onSettings }: ControlsProps) {
-  const { talk, mute, stopAudio, text, pause, replay } = view;
+  const { slot, talk, finish, mute, stopAudio, text, pause, replay } = view;
   const press = () => {
     if (talk.disabled) return;
     if (talk.kind === 'done') actions.stopTalking();
     else if (talk.kind === 'voice') void actions.begin({ voice: true });
+    else if (talk.kind === 'resume') actions.togglePause();
     else actions.talk();
   };
-  return (
-    <div
-      className={cx('cw-ctl', `cw-ctl--${layout}`)}
-      role="group"
-      aria-label="Call controls"
-      id="cw-controls"
-      tabIndex={-1}
-    >
+  const microphone =
+    talk.kind === 'none' ? null : (
       <Button
         // Returning to voice from a typed call is a choice, not the main thing on the screen: the
         // typed reply is, so it is the quiet kind of button, and it is not the larger one.
         appearance={talk.kind === 'voice' ? 'outline' : 'primary'}
-        size={talk.kind === 'voice' ? 'medium' : 'large'}
+        size={talk.kind === 'voice' || slot ? 'medium' : 'large'}
         icon={talk.icon}
         className="cw-talk"
         data-kind={talk.kind}
@@ -68,15 +89,55 @@ export function Controls({ layout, view, statusId, hint, actions, onSettings }: 
       >
         {talk.label}
       </Button>
-      {stopAudio.visible ? (
-        <Button
-          icon="speaker-off"
-          disabledFocusable={stopAudio.disabled}
-          onClick={() => actions.interrupt()}
-        >
-          Stop customer audio
-        </Button>
-      ) : null}
+    );
+  const stop = stopAudio.visible ? (
+    <Button
+      className={slot ? 'cw-ctl__early' : undefined}
+      icon="speaker-off"
+      disabledFocusable={stopAudio.disabled}
+      onClick={() => actions.interrupt()}
+    >
+      Stop customer audio
+    </Button>
+  ) : null;
+  const occupied = Boolean(microphone || finish.visible || stop);
+  return (
+    <div
+      className={cx('cw-ctl', `cw-ctl--${layout}`, slot && 'cw-ctl--slot')}
+      role="group"
+      aria-label="Call controls"
+      id="cw-controls"
+      tabIndex={-1}
+    >
+      {slot ? (
+        <>
+          <div className="cw-ctl__slot">
+            {microphone}
+            {finish.visible ? (
+              // A way out, never the main control: it does not take focus, and it goes once the turn is sent.
+              <Button
+                className="cw-ctl__early"
+                icon="stop"
+                disabledFocusable={finish.disabled}
+                data-cw-finish=""
+                onClick={() => actions.stopTalking()}
+              >
+                Done speaking
+              </Button>
+            ) : null}
+            {stop}
+            {/* With nothing to press the guidance has the slot. */}
+            <HintLine hint={occupied ? null : hint} keep />
+          </div>
+          {/* With something to press (a call that paused itself says why) it goes under the slot. */}
+          {occupied ? <HintLine hint={hint} keep={false} /> : null}
+        </>
+      ) : (
+        <>
+          {microphone}
+          {stop}
+        </>
+      )}
       {mute.visible ? (
         <ToggleButton
           pressed={mute.pressed}
@@ -98,6 +159,7 @@ export function Controls({ layout, view, statusId, hint, actions, onSettings }: 
             appearance="subtle"
             size="small"
             icon={pause.resume ? 'play' : 'pause'}
+            data-cw-pause=""
             disabledFocusable={pause.disabled}
             onClick={() => actions.togglePause()}
           >
@@ -125,7 +187,7 @@ export function Controls({ layout, view, statusId, hint, actions, onSettings }: 
           Settings
         </Button>
       </div>
-      {hint ? <p className="cw-ctl__hint">{hint}</p> : null}
+      {slot ? null : <HintLine hint={hint} keep={false} />}
     </div>
   );
 }

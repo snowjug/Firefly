@@ -282,17 +282,20 @@ describe('a spoken call, stage by stage', () => {
     await act(async () => env.mic.settle('grant'));
     await flush();
     expect(status()).toBe('Customer speaking');
-    expect(within(controls()).getByRole('button', { name: 'Talk' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
+    // Hands-free: nothing to press to talk. The one control in the slot is how the trainee takes the
+    // turn from the customer, and it is only there while the customer speaks.
+    expect(within(controls()).queryByRole('button', { name: 'Talk' })).toBeNull();
+    expect(
+      within(controls()).getByRole('button', { name: 'Stop customer audio' }),
+    ).not.toHaveAttribute('aria-disabled');
     expect(customerRegion().querySelector('.ff-avatar--speaking')).not.toBeNull();
     expect(transcript().querySelector('[aria-current="true"]')).not.toBeNull();
 
     await act(async () => env.element.latest().finish());
     await advance(400);
     expect(status()).toBe(LABEL.listening);
-    expect(within(controls()).getByRole('button', { name: 'Done speaking' })).toBeInTheDocument();
+    expect(within(controls()).queryByRole('button', { name: 'Done speaking' })).toBeNull();
+    expect(within(controls()).queryByRole('button', { name: 'Stop customer audio' })).toBeNull();
     expect(customerRegion().querySelector('.ff-avatar--speaking')).toBeNull();
 
     env.audio.analyserRms = 0.3;
@@ -333,19 +336,14 @@ describe('a spoken call, stage by stage', () => {
     expect(env.element.latest().paused).toBe(true);
     expect(within(transcript()).getByText('Audio stopped')).toBeInTheDocument();
     expect(within(transcript()).getByText(/My account is locked/)).toBeInTheDocument();
-    // The microphone opens once the customer's voice has been quiet, and nothing says Listening
-    // before it is open: the status says the microphone is ready, and Talk, pressed now, works
-    // until it is.
+    // The microphone opens by itself once the customer's voice has been quiet, and nothing says
+    // Listening before it is open: the status says the microphone is ready, and there is no Talk to
+    // press meanwhile.
     expect(status()).toBe(LABEL.ready);
-    await press('Talk');
-    expect(status()).toBe(LABEL.ready);
-    expect(within(controls()).getByRole('button', { name: 'Talk' })).toHaveAttribute(
-      'aria-busy',
-      'true',
-    );
+    expect(within(controls()).queryByRole('button', { name: 'Talk' })).toBeNull();
     await advance(400);
     expect(status()).toBe(LABEL.listening);
-    expect(within(controls()).getByRole('button', { name: 'Done speaking' })).toBeInTheDocument();
+    expect(within(controls()).queryByRole('button', { name: /^(Talk|Done speaking)$/ })).toBeNull();
   });
 
   it('pauses and resumes, and says so in words', async () => {
@@ -356,12 +354,13 @@ describe('a spoken call, stage by stage', () => {
     await press('Pause');
     expect(status()).toBe('Paused');
     expect(env.mic.openTracks()).toHaveLength(0);
-    expect(within(controls()).getByRole('button', { name: 'Talk' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
+    // A held call has one thing to press, and the keyboard goes to it.
+    expect(within(controls()).queryByRole('button', { name: 'Talk' })).toBeNull();
+    expect(within(controls()).queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(within(controls()).getByRole('button', { name: 'Resume' })).toBeInTheDocument();
     await press('Resume');
     expect(status()).not.toBe('Paused');
+    expect(within(controls()).getByRole('button', { name: 'Pause' })).toBeInTheDocument();
   });
 });
 
@@ -533,9 +532,8 @@ describe('from voice to text and back', () => {
     expect(screen.queryByRole('textbox', { name: 'Your reply' })).toBeNull();
     expect(env.mic.openTracks()).toHaveLength(1);
     expect([LABEL.speaking, LABEL.listening, LABEL.ready]).toContain(status());
-    expect(
-      within(controls()).getByRole('button', { name: /^(Talk|Done speaking)$/ }),
-    ).toHaveFocus();
+    // Hands-free has no microphone control to go to: the keyboard stays with the call's controls.
+    expect(controls()).toHaveFocus();
   });
 });
 

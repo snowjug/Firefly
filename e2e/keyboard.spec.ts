@@ -14,6 +14,7 @@ import {
   test,
 } from './support/a11y.ts';
 import { callScreen, startTypedCall } from './support/call-screen.ts';
+import { countText, libraryWhere } from './support/scenario-library.ts';
 // The two tests that need the API and the console recorder use the shared fixtures of the other specs.
 import { test as appTest } from './support/fixtures.ts';
 
@@ -341,7 +342,7 @@ test('the preset and the difficulty filter are radio groups that move with the a
         .getByRole('main')
         .getByRole('status')
         .filter({ hasText: /scenarios$/ }),
-    ).toHaveText('4 of 16 scenarios');
+    ).toHaveText(countText(libraryWhere({ difficulty: 'starter' }).length));
   });
 });
 
@@ -428,8 +429,9 @@ test.describe('on a phone', () => {
     await page.evaluate(() => document.getElementById('main')?.focus());
     const toEnd = await tabTo(page, /^End call$/, 30);
     await page.evaluate(() => document.getElementById('main')?.focus());
-    const toMicrophone = await tabTo(page, /^(Talk|Done speaking|Return to voice)$/, 30);
+    const toMicrophone = await tabTo(page, /^Mute$/, 30);
     expect(toEnd, 'Tab stops from the top of the call to End call').toBeLessThanOrEqual(12);
+    // A call that listens by itself has no Talk to press: Mute is the microphone's own control.
     expect(
       toMicrophone,
       'Tab stops from the top of the call to the microphone control',
@@ -457,6 +459,9 @@ test('the microphone stops with one key press, and nothing listens for letters',
   await page.keyboard.press('Space');
   await expect(settings.getByRole('switch', { name: 'Hands-free' })).not.toBeChecked();
   await page.keyboard.press('Escape');
+  // The page answers once the dialog has gone, and the keyboard is back on what opened it.
+  await expect(settings).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Settings' })).toBeFocused();
 
   await page.getByRole('button', { name: 'Stop customer audio' }).focus();
   await page.keyboard.press('Enter');

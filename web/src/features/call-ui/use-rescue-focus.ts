@@ -22,6 +22,14 @@ export function useRescueFocus(trigger: unknown, find: () => HTMLElement | null)
 /** The call controls, which can take focus when nothing else can (a control that held it is gone). */
 export const findControlsZone = (): HTMLElement | null => document.getElementById('cw-controls');
 
-/** The microphone control, where focus goes when the trainee goes back to voice. */
+/**
+ * The microphone control, where focus goes when the trainee goes back to voice, and where it starts
+ * when the call opens. A hands-free call has none while the microphone opens by itself, so it falls
+ * back to the group of controls, which takes focus without being something to press.
+ */
 export const findTalkControl = (): HTMLElement | null =>
-  document.querySelector<HTMLElement>('[data-cw-talk]');
+  document.querySelector<HTMLElement>('[data-cw-talk]') ?? findControlsZone();
+
+/** The Pause button, where focus goes when a held call is resumed and the Resume button is gone. */
+export const findPauseControl = (): HTMLElement | null =>
+  document.querySelector<HTMLElement>('[data-cw-pause]') ?? findControlsZone();

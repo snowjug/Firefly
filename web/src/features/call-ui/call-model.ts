@@ -253,6 +253,92 @@ export function describeStatus(input: StatusInput): CallStatus {
   }
 }
 
+// ---- The presence: how the customer's avatar shows the state ----------------------------------
+
+/**
+ * What the ring around the customer's avatar is doing, which is the status said without words:
+ * a ring that turns while the call connects, a quieter one while something is worked out, a slow
+ * breath while the microphone waits, a halo that follows the voice while the trainee is heard and
+ * while the customer speaks, and a still, dimmed ring while the call is held. Everything else is
+ * still. The status label is the accessible form of every one of these: the ring says nothing to
+ * assistive technology.
+ */
+export type PresenceMode =
+  'still' | 'connecting' | 'working' | 'listening' | 'hearing' | 'speaking' | 'held';
+
+const PRESENCE: Record<StatusId, PresenceMode> = {
+  'mic-not-requested': 'still',
+  'requesting-permission': 'connecting',
+  'permission-denied': 'still',
+  'mic-unavailable': 'still',
+  connecting: 'connecting',
+  'mic-ready': 'still',
+  listening: 'listening',
+  'speech-detected': 'hearing',
+  'processing-speech': 'working',
+  'generating-reply': 'working',
+  'customer-speaking': 'speaking',
+  paused: 'held',
+  muted: 'still',
+  'retry-required': 'still',
+  retrying: 'working',
+  'limit-reached': 'still',
+  'text-fallback': 'still',
+  offline: 'still',
+  ending: 'working',
+  evaluating: 'working',
+  completed: 'still',
+};
+
+export function describePresence(id: StatusId): PresenceMode {
+  return PRESENCE[id];
+}
+
+// ---- Live captions -----------------------------------------------------------------------------
+
+export interface Caption {
+  who: 'customer' | 'you';
+  /**
+   * Changes when a different line starts (so the strip crossfades from one to the next) and stays
+   * the same while the words of one line grow.
+   */
+  key: string;
+  text: string;
+}
+
+/**
+ * What the caption strip under the customer shows: the customer's line while it is spoken, and the
+ * trainee's own words while they speak and while the sentence is being finished. Between turns there
+ * is nothing. The strip is not the record (the transcript is) and says nothing to assistive
+ * technology, so this only decides what is drawn.
+ */
+export function describeCaption(input: {
+  statusId: StatusId;
+  turns: readonly CallTurn[];
+  interim: string;
+}): Caption | null {
+  const { statusId, turns, interim } = input;
+  if (statusId === 'customer-speaking') {
+    const turn = latestCustomerTurn(turns);
+    const text = turn?.text.trim();
+    return turn && text ? { who: 'customer', key: `customer:${turn.key}`, text } : null;
+  }
+  if (
+    statusId === 'listening' ||
+    statusId === 'speech-detected' ||
+    statusId === 'processing-speech'
+  ) {
+    const words = interim.trim();
+    return words ? { who: 'you', key: 'you', text: words } : null;
+  }
+  return null;
+}
+
+/** The words of a caption, each of which settles in as it arrives. */
+export function captionWords(text: string): string[] {
+  return text.split(/\s+/).filter(Boolean);
+}
+
 // ---- The connection badge in the top bar -------------------------------------------------------
 
 export interface ConnectionStatus {
@@ -491,8 +577,12 @@ export function briefPathFor(session: SessionDTO): string {
 // ---- The controls ------------------------------------------------------------------------------
 
 export interface TalkControl {
-  /** `talk` opens the microphone, `done` finishes the utterance, `voice` goes back to voice from text. */
-  kind: 'talk' | 'done' | 'voice';
+  /**
+   * `talk` opens the microphone, `done` finishes the utterance, `voice` goes back to voice from text.
+   * In a hands-free call `resume` ends a hold, and `none` means nothing needs pressing: the
+   * microphone opens by itself.
+   */
+  kind: 'talk' | 'done' | 'voice' | 'resume' | 'none';
   /** The visible label, and the accessible name. */
   label: string;
   icon: IconName;
@@ -503,7 +593,17 @@ export interface TalkControl {
 }
 
 export interface ControlsView {
+  /**
+   * A hands-free spoken call: the first row is one reserved slot that holds a single control at a
+   * time (or nothing), not a big Talk that is always there. Push to talk and typed calls are not.
+   */
+  slot: boolean;
   talk: TalkControl;
+  /**
+   * "Done speaking" in a hands-free call: a quiet way to end the turn early, there only while the
+   * trainee's speech has been heard (and, disabled, while the sentence is being finished).
+   */
+  finish: { visible: boolean; disabled: boolean };
   /** Mute is a toggle that reports whether it is on. */
   mute: { visible: boolean; pressed: boolean; disabled: boolean };
   /** Stops the customer's audio: the only way to take the turn before it finishes (no barge-in). */
@@ -525,7 +625,27 @@ export interface ControlsInput extends Pick<
   limitReached: boolean;
   /** The microphone is really open (`CallSnapshot.micOpen`). Left out, it is. */
   micOpen?: boolean;
+  /** Hands-free is on (`CallSnapshot.handsFree`). Left out, it is off: push to talk, as the screen was. */
+  handsFree?: boolean;
+  /** The trainee's voice has been heard in this turn (`CallSnapshot.speechDetected`). */
+  speechHeard?: boolean;
+  /**
+   * Hands-free has not given up: the microphone opens by itself for each turn (`CallSnapshot.
+   * autoListening`). False after repeated empty recognitions. Left out, it is read as false, as the
+   * contract says, so a snapshot that does not say shows Talk and never leaves a dead end.
+   */
+  autoListening?: boolean;
+  /** A problem card is showing: the microphone does not reopen by itself until it is dealt with. */
+  cardShown?: boolean;
 }
+
+const NO_TALK: TalkControl = {
+  kind: 'none',
+  label: '',
+  icon: 'microphone',
+  disabled: true,
+  busy: false,
+};
 
 const TURN_PHASES: readonly CallPhase[] = [
   'ready',
@@ -538,6 +658,13 @@ const TURN_PHASES: readonly CallPhase[] = [
  * What each control is for and whether it can be used. A control that cannot be used right now is
  * disabled but stays in the tab order; the status label beside it says why. Voice controls leave a
  * typed call entirely, so text mode is not a voice screen with half its buttons dead.
+ *
+ * Push to talk is the screen as it always was: one big control that is Talk, then Done speaking.
+ * In a hands-free call the microphone opens by itself, so that control goes: the call is a presence,
+ * and the first row is a slot that holds only what a press is really for. That is Resume on a call
+ * that is held, Talk where the microphone will not open by itself (after repeated empty
+ * recognitions, or while a problem card is showing), Done speaking while the trainee's speech has
+ * been heard, and Stop customer audio while the customer speaks. Otherwise it is empty.
  */
 export function describeControls(input: ControlsInput): ControlsView {
   const { phase, stage, mode, muted, paused, audio, canReplay, blocked, limitReached } = input;
@@ -548,6 +675,7 @@ export function describeControls(input: ControlsInput): ControlsView {
 
   if (mode === 'text') {
     return {
+      slot: false,
       talk: {
         kind: 'voice',
         label: 'Return to voice',
@@ -555,6 +683,7 @@ export function describeControls(input: ControlsInput): ControlsView {
         disabled: phase !== 'ready-for-next-turn' || limitReached,
         busy: false,
       },
+      finish: none,
       mute: { ...none, pressed: false },
       stopAudio: none,
       text: none,
@@ -563,7 +692,7 @@ export function describeControls(input: ControlsInput): ControlsView {
     };
   }
 
-  const talk: TalkControl =
+  const pressToTalk: TalkControl =
     stage === 'listening' && !micOpen
       ? // Asked for, not open yet: still "Talk", working, until the microphone really is open.
         { kind: 'talk', label: 'Talk', icon: 'microphone', disabled: true, busy: true }
@@ -582,12 +711,9 @@ export function describeControls(input: ControlsInput): ControlsView {
             disabled: phase !== 'ready-for-next-turn' || muted || paused || blocked || limitReached,
             busy: false,
           };
-  return {
-    talk,
+  const shared = {
     mute: { visible: true, pressed: muted, disabled: closing || starting },
-    stopAudio: { visible: true, disabled: phase !== 'customer-speaking' && phase !== 'ready' },
     text: { visible: true, disabled: closing || !TURN_PHASES.includes(phase) },
-    pause: { visible: true, resume: paused, disabled: closing || starting },
     replay: {
       visible: audio === 'on',
       disabled:
@@ -595,6 +721,45 @@ export function describeControls(input: ControlsInput): ControlsView {
         paused ||
         (phase !== 'ready-for-next-turn' && phase !== 'customer-speaking' && phase !== 'listening'),
     },
+  };
+
+  if (!input.handsFree) {
+    return {
+      slot: false,
+      talk: pressToTalk,
+      finish: none,
+      stopAudio: { visible: true, disabled: phase !== 'customer-speaking' && phase !== 'ready' },
+      pause: { visible: true, resume: paused, disabled: closing || starting },
+      ...shared,
+    };
+  }
+
+  // Hands-free. The microphone opens by itself while hands-free has not given up and nothing needs
+  // the trainee first; a press is only for the cases where it will not.
+  const listensByItself = input.autoListening === true && !input.cardShown;
+  const waiting = stage === 'mic-permission';
+  const pressNeeded =
+    !waiting && !paused && phase === 'ready-for-next-turn' && !listensByItself && !blocked;
+  const talk: TalkControl = paused
+    ? { kind: 'resume', label: 'Resume', icon: 'play', disabled: closing || starting, busy: false }
+    : waiting
+      ? { kind: 'talk', label: 'Talk', icon: 'microphone', disabled: true, busy: true }
+      : pressNeeded && !limitReached
+        ? pressToTalk
+        : NO_TALK;
+  const heard = input.speechHeard ?? false;
+  return {
+    slot: true,
+    talk,
+    finish: {
+      visible: stage === 'endpointing' || (stage === 'listening' && micOpen && heard),
+      disabled: stage === 'endpointing',
+    },
+    // Only while the customer speaks: it is how the trainee takes the turn (no barge-in).
+    stopAudio: { visible: phase === 'customer-speaking', disabled: false },
+    // A held call has Resume in the slot, so there is one of it and not two.
+    pause: { visible: !paused, resume: false, disabled: closing || starting },
+    ...shared,
   };
 }
 

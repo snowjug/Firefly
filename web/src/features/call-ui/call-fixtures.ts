@@ -409,7 +409,13 @@ const LONGER = conversation(13);
 // ---- The fixtures -------------------------------------------------------------------------------
 
 export type FixtureGroup =
-  'Screens' | 'Stages of a turn' | 'Modes' | 'Problems' | 'Customer state' | 'Dialogs';
+  | 'Screens'
+  | 'Stages of a turn'
+  | 'Hands-free'
+  | 'Modes'
+  | 'Problems'
+  | 'Customer state'
+  | 'Dialogs';
 
 export interface CallFixture {
   title: string;
@@ -697,12 +703,14 @@ const DEFINITIONS = {
   listening: {
     title: 'Listening',
     group: 'Stages of a turn',
-    description: 'The microphone is open and nobody is speaking yet.',
+    description:
+      'Hands-free: the microphone is open and nobody is speaking yet. Nothing is pressed: the ring breathes.',
     snapshot: snapshotOf({
       turns: EARLY,
       phase: 'listening',
       stage: 'listening',
       handsFree: true,
+      autoListening: true,
       micOpen: true,
       micLevel: 0.06,
       announcement: said('Listening. Speak when you are ready.'),
@@ -711,12 +719,14 @@ const DEFINITIONS = {
   'speech-detected': {
     title: 'Hearing you',
     group: 'Stages of a turn',
-    description: 'The trainee is speaking: the waveform moves and their words appear as they go.',
+    description:
+      'Hands-free: the trainee is speaking. The ring follows the voice, the words appear as they go, and Done speaking is there to end the turn early.',
     snapshot: snapshotOf({
       turns: EARLY,
       phase: 'listening',
       stage: 'listening',
       handsFree: true,
+      autoListening: true,
       micOpen: true,
       speechDetected: true,
       micLevel: 0.6,
@@ -875,6 +885,162 @@ const DEFINITIONS = {
       phase: 'completed',
       stage: 'completed',
       announcement: said('The call is complete.'),
+    }),
+  },
+
+  // ---- A hands-free call: the microphone opens by itself, and the customer is a presence ----
+  'hands-free-connecting': {
+    title: 'Hands-free: connecting',
+    group: 'Hands-free',
+    description:
+      'The microphone is allowed and the opening line is being made: a ring turns slowly round the customer, and there is nothing to press.',
+    snapshot: snapshotOf({
+      turns: OPENING,
+      phase: 'ready',
+      stage: 'ready',
+      handsFree: true,
+      autoListening: true,
+      customerState: state('calm', 'steady'),
+      stateHistory: history('calm'),
+      elapsedSeconds: 2,
+    }),
+  },
+  'hands-free-customer-speaking': {
+    title: 'Hands-free: customer speaking',
+    group: 'Hands-free',
+    description:
+      "The customer's line is in the captions and the ring follows the sound that plays. Stop customer audio is the one control in the slot.",
+    snapshot: { ...speaking, handsFree: true, autoListening: true },
+  },
+  'hands-free-customer-speaking-browser-voice': {
+    title: 'Hands-free: customer speaking (a voice the page cannot measure)',
+    group: 'Hands-free',
+    description:
+      "A browser voice: the ring is the avatar's own fixed pulse, never a level it cannot know.",
+    snapshot: {
+      ...speaking,
+      handsFree: true,
+      autoListening: true,
+      customerLevel: 0.4,
+      customerLevelMeasured: false,
+    },
+  },
+  'hands-free-processing': {
+    title: 'Hands-free: the customer is replying',
+    group: 'Hands-free',
+    description: 'The words are sent: a quiet arc turns, the captions fade, nothing is pressed.',
+    snapshot: snapshotOf({
+      turns: [
+        ...EARLY,
+        exchange(
+          98,
+          'Did anything change on those PCs or the network on Monday?',
+          'sending',
+          'voice',
+        ),
+      ],
+      phase: 'processing',
+      stage: 'processing',
+      handsFree: true,
+      autoListening: true,
+    }),
+  },
+  'hands-free-ready': {
+    title: 'Hands-free: about to listen',
+    group: 'Hands-free',
+    description:
+      'The customer has finished and the microphone is about to open by itself: no Talk, and the ring is still until it is.',
+    snapshot: snapshotOf({
+      turns: EARLY,
+      handsFree: true,
+      autoListening: true,
+      announcement: said('Microphone ready.'),
+    }),
+  },
+  'hands-free-still-listening': {
+    title: 'Hands-free: still listening',
+    group: 'Hands-free',
+    description:
+      'After 15 seconds of quiet a soft line says it is still listening. It fades in, in place, and nothing moves.',
+    snapshot: snapshotOf({
+      turns: EARLY,
+      phase: 'listening',
+      stage: 'listening',
+      handsFree: true,
+      autoListening: true,
+      micOpen: true,
+      micLevel: 0.02,
+      hint: hintText({ code: 'still-listening' }),
+    }),
+  },
+  'hands-free-long-words': {
+    title: 'Hands-free: a long turn',
+    group: 'Hands-free',
+    description:
+      'The trainee has said more than three lines: the captions keep the newest, and the oldest line leaves at the top.',
+    snapshot: snapshotOf({
+      turns: EARLY,
+      phase: 'listening',
+      stage: 'listening',
+      handsFree: true,
+      autoListening: true,
+      micOpen: true,
+      speechDetected: true,
+      micLevel: 0.45,
+      interim: `${SPOKEN_WORDS} you are using, and whether the people affected are on the same build. Also, when did you last see it work, and has anything been installed or updated since then on those PCs or on the network they share?`,
+    }),
+  },
+  'hands-free-muted': {
+    title: 'Hands-free: muted',
+    group: 'Hands-free',
+    description: 'The microphone is muted: the ring is still, and the status says so.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      muted: true,
+      stage: 'muted',
+      handsFree: true,
+      autoListening: true,
+      announcement: said('Your microphone is muted.'),
+    }),
+  },
+  'hands-free-paused': {
+    title: 'Hands-free: on hold',
+    group: 'Hands-free',
+    description:
+      'The call is held: the ring is still and dashed, and Resume is the one thing to press.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      paused: true,
+      stage: 'paused',
+      handsFree: true,
+      autoListening: true,
+      announcement: said('The call is paused.'),
+    }),
+  },
+  'hands-free-idle-paused': {
+    title: 'Hands-free: paused after ten quiet minutes',
+    group: 'Hands-free',
+    description: 'The call paused itself after ten minutes without sound, and says why.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      paused: true,
+      stage: 'paused',
+      handsFree: true,
+      autoListening: true,
+      hint: hintText({ code: 'idle-paused' }),
+      announcement: said('The call is paused.'),
+    }),
+  },
+  'hands-free-capped': {
+    title: 'Hands-free: stopped after empty recognitions',
+    group: 'Hands-free',
+    description:
+      'Three recognitions in a row came back with no words, so the microphone waits: Talk is the one thing to press.',
+    snapshot: snapshotOf({
+      turns: MIDDLE,
+      handsFree: true,
+      autoListening: false,
+      hint: hintText({ code: 'no-words' }),
     }),
   },
 

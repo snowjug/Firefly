@@ -1,0 +1,99 @@
+/* Live captions under the customer: not chat, no bubbles. The strip keeps its height whether or not
+   anything is said, and fades in and out, so nothing around it moves. The customer's line is clamped
+   to its first three lines; the trainee's own words keep to the last three, as they are spoken. Only
+   opacity and transform move. It is hidden from assistive technology (the transcript is the record). */
+
+.cw-captions {
+  /* The speaker's name and three lines of the reading size. */
+  --_lines: 3;
+  align-self: stretch;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  block-size: calc(var(--lh-caption) + var(--lh-reading) * var(--_lines));
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(var(--move-xs));
+  transition:
+    opacity var(--dur-normal) var(--ease-easy),
+    transform var(--dur-normal) var(--ease-decelerate);
+}
+.cw-captions[data-live='true'] {
+  opacity: 1;
+  transform: none;
+}
+.cw-captions .cw-fade {
+  display: grid;
+  inline-size: 100%;
+}
+
+.cw-captions__line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+}
+.cw-captions__who {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.cw-captions__body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  inline-size: 100%;
+  block-size: calc(var(--lh-reading) * var(--_lines));
+  min-inline-size: 0;
+  overflow: hidden;
+}
+.cw-captions__text {
+  max-inline-size: 100%;
+  color: var(--fg-1);
+  font-size: var(--fs-reading);
+  line-height: var(--lh-reading);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+/* The customer's line starts at its first words and is cut after three lines. */
+.cw-captions[data-who='customer'] .cw-captions__body {
+  align-items: flex-start;
+}
+.cw-captions[data-who='customer'] .cw-captions__text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+/* The trainee's words stay with the newest: the oldest line leaves at the top, softly. */
+.cw-captions[data-who='you'] .cw-captions__body {
+  mask-image: linear-gradient(to bottom, transparent, var(--bg-canvas) var(--lh-reading));
+}
+.cw-captions[data-who='you'] .cw-captions__word {
+  animation: cw-word var(--dur-slower) var(--ease-decelerate) both;
+}
+@keyframes cw-word {
+  from {
+    opacity: 0.45;
+  }
+}
+
+/* A short window cannot spare the third line. */
+@media (max-height: 48em) {
+  .cw-captions {
+    --_lines: 2;
+  }
+  .cw-captions[data-who='customer'] .cw-captions__text {
+    -webkit-line-clamp: 2;
+  }
+}
+
+@media (forced-colors: active) {
+  .cw-captions__text {
+    color: CanvasText;
+  }
+  .cw-captions__who {
+    color: GrayText;
+  }
+}

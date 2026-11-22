@@ -1,5 +1,7 @@
-/* The call controls: Microphone is the large control; Stop customer audio, Mute and Text sit under it;
-   Pause, Replay and Settings are quieter. One grid serves the stage panel and the narrow dock. */
+/* The call controls. With push to talk the microphone is the large control; Stop customer audio, Mute and
+   Text sit under it; Pause, Replay and Settings are quieter. A hands-free call has no such control (the
+   microphone opens by itself): its first row is a slot that holds only what a press is for. One grid
+   serves the stage panel and the narrow dock. */
 
 .cw-ctl {
   display: grid;
@@ -91,6 +93,33 @@
   justify-content: center;
   gap: var(--sp-1) var(--sp-2);
 }
+
+/* A hands-free call has no big microphone control, because the microphone opens by itself. The first
+   row is one slot with a place of its own, as tall as the controls that go in it (all one size), so
+   that what comes and goes in it (Resume, Talk, Done speaking, Stop customer audio, a line of
+   guidance) moves nothing around it. What is in it enters with a short fade and a small rise. */
+.cw-ctl__slot {
+  position: relative;
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-block-size: var(--target);
+}
+.cw-ctl__slot > .ff-button {
+  max-inline-size: 100%;
+  animation: cw-slot-in var(--dur-normal) var(--ease-decelerate);
+}
+.cw-ctl__slot > .cw-talk {
+  flex: 1 1 auto;
+}
+@keyframes cw-slot-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-xs));
+  }
+}
 .cw-ctl__hint {
   grid-column: 1 / -1;
   color: var(--fg-2);
@@ -98,6 +127,26 @@
   line-height: var(--lh-compact);
   text-align: center;
   text-wrap: balance;
+  animation: cw-slot-in var(--dur-normal) var(--ease-decelerate);
+}
+/* In the slot the guidance is always there, laid over the slot's own place and out of the way of
+   what is pressed, and fades in and out in place. */
+.cw-ctl__slot > .cw-ctl__hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  animation: none;
+  opacity: 0;
+  transform: translateY(var(--move-xs));
+  pointer-events: none;
+  transition:
+    opacity var(--dur-normal) var(--ease-easy),
+    transform var(--dur-normal) var(--ease-decelerate);
+}
+.cw-ctl__slot > .cw-ctl__hint[data-visible='true'] {
+  opacity: 1;
+  transform: none;
 }
 
 /* The dock is what a thumb reaches: it is no wider than a hand's reach (a tablet does not stretch it

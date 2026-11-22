@@ -390,6 +390,17 @@ describe('the voice settings dialog', () => {
     expect(props.actions.setAudio).toHaveBeenCalledExactlyOnceWith(true);
   });
 
+  it('says what Hands-free really does: it keeps listening, and push to talk is one switch away', async () => {
+    const user = userEvent.setup();
+    const { dialog, props } = settings({ handsFree: true });
+    const toggle = dialog.getByRole('switch', { name: 'Hands-free' });
+    expect(toggle).toHaveAccessibleDescription(
+      'Keep listening between turns. Turn off to press Talk for each answer.',
+    );
+    await user.click(toggle);
+    expect(props.actions.setHandsFree).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
   it('lists the languages speech supports, by name, with the current one chosen', () => {
     const { dialog } = settings({ language: 'en-IE' });
     const select = dialog.getByRole('combobox', { name: 'Speech language' }) as HTMLSelectElement;
@@ -515,6 +526,101 @@ describe('the customer on screen', () => {
       rerender(<CustomerStage {...props} state={stateOf('concerned', 'rising')} />);
       expect(container.querySelector('.cw-fade__out')).toBeNull();
       expect(screen.getByRole('group', { name: 'Customer state' })).toHaveTextContent('rising');
+    });
+
+    it('sends out one soft ring when the tone changes, and never when it stays the same', () => {
+      const props = baseProps();
+      const { container, rerender } = render(<CustomerStage {...props} state={stateOf('calm')} />);
+      const cue = () => container.querySelector('.cw-mood__cue');
+      // The first drawing is not a change.
+      expect(cue()).toBeNull();
+      // A trend that moves, or the same state said again, is not a change of tone either.
+      rerender(<CustomerStage {...props} state={stateOf('calm', 'rising')} />);
+      rerender(<CustomerStage {...props} state={stateOf('calm', 'rising')} />);
+      expect(cue()).toBeNull();
+
+      rerender(<CustomerStage {...props} state={stateOf('concerned', 'rising')} />);
+      const first = cue();
+      expect(first).not.toBeNull();
+      // Said by the announcer, once, in words; the ring is for the eye alone.
+      expect(first).toHaveAttribute('aria-hidden', 'true');
+      expect(first).toBeEmptyDOMElement();
+      rerender(<CustomerStage {...props} state={stateOf('concerned', 'steady')} />);
+      expect(cue()).toBe(first);
+
+      // The next change is a new ring: a new element, so the animation plays again.
+      rerender(<CustomerStage {...props} state={stateOf('angry', 'rising')} />);
+      expect(cue()).not.toBeNull();
+      expect(cue()).not.toBe(first);
+    });
+  });
+
+  describe('the ring round the customer', () => {
+    const status = (stage: Parameters<typeof describeStatus>[0]['stage']) =>
+      describeStatus({
+        stage,
+        mode: 'voice',
+        phase: stage === 'customer-speaking' ? 'customer-speaking' : 'listening',
+        speechDetected: stage === 'listening',
+        microphone: 'granted',
+      });
+    const presence = (container: HTMLElement) =>
+      container.querySelector('.cw-presence') as HTMLElement;
+
+    it('says what the call is doing without a word, and is hidden from assistive technology', () => {
+      const props = baseProps();
+      const { container, rerender } = render(
+        <CustomerStage {...props} status={status('listening')} micLevel={0.5} />,
+      );
+      expect(presence(container)).toHaveAttribute('data-presence', 'hearing');
+      expect(presence(container)).toHaveAttribute('aria-hidden', 'true');
+      rerender(
+        <CustomerStage
+          {...props}
+          status={status('customer-speaking')}
+          speaking
+          customerLevel={0.7}
+          customerLevelMeasured
+        />,
+      );
+      expect(presence(container)).toHaveAttribute('data-presence', 'speaking');
+      expect(presence(container)).toHaveAttribute('data-measured', 'true');
+      // The words for the same state are in the status line, which is what a screen reader has.
+      expect(container.querySelector('#status-line')).toHaveTextContent('Customer speaking');
+    });
+
+    it('is drawn for a customer whose voice cannot be measured as the avatar’s own fixed pulse, not a level', () => {
+      const props = baseProps();
+      const { container } = render(
+        <CustomerStage
+          {...props}
+          status={status('customer-speaking')}
+          speaking
+          customerLevel={0.9}
+          customerLevelMeasured={false}
+        />,
+      );
+      expect(presence(container)).toHaveAttribute('data-measured', 'false');
+      expect(presence(container).style.getPropertyValue('--cw-level')).toBe('0');
+      expect(container.querySelector('.ff-avatar--speaking')).not.toBeNull();
+    });
+
+    it('is a compact avatar on a narrow screen, and the large one beside the controls', () => {
+      const props = baseProps();
+      const { container, rerender } = render(<CustomerStage {...props} compact />);
+      expect(presence(container)).toHaveClass('cw-presence--md');
+      rerender(<CustomerStage {...props} compact={false} />);
+      expect(presence(container)).toHaveClass('cw-presence--xl');
+    });
+  });
+
+  describe('the captions under the customer', () => {
+    it('are there where the stage has room for them, and not where it has not', () => {
+      const props = baseProps();
+      const { container, rerender } = render(<CustomerStage {...props} caption={null} />);
+      expect(container.querySelector('.cw-captions')).not.toBeNull();
+      rerender(<CustomerStage {...props} compact />);
+      expect(container.querySelector('.cw-captions')).toBeNull();
     });
   });
 

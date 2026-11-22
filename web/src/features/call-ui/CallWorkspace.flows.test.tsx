@@ -14,6 +14,12 @@ const controls = () => screen.getByRole('group', { name: 'Call controls' });
 const control = (name: string | RegExp) => within(controls()).getByRole('button', { name });
 const bar = () => document.querySelector('header') as HTMLElement;
 
+/** The same moments with hands-free off: Talk, then Done speaking, one control as it always was. */
+const PUSH_TO_TALK = {
+  listening: { ...FIXTURES.listening.snapshot, handsFree: false, autoListening: false },
+  hearing: { ...FIXTURES['speech-detected'].snapshot, handsFree: false, autoListening: false },
+};
+
 describe.each([
   ['wide', WIDTH.wide],
   ['narrow', WIDTH.narrow],
@@ -26,7 +32,7 @@ describe.each([
     expect(actions.stopTalking).not.toHaveBeenCalled();
     cleanup();
 
-    const listening = renderCall('listening', { width });
+    const listening = renderCall(PUSH_TO_TALK.listening, { width });
     await user.click(control('Done speaking'));
     expect(listening.actions.stopTalking).toHaveBeenCalledTimes(1);
     expect(listening.actions.talk).not.toHaveBeenCalled();
@@ -112,9 +118,119 @@ describe.each([
     expect(actions.stopTalking).not.toHaveBeenCalled();
 
     // Only then is it Listening, and the control becomes the one that finishes the sentence.
-    update(FIXTURES.listening.snapshot);
+    update(PUSH_TO_TALK.listening);
     expect(control('Done speaking')).not.toHaveAttribute('aria-busy');
     expect(screen.getByRole('region', { name: 'Customer' })).toHaveTextContent('Listening to you');
+  });
+});
+
+describe.each([
+  ['wide', WIDTH.wide],
+  ['narrow', WIDTH.narrow],
+] as const)('a hands-free call at %s width', (_name, width) => {
+  const microphone = () =>
+    within(controls()).queryByRole('button', { name: /^(Talk|Done speaking|Return to voice)$/ });
+
+  it('has no big microphone control, because the microphone opens by itself', () => {
+    renderCall('listening', { width });
+    expect(microphone()).toBeNull();
+    expect(controls().querySelector('[data-cw-talk]')).toBeNull();
+    for (const name of ['Mute', 'Text', 'Pause', 'Replay', 'Settings']) {
+      expect(control(name)).toBeInTheDocument();
+    }
+    // Nothing to stop while nobody is speaking: the customer's control comes with their voice.
+    expect(within(controls()).queryByRole('button', { name: 'Stop customer audio' })).toBeNull();
+  });
+
+  it('offers Done speaking only once speech has been heard, as a quiet way out that never takes focus', async () => {
+    const user = userEvent.setup();
+    const { actions, update } = renderCall('listening', { width });
+    expect(microphone()).toBeNull();
+
+    update(FIXTURES['speech-detected'].snapshot);
+    const done = control('Done speaking');
+    expect(done).toHaveClass('ff-button--secondary');
+    expect(done).not.toHaveClass('ff-button--primary');
+    expect(done).not.toHaveFocus();
+    await user.click(done);
+    expect(actions.stopTalking).toHaveBeenCalledTimes(1);
+    expect(actions.talk).not.toHaveBeenCalled();
+  });
+
+  it('takes Done speaking away once the turn is sent, and keeps the keyboard with the controls', async () => {
+    const { update } = renderCall('speech-detected', { width });
+    const done = control('Done speaking');
+    done.focus();
+    expect(done).toHaveFocus();
+
+    update(FIXTURES['hands-free-processing'].snapshot);
+    expect(microphone()).toBeNull();
+    expect(controls()).toHaveFocus();
+  });
+
+  it('shows Stop customer audio only while the customer speaks, and it is the only thing in the slot', async () => {
+    const user = userEvent.setup();
+    const { actions, update } = renderCall('hands-free-customer-speaking', { width });
+    expect(controls().querySelector('.cw-ctl__slot')).toContainElement(
+      control('Stop customer audio'),
+    );
+    expect(microphone()).toBeNull();
+    await user.click(control('Stop customer audio'));
+    expect(actions.interrupt).toHaveBeenCalledTimes(1);
+
+    update(FIXTURES['hands-free-ready'].snapshot);
+    expect(within(controls()).queryByRole('button', { name: 'Stop customer audio' })).toBeNull();
+  });
+
+  it('puts Resume in the slot of a call that is held, once, and Pause is not drawn beside it', async () => {
+    const user = userEvent.setup();
+    const { actions, update } = renderCall('hands-free-paused', { width });
+    const resume = control('Resume');
+    expect(within(controls()).getAllByRole('button', { name: 'Resume' })).toHaveLength(1);
+    expect(within(controls()).queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(resume).toHaveClass('ff-button--primary');
+    expect(resume.closest('.cw-ctl__slot')).not.toBeNull();
+    await user.click(resume);
+    expect(actions.togglePause).toHaveBeenCalledTimes(1);
+
+    update(FIXTURES['hands-free-ready'].snapshot);
+    expect(control('Pause')).toBeInTheDocument();
+    expect(within(controls()).queryByRole('button', { name: 'Resume' })).toBeNull();
+  });
+
+  it('says why a call paused itself, beside Resume', () => {
+    renderCall('hands-free-idle-paused', { width });
+    expect(controls()).toHaveTextContent('Paused after 10 minutes without sound.');
+    expect(control('Resume')).toBeInTheDocument();
+  });
+
+  it('brings Talk back only where the microphone will not open by itself', async () => {
+    const user = userEvent.setup();
+    const { actions } = renderCall('hands-free-capped', { width });
+    const talk = control('Talk');
+    expect(talk).not.toHaveAttribute('aria-disabled', 'true');
+    expect(talk).toHaveClass('ff-button--primary');
+    await user.click(talk);
+    expect(actions.talk).toHaveBeenCalledTimes(1);
+    cleanup();
+
+    // A problem card is showing: the microphone waits for the card, so Talk is there beside it.
+    const failed = FIXTURES['problem-transcription-failed'].snapshot;
+    renderCall({ ...failed, handsFree: true, autoListening: true }, { width });
+    expect(control('Talk')).toBeInTheDocument();
+  });
+
+  it('gives the soft guidance the slot while there is nothing to press, fading in place', () => {
+    const { update } = renderCall('hands-free-still-listening', { width });
+    const hint = () => controls().querySelector('.cw-ctl__slot > .cw-ctl__hint') as HTMLElement;
+    expect(hint()).toHaveTextContent('Still listening. Speak when you are ready.');
+    expect(hint()).toHaveAttribute('data-visible', 'true');
+    expect(hint()).not.toHaveAttribute('aria-hidden');
+
+    // Gone from view and from assistive technology, but its place is kept so nothing moves.
+    update(FIXTURES.listening.snapshot);
+    expect(hint()).toHaveAttribute('data-visible', 'false');
+    expect(hint()).toHaveAttribute('aria-hidden', 'true');
   });
 });
 

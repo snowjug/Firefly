@@ -71,10 +71,11 @@ describe('every fixture', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     const ids = [...container.querySelectorAll('[id]')].map((element) => element.id);
     expect(new Set(ids).size, `duplicate ids in ${name}`).toBe(ids.length);
-    // CSP: styles come from stylesheets, never from attributes. Two exceptions, both set from script
-    // and never written in markup: a loading bar's transform, and the tips deck's own custom
-    // properties (`--tp-index`, `--tp-drag`), which say where its track is.
-    const scriptOnly = /^\s*(--tp-[\w-]+\s*:[^;]+;?\s*)+$/;
+    // CSP: styles come from stylesheets, never from attributes. Three exceptions, all set from script
+    // and never written in markup: a loading bar's transform, the tips deck's own custom properties
+    // (`--tp-index`, `--tp-drag`), which say where its track is, and the customer's presence ring's
+    // level (`--cw-level`), which the stylesheet turns into a size.
+    const scriptOnly = /^\s*((?:--tp-|--cw-)[\w-]+\s*:[^;]+;?\s*)+$/;
     const styled = [...container.querySelectorAll('[style]')].filter(
       (element) =>
         !element.classList.contains('ff-progress__fill') &&
@@ -109,8 +110,15 @@ describe('the states of the call', () => {
       // The label is in the paragraph the controls point at, so a dimmed control says why.
       const describedBy = label.closest('p')?.id;
       expect(describedBy).toBeTruthy();
-      const talk = screen.getByRole('button', { name: /^(Talk|Done speaking|Return to voice)$/ });
-      expect(talk).toHaveAttribute('aria-describedby', describedBy);
+      const snapshot = FIXTURES[name].snapshot;
+      if (snapshot.handsFree && snapshot.mode === 'voice') {
+        // A hands-free call has no big microphone control to describe: it opens by itself. (Done
+        // speaking may be there, as a quiet way out, once speech has been heard.)
+        expect(document.querySelector('[data-cw-talk]')).toBeNull();
+      } else {
+        const talk = screen.getByRole('button', { name: /^(Talk|Done speaking|Return to voice)$/ });
+        expect(talk).toHaveAttribute('aria-describedby', describedBy);
+      }
     },
   );
 
