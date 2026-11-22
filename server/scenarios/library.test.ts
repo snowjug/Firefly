@@ -193,6 +193,18 @@ describe('the library', () => {
       }
     }
   });
+
+  it('words every hidden fact trigger so it still reads once the coaching turns "Asks ..." into advice', () => {
+    // The summary says "The biggest opportunity is to ask ..." with the trigger's own words, so a
+    // second question word straight after "looks after" ("who looks after who can ...") would show.
+    for (const scenario of library) {
+      for (const fact of scenario.hiddenFacts) {
+        expect(fact.revealWhen, `${scenario.id} ${fact.id}`).not.toMatch(
+          /\b(?:looks after|look after|manages|owns)\s+(?:who|what|which)\b/i,
+        );
+      }
+    }
+  });
 });
 
 describe('the grounding review', () => {

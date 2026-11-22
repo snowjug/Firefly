@@ -18,6 +18,7 @@ import {
   harmfulTurns,
   hasRecorded,
   joinPhrases,
+  keyFactsClause,
   longestSentence,
   plural,
   quoteFor,
@@ -283,10 +284,9 @@ function scoreScoping(call: CallView, discovery: CoachingReport['discovery']): O
   if (manyRepeats) deductions.push(`${repeats.size} repeated questions`);
   if (premature) deductions.push('fixes offered before the problem was scoped');
   const topicNames = topics.map((t) => DISCOVERY_INTENT_LABELS[t].toLowerCase());
-  const weighted =
-    share > 0 && share < 1 ? `, a weighted ${Math.round(share * 100)}% of what mattered` : '';
+  const matter = keyFactsClause(discovery.results);
   const rationale = [
-    `${discoverySentence(discovery, undefined, { gap: false })}${weighted}.`,
+    `${discoverySentence(discovery, undefined, { gap: false })}${matter ? `, and ${matter}` : ''}.`,
     topics.length > 0 ? `Core topics you asked about: ${joinPhrases(topicNames)}.` : '',
     deductions.length === 1
       ? `One point off: ${deductions[0]}.`

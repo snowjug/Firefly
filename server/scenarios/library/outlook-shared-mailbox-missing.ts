@@ -315,7 +315,7 @@ const scenario = {
       statement:
         "Our office manager mentioned she'd been tidying up who has access to the shared mailboxes while I was off.",
       revealWhen:
-        'Asks whether anything changed while he was away, or who looks after who can open the shared mailboxes.',
+        'Asks whether anything changed while he was away, or who looks after access to the shared mailboxes.',
       intents: ['recent_changes'],
       cues: [
         'changed',

@@ -511,6 +511,24 @@ export function weightedShare(results: DiscoveryResult[]): number {
   return total === 0 ? 0 : got / total;
 }
 
+/**
+ * How the facts that mattered most (critical and important) went, in counts and not a percentage:
+ * "and 2 of the 3 that mattered most". Empty when it would only repeat the count of all facts: no
+ * fact found, all found, or no fact of less weight to tell it apart from.
+ */
+export function keyFactsClause(results: DiscoveryResult[]): string {
+  const key = results.filter((r) => r.importance !== 'helpful');
+  const found = results.filter((r) => r.status === 'discovered').length;
+  if (key.length === 0 || key.length === results.length) return '';
+  if (found === 0 || found === results.length) return '';
+  const keyFound = key.filter((r) => r.status === 'discovered').length;
+  if (key.length === 1)
+    return keyFound === 1 ? 'the one that mattered most' : 'not the one that mattered most';
+  if (keyFound === key.length) return `all ${key.length} that mattered most`;
+  if (keyFound === 0) return `none of the ${key.length} that mattered most`;
+  return `${keyFound} of the ${key.length} that mattered most`;
+}
+
 /** The most important fact the trainee did not fully uncover: a missed one before a partly found one. */
 export function biggestGap(discovery: CoachingReport['discovery']): DiscoveryResult | undefined {
   return discovery.results
