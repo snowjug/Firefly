@@ -326,12 +326,15 @@ test.describe('landing', () => {
       await expect
         .poll(async () => (await line.boundingBox())?.x ?? 0)
         .toBeGreaterThan((before?.x ?? 0) + 50);
-      const tab = await preview.getByRole('tab', { name: 'Outlook' }).boundingBox();
-      const moved = await line.boundingBox();
-      expect(moved?.x).toBeGreaterThanOrEqual((tab?.x ?? 0) - 1);
-      expect((moved?.x ?? 0) + (moved?.width ?? 0)).toBeLessThanOrEqual(
-        (tab?.x ?? 0) + (tab?.width ?? 0) + 1,
-      );
+      // The line slides, so it is measured once it has arrived: it ends up under the tab, within it.
+      await expect
+        .poll(async () => {
+          const tab = await preview.getByRole('tab', { name: 'Outlook' }).boundingBox();
+          const moved = await line.boundingBox();
+          if (!tab || !moved) return [];
+          return [moved.x >= tab.x - 1, moved.x + moved.width <= tab.x + tab.width + 1];
+        })
+        .toEqual([true, true]);
       await expect(preview.getByRole('tabpanel', { name: 'Outlook' })).toContainText(
         'Daniel Reyes',
       );

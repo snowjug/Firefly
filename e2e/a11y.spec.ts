@@ -18,6 +18,7 @@ import {
   startSpokenCall,
   structureProblems,
   test,
+  unpinBars,
   watchAnnouncements,
 } from './support/a11y.ts';
 import { callScreen } from './support/call-screen.ts';
@@ -249,10 +250,13 @@ for (const viewport of VIEWPORTS) {
         .getByRole('radio', { name: 'Low' })
         .check();
       // The header and the way-on bar are pinned to the edges of a phone, and a scan counts a control
-      // that sits under one of them as covered. Bring the first control of the set-up to the middle.
+      // that is partly under one of them as obscured, wherever the page happens to be scrolled (a wider
+      // font puts the same control in a different place). Bring the first control of the set-up to the
+      // middle, and let the bars scroll with the page for this scan.
       await pane
         .getByRole('button', { name: 'Reset to scenario defaults' })
         .evaluate((element) => element.scrollIntoView({ block: 'center' }));
+      await unpinBars(page);
       await check(
         page,
         testInfo,

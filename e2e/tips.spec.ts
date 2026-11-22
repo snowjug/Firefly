@@ -326,9 +326,10 @@ test.describe('how a tip changes', () => {
     const first = (await screen.tips.current.innerText()).trim();
     const track = page.locator('.tp-track');
     const shift = () => track.evaluate((el) => parseFloat(el.style.getPropertyValue('--tp-drag')));
-    // A press on the words, not on “Learn why”: a button keeps its own press.
+    // A press on the words, not on “Learn why”: a button keeps its own press. The words are measured once
+    // the tip has stopped gliding, or the press could land beside them.
     const middle = async () => {
-      const box = await rect(screen.tips.current);
+      const box = await settledRect(screen.tips.current);
       return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     };
 
