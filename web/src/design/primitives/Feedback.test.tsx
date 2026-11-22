@@ -143,6 +143,14 @@ describe('ScoreBar', () => {
     expect(screen.getByRole('img', { name: '4 of 5, Strong' })).toBeInTheDocument();
   });
 
+  it('keeps the words in the document as text when only the segments are to be drawn', () => {
+    const { container } = render(<ScoreBar score={4} hideText />);
+    expect(container.firstElementChild).toHaveClass('ff-scorebar--text-hidden');
+    expect(container.querySelector('.ff-scorebar__text')).toHaveTextContent('4 of 5');
+    expect(container.querySelector('.ff-scorebar__text')).toHaveTextContent('Strong');
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
   it('fills a whole segment for each point and part of the next for a fraction', () => {
     const { container } = render(<ScoreBar score={3.5} />);
     const fills = [...container.querySelectorAll<HTMLElement>('.ff-scorebar__fill')];

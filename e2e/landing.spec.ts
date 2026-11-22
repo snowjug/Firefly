@@ -85,6 +85,24 @@ const ringAround = (page: Page) =>
     return false;
   });
 
+/** The heights of the footer's links and of the segments of its theme choice, as laid out now. */
+const footerTargets = (page: Page) =>
+  page.evaluate(() => ({
+    links: [...document.querySelectorAll('.ff-footer__links a')].map(
+      (link) => link.getBoundingClientRect().height,
+    ),
+    segments: [...document.querySelectorAll('.ff-footer .ff-segmented__item')].map(
+      (item) => item.getBoundingClientRect().height,
+    ),
+  }));
+
+/** The right edge of the first match, in pixels from the left of the window. */
+const rightEdge = (page: Page, selector: string) =>
+  page
+    .locator(selector)
+    .first()
+    .evaluate((element) => element.getBoundingClientRect().right);
+
 /** Animations that are still running and last longer than a frame, as the browser reports them. */
 const longAnimations = (page: Page) =>
   page.evaluate(() =>
@@ -276,13 +294,18 @@ test.describe('landing', () => {
     }) => {
       test.setTimeout(90_000);
       await page.goto('/');
-      const play = page.getByRole('button', { name: 'Play preview' });
-      await expect(play).toBeVisible({ timeout: 70_000 });
+      // The call is over, so the control says "Replay": the three runs are played and it starts again.
+      const replay = page.getByRole('button', { name: 'Replay preview' });
+      await expect(replay).toBeVisible({ timeout: 70_000 });
       const rest = await callState(page);
       expect(rest).toMatchObject({ phase: 'report', shown: 3, quoted: 3, scored: 3 });
+      // The two microphone pictures step back: nothing on the card says a call is still going.
+      await expect(
+        page.locator('[role="tabpanel"][data-selected] .lp-panel__indicators'),
+      ).toHaveCSS('opacity', '0.4');
       await page.waitForTimeout(1500);
       expect(sameState(await callState(page), rest), 'it stays at rest').toBe(true);
-      await play.click();
+      await replay.click();
       await expect(page.getByRole('button', { name: 'Pause preview' })).toBeFocused();
       await expect.poll(async () => (await callState(page)).phase).toBe('call');
     });
@@ -520,12 +543,93 @@ test.describe('landing', () => {
     }) => {
       await page.goto('/');
       const card = page.locator('.lp-rp__card');
+      const fill = page.locator('.lp-rp__row .lp-rp__pip[data-on]').first();
+      const colour = () => fill.evaluate((element) => getComputedStyle(element).backgroundColor);
+      const token = (name: string) =>
+        page.evaluate((property) => {
+          const probe = document.createElement('i');
+          probe.style.background = `var(${property})`;
+          document.body.append(probe);
+          const value = getComputedStyle(probe).backgroundColor;
+          probe.remove();
+          return value;
+        }, name);
+
+      // Every level is drawn from the start, in a neutral colour: the card is never a row of blanks.
       await expect(card).not.toHaveAttribute('data-revealed');
+      await expect(page.locator('.lp-rp__pips').first()).toBeVisible();
+      expect(await colour()).toBe(await token('--stroke-accessible'));
+
+      // A beat after the card has come into view the levels take the product's colour, once.
       await card.scrollIntoViewIfNeeded();
       await expect(card).toHaveAttribute('data-revealed', '');
-      await expect(page.locator('.lp-rp__score').first()).toHaveCSS('opacity', '1');
+      await expect.poll(colour, { timeout: 5_000 }).toBe(await token('--brand-stroke'));
       await page.evaluate(() => window.scrollTo(0, 0));
       await expect(card).toHaveAttribute('data-revealed', '');
+      expect(await colour()).toBe(await token('--brand-stroke'));
+    });
+
+    test('has six rows of one height, 44px, with the skill, its level and its turn centred on them', async ({
+      page,
+    }) => {
+      await page.goto('/');
+      const region = page.getByRole('region', { name: 'Coaching evidence' });
+      await region.scrollIntoViewIfNeeded();
+      const rows = await region.locator('.lp-rp__row').evaluateAll((elements) =>
+        elements.map((row) => {
+          const box = row.getBoundingClientRect();
+          const middle = box.top + box.height / 2;
+          const offset = (selector: string) => {
+            const part = row.querySelector(selector)?.getBoundingClientRect();
+            return part ? Math.abs(part.top + part.height / 2 - middle) : 0;
+          };
+          return {
+            height: box.height,
+            skill: offset('.lp-rp__skill'),
+            level: offset('.lp-rp__pips'),
+            turn: offset('.lp-rp__at'),
+          };
+        }),
+      );
+      expect(rows).toHaveLength(6);
+      for (const row of rows) {
+        expect(row.height).toBe(44);
+        expect(row.skill).toBeLessThanOrEqual(1);
+        expect(row.level).toBeLessThanOrEqual(1);
+        expect(row.turn).toBeLessThanOrEqual(1);
+      }
+      // The line to the evidence leaves from the middle of the chosen row (from 48em, where it shows).
+      const line = await region.locator('.lp-rp__row[data-active]').evaluate((row) => {
+        const box = row.getBoundingClientRect();
+        const after = getComputedStyle(row, '::after');
+        return {
+          offset: parseFloat(after.top) + parseFloat(after.height) / 2 - box.height / 2,
+          drawn: after.content !== 'none',
+        };
+      });
+      expect(line.drawn).toBe(true);
+      expect(Math.abs(line.offset)).toBeLessThanOrEqual(1);
+    });
+
+    test('lets the evidence stand as tall as its words, with no wide empty tint between the quote and the coaching', async ({
+      page,
+    }) => {
+      await page.goto('/');
+      const region = page.getByRole('region', { name: 'Coaching evidence' });
+      await region.scrollIntoViewIfNeeded();
+      const gaps = [];
+      const skills = region.getByRole('group', { name: 'Skills' }).getByRole('radio');
+      for (let index = 0; index < 6; index += 1) {
+        await skills.nth(index).check({ force: true });
+        gaps.push(
+          await region.locator('.lp-rp__linked[data-active]').evaluate((set) => {
+            const quote = set.querySelector('.lp-rp__quote')?.getBoundingClientRect();
+            const noted = set.querySelector('.lp-rp__noted')?.getBoundingClientRect();
+            return Math.round((noted?.top ?? 0) - (quote?.bottom ?? 0));
+          }),
+        );
+      }
+      for (const gap of gaps) expect(gap, `the quote to the coaching: ${gaps}`).toBeLessThan(80);
     });
 
     test('lights the three steps in order as they come into view', async ({ page }) => {
@@ -901,6 +1005,176 @@ test.describe('landing: themes', () => {
   }
 });
 
+test.describe('landing: layout', () => {
+  test('keeps the promise large where there is room, and its supporting line whole', async ({
+    page,
+  }) => {
+    const fontSize = () =>
+      page
+        .locator('.lp-hero h1')
+        .evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await page.goto('/');
+    expect(await fontSize(), 'at 1024 the promise keeps its size').toBeLessThan(48);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    expect(await fontSize(), 'at 1440').toBeGreaterThanOrEqual(48);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    expect(await fontSize(), 'at 1920').toBeGreaterThanOrEqual(52);
+
+    // The two halves of the hero weigh the same from 1440: the copy and the call are as wide as each other.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const [copy, call] = await Promise.all([
+      page.locator('.lp-hero__copy').evaluate((element) => element.getBoundingClientRect().width),
+      page.locator('.lp-preview').evaluate((element) => element.getBoundingClientRect().width),
+    ]);
+    expect(Math.abs(copy - call)).toBeLessThanOrEqual(1);
+
+    // "evidence-based" is one piece of the line, wherever the line breaks.
+    for (const width of [320, 375, 430, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const pieces = await page
+        .locator('.lp-hero__keep')
+        .evaluate((element) => element.getClientRects().length);
+      expect(pieces, `"evidence-based" at ${width} px`).toBe(1);
+    }
+  });
+
+  test('ends the call card, the evidence card and the footer where the header’s Start call ends', async ({
+    page,
+  }) => {
+    for (const width of [768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/');
+      await expect(page.getByRole('region', { name: 'Scenario cards' })).toBeVisible();
+      const edge = await rightEdge(page, '.ff-header__actions a');
+      expect(await rightEdge(page, '.lp-preview__window'), `the call card at ${width}`).toBeCloseTo(
+        edge,
+        0,
+      );
+      expect(await rightEdge(page, '.lp-preview__tabs'), `the tab strip at ${width}`).toBeCloseTo(
+        edge,
+        0,
+      );
+      expect(await rightEdge(page, '.lp-rp__card'), `the evidence card at ${width}`).toBeCloseTo(
+        edge,
+        0,
+      );
+      if (width >= 1024) {
+        // The links and the theme choice end at the container's edge, not short of it.
+        expect(await rightEdge(page, '.ff-footer__end'), `the footer at ${width}`).toBeCloseTo(
+          edge,
+          0,
+        );
+        expect(
+          await rightEdge(page, '.ff-theme-select'),
+          `the theme choice at ${width}`,
+        ).toBeCloseTo(edge, 0);
+      }
+    }
+  });
+
+  test('makes the footer links and the theme choice 44px targets up to a tablet, and keeps them small on a desktop', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    for (const width of [390, 768]) {
+      await page.setViewportSize({ width, height: 900 });
+      const { links, segments } = await footerTargets(page);
+      expect(Math.min(...links), `the links at ${width}: ${links}`).toBeGreaterThanOrEqual(44);
+      expect(Math.min(...segments), `the segments at ${width}: ${segments}`).toBeGreaterThanOrEqual(
+        44,
+      );
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { links, segments } = await footerTargets(page);
+    expect(Math.min(...links)).toBeGreaterThanOrEqual(24);
+    expect(Math.min(...segments)).toBeGreaterThanOrEqual(24);
+    const footer = await page.getByRole('contentinfo').boundingBox();
+    expect(footer?.height, 'the footer stays one slim row on a desktop').toBeLessThan(80);
+  });
+
+  test('keeps the theme choice’s confirmation out of the footer’s row, and still shows it', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const footer = page.getByRole('contentinfo');
+    const before = await footer.boundingBox();
+    // The choice is applied inside a view transition, a frame after the click: check() would read the
+    // radio too soon, so the click and the wait are separate.
+    const dark = footer.getByRole('radio', { name: 'Dark' });
+    await dark.click({ force: true });
+    await expect(dark).toBeChecked();
+    const saved = footer.getByText('Saved on this device', { exact: true });
+    await expect(saved).toBeVisible();
+    await expect(saved).toHaveCSS('opacity', '1');
+    expect((await footer.boundingBox())?.height, 'the confirmation takes no room of its own').toBe(
+      before?.height,
+    );
+    await expect(saved).toHaveCSS('opacity', '0', { timeout: 8_000 });
+  });
+
+  test('numbers the three steps, and keeps the block compact', async ({ page }) => {
+    await page.goto('/');
+    const steps = page.getByRole('region', { name: 'How it works' });
+    await expect(steps.locator('.lp-step__number')).toHaveText(['1', '2', '3']);
+    const box = await steps.boundingBox();
+    expect(box?.height, 'the three steps take about 200px of a desktop').toBeLessThan(215);
+  });
+
+  test('puts the state word beside the waveform it describes, and dims the microphones when the call is over', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect.poll(async () => (await callState(page)).speaking).toBe('customer');
+    const gap = await page.evaluate(() => {
+      const panel = document.querySelector('[role="tabpanel"][data-selected]');
+      const wave = panel?.querySelector('.lp-wave')?.getBoundingClientRect();
+      const state = panel?.querySelector('.lp-call__state')?.getBoundingClientRect();
+      return (state?.left ?? 0) - (wave?.right ?? 0);
+    });
+    expect(gap, 'the word is next to the wave, not at the far end of the row').toBeLessThan(40);
+    expect(gap).toBeGreaterThan(0);
+    const indicators = page.locator('[role="tabpanel"][data-selected] .lp-panel__indicators');
+    await expect(indicators).toHaveCSS('opacity', '1');
+    await expect
+      .poll(async () => (await callState(page)).phase, { timeout: 15_000 })
+      .toBe('report');
+    await expect(indicators).toHaveCSS('opacity', '0.4');
+  });
+
+  test('keeps the call card one height through its loop and across its tabs, with each foot on the card’s bottom edge', async ({
+    page,
+  }) => {
+    test.setTimeout(100_000);
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto('/');
+    const measure = () =>
+      page.evaluate(() => {
+        const frame = document.querySelector('.lp-preview__window')?.getBoundingClientRect();
+        const foot = document
+          .querySelector('[role="tabpanel"][data-selected] .lp-panel__foot')
+          ?.getBoundingClientRect();
+        if (!frame || !foot) throw new Error('The call card is not there.');
+        // The card's own 1px border is under the foot.
+        return { height: frame.height, blank: frame.bottom - foot.bottom - 1 };
+      });
+    const heights: number[] = [];
+    for (const tab of ['Teams', 'Outlook', 'Entra ID']) {
+      await page.getByRole('tab', { name: tab }).click();
+      for (let sample = 0; sample < 5; sample += 1) {
+        const { height, blank } = await measure();
+        heights.push(height);
+        expect(blank, `${tab}: nothing blank under the foot`).toBeLessThanOrEqual(0.5);
+        await page.waitForTimeout(3_000);
+      }
+    }
+    expect(
+      Math.max(...heights) - Math.min(...heights),
+      `the card changed height: ${heights}`,
+    ).toBeLessThanOrEqual(0.5);
+  });
+});
+
 test.describe('landing: a phone', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -913,6 +1187,35 @@ test.describe('landing: a phone', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow, 'the page is wider than the screen').toBeLessThanOrEqual(0);
+
+    await test.step('the header keeps its menu, its theme switch and Start call together on the right, each a 44px target', async () => {
+      const bar = await page.evaluate(() => {
+        const box = (selector: string) => {
+          const found = document.querySelector(selector)?.getBoundingClientRect();
+          if (!found) throw new Error(`no ${selector}`);
+          return { left: found.left, right: found.right, width: found.width, height: found.height };
+        };
+        return {
+          brand: box('.ff-header__brand'),
+          menu: box('.ff-header__menu'),
+          theme: box('.ff-header .ff-theme-toggle'),
+          start: box('.ff-header__actions a'),
+          view: document.documentElement.clientWidth,
+        };
+      });
+      expect(bar.menu.width, 'the menu is a square').toBe(44);
+      expect(bar.menu.height).toBe(44);
+      expect(bar.theme.width).toBe(44);
+      expect(bar.theme.height).toBe(44);
+      expect(bar.start.height).toBeGreaterThanOrEqual(44);
+      // The menu and the theme switch touch: one group, not a button floating between the logo and it.
+      expect(Math.abs(bar.theme.left - bar.menu.right)).toBeLessThanOrEqual(1);
+      expect(bar.start.left - bar.theme.right).toBeLessThanOrEqual(12);
+      expect(bar.menu.left, 'the group is on the right, away from the logo').toBeGreaterThan(
+        bar.brand.right + 40,
+      );
+      expect(bar.view - bar.start.right).toBeLessThanOrEqual(20);
+    });
 
     await test.step('the hero’s two actions fill the row, and the preview follows', async () => {
       const hero = page.getByRole('region', { name: TITLE });
@@ -955,6 +1258,28 @@ test.describe('landing: a phone', () => {
       await expect(header.getByRole('link', { name: 'Start call' })).toBeVisible();
       await expect(header.getByRole('button', { name: 'Dark theme' })).toBeVisible();
     });
+
+    await test.step('the footer’s links and its theme choice are 44px targets', async () => {
+      const targets = await footerTargets(page);
+      expect(
+        Math.min(...targets.links),
+        `the footer links: ${targets.links}`,
+      ).toBeGreaterThanOrEqual(44);
+      expect(targets.segments).toHaveLength(3);
+      expect(
+        Math.min(...targets.segments),
+        `the theme segments: ${targets.segments}`,
+      ).toBeGreaterThanOrEqual(44);
+    });
+  });
+
+  test('has the Demo chip of the app pages in a 44px target', async ({ page }) => {
+    await page.goto('/scenarios');
+    await expect(page.getByRole('heading', WORKSPACE)).toBeVisible();
+    const more = page.getByRole('banner').getByRole('button', { name: /Demo mode/ });
+    const box = await more.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+    expect(box?.width).toBeGreaterThanOrEqual(44);
   });
 
   test('has no accessibility violations', async ({ page }, testInfo) => {

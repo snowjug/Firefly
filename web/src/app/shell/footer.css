@@ -41,9 +41,42 @@
   display: flex;
 }
 
+/* The choice ends at the container's edge like everything else: its "Saved on this device" does not
+   keep a room of its own beside it but hangs above it for the moment it is shown. */
+.ff-footer__end .ff-theme-select {
+  position: relative;
+}
+.ff-footer__end .ff-theme-select__saved {
+  position: absolute;
+  inset-block-end: calc(100% + var(--sp-1));
+  inset-inline-end: 0;
+  min-inline-size: 0;
+  padding: var(--sp-0h) var(--sp-2);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-4);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* On a phone and a tablet every link and every segment of the choice is a target of 44 px. */
+@media (max-width: 48em) {
+  .ff-footer__links a {
+    min-block-size: var(--target);
+  }
+  .ff-footer__end .ff-segmented {
+    --_h: calc(var(--target) + 0.5rem);
+  }
+}
+
 @media (forced-colors: active) {
   .ff-footer {
     border-block-start-color: CanvasText;
+  }
+  .ff-footer__end .ff-theme-select__saved {
+    border-color: CanvasText;
+    box-shadow: none;
   }
 }
 @media print {

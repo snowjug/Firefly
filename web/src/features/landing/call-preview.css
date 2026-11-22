@@ -7,13 +7,6 @@
 .lp-preview {
   margin: 0;
   min-inline-size: 0;
-  max-inline-size: 40rem;
-}
-/* Beside the copy it fills its column, so its edge lines up with the page's. */
-@media (min-width: 64em) {
-  .lp-preview {
-    max-inline-size: none;
-  }
 }
 .lp-preview__caption {
   margin-block-start: var(--sp-3);
@@ -84,6 +77,12 @@
     transform var(--motion-control) var(--ease-easy),
     box-shadow var(--motion-component) var(--ease-easy);
 }
+/* The three examples share one cell, and each fills it: the one that is shorter than the tallest still
+   has its foot on the window's bottom edge, with nothing blank under it. */
+.lp-preview__panel {
+  display: flex;
+  flex-direction: column;
+}
 /* Keyboard focus inside gets the same lift in the shadow as the pointer does, without the tilt. */
 .lp-preview__window:focus-within {
   box-shadow: var(--shadow-16);
@@ -129,10 +128,12 @@
    moves when one replaces the other. Both stay in the document; only the one in front is seen. */
 .lp-panel {
   display: flex;
+  flex: 1;
   flex-direction: column;
 }
 .lp-panel__stage {
   display: grid;
+  flex: 1;
   min-inline-size: 0;
 }
 .lp-face {
@@ -164,7 +165,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2) var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
   border-block-end: var(--stroke-w) solid var(--stroke-3);
 }
 .lp-call__product {
@@ -208,7 +209,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-4);
-  padding: var(--sp-4) var(--sp-4) var(--sp-1);
+  padding: var(--sp-3) var(--sp-4) 0;
 }
 .lp-call__avatar {
   position: relative;
@@ -246,16 +247,18 @@
   color: var(--fg-2);
 }
 
-/* ---- The voice: the waveform and what the call is doing ---------------------------------------- */
+/* ---- The voice: the waveform and what the call is doing ---------------------------------------
+   The word that says who is speaking stands beside the waveform it describes, not at the far end of
+   the row. */
 .lp-call__voice {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3) var(--sp-4);
-  padding: var(--sp-2) var(--sp-4) var(--sp-3);
+  justify-content: flex-start;
+  gap: var(--sp-3) var(--sp-5);
+  padding: var(--sp-1) var(--sp-4) var(--sp-3);
 }
 .lp-wave {
-  flex: 0 1 15rem;
+  flex: 0 1 13rem;
   min-inline-size: 0;
   block-size: auto;
   fill: var(--voice-customer);
@@ -269,6 +272,9 @@
   flex: none;
   align-items: center;
   gap: var(--sp-2);
+  /* Wide enough for the longest word ("Call ended"), so the wave beside it has one width through the
+     whole loop and the card never changes height as the word changes. */
+  min-inline-size: 5.75rem;
   margin: 0;
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
@@ -300,15 +306,16 @@
 .lp-call__lines {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   margin: 0;
-  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
   border-block-start: var(--stroke-w) solid var(--stroke-3);
   list-style: none;
 }
+/* A narrow column for the speaker's first name or "You", so the words get the width. */
 .lp-line {
   display: grid;
-  grid-template-columns: 6.5rem minmax(0, 1fr);
+  grid-template-columns: 4rem minmax(0, 1fr);
   column-gap: var(--sp-3);
   opacity: 0;
   transform: translateY(var(--move-xs));
@@ -323,7 +330,7 @@
 /* The trainee's own words sit on a tint, and are labelled "You": distinct without colour alone. */
 .lp-line[data-speaker='trainee'] {
   margin-inline: calc(var(--sp-3) * -1);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-1h) var(--sp-3);
   border-radius: var(--r-lg);
   background: var(--brand-tint);
 }
@@ -333,19 +340,20 @@
   font-weight: var(--fw-semibold);
   color: var(--fg-2);
 }
+/* Two lines come out even, so a line never ends with one short word alone. */
 .lp-line__text {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   color: var(--fg-1);
-  text-wrap: pretty;
+  text-wrap: balance;
 }
 
 /* ---- The report the card turns into: the words first, then the score ---------------------------- */
 .lp-face--report {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-4);
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
 }
 .lp-mini__label {
   margin: 0;
@@ -362,13 +370,19 @@
   padding: 0;
   list-style: none;
 }
+/* The skill and its level on one line, the words it rests on under them: a short row, so the report
+   is never the taller of the card's two faces. The words stay before the level in the document. */
 .lp-mini__row {
-  display: flex;
+  display: grid;
   flex: 1;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--sp-1);
-  padding-block: var(--sp-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'skill score'
+    'quote quote';
+  align-content: center;
+  align-items: center;
+  gap: var(--sp-0h) var(--sp-3);
+  padding-block: var(--sp-2);
   border-block-start: var(--stroke-w) solid var(--stroke-3);
 }
 .lp-mini__skill,
@@ -387,6 +401,7 @@
   transform: none;
 }
 .lp-mini__skill {
+  grid-area: skill;
   margin: 0;
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
@@ -394,11 +409,16 @@
   color: var(--fg-2);
 }
 .lp-mini__quote {
+  grid-area: quote;
   margin: 0;
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   color: var(--fg-1);
   text-wrap: pretty;
+}
+.lp-mini__score {
+  grid-area: score;
+  display: inline-flex;
 }
 .lp-mini__turn {
   margin-inline-end: var(--sp-1);
@@ -413,7 +433,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
+  padding: var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-4);
   border-block-start: var(--stroke-w) solid var(--stroke-3);
   border-end-start-radius: calc(var(--r-xl) - var(--stroke-w));
   border-end-end-radius: calc(var(--r-xl) - var(--stroke-w));
@@ -423,6 +443,11 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
+  transition: opacity var(--motion-panel) var(--ease-easy);
+}
+/* Once the call has ended there is no microphone to show: the two pictures step back. */
+.lp-panel[data-phase='report'] .lp-panel__indicators {
+  opacity: 0.4;
 }
 .lp-ind {
   display: inline-flex;
@@ -454,7 +479,7 @@
   background: var(--bg-subtle);
 }
 
-/* ---- Narrow: a little less padding, and the speaker above the words ------------------------------ */
+/* ---- Narrow: a little less padding; on the narrowest screens the speaker above the words ---------- */
 @media (max-width: 30em) {
   .lp-call__head,
   .lp-call__person,
@@ -466,15 +491,17 @@
   .lp-panel__foot {
     padding-inline-start: var(--sp-3);
   }
-  .lp-line {
-    grid-template-columns: minmax(0, 1fr);
-  }
   .lp-line[data-speaker='trainee'] {
     margin-inline: calc(var(--sp-2) * -1);
     padding-inline: var(--sp-2);
   }
   .lp-preview__icon {
     display: none;
+  }
+}
+@media (max-width: 23em) {
+  .lp-line {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

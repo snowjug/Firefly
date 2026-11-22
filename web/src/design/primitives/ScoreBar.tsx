@@ -12,6 +12,11 @@ export interface ScoreBarProps {
   /** Show the number and label as text. Turn off only where the text sits beside it already. */
   showText?: boolean;
   /**
+   * Draw only the segments. The number and the word stay in the document as text, for a row whose
+   * own name carries them, so the bar is still never the only carrier.
+   */
+  hideText?: boolean;
+  /**
    * Fill the segments once from empty when the bar first appears, one after another. Only when
    * motion is allowed: under reduced motion the bar is simply there.
    */
@@ -33,6 +38,7 @@ export function ScoreBar({
   label,
   size = 'medium',
   showText = true,
+  hideText = false,
   animate = false,
   className,
 }: ScoreBarProps) {
@@ -45,6 +51,7 @@ export function ScoreBar({
       className={cx(
         'ff-scorebar',
         `ff-scorebar--${size}`,
+        hideText && 'ff-scorebar--text-hidden',
         animate && 'ff-scorebar--animate',
         className,
       )}

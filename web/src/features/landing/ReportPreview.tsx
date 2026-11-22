@@ -1,7 +1,6 @@
 import { useId, useState, type CSSProperties } from 'react';
-import { DIMENSIONS, type DimensionId } from '#shared/domain/vocab.ts';
+import { DIMENSIONS, scoreLabel, type DimensionId } from '#shared/domain/vocab.ts';
 import { useInViewOnce } from '../../design/interaction/use-in-view.ts';
-import { ScoreBar } from '../../design/primitives/ScoreBar.tsx';
 import { useMediaQuery } from '../../lib/hooks.ts';
 import { LandingSection } from './LandingSection.tsx';
 import { REPORT_FIRST, REPORT_PREVIEW, REPORT_ROWS } from './landing-copy.ts';
@@ -9,6 +8,24 @@ import './report-preview.css';
 
 // The scores follow once the card's top is a little way up the window, so the order is seen.
 const IN_VIEW = '0px 0px -15% 0px';
+
+/**
+ * A score as five small segments. It is this card's own picture, not the system's score bar: every
+ * level is drawn in a neutral colour from the start and takes the product's colour later, which only
+ * this card does. "4 of 5, Strong" stays in the document as text.
+ */
+function Level({ score }: { score: number }) {
+  return (
+    <span className="lp-rp__level">
+      <span className="lp-rp__pips" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, index) => (
+          <span key={index} className="lp-rp__pip" data-on={index < score ? '' : undefined} />
+        ))}
+      </span>
+      <span className="visually-hidden">{`${score} of 5, ${scoreLabel(score)}`}</span>
+    </span>
+  );
+}
 
 /**
  * A small report that shows its evidence before its scores. On the left, one thing the trainee said,
@@ -88,10 +105,8 @@ export function ReportPreview() {
                       onChange={() => setActive(row.skill)}
                     />
                     <span className="lp-rp__skill">{DIMENSIONS[row.skill].label}</span>
+                    <Level score={row.score} />
                     <span className="lp-rp__at">Turn {row.turn}</span>
-                    <span className="lp-rp__score">
-                      <ScoreBar score={row.score} size="small" />
-                    </span>
                   </label>
                 </li>
               ))}

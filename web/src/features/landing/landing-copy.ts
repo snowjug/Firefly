@@ -1,5 +1,4 @@
 import type { DimensionId, ProductId } from '#shared/domain/vocab.ts';
-import type { IconName } from '../../design/icons.tsx';
 
 // The landing page's words and examples, in one place. Every example is made up: the people and
 // their organisations do not exist, and each preview says so. Nothing here is loaded from the
@@ -13,6 +12,9 @@ export const HERO = {
   primary: 'Start call',
   secondary: 'Explore scenarios',
 } as const;
+
+/** The phrase in the lead that never breaks across two lines, hyphen and all. */
+export const HERO_LEAD_KEEP = 'evidence-based';
 
 /** The section the hero's second action scrolls to. */
 export const FEATURED_ID = 'featured';
@@ -30,10 +32,10 @@ export const FEATURED = {
 
 /** Three connected steps. Each is a short title and at most six words under it. */
 export const STEPS = [
-  { icon: 'list', title: 'Choose scenario', text: 'Pick a product and issue.' },
-  { icon: 'microphone', title: 'Speak naturally', text: 'Talk with a synthetic customer.' },
-  { icon: 'document', title: 'Review coaching', text: 'See quotes behind every score.' },
-] as const satisfies readonly { icon: IconName; title: string; text: string }[];
+  { title: 'Choose scenario', text: 'Pick a product and issue.' },
+  { title: 'Speak naturally', text: 'Talk with a synthetic customer.' },
+  { title: 'Review coaching', text: 'See quotes behind every score.' },
+] as const;
 
 /** The products the featured scenarios are drawn from, in the order the cards are shown. */
 export const FEATURED_PRODUCTS: readonly ProductId[] = [

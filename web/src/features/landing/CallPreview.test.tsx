@@ -109,6 +109,29 @@ describe('the call preview: every word is in the document before it can be seen'
     expect(within(indicators).queryAllByRole('button')).toHaveLength(0);
     expect(indicators.querySelectorAll('[tabindex], button, a, input')).toHaveLength(0);
   });
+
+  it('names the speakers the way a chat does: the customer by first name, the trainee as "You"', () => {
+    setUp();
+    const speakers = [...stage().querySelectorAll('.lp-line__who')].map((who) => who.textContent);
+    expect(speakers).toEqual(
+      TEAMS.lines.map((item) => (item.speaker === 'customer' ? 'Maya' : 'You')),
+    );
+    // The full name and role are in the card above the words, once.
+    expect(within(stage()).getAllByText('Maya Okafor')).toHaveLength(1);
+  });
+
+  it('keeps each skill’s level in the report as segments, with the words "n of 5" kept in the document', () => {
+    setUp();
+    const rows = [...stage().querySelectorAll('.lp-mini__row')];
+    expect(rows).toHaveLength(TEAMS.report.length);
+    rows.forEach((row, index) => {
+      expect(row.querySelectorAll('.ff-scorebar__segment')).toHaveLength(5);
+      expect(row.querySelector('.ff-scorebar')).toHaveClass('ff-scorebar--text-hidden');
+      expect(row.querySelector('.ff-scorebar__text')).toHaveTextContent(
+        `${TEAMS.report[index]?.score} of 5`,
+      );
+    });
+  });
 });
 
 describe('the call preview: it plays a short call', () => {
@@ -183,13 +206,16 @@ describe('the call preview: it plays a short call', () => {
     expect(stage()).toHaveAttribute('data-phase', 'report');
     expect(stage().querySelectorAll('.lp-mini__row[data-scored]')).toHaveLength(3);
     expect(raf.pending()).toBe(0);
-    expect(screen.getByRole('button', { name: 'Play preview' })).toBeInTheDocument();
+    // The call is over, so the control says what it will do: play the whole thing again.
+    const again = screen.getByRole('button', { name: 'Replay preview' });
+    expect(within(again).getByText('Replay')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pause preview' })).toBeNull();
   });
 
-  it('plays it again from the top on "Play" at the end, with focus kept on the control', async () => {
+  it('plays it again from the top on "Replay" at the end, with focus kept on the control', async () => {
     const { advance, user } = setUp();
     advance(LOOP_MS * MAX_LOOPS + 500);
-    await user.click(screen.getByRole('button', { name: 'Play preview' }));
+    await user.click(screen.getByRole('button', { name: 'Replay preview' }));
     const again = screen.getByRole('button', { name: 'Pause preview' });
     expect(again).toHaveFocus();
     expect(stage()).toHaveAttribute('data-phase', 'call');

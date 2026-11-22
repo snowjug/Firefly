@@ -193,6 +193,10 @@
 .ff-header__more:hover {
   background: var(--bg-hover);
 }
+/* A press shows the whole 44px target, not just the chip inside it. */
+.ff-header__more:active {
+  background: var(--bg-pressed);
+}
 .ff-header__panel {
   display: none;
 }
@@ -238,6 +242,11 @@
   .ff-header__links .ff-navlink {
     margin-inline: calc(var(--sp-3) * -1);
   }
+  /* The menu button and the theme switch are one group on the right: their boxes meet, so the two
+     glyphs stand one 44px box apart instead of a button and a gap. */
+  .ff-header .ff-header__menu {
+    margin-inline-end: calc(var(--sp-3) * -1);
+  }
   .ff-header--app .ff-header__brand--has-back {
     display: none;
   }
@@ -270,6 +279,13 @@
   .ff-header__bar {
     gap: var(--sp-2);
   }
+  /* With its word hidden the button is a 44px square around the icon, not a wide button. */
+  .ff-header .ff-header__menu {
+    inline-size: var(--target);
+    min-inline-size: var(--target);
+    padding-inline: 0;
+    margin-inline-end: calc(var(--sp-2) * -1);
+  }
 }
 /* On the narrowest phones the wordmark, the menu, the theme switch and "Start call" still share one
    row: the gaps close up rather than the bar wrapping onto a second line. */
@@ -277,6 +293,9 @@
   .ff-header__bar,
   .ff-header__actions {
     gap: var(--sp-1);
+  }
+  .ff-header .ff-header__menu {
+    margin-inline-end: calc(var(--sp-1) * -1);
   }
 }
 

@@ -22,6 +22,8 @@ const Transcript = memo(function Transcript({
   example: PreviewExample;
   shown: number;
 }) {
+  // A chat names its speakers briefly: the customer's full name and role are in the card above.
+  const customer = example.customer.name.split(' ')[0];
   return (
     <ol className="lp-call__lines" role="list">
       {example.lines.map((line, index) => (
@@ -31,9 +33,7 @@ const Transcript = memo(function Transcript({
           data-speaker={line.speaker}
           data-shown={index < shown ? '' : undefined}
         >
-          <span className="lp-line__who">
-            {line.speaker === 'customer' ? example.customer.name : 'You'}
-          </span>
+          <span className="lp-line__who">{line.speaker === 'customer' ? customer : 'You'}</span>
           <span className="lp-line__text">{line.text}</span>
         </li>
       ))}
@@ -67,7 +67,7 @@ const MiniReport = memo(function MiniReport({
               <span className="lp-mini__turn">Turn {row.turn}</span> <q>{row.quote}</q>
             </p>
             <span className="lp-mini__score">
-              <ScoreBar score={row.score} size="small" animate={index < scores} />
+              <ScoreBar score={row.score} size="small" animate={index < scores} hideText />
             </span>
           </li>
         ))}

@@ -24,6 +24,7 @@ import {
   FEATURED_ID,
   FINAL_TITLE,
   HERO,
+  HERO_LEAD_KEEP,
   REPORT_PREVIEW,
   RESPONSIBLE_NOTE,
   STEPS,
@@ -70,6 +71,14 @@ describe('the landing page: copy budgets, counted from what is on screen', () =>
     expect(visibleWords(lead as HTMLElement)).toBeLessThanOrEqual(18);
   });
 
+  it('keeps "evidence-based" in one piece, so no line of the supporting line ends at its hyphen', () => {
+    renderLanding();
+    const lead = document.getElementById('lp-hero-lead') as HTMLElement;
+    expect(lead.querySelectorAll('.lp-hero__keep')).toHaveLength(1);
+    expect(lead.querySelector('.lp-hero__keep')).toHaveTextContent(HERO_LEAD_KEEP);
+    expect(HERO.lead).toContain(HERO_LEAD_KEEP);
+  });
+
   it('has two actions of at most three words: "Start call" to the scenarios, "Explore scenarios" to the featured ones', () => {
     renderLanding();
     const hero = screen.getByRole('region', { name: HERO.title });
@@ -104,6 +113,14 @@ describe('the landing page: copy budgets, counted from what is on screen', () =>
       'Speak naturally',
       'Review coaching',
     ]);
+  });
+
+  it('numbers the steps 1, 2 and 3 for the eye, in marks that assistive technology skips (the list already counts)', () => {
+    renderLanding();
+    const list = within(screen.getByRole('region', { name: 'How it works' })).getByRole('list');
+    const marks = [...list.querySelectorAll('.lp-step__number')];
+    expect(marks.map((mark) => mark.textContent)).toEqual(['1', '2', '3']);
+    for (const mark of marks) expect(mark).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('keeps the report preview’s own words to one short line under its heading', () => {
@@ -353,11 +370,58 @@ describe('the landing page’s stylesheets', () => {
 
   it('brings the scores in after the evidence has landed, one row after another', () => {
     const css = sheet('report-preview.css');
+    // Every level is drawn from the start in a neutral colour; it takes the product's colour a beat after
+    // the card has come into view, row by row.
     expect(css).toMatch(
-      /\.lp-rp__card\[data-revealed\] \.lp-rp__score\s*\{[^}]*transition-delay:\s*calc\(var\(--motion-panel\) \+ var\(--dur-stagger\) \* var\(--i\)\)/,
+      /\.lp-rp__pip\[data-on\]\s*\{[^}]*background:\s*var\(--stroke-accessible\)[^}]*transition:\s*background-color/,
+    );
+    expect(css).toMatch(
+      /\.lp-rp__card\[data-revealed\] \.lp-rp__pip\[data-on\]\s*\{[^}]*background:\s*var\(--brand-stroke\)[^}]*transition-delay:\s*calc\(var\(--motion-panel\) \+ var\(--dur-stagger\) \* var\(--i\)\)/,
     );
     // The evidence itself is never held back: it has no reveal state of its own.
     expect(css).not.toMatch(/data-revealed\] \.lp-rp__evidence/);
+  });
+
+  it('gives every skill row one height of 44px, with its skill, level and turn centred on it', () => {
+    const css = sheet('report-preview.css');
+    expect(css).toMatch(
+      /\.lp-rp__row\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto auto;[^}]*align-items:\s*center;[^}]*min-block-size:\s*var\(--target\)/,
+    );
+    expect(tokens).toMatch(/--target:\s*2\.75rem/);
+    // The line from the chosen row to the evidence leaves from the middle of the row.
+    expect(css).toMatch(
+      /\.lp-rp__row\[data-active\]::after\s*\{[^}]*inset-block-start:\s*calc\(50% /,
+    );
+  });
+
+  it('steps the call’s microphone pictures back once the call has ended', () => {
+    const css = sheet('call-preview.css');
+    expect(css).toMatch(
+      /\.lp-panel\[data-phase='report'\] \.lp-panel__indicators\s*\{[^}]*opacity:\s*0\.4/,
+    );
+    // The two pictures do nothing: they are not controls, whatever their state.
+    expect(css).not.toMatch(/\.lp-ind[^{]*\{[^}]*cursor:\s*pointer/);
+  });
+
+  it('keeps the speaker’s column narrow, and the state word beside the waveform it describes', () => {
+    const css = sheet('call-preview.css');
+    expect(css).toMatch(/\.lp-line\s*\{[^}]*grid-template-columns:\s*4rem minmax\(0, 1fr\)/);
+    expect(css).toMatch(/\.lp-call__voice\s*\{[^}]*justify-content:\s*flex-start/);
+    // Neither the preview nor its tabs stop short of the column they are in.
+    expect(css).not.toMatch(/\.lp-preview\s*\{[^}]*max-inline-size/);
+  });
+
+  it('steps the promise up from 1440px, in the same page container as the rest', () => {
+    const css = sheet('hero.css');
+    const wide = block(css, '@media (min-width: 90em)');
+    expect(wide).toMatch(/\.lp-hero__title\s*\{[^}]*font-size:\s*var\(--fs-display-wide\)/);
+    expect(wide).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/);
+    expect(block(css, '@media (min-width: 120em)')).toMatch(
+      /font-size:\s*var\(--fs-display-widest\)/,
+    );
+    // Both sizes the sheet asks for exist: a missing token would leave the title at its inherited size.
+    expect(tokens).toMatch(/--fs-display-wide:\s*3rem;/);
+    expect(tokens).toMatch(/--fs-display-widest:\s*3\.25rem;/);
   });
 
   it('moves the hero action by transform only: it compresses 1 to 2 px and the arrow leans', () => {

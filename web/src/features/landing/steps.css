@@ -1,12 +1,12 @@
 /* The three steps: a plain ordered list, always readable. As the list scrolls into view (once, see
-   Steps.tsx) the marks and the lines between them light in order, a short beat apart: a colour change
-   and a line that grows by transform, on the shared durations. Under reduced motion the list is lit
-   from the start and every time here is an instant one. */
+   Steps.tsx) the numbers and the lines between them light in order, a short beat apart: a colour
+   change and a line that grows by transform, on the shared durations. Under reduced motion the list
+   is lit from the start and every time here is an instant one. */
 
 .lp-steps {
-  --lp-icon: 2.5rem;
+  --lp-mark: 2.25rem;
   display: grid;
-  gap: var(--sp-6);
+  gap: var(--sp-5);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -14,28 +14,32 @@
 .lp-step {
   position: relative;
   display: grid;
-  grid-template-columns: var(--lp-icon) minmax(0, 1fr);
+  grid-template-columns: var(--lp-mark) minmax(0, 1fr);
   column-gap: var(--sp-4);
   align-items: start;
 }
-.lp-step__icon {
+.lp-step__number {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  inline-size: var(--lp-icon);
-  block-size: var(--lp-icon);
+  inline-size: var(--lp-mark);
+  block-size: var(--lp-mark);
   border: var(--stroke-w) solid var(--stroke-1);
   border-radius: var(--r-pill);
   background: var(--bg-subtle);
-  color: var(--fg-3);
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: 1;
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
   transition:
     background-color var(--motion-panel) var(--ease-easy),
     border-color var(--motion-panel) var(--ease-easy),
     color var(--motion-panel) var(--ease-easy);
   transition-delay: calc(var(--dur-stagger) * var(--i) * 3);
 }
-.lp-steps[data-active] .lp-step__icon {
+.lp-steps[data-active] .lp-step__number {
   border-color: var(--brand-stroke);
   background: var(--brand-tint);
   color: var(--brand-fg-2);
@@ -62,9 +66,9 @@
    The track is always there; the fill grows along it once the steps are lit. Decoration only. */
 .lp-step__link {
   position: absolute;
-  inset-inline-start: calc(var(--lp-icon) / 2 - 1px);
-  inset-block-start: calc(var(--lp-icon) + var(--sp-1));
-  inset-block-end: calc(var(--sp-6) * -1 + var(--sp-1));
+  inset-inline-start: calc(var(--lp-mark) / 2 - 1px);
+  inset-block-start: calc(var(--lp-mark) + var(--sp-1));
+  inset-block-end: calc(var(--sp-5) * -1 + var(--sp-1));
   inline-size: var(--stroke-w-thick);
   background: var(--stroke-1);
 }
@@ -89,13 +93,13 @@
   }
   .lp-step {
     grid-template-columns: minmax(0, 1fr);
-    row-gap: var(--sp-3);
+    row-gap: var(--sp-2);
     align-content: start;
   }
   .lp-step__link {
-    inset-inline-start: calc(var(--lp-icon) + var(--sp-2));
+    inset-inline-start: calc(var(--lp-mark) + var(--sp-2));
     inset-inline-end: calc(var(--sp-8) * -1 + var(--sp-2));
-    inset-block-start: calc(var(--lp-icon) / 2 - 1px);
+    inset-block-start: calc(var(--lp-mark) / 2 - 1px);
     inset-block-end: auto;
     inline-size: auto;
     block-size: var(--stroke-w-thick);
@@ -113,7 +117,7 @@
 }
 
 @media (forced-colors: active) {
-  .lp-step__icon {
+  .lp-step__number {
     border-color: CanvasText;
   }
   .lp-step__link {

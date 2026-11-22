@@ -58,6 +58,8 @@ function Player({ example, active, reduced, restoreFocus, onReplay }: PlayerProp
   });
   const resting = !reduced && !clock.playing && clock.loop >= MAX_LOOPS;
   const showPlay = paused || resting;
+  // After the last run the call is over, so the control says so: it plays the whole thing again.
+  const verb = resting ? 'Replay' : showPlay ? 'Play' : 'Pause';
 
   const button = useRef<HTMLButtonElement>(null);
   const [focusOnMount] = useState(restoreFocus);
@@ -86,11 +88,11 @@ function Player({ example, active, reduced, restoreFocus, onReplay }: PlayerProp
             ref={button}
             appearance="subtle"
             size="small"
-            icon={showPlay ? 'play' : 'pause'}
-            aria-label={showPlay ? 'Play preview' : 'Pause preview'}
+            icon={resting ? 'refresh' : showPlay ? 'play' : 'pause'}
+            aria-label={`${verb} preview`}
             onClick={press}
           >
-            {showPlay ? 'Play' : 'Pause'}
+            {verb}
           </Button>
         )
       }
