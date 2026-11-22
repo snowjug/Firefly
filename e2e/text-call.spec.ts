@@ -18,6 +18,7 @@ import {
   libraryScenarios,
   saysSentence,
   secretsBesidesAreas,
+  timeoutFor,
 } from './support/scenario-library.ts';
 
 // Typing instead of speaking, what the customer's state shows and what is found, the unexpected
@@ -459,6 +460,9 @@ test.describe('ending the call', () => {
       await screen.endCall.click();
       await screen.endDialog.getByRole('button', { name: 'End and review' }).click();
       await expect(screen.endingDialog).toBeVisible();
+      // The dialog is now the moment the call ended: "Call ended", how long it was, the review being prepared.
+      await expect(screen.ended.title).toBeVisible();
+      await expect(screen.ended.time).toHaveText(/^Call length \d+:\d{2}$/);
       await expect(screen.endingDialog).toContainText(/Ending call|Preparing your review/);
       await expect(page).toHaveURL(new RegExp(`/sessions/${call.id}/report$`));
       await expect(
@@ -728,7 +732,7 @@ test.describe('before anything has been asked', () => {
     page,
     api,
   }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(timeoutFor(14_000));
     for (const scenario of libraryScenarios()) {
       await test.step(scenario.title, async () => {
         // Guided practice shows the most on screen (hints and areas to explore).

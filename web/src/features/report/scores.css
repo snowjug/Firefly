@@ -161,37 +161,17 @@
   }
 }
 
-/* The rows come in one after another. Nothing is hidden without motion: the start state is only
-   there while motion is allowed, and the transition is a few tens of milliseconds a row. */
-@media (prefers-reduced-motion: no-preference) {
-  .rp-skills .rp-skill {
-    opacity: 0;
-    transform: translateY(var(--move-xs));
-    transition:
-      opacity var(--dur-slow) var(--ease-decelerate),
-      transform var(--dur-slow) var(--ease-decelerate);
-  }
-  .rp-skills[data-revealed] .rp-skill {
-    opacity: 1;
-    transform: none;
-  }
-  .rp-skills[data-revealed] .rp-skill:nth-child(2) {
-    transition-delay: var(--dur-stagger);
-  }
-  .rp-skills[data-revealed] .rp-skill:nth-child(3) {
-    transition-delay: calc(var(--dur-stagger) * 2);
-  }
-  .rp-skills[data-revealed] .rp-skill:nth-child(4) {
-    transition-delay: calc(var(--dur-stagger) * 3);
-  }
-  .rp-skills[data-revealed] .rp-skill:nth-child(5) {
-    transition-delay: calc(var(--dur-stagger) * 4);
-  }
-  .rp-skills[data-revealed] .rp-skill:nth-child(6) {
-    transition-delay: calc(var(--dur-stagger) * 5);
-  }
+/* The rows come in through the report's reveal (`[data-reveal]` on each row, in layout.css), one
+   step apart, and nothing is hidden without motion: that rule is drawn only on a screen and only
+   where motion is allowed. What is left here is the panel that opens inside a row, and the calm label
+   on a row no quote backs, which fades in a beat after its row has arrived and never pops. */
+@media screen and (prefers-reduced-motion: no-preference) {
   .rp-skill__panel:not([hidden]) {
     animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+  }
+  .rp-skill[data-revealed] .rp-skill__count .ff-badge {
+    animation: ff-fade var(--dur-normal) var(--ease-easy)
+      calc(var(--reveal-i, 0) * var(--dur-stagger) + var(--dur-slow)) backwards;
   }
 }
 
@@ -496,9 +476,6 @@
     overflow: visible;
   }
   .rp-skills .rp-skill {
-    opacity: 1;
-    transform: none;
-    transition: none;
     break-inside: avoid;
   }
   .rp-skill__toggle,

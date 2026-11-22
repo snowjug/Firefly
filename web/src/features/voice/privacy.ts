@@ -59,8 +59,8 @@ export function whoHearsYou(context: PrivacyContext): string {
         : 'This Firefly server receives your recording and throws it away without understanding it, because the speech service in use is a scripted demonstration. Nothing is sent to any other service.';
     case 'browser-recognition':
       return context.chromium
-        ? "Your browser's own speech recognition turns your speech into text, and Firefly never receives the audio. In Edge and Chrome this is normally an online service run by the browser's maker, unless your device can do it by itself."
-        : "Your browser's own speech recognition turns your speech into text, and Firefly never receives the audio. Where the browser does this is up to the browser.";
+        ? "Your browser's own speech recognition turns your speech into text, and Firefly never receives the audio. In Edge and Chrome this is normally an online service run by the browser's maker, unless your device can do it by itself. It listens for as long as the microphone is open, not only while you speak."
+        : "Your browser's own speech recognition turns your speech into text, and Firefly never receives the audio. Where the browser does this is up to the browser. It listens for as long as the microphone is open, not only while you speak.";
     case 'none':
       return 'No speech service is in use, so you type your replies and no audio is recorded.';
   }
@@ -86,9 +86,10 @@ export function whoSpeaksForTheCustomer(context: PrivacyContext): string {
  * own speech service, or none.
  */
 export function privacyDetails(context: PrivacyContext): PrivacyDetail[] {
+  const spoken = context.capture !== 'none';
   const rawAudio: Record<CaptureKind, string> = {
     'server-speech':
-      'Your recording is held in memory only until it has been turned into text, then discarded. The server does not write it to disk or to a database and does not log it, and it overwrites its own copy as soon as the request is over. If turning it into text fails, the recording may be kept in your browser for a retry until you try again, type instead, or end the call.',
+      'While the microphone is open, your browser listens for speech on your device. It keeps and sends only what sounds like speech, a sentence at a time, and throws away the quiet between. Your recording is held in memory only until it has been turned into text, then discarded. The server does not write it to disk or to a database and does not log it, and it overwrites its own copy as soon as the request is over. If turning it into text fails, the recording may be kept in your browser for a retry until you try again, type instead, or end the call.',
     'browser-recognition':
       'Firefly never receives or keeps your audio on this path. Your browser handles it, as the last item says.',
     none: 'Nothing is recorded, so there is no audio to keep.',
@@ -107,12 +108,14 @@ export function privacyDetails(context: PrivacyContext): PrivacyDetail[] {
     {
       id: 'recording-status',
       label: 'You can always see when it is recording',
-      text: 'While Firefly is listening, the screen says Listening and your browser shows its own recording indicator.',
+      text: `While Firefly is listening, the screen says Listening and your browser shows its own recording indicator.${spoken ? ' In a hands-free call Firefly keeps listening whenever it is your turn, whether or not you are speaking, and stops while the customer speaks.' : ''}`,
     },
     {
       id: 'stop-any-time',
       label: 'Stop at any time',
-      text: 'You can mute, pause, or choose Done speaking to end what you are saying. Pausing or ending the call lets go of the microphone.',
+      text: spoken
+        ? 'You can mute, pause, or choose Done speaking to end what you are saying. Muting or pausing stops Firefly listening at once, and a hands-free call pauses itself after 10 minutes without sound. Pausing or ending the call lets go of the microphone.'
+        : 'You can mute, pause, or choose Done speaking to end what you are saying. Pausing or ending the call lets go of the microphone.',
     },
     {
       id: 'typed-fallback',

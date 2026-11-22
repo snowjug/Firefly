@@ -82,6 +82,12 @@
     transform var(--motion-component) var(--ease-decelerate),
     opacity var(--motion-control) var(--ease-easy);
 }
+@keyframes ff-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--move-xs) * -1));
+  }
+}
 
 /* ---- Public header ------------------------------------------------------------------------ */
 .ff-header__nav {
@@ -238,6 +244,12 @@
 
 /* ---- Narrow: the app header is a compact bar ---------------------------------------------- */
 @media (max-width: 47.99em) {
+  /* The menu drops in from the bar: a short fade and a small slide. It closes at once. From 48em the
+     same elements are part of the bar and do not move. */
+  .ff-header__nav[data-open],
+  .ff-header__panel[data-open] {
+    animation: ff-menu-in var(--dur-normal) var(--ease-decelerate) both;
+  }
   /* In the dropdown the link text lines up with the text above it; its hover fill still pads it. */
   .ff-header__links .ff-navlink {
     margin-inline: calc(var(--sp-3) * -1);

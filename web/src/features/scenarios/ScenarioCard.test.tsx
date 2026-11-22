@@ -229,6 +229,72 @@ describe('while the scenarios load', () => {
   });
 });
 
+describe('arriving', () => {
+  it('has no arrival of its own unless it is told it is new: a card that was there does not move', () => {
+    selectCard(teams);
+    expect(card()).not.toHaveAttribute('data-arrive');
+    expect(card().style.getPropertyValue('--reveal-i')).toBe('');
+  });
+
+  it('carries its place in the sequence, and none past the eighth: thirty cards are not thirty animations', () => {
+    const { rerender } = render(
+      <ScenarioCard
+        scenario={teams}
+        mode="select"
+        name="g"
+        onSelect={() => undefined}
+        arrive={{ index: 3 }}
+      />,
+    );
+    expect(card()).toHaveAttribute('data-arrive', 'now');
+    expect(card().style.getPropertyValue('--reveal-i')).toBe('3');
+    rerender(
+      <ScenarioCard
+        scenario={teams}
+        mode="select"
+        name="g"
+        onSelect={() => undefined}
+        arrive={{ index: 29 }}
+      />,
+    );
+    expect(card()).not.toHaveAttribute('data-arrive');
+    expect(card().style.getPropertyValue('--reveal-i')).toBe('');
+  });
+
+  it('rests on its first frame while it is waiting to be seen, and goes when it is let go', () => {
+    const { rerender } = linkCard(teams);
+    rerender(
+      <MemoryRouter>
+        <ScenarioCard scenario={teams} mode="link" arrive={{ index: 1, waiting: true }} />
+      </MemoryRouter>,
+    );
+    expect(card()).toHaveAttribute('data-arrive', 'waiting');
+    rerender(
+      <MemoryRouter>
+        <ScenarioCard scenario={teams} mode="link" arrive={{ index: 1, waiting: false }} />
+      </MemoryRouter>,
+    );
+    expect(card()).toHaveAttribute('data-arrive', 'now');
+  });
+
+  it('does not change what the card says or what it does', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <ScenarioCard
+        scenario={teams}
+        mode="select"
+        name="g"
+        onSelect={onSelect}
+        arrive={{ index: 0, waiting: true }}
+      />,
+    );
+    expect(screen.getByRole('radio', { name: 'Meeting recordings missing' })).toBeInTheDocument();
+    await user.click(screen.getByRole('radio'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith(teams.id);
+  });
+});
+
 describe('what its stylesheet promises', () => {
   const css = readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), 'scenario-card.css'),
@@ -297,5 +363,42 @@ describe('what its stylesheet promises', () => {
   it('uses no spring, and no colour of its own', () => {
     expect(css).not.toMatch(/--ease-spring/);
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
+  });
+
+  it('brings a new card in only on a screen with motion allowed, a beat after the one before it', () => {
+    const query = '@media screen and (prefers-reduced-motion: no-preference) {';
+    const start = css.indexOf(query);
+    expect(start, 'the arrival has a query of its own').toBeGreaterThan(-1);
+    const arrival = css.slice(start, css.indexOf('@keyframes scn-card-arrive'));
+    expect(arrival).toMatch(
+      /\.scn-card\[data-arrive\]\s*\{[^}]*animation:\s*scn-card-arrive var\(--motion-panel\)[^;]*backwards/,
+    );
+    expect(arrival).toMatch(
+      /animation-delay:\s*calc\(var\(--reveal-i, 0\) \* var\(--dur-stagger\)\)/,
+    );
+    // It fills backwards only: once it has ended the card's own hover, tilt and press are its own again.
+    expect(arrival).not.toMatch(/forwards|both/);
+    // Nothing outside the query starts it, so a reduced-motion visitor and paper keep every card.
+    expect(css.replace(arrival, '')).not.toMatch(/animation:\s*scn-card-arrive/);
+  });
+
+  it('holds a card that is waiting on its first frame, and moves only opacity and transform', () => {
+    expect(css).toMatch(
+      /\.scn-card\[data-arrive='waiting'\]\s*\{\s*animation-play-state:\s*paused;\s*\}/,
+    );
+    const keyframes = css.match(/@keyframes scn-card-arrive\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(keyframes).toMatch(/opacity:\s*0/);
+    expect(keyframes).toMatch(/transform:\s*translateY\(var\(--move-sm\)\)/);
+    const moved = [...keyframes.matchAll(/([a-z-]+)\s*:/g)].map((match) => match[1]);
+    expect([...new Set(moved)].sort()).toEqual(['opacity', 'transform']);
+  });
+
+  it('seats the chosen card a little higher, as a card under the pointer is, and a press still wins', () => {
+    const chosen = css.match(/\.scn-card\[data-selected\]\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(chosen).toMatch(/transform:\s*translateY\(calc\(var\(--move-lift\) \* -1\)\)/);
+    // The press comes after it in the sheet at the same specificity, so pressing the chosen card compresses it.
+    expect(css.indexOf('.scn-card:active {')).toBeGreaterThan(
+      css.indexOf('.scn-card[data-selected] {'),
+    );
   });
 });

@@ -244,13 +244,15 @@
   transition: transform var(--motion-control) var(--ease-decelerate);
 }
 
-/* ---- Chosen: a tint, a heavier edge, a check and the word "Selected" (never colour alone) ------- */
+/* ---- Chosen: a tint, a heavier edge, a check and the word "Selected" (never colour alone). It also
+   sits a little higher, as a card under the pointer does, so the choice is felt as well as seen. --- */
 .scn-card[data-selected] {
   border-color: var(--brand-stroke);
   background: var(--brand-tint);
   box-shadow:
     inset 0 0 0 1px var(--brand-stroke),
-    var(--shadow-2);
+    var(--shadow-4);
+  transform: translateY(calc(var(--move-lift) * -1));
 }
 
 /* ---- Focus: the same prominence as a pointer, with no tilt. The ring is drawn round the whole card. */
@@ -360,6 +362,30 @@
 /* ---- A press compresses the card a little (nothing at all when motion is reduced) --------------- */
 .scn-card:active {
   transform: scale(calc(1 - var(--press-grow)));
+}
+
+/* ---- Arriving: a card new to its row fades in and rises a few pixels, a beat after the one before it
+   (--reveal-i, 0 to 7). Only the first eight new cards do: ScenarioCard gives a later one no
+   data-arrive, so a row of thirty is not thirty animations, most of them for cards out of sight. A
+   card that was already there has no data-arrive either, and does not move. data-arrive='waiting' (the
+   landing page's row, until it has been seen) rests on the first frame. Only while motion is allowed,
+   and never on paper: nothing is hidden for someone who asked for less. Nothing is held once it ends
+   (the fill is backwards only), so the hover, the tilt and the press above are the card's own
+   again. ------------------------------------------------------------------------------------- */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .scn-card[data-arrive] {
+    animation: scn-card-arrive var(--motion-panel) var(--ease-decelerate) backwards;
+    animation-delay: calc(var(--reveal-i, 0) * var(--dur-stagger));
+  }
+  .scn-card[data-arrive='waiting'] {
+    animation-play-state: paused;
+  }
+}
+@keyframes scn-card-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-sm));
+  }
 }
 
 /* ---- Loading ---------------------------------------------------------------------------------- */

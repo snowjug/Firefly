@@ -119,21 +119,29 @@
   margin-inline-start: var(--sp-2);
 }
 .rp-ratio__seg {
+  position: relative;
   inline-size: 1.25rem;
   block-size: 0.5rem;
   border-radius: var(--r-pill);
   box-shadow: inset 0 0 0 1px var(--stroke-accessible);
 }
-.rp-ratio__seg--discovered {
+/* What was found is a fill inside its outline, solid when found in full and light when found in
+   part. A fact that was missed is the outline alone, there from the start. */
+.rp-ratio__seg--discovered::before,
+.rp-ratio__seg--partial::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: left center;
+}
+.rp-ratio__seg--discovered::before {
   background: var(--status-success-fg);
   box-shadow: inset 0 0 0 1px var(--status-success-fg);
 }
-.rp-ratio__seg--partial {
+.rp-ratio__seg--partial::before {
   background: var(--status-success-border);
   box-shadow: inset 0 0 0 1px var(--status-success-fg);
-}
-.rp-ratio__seg--missed {
-  background: transparent;
 }
 .rp-discovery__columns {
   display: grid;
@@ -254,6 +262,25 @@
   text-wrap: pretty;
 }
 
+/* ---- Motion: only on a screen and only where motion is allowed; nothing is held once it ends ---- */
+@media screen and (prefers-reduced-motion: no-preference) {
+  /* The segments that were found fill from the start edge, one after another, when the line is seen. */
+  .rp-discovery__total[data-reveal]:not([data-revealed]) .rp-ratio__seg::before {
+    transform: scaleX(0);
+  }
+  .rp-ratio__seg::before {
+    transition: transform var(--dur-normal) var(--ease-decelerate);
+    transition-delay: calc(var(--seg, 0) * var(--dur-stagger) * 2);
+  }
+  /* The labels on a fact (how much it mattered, found in part) come in with a fade and a small rise,
+     a beat after their row, the missed ones as the found ones. */
+  .rp-fact[data-revealed] .ff-badge,
+  .rp-fact[data-revealed] .ff-tag {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate)
+      calc(var(--reveal-i, 0) * var(--dur-stagger) + var(--dur-fast)) backwards;
+  }
+}
+
 @media (forced-colors: active) {
   .rp-items,
   .rp-facts-list,
@@ -273,11 +300,13 @@
     forced-color-adjust: none;
     box-shadow: inset 0 0 0 1px CanvasText;
   }
-  .rp-ratio__seg--discovered {
+  .rp-ratio__seg--discovered::before {
     background: CanvasText;
+    box-shadow: none;
   }
-  .rp-ratio__seg--partial {
+  .rp-ratio__seg--partial::before {
     background: GrayText;
+    box-shadow: none;
   }
 }
 

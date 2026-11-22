@@ -1,5 +1,8 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductId } from '#shared/domain/vocab.ts';
@@ -144,6 +147,26 @@ describe('the chips', () => {
     expect(screen.getByRole('radio', { name: /^Intune/ })).toBeEnabled();
     expect(screen.getByRole('radio', { name: /^Intune/ })).toBeChecked();
   });
+
+  it('bring a count in again when it changes, and leave every count that did not change alone', () => {
+    const counts = (list: RailProduct[]) => (
+      <ProductRail products={list} total={15} value={null} onChange={() => undefined} />
+    );
+    const { rerender } = render(counts(PRODUCTS));
+    const nodeOf = (name: RegExp) =>
+      screen.getByRole('radio', { name }).closest('label')?.querySelector('.scn-chip__count');
+    const teams = nodeOf(/^Teams/);
+    const outlook = nodeOf(/^Outlook/);
+    rerender(
+      counts(
+        PRODUCTS.map((product) => (product.id === 'teams' ? { ...product, count: 1 } : product)),
+      ),
+    );
+    expect(nodeOf(/^Teams/)).toHaveTextContent('1');
+    // A new element replays the fade; the same element would not.
+    expect(nodeOf(/^Teams/)).not.toBe(teams);
+    expect(nodeOf(/^Outlook/)).toBe(outlook);
+  });
 });
 
 describe('the keyboard', () => {
@@ -227,6 +250,20 @@ describe('the shared indicator', () => {
     expect(screen.getByRole('radio', { name: /^Azure/ }).closest('label')).toHaveAttribute(
       'data-selected',
       'true',
+    );
+  });
+
+  it('slides by transform in a component-sized beat, and a press settles an enabled chip a pixel', () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'product-rail.css'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(css).toMatch(
+      /\.scn-rail__track\[data-placed\] \.scn-rail__ind\s*\{\s*transition:\s*transform var\(--motion-component\)/,
+    );
+    // The radio covers the chip, so it is the radio that is pressed; a disabled one never is.
+    expect(css).toMatch(
+      /\.scn-chip__input:not\(:disabled\):active \+ \.scn-chip__face\s*\{[^}]*background:\s*var\(--bg-pressed\)[^}]*transform:\s*translateY\(var\(--press-shift\)\)/,
     );
   });
 });

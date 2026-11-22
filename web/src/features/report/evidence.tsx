@@ -166,17 +166,24 @@ export function TurnLink({
   );
 }
 
-/** A link to a section of the report: scrolls there and puts focus on its heading. */
+/**
+ * A link to a section of the report: scrolls there and puts focus on its heading. With `smooth` the
+ * scroll glides (unless motion is reduced), as it does from the page's own navigation.
+ */
 export function SectionLink({
   to,
+  smooth = false,
   children,
   ...rest
-}: { to: string; children: ReactNode } & Omit<ComponentPropsWithoutRef<'a'>, 'href'>) {
+}: { to: string; smooth?: boolean; children: ReactNode } & Omit<
+  ComponentPropsWithoutRef<'a'>,
+  'href'
+>) {
   const follow = (event: MouseEvent<HTMLAnchorElement>) => {
     rest.onClick?.(event);
     if (!isPlainClick(event)) return;
     event.preventDefault();
-    jumpToSection(to);
+    jumpToSection(to, { smooth });
   };
   return (
     <a {...rest} href={`#${to}`} onClick={follow}>

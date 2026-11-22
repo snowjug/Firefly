@@ -69,11 +69,15 @@ function CallSession({ sessionId, config }: { sessionId: string; config: AppConf
 
   // A call that is over (or never was open) belongs to the report, not to this page. That includes a
   // call that turned out to have ended somewhere else, such as in another tab: the report says what
-  // became of it, whether it was finished or deleted.
+  // became of it, whether it was finished or deleted. While End and review shows the call-ended
+  // moment the workspace opens the report itself, when the moment has been read, so the engine
+  // saying the call is over must not open it underneath.
+  const [ending, setEnding] = useState(false);
   const over =
-    (session !== null && session.status !== 'active') ||
-    snapshot.phase === 'completed' ||
-    snapshot.problem?.code === 'session-ended';
+    !ending &&
+    ((session !== null && session.status !== 'active') ||
+      snapshot.phase === 'completed' ||
+      snapshot.problem?.code === 'session-ended');
   useEffect(() => {
     if (over) navigate(reportPath(sessionId), { replace: true });
   }, [over, navigate, sessionId]);
@@ -99,6 +103,7 @@ function CallSession({ sessionId, config }: { sessionId: string; config: AppConf
       preferText={params.get('input') === 'text'}
       showInputMode={config.features.devDiagnostics}
       onEnded={(endedId) => navigate(reportPath(endedId), { replace: true })}
+      onEndingChange={setEnding}
       onDiscard={discard}
       loadClosingCheck={(signal) => api.closingCheck(sessionId, signal)}
     />

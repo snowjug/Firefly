@@ -5,7 +5,6 @@ import {
   clippedText,
   expectAccessible,
   expectStatus,
-  failNext,
   holdTone,
   overflow,
   speak,
@@ -863,8 +862,12 @@ test.describe('in both themes', () => {
         });
       }
       await screen.endDialog.getByRole('button', { name: 'Continue call' }).click();
+      // The page answers once the dialog has gone, and the keyboard is back on End call.
+      await expect(screen.endDialog).toBeHidden();
+      await expect(screen.endCall).toBeFocused();
 
-      await failNext(page.request, 'customer', 1);
+      // Queued through the fixture, so that a failure this test did not use cannot reach the next one.
+      await api.failNext('customer', 1);
       await screen.reply.fill('Can you read me the error message?');
       await page.keyboard.press('Enter');
       await expect(screen.problem.card).toBeVisible();

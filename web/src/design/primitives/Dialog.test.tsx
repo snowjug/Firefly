@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { act, useState, type ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -152,5 +152,143 @@ describe('Dialog', () => {
     const dialog = screen.getByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Say it' }));
     expect(within(dialog).getByRole('status')).toHaveTextContent('Ending the call.');
+  });
+});
+
+// jsdom has no animations, so every test above closes a dialog with nothing to fade out, as a browser
+// does when it cannot animate. These stand in for a browser that can (it has getAnimations, and the
+// dialog has a box), to see what is left on screen while the exit plays.
+describe('Dialog: its exit', () => {
+  /** Says that the browser can animate, and where the dialog is. */
+  function canAnimate() {
+    Object.defineProperty(HTMLElement.prototype, 'getAnimations', {
+      configurable: true,
+      value: () => [],
+    });
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 80, 400, 300),
+    );
+  }
+  const picture = () => document.querySelector<HTMLElement>('dialog[data-picture]');
+  const scrim = () => document.querySelector('.ff-dialog-scrim');
+
+  afterEach(() => {
+    // The picture belongs to the page, not to the test's container: take away what a test left.
+    document
+      .querySelectorAll('dialog[data-picture], .ff-dialog-scrim')
+      .forEach((node) => node.remove());
+    Reflect.deleteProperty(HTMLElement.prototype, 'getAnimations');
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function Owner({
+    open,
+    onClose = () => undefined,
+  }: {
+    open: boolean;
+    onClose?: DialogProps['onClose'];
+  }) {
+    return (
+      <>
+        <button type="button">Opener</button>
+        <Dialog open={open} onClose={onClose} title="Practice settings">
+          <button type="button" id="inside-the-dialog">
+            Inside
+          </button>
+        </Dialog>
+      </>
+    );
+  }
+
+  it('goes at once when the owner closes it, focus is back on its opener, and a hidden picture of it fades out in its place', () => {
+    canAnimate();
+    const { rerender } = render(<Owner open={false} />);
+    const opener = screen.getByRole('button', { name: 'Opener' });
+    opener.focus();
+    rerender(<Owner open />);
+    expect(picture()).toBeNull();
+
+    rerender(<Owner open={false} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(opener).toHaveFocus();
+    const shown = picture() as HTMLElement;
+    expect(shown).not.toBeNull();
+    expect(shown).toHaveAttribute('aria-hidden', 'true');
+    expect(shown).toHaveAttribute('inert');
+    expect(shown).toHaveTextContent('Practice settings');
+    expect(shown.style.left).toBe('100px');
+    expect(shown.style.top).toBe('80px');
+    expect(shown.style.width).toBe('400px');
+    expect(scrim()).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('takes the picture away when its animation ends, and nothing else with it', () => {
+    canAnimate();
+    const { rerender } = render(<Owner open />);
+    rerender(<Owner open={false} />);
+    fireEvent.animationEnd(screen.getByText('Opener'));
+    expect(picture(), 'an animation that ended elsewhere is not its end').not.toBeNull();
+    fireEvent.animationEnd(picture() as HTMLElement);
+    expect(picture()).toBeNull();
+    expect(scrim()).toBeNull();
+  });
+
+  it('can never stay: the picture is taken away within a bound even if its animation never ends', () => {
+    vi.useFakeTimers();
+    canAnimate();
+    const { rerender } = render(<Owner open />);
+    rerender(<Owner open={false} />);
+    expect(picture()).not.toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(picture()).toBeNull();
+    expect(scrim()).toBeNull();
+  });
+
+  it('draws no picture for someone who asked for less motion, or where the browser cannot animate', () => {
+    canAnimate();
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      media: query,
+      matches: /reduce/.test(query),
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    const quiet = render(<Owner open />);
+    quiet.rerender(<Owner open={false} />);
+    expect(picture()).toBeNull();
+    quiet.unmount();
+
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(HTMLElement.prototype, 'getAnimations');
+    const plain = render(<Owner open />);
+    plain.rerender(<Owner open={false} />);
+    expect(picture()).toBeNull();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('does not hold the page back: a new dialog can open while the picture of the old one fades', () => {
+    canAnimate();
+    const { rerender } = render(<Owner open />);
+    rerender(<Owner open={false} />);
+    rerender(<Owner open />);
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(screen.getByRole('dialog')).toHaveAttribute('open');
+    expect(screen.getByRole('dialog')).not.toHaveAttribute('inert');
+    expect(picture()).not.toBeNull();
+    const ids = [...document.querySelectorAll('[id]')].map((node) => node.id);
+    expect(new Set(ids).size, 'the picture repeats no id of the dialog that is open again').toBe(
+      ids.length,
+    );
+  });
+
+  it('draws nothing when its owner takes it away without closing it', () => {
+    canAnimate();
+    const { unmount } = render(<Owner open />);
+    unmount();
+    expect(picture()).toBeNull();
+    expect(document.querySelector('dialog')).toBeNull();
   });
 });

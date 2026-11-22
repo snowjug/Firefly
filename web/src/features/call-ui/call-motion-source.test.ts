@@ -95,9 +95,10 @@ describe('pressing a call control', () => {
 describe('what repeats on the call screen', () => {
   const repeating = all.filter((d) => d.property === 'animation' && /\binfinite\b/.test(d.value));
 
-  it('is a ring, a breath and three points, and nothing flashes or shakes', () => {
+  it('is a ring, a breath, a halo, an arc that turns and three points, and nothing flashes or shakes', () => {
     const names = repeating.map((d) => d.value.split(' ')[0]).sort();
-    expect(names).toEqual(['cw-breathe', 'cw-ring', 'cw-think']);
+    // The arc turns twice: while connecting, and a slower, quieter turn while something is worked out.
+    expect(names).toEqual(['cw-breathe', 'cw-halo', 'cw-ring', 'cw-think', 'cw-turn', 'cw-turn']);
     for (const sheet of SHEETS) {
       expect(read(sheet), sheet).not.toMatch(
         /@keyframes\s+[\w-]*(?:shake|flash|bounce|wobble|blink)/i,
@@ -117,5 +118,73 @@ describe('what repeats on the call screen', () => {
       );
       expect(still, `${d.selector} repeats and has no still equivalent`).toBeDefined();
     }
+  });
+});
+
+describe('the customer’s presence', () => {
+  it('follows a voice only where motion is allowed: the level is never a size under reduced motion', () => {
+    const followers = all.filter((d) => d.value.includes('--cw-level'));
+    expect(followers.length).toBeGreaterThan(0);
+    for (const d of followers) {
+      expect(
+        d.within.some((at) => /prefers-reduced-motion:\s*no-preference/.test(at)),
+        `${d.selector} uses the level outside no-preference`,
+      ).toBe(true);
+    }
+  });
+
+  it('smooths the level with a short transition on transform, and never lets it jump or spring', () => {
+    const smoothing = all.find(
+      (d) =>
+        d.property === 'transition' &&
+        d.selector.includes('cw-presence__halo') &&
+        d.within.some((at) => /no-preference/.test(at)),
+    );
+    expect(smoothing?.value).toMatch(/transform var\(--dur-fast\) var\(--ease-easy\)/);
+    expect(smoothing?.value).not.toMatch(/spring/);
+  });
+
+  it('arrives once: a ripple and a slight growth, neither of which repeats', () => {
+    for (const name of ['cw-ripple', 'cw-arrive']) {
+      const uses = all.filter((d) => d.property === 'animation' && d.value.startsWith(name));
+      expect(uses.length, name).toBeGreaterThan(0);
+      for (const d of uses) expect(d.value, d.selector).not.toMatch(/\binfinite\b/);
+    }
+  });
+
+  it('pulses the mood chip once per change, and only transform and opacity move in it', () => {
+    const cue = all.find((d) => d.selector === '.cw-mood__cue' && d.property === 'animation');
+    expect(cue?.value).toMatch(/^cw-mood-cue var\(--dur-slow\)/);
+    expect(cue?.value).not.toMatch(/\binfinite\b/);
+    const moved = all
+      .filter((d) => d.within.some((at) => at === '@keyframes cw-mood-cue'))
+      .map((d) => d.property)
+      .sort();
+    expect(moved).toEqual(['opacity', 'opacity', 'transform', 'transform']);
+  });
+});
+
+describe('the captions and the soft guidance', () => {
+  it('keep a height of their own, so that nothing moves when they appear or go', () => {
+    const strip = all.filter((d) => d.selector === '.cw-captions');
+    expect(strip.map((d) => d.property)).toContain('block-size');
+    // The words themselves are drawn in a box of fixed height: more of them never grow the page.
+    const body = all.filter(
+      (d) => d.selector === '.cw-captions__body' && d.property === 'block-size',
+    );
+    expect(body).toHaveLength(1);
+    const guidance = all.find(
+      (d) => d.selector === '.cw-ctl__slot' && d.property === 'min-block-size',
+    );
+    expect(guidance?.value).toBe('var(--target)');
+  });
+
+  it('fade and rise by opacity and transform alone', () => {
+    const live = all.filter((d) => d.selector === ".cw-captions[data-live='true']");
+    expect(live.map((d) => d.property).sort()).toEqual(['opacity', 'transform']);
+    const shown = all.filter(
+      (d) => d.selector === ".cw-ctl__slot > .cw-ctl__hint[data-visible='true']",
+    );
+    expect(shown.map((d) => d.property).sort()).toEqual(['opacity', 'transform']);
   });
 });

@@ -15,6 +15,7 @@ import {
 const GROUPS: FixtureGroup[] = [
   'Screens',
   'Stages of a turn',
+  'Hands-free',
   'Modes',
   'Problems',
   'Customer state',

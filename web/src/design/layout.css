@@ -141,12 +141,36 @@
 .u-center {
   text-align: center;
 }
-/* A small entrance for something that has just appeared (a new row, a revealed panel). */
-.u-enter {
-  animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+/* A small entrance for something that has just appeared (a new row, a revealed panel). Only on a
+   screen: paper takes the first frame of whatever is entering, and a row that is not there yet is lost. */
+@media screen {
+  .u-enter {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+  }
+  .u-fade {
+    animation: ff-fade var(--dur-normal) var(--ease-easy) both;
+  }
 }
-.u-fade {
-  animation: ff-fade var(--dur-normal) var(--ease-easy) both;
+/* A block that rises into place the first time it scrolls into view: spread the props of `useReveal`
+   on it. It is hidden only while motion is allowed and only on a screen, so nothing is lost to reduced
+   motion, to print or to a script that never runs. It is an animation, not a transition, so once it has
+   risen it keeps no transition, no delay and no transform of its own to get in the way of the block's
+   own hover or press. `--reveal-i` (0, 1, 2 ...) staggers siblings by one `--dur-stagger` each. A block
+   that was already in view when it arrived (`data-revealed="now"`) is never hidden and never moves. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  [data-reveal]:not([data-revealed]) {
+    opacity: 0;
+  }
+  [data-reveal][data-revealed=''] {
+    animation: ff-reveal var(--dur-slow) var(--ease-decelerate) backwards;
+    animation-delay: calc(var(--reveal-i, 0) * var(--dur-stagger));
+  }
+}
+@keyframes ff-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-sm));
+  }
 }
 /* A table or code block that may scroll sideways inside its own box (give it tabindex="0"). */
 .u-scroll-x {

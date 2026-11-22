@@ -30,13 +30,14 @@ export function OfflineNotice() {
   );
 }
 
-const SHOW_AFTER_MS = 250;
+const SHOW_AFTER_MS = 200;
 const ANNOUNCE_AFTER_MS = 1500;
 
 /**
  * A thin line across the top while the next page is on its way, drawn only if the wait is long
- * enough to notice, and announced to screen readers if it is longer still. The old page stays in
- * place meanwhile, so nothing flashes.
+ * enough to notice (about 200 ms, so a quick navigation shows nothing at all), and announced to
+ * screen readers if it is longer still. The old page stays in place meanwhile, so nothing flashes,
+ * and the line is gone the moment the new page arrives.
  */
 export function NavigationProgress() {
   const loading = useNavigation().state !== 'idle';

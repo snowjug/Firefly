@@ -2,12 +2,18 @@ import type { Locator, Page } from '@playwright/test';
 import type { SessionDTO } from '../shared/domain/api.ts';
 import type { CoachingReport } from '../shared/domain/report.ts';
 import { CALL_STAGE_LABELS, CARE_LABELS, DIMENSIONS } from '../shared/domain/vocab.ts';
-import { expectAccessible, overflow, clippedText, structureProblems } from './support/a11y.ts';
+import {
+  clippedText,
+  expectAccessible,
+  overflow,
+  settled,
+  structureProblems,
+} from './support/a11y.ts';
 import { expect, test } from './support/fixtures.ts';
 import { GOOD_CALL, PARTIAL_CALL, SHORT_CALL } from './support/api.ts';
 import { callScreen, endCallAndOpenReport, sendTyped } from './support/call-screen.ts';
 import { expectNoRawFailureText } from './support/raw-text.ts';
-import { libraryScenario } from './support/scenario-library.ts';
+import { countText, libraryCount, libraryScenario } from './support/scenario-library.ts';
 
 // The coaching report: the call in a block, the call journey and the agreement between it and the
 // transcript, the scores, the CARE review, the customer's experience, the discovery review, the
@@ -50,6 +56,83 @@ async function openReport(page: Page, sessionId: string) {
   await page.goto(`/sessions/${sessionId}/report`);
   await expect(page.getByRole('heading', { level: 1, name: 'Coaching report' })).toBeVisible();
 }
+
+/**
+ * Scrolls through the whole report so that every part that waits to be scrolled to has come in
+ * (an axe scan skips what is still at opacity 0, so a scan taken before this would pass over it), then
+ * waits for the page to be still and goes back to the top.
+ */
+async function revealAll(page: Page) {
+  await page.evaluate(async () => {
+    const step = Math.max(240, window.innerHeight * 0.8);
+    for (let y = 0; y <= document.documentElement.scrollHeight; y += step) {
+      window.scrollTo(0, y);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    }
+    window.scrollTo(0, 0);
+  });
+  // A part inside something closed has no box and is not waited for: it comes in when it is opened.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            [
+              ...document.querySelectorAll(
+                '[data-reveal]:not([data-revealed]), [data-counting], [data-draw="wait"]',
+              ),
+            ].filter((element) => element.getClientRects().length > 0).length,
+        ),
+      { message: 'every part that waits has come in, and the number has counted up' },
+    )
+    .toBe(0);
+  await settled(page);
+}
+
+/** The scale and the shift of a computed `matrix(...)`, as [x scale, y scale, x shift, y shift]; none is [1, 1, 0, 0]. */
+const matrixOf = (transform: string): [number, number, number, number] => {
+  const numbers = /^matrix\(([^)]*)\)$/.exec(transform)?.[1]?.split(',').map(Number);
+  return numbers
+    ? [numbers[0] ?? 1, numbers[3] ?? 1, numbers[4] ?? 0, numbers[5] ?? 0]
+    : [1, 1, 0, 0];
+};
+
+/** The middle of an element on the screen. */
+const centreOf = (target: Locator) =>
+  target.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+
+/** What a screen reader would find on the page, as the browser's own accessibility tree has it. */
+async function spokenText(page: Page): Promise<string[]> {
+  const session = await page.context().newCDPSession(page);
+  try {
+    const { nodes } = await session.send('Accessibility.getFullAXTree');
+    return nodes.flatMap((node) =>
+      node.ignored || !node.name?.value ? [] : [String(node.name.value)],
+    );
+  } finally {
+    await session.detach();
+  }
+}
+
+/** Resolves once the page has stopped scrolling (a smooth scroll is not an animation that `settled` can see). */
+const scrolled = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        let last = -1;
+        let still = 0;
+        const look = () => {
+          still = window.scrollY === last ? still + 1 : 0;
+          last = window.scrollY;
+          if (still >= 4) resolve();
+          else setTimeout(look, 50);
+        };
+        look();
+      }),
+  );
 
 /** The turn number at the end of a moment's name on the timeline: "Greeting, Turn 2". */
 const turnOfMoment = async (tab: Locator): Promise<number> => {
@@ -763,6 +846,10 @@ test.describe('the coaching report', () => {
       await expect(turn).toBeInViewport();
       await expect(turn.getByText('Cited', { exact: true })).toBeVisible();
       await expect(turn.locator('mark')).toContainText(quote.slice(0, 20));
+      // The mark over the words is a wash that fades in by opacity alone.
+      await expect
+        .poll(() => turn.evaluate((element) => getComputedStyle(element, '::before').opacity))
+        .toBe('1');
     });
 
     await test.step('the turn lands clear of the sticky bars and of the Back control', async () => {
@@ -925,6 +1012,390 @@ test.describe('how the report arrives', () => {
       expect(moving, 'no animation of any length is running on the report').toBe(0);
     });
   });
+
+  test('the first screen settles in over a short cascade, and nothing is held back from reading or clicking', async ({
+    api,
+    page,
+  }) => {
+    const call = await api.completedCall({ scenarioId: DEFENDER, lines: DEFENDER_CALL });
+    const parts = [
+      '.rp-exec__titles',
+      '.rp-exec__facts',
+      '.rp-exec__summary > .rp-exec__label',
+      '.rp-exec__signal',
+      '.rp-exec__note',
+      '.rp-exec__actions',
+    ];
+    const cascade = () =>
+      page.evaluate(
+        (selectors) =>
+          selectors.map((selector) => {
+            const style = getComputedStyle(document.querySelector(selector) as Element);
+            return {
+              selector,
+              name: style.animationName,
+              delay: parseFloat(style.animationDelay),
+              duration: parseFloat(style.animationDuration),
+              pointerEvents: style.pointerEvents,
+            };
+          }),
+        parts,
+      );
+
+    await test.step('with motion: each part a step after the one before, and the whole of it within about 600 ms', async () => {
+      await openReport(page, call.id);
+      const steps = await cascade();
+      for (const step of steps) {
+        expect(step.name, step.selector).toBe('ff-enter');
+        expect(step.pointerEvents, `${step.selector} can be clicked while it comes in`).not.toBe(
+          'none',
+        );
+      }
+      const delays = steps.map((step) => step.delay);
+      expect(delays).toEqual([...delays].sort((a, b) => a - b));
+      expect(new Set(delays).size, 'every part has a place of its own in the cascade').toBe(
+        delays.length,
+      );
+      expect(Math.max(...steps.map((step) => step.delay + step.duration))).toBeLessThanOrEqual(0.6);
+    });
+
+    await test.step('with reduced motion: none of it moves', async () => {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await openReport(page, call.id);
+      for (const step of await cascade()) expect(step.name, step.selector).toBe('none');
+    });
+  });
+
+  test('the overall number counts up once from nothing, while its real value is in the page from the first moment and is never read out', async ({
+    api,
+    page,
+  }) => {
+    const call = await api.completedCall({ scenarioId: DEFENDER, lines: DEFENDER_CALL });
+    const real = formatScore((call.report as CoachingReport).summary.overallScore as number);
+    // The frames are held back, so that the count can be looked at where it begins, and let go after.
+    await page.addInitScript(() => {
+      const held: FrameRequestCallback[] = [];
+      const request = window.requestAnimationFrame.bind(window);
+      let holding = true;
+      window.requestAnimationFrame = (callback) =>
+        holding ? held.push(callback) : request(callback);
+      Object.assign(window, {
+        releaseFrames: () => {
+          holding = false;
+          for (const callback of held.splice(0)) request(callback);
+        },
+      });
+    });
+    await openReport(page, call.id);
+    const number = page.locator('.rp-exec__number');
+
+    await test.step('at its start: the real value is the text, the digits drawn are 0, and the browser tells a screen reader only the real value', async () => {
+      await expect(number.locator('.rp-count__value')).toHaveText(real);
+      await expect(number).toHaveAttribute('data-counting', '');
+      const shown = await number.getAttribute('data-shown');
+      expect(shown).toMatch(/^0(\.0)?$/);
+      const spoken = await spokenText(page);
+      expect(spoken).toContain(real);
+      expect(spoken, 'the digits that are drawn are not in the accessibility tree').not.toContain(
+        shown,
+      );
+    });
+
+    await test.step('it goes up and never down, never past the real value, and ends as the real value alone', async () => {
+      const shown = await page.evaluate(
+        () =>
+          new Promise<number[]>((resolve) => {
+            const element = document.querySelector('.rp-exec__number') as HTMLElement;
+            const values: number[] = [];
+            new MutationObserver((_records, observer) => {
+              const value = element.getAttribute('data-shown');
+              if (value !== null) values.push(Number(value));
+              if (!element.hasAttribute('data-counting')) {
+                observer.disconnect();
+                resolve(values);
+              }
+            }).observe(element, { attributes: true });
+            (window as unknown as { releaseFrames: () => void }).releaseFrames();
+          }),
+      );
+      expect(shown.length).toBeGreaterThanOrEqual(2);
+      expect(shown).toEqual([...shown].sort((a, b) => a - b));
+      expect(Math.max(...shown)).toBeLessThanOrEqual(Number(real));
+      await expect(number).not.toHaveAttribute('data-counting', '');
+      await expect(number).not.toHaveAttribute('data-shown', /.*/);
+      await expect(number).toHaveText(real);
+    });
+  });
+
+  test('the number is simply there, and nothing is counted, under reduced motion', async ({
+    api,
+    page,
+  }) => {
+    const call = await api.completedCall({ scenarioId: DEFENDER, lines: DEFENDER_CALL });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await openReport(page, call.id);
+    const number = page.locator('.rp-exec__number');
+    await expect(number).toHaveText(
+      formatScore((call.report as CoachingReport).summary.overallScore as number),
+    );
+    await expect(number).not.toHaveAttribute('data-counting', '');
+    await expect(number).not.toHaveAttribute('data-shown', /.*/);
+  });
+
+  test('the line of the call chart is drawn once, as the chart is first seen, and the chart ends whole and still, with every point', async ({
+    api,
+    page,
+  }) => {
+    const call = await api.completedCall({
+      scenarioId: DEFENDER,
+      overrides: { curveballs: ['ask-manager'] },
+      lines: DEFENDER_CALL,
+    });
+    const turning = (call.report as CoachingReport).journey.points.filter(
+      (point) => point.kind === 'turning-point',
+    ).length;
+    expect(turning, 'the call has turning points to ring').toBeGreaterThan(0);
+    await openReport(page, call.id);
+    const chart = page.locator('.rp-chart');
+    const look = () =>
+      chart.evaluate((root) => {
+        const styles = (selector: string) =>
+          [...root.querySelectorAll(selector)].map((element) => getComputedStyle(element));
+        return {
+          draw: root.getAttribute('data-draw'),
+          line: styles('.rp-chart__reveal')[0]?.transform ?? 'missing',
+          markers: styles('.rp-chart__marker').map((style) => style.opacity),
+          rings: styles('.rp-chart__pulse').map((style) => style.opacity),
+          along: [...root.querySelectorAll<SVGElement>('.rp-chart__point')].map((point) =>
+            Number(point.style.getPropertyValue('--t')),
+          ),
+        };
+      });
+
+    await test.step('below the screen it waits: the line is covered and the markers are not there yet', async () => {
+      const waiting = await look();
+      expect(waiting.draw).toBe('wait');
+      expect(matrixOf(waiting.line)[0], 'the line is covered').toBe(0);
+      expect(new Set(waiting.markers)).toEqual(new Set(['0']));
+    });
+
+    await test.step('once seen it is drawn; at rest the line is whole, every marker is there and the rings are gone', async () => {
+      await chart.scrollIntoViewIfNeeded();
+      await expect(chart).toHaveAttribute('data-draw', 'go');
+      await settled(page);
+      const drawn = await look();
+      expect(matrixOf(drawn.line)).toEqual([1, 1, 0, 0]);
+      expect(new Set(drawn.markers)).toEqual(new Set(['1']));
+      expect(drawn.rings).toHaveLength(turning);
+      expect(new Set(drawn.rings)).toEqual(new Set(['0']));
+      // How far along the line each point stands: 0 at the start, 1 at the end, in the order of the call.
+      expect(drawn.along).toEqual([...drawn.along].sort((a, b) => a - b));
+      expect([Math.min(...drawn.along), Math.max(...drawn.along)]).toEqual([0, 1]);
+    });
+  });
+
+  test('the line beside a quote draws itself from the top when the quote is first seen', async ({
+    api,
+    page,
+  }) => {
+    const call = await api.completedCall({ scenarioId: DEFENDER, lines: DEFENDER_CALL });
+    await openReport(page, call.id);
+    const quote = region(page, 'Strengths').locator('.rp-quote').first();
+    const line = async () =>
+      matrixOf(await quote.evaluate((element) => getComputedStyle(element, '::before').transform));
+    await expect(quote).not.toHaveAttribute('data-drawn', '');
+    expect((await line())[1], 'covered while it waits').toBe(0);
+    await quote.scrollIntoViewIfNeeded();
+    await expect(quote).toHaveAttribute('data-drawn', '');
+    await settled(page);
+    expect(await line()).toEqual([1, 1, 0, 0]);
+  });
+
+  test('a slow page shows its placeholder only after a short wait, with motion and without', async ({
+    api,
+    page,
+  }) => {
+    const call = await api.completedCall({ scenarioId: DEFENDER, lines: DEFENDER_CALL });
+    await page.route(new RegExp(`/api/sessions/${call.id}$`), async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+      return route.fallback();
+    });
+    // When the placeholder is first in the page, and when it is first drawn.
+    await page.addInitScript(() => {
+      const log = { inPage: -1, drawn: -1 };
+      Object.assign(window, { placeholderLog: log });
+      setInterval(() => {
+        const placeholder = document.querySelector('.rp-state__skeleton');
+        if (placeholder && log.inPage < 0) log.inPage = performance.now();
+        if (placeholder && log.drawn < 0 && getComputedStyle(placeholder).visibility === 'visible')
+          log.drawn = performance.now();
+      }, 10);
+    });
+    for (const reduced of [false, true]) {
+      await test.step(reduced ? 'reduced motion' : 'with motion', async () => {
+        await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
+        await page.goto(`/sessions/${call.id}/report`);
+        await expect(page.locator('.rp-exec')).toBeVisible();
+        const log = await page.evaluate(
+          () =>
+            (window as unknown as { placeholderLog: { inPage: number; drawn: number } })
+              .placeholderLog,
+        );
+        expect(
+          log.inPage,
+          'the placeholder was in the page while the call was fetched',
+        ).toBeGreaterThan(0);
+        expect(log.drawn, 'and it was drawn once the wait was not short').toBeGreaterThan(0);
+        expect(log.drawn - log.inPage, 'but not at once').toBeGreaterThanOrEqual(100);
+      });
+    }
+  });
+});
+
+test.describe('how the report answers the reader', () => {
+  test.beforeEach(async ({ api, page }) => {
+    const call = await api.completedCall({
+      scenarioId: DEFENDER,
+      overrides: { curveballs: ['ask-manager'] },
+      lines: DEFENDER_CALL,
+    });
+    await openReport(page, call.id);
+  });
+
+  test('choosing a point on the chart puts one ring round it, which glides from the point chosen before', async ({
+    page,
+  }) => {
+    const chart = region(page, 'Customer experience').getByRole('group', {
+      name: /^Customer temperature/,
+    });
+    await chart.scrollIntoViewIfNeeded();
+    await settled(page);
+    const points = chart.getByRole('button');
+    const ring = chart.locator('.rp-chart__cursor');
+    const choose = async (index: number) => {
+      await points.nth(index).focus();
+      await page.keyboard.press('Enter');
+      await expect(points.nth(index)).toHaveAttribute('aria-pressed', 'true');
+      await settled(page);
+    };
+    const expectOn = async (index: number) => {
+      const at = await centreOf(ring);
+      const marker = await centreOf(points.nth(index).locator('.rp-chart__marker'));
+      expect(Math.abs(at.x - marker.x)).toBeLessThanOrEqual(2);
+      expect(Math.abs(at.y - marker.y)).toBeLessThanOrEqual(2);
+      return at;
+    };
+
+    await expect(ring).not.toHaveAttribute('data-on', '');
+    await choose(1);
+    await expect(ring).toHaveAttribute('data-on', '');
+    await expect(ring, 'the first one appears where it is').not.toHaveAttribute('data-glides', '');
+    const first = await expectOn(1);
+
+    await choose(2);
+    await expect(ring, 'the next one comes from the first').toHaveAttribute('data-glides', '');
+    const second = await expectOn(2);
+    expect(Math.hypot(second.x - first.x, second.y - first.y), 'the ring moved').toBeGreaterThan(5);
+  });
+
+  test('the navigation marks where the reader is with a line that goes to the section they reach', async ({
+    page,
+  }) => {
+    const nav = page.getByRole('navigation', { name: 'On this page' });
+    const indicator = nav.locator('.rp-nav__indicator');
+    const here = nav.locator('[aria-current="location"]');
+    const middle = async (target: Locator) => (await centreOf(target)).y;
+    const reached = new Set<string>();
+    for (const section of ['Scores', 'Discovery review', 'Strengths']) {
+      await nav.getByRole('link', { name: section, exact: true }).click();
+      await scrolled(page);
+      await settled(page);
+      reached.add(await here.innerText());
+      expect(
+        Math.abs((await middle(indicator)) - (await middle(here))),
+        `the line is at ${section}`,
+      ).toBeLessThanOrEqual(3);
+      await expect(indicator).toHaveCSS('opacity', '1');
+    }
+    expect(reached.size, 'the line was in more than one place').toBeGreaterThanOrEqual(2);
+  });
+
+  test('a link in the navigation scrolls to its section smoothly, and at once when motion is reduced', async ({
+    page,
+  }) => {
+    const watch = () =>
+      page.evaluate(
+        () =>
+          new Promise<number[]>((resolve) => {
+            const seen = [Math.round(window.scrollY)];
+            const started = performance.now();
+            let quiet = 0;
+            const look = () => {
+              const y = Math.round(window.scrollY);
+              if (y === seen[seen.length - 1]) quiet += 1;
+              else {
+                quiet = 0;
+                seen.push(y);
+              }
+              if ((quiet >= 8 && seen.length > 1) || performance.now() - started > 4_000)
+                resolve(seen);
+              else requestAnimationFrame(look);
+            };
+            requestAnimationFrame(look);
+          }),
+      );
+    const link = page
+      .getByRole('navigation', { name: 'On this page' })
+      .getByRole('link', { name: 'Strengths', exact: true });
+
+    const smooth = watch();
+    await link.click();
+    const along = await smooth;
+    const between = (steps: number[]) =>
+      new Set(steps.filter((y) => y > (steps[0] ?? 0) && y < (steps[steps.length - 1] ?? 0))).size;
+    expect(between(along), 'the page travelled there').toBeGreaterThanOrEqual(3);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+    await scrolled(page);
+    const instant = watch();
+    await link.click();
+    expect(between(await instant), 'the page was there at once').toBeLessThanOrEqual(1);
+  });
+
+  test('the next-practice card rises under a mouse and settles under a press, and is one target from edge to edge', async ({
+    page,
+  }) => {
+    const card = page.locator('.rp-next');
+    const transform = async () =>
+      matrixOf(await card.evaluate((element) => getComputedStyle(element).transform));
+    await card.scrollIntoViewIfNeeded();
+    await settled(page);
+    expect(await transform(), 'at rest').toEqual([1, 1, 0, 0]);
+
+    await test.step('a mouse over it lifts it, and moving away puts it back', async () => {
+      await card.hover();
+      await settled(page);
+      expect((await transform())[3], 'it rose').toBeLessThan(0);
+      await page.mouse.move(2, 2);
+      await settled(page);
+      expect(await transform()).toEqual([1, 1, 0, 0]);
+    });
+
+    // A press shrinks the card a little, and a pointer left near its very edge would be outside it
+    // when let go, so the press is made well inside the edge (and not dragged: that starts a drag).
+    await test.step('the whole card is the button’s target: a press away from the button settles the card, and letting go follows the link', async () => {
+      const box = await card.boundingBox();
+      expect(box).not.toBeNull();
+      await page.mouse.move((box?.x ?? 0) + 40, (box?.y ?? 0) + 40);
+      await page.mouse.down();
+      await settled(page);
+      expect((await transform())[0], 'it settled').toBeLessThan(1);
+      await page.mouse.up();
+      await expect(page).toHaveURL(/\/scenarios/);
+    });
+  });
 });
 
 test.describe('a call with a promise in it', () => {
@@ -987,6 +1458,8 @@ test.describe('the report in both colour themes', () => {
     await expect(
       page.getByRole('group', { name: /^Customer temperature through the call/ }),
     ).toBeVisible();
+    // Parts below the first screen come in as they are scrolled to, and a scan passes over what has not.
+    await revealAll(page);
 
     const open = async () => {
       await region(page, 'Scores').getByRole('button', { name: 'Expand all' }).click();
@@ -1033,7 +1506,10 @@ test.describe('at every width', () => {
         await expect(
           page.getByRole('group', { name: /^Customer temperature through the call/ }),
         ).toBeVisible();
+        // Everything has come in, and no number is still being counted, before anything is measured.
+        await revealAll(page);
         await region(page, 'Scores').getByRole('button', { name: 'Expand all' }).click();
+        await settled(page);
         const result = await overflow(page);
         expect(result.scrollWidth, `${width} px: the page scrolls sideways`).toBeLessThanOrEqual(
           result.innerWidth,
@@ -1082,7 +1558,9 @@ test.describe('on a phone-sized screen', () => {
     });
 
     await test.step('no part of the page sticks out of the screen, and no label is cut off', async () => {
+      await revealAll(page);
       await region(page, 'Scores').getByRole('button', { name: 'Expand all' }).click();
+      await settled(page);
       const report = await overflow(page);
       expect(report.offenders).toEqual([]);
       expect(report.scrollWidth).toBeLessThanOrEqual(report.innerWidth + 1);
@@ -1332,7 +1810,7 @@ test.describe('after a report', () => {
           .getByRole('main')
           .getByRole('status')
           .filter({ hasText: /scenarios$/ }),
-      ).toHaveText('16 scenarios');
+      ).toHaveText(countText(libraryCount()));
     });
   });
 });

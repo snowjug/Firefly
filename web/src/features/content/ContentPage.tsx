@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react';
+import { useReveal } from '../../design/interaction/use-reveal.ts';
 import { Disclosure } from '../../design/primitives/Disclosure.tsx';
 import './content.css';
 
@@ -28,7 +29,9 @@ export function ContentPage({
 
 /**
  * One section of a content page: a heading, a few short bullets, and the detail folded into a
- * disclosure that opens on request. Each section is a labelled region.
+ * disclosure that opens on request. Each section is a labelled region. It rises into place the
+ * first time it scrolls into view (`useReveal`: nothing is hidden without motion, on paper or
+ * without a script); the heading of the page itself is always there.
  */
 export function ContentSection({
   id,
@@ -45,8 +48,9 @@ export function ContentSection({
   details?: ReactNode;
 }) {
   const titleId = useId();
+  const [section, reveal] = useReveal<HTMLElement>();
   return (
-    <section id={id} aria-labelledby={titleId} className="ct-section">
+    <section ref={section} {...reveal} id={id} aria-labelledby={titleId} className="ct-section">
       <h2 id={titleId} className="ct-h2">
         {title}
       </h2>

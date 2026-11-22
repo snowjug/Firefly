@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { CoachingReport, JourneyPoint } from '#shared/domain/report.ts';
 import { CURVEBALL_LABELS } from '#shared/domain/vocab.ts';
 import {
@@ -8,6 +8,8 @@ import {
   StateBadge,
   VisuallyHidden,
   useAnnouncer,
+  useReveal,
+  type RevealProps,
 } from '../../design/index.ts';
 import { CURVEBALL_STATUS_WORDS, bandIdFor, plainUnexpectedTurn } from './copy.ts';
 import { EvidencePanel, type Moment } from './EvidencePanel.tsx';
@@ -21,9 +23,10 @@ import {
   type ChartPoint,
   type KeyMoment,
 } from './journey-model.ts';
-import { Field, Section, TurnQuote } from './parts.tsx';
+import { Empty, Field, Section, TurnQuote } from './parts.tsx';
 import { MarkerGlyph } from './marker-shape.tsx';
 import { usePrinting } from './print.tsx';
+import { stagger } from './reveal.ts';
 import { useTimelineSync } from './selection.tsx';
 import './journey.css';
 
@@ -50,8 +53,9 @@ const STATUS_TONE = { resolved: 'success', unresolved: 'warning', active: 'neutr
 
 function UnexpectedTurn({ curveball }: { curveball: NonNullable<CoachingReport['curveball']> }) {
   const label = CURVEBALL_LABELS[curveball.type]?.label ?? 'An unexpected moment';
+  const [ref, reveal] = useReveal<HTMLDivElement>();
   return (
-    <div className="rp-unexpected">
+    <div className="rp-unexpected" ref={ref} {...reveal} style={stagger(2)}>
       <h3 className="rp-subtitle">Unexpected turn</h3>
       <p className="rp-unexpected__line">
         <span className="rp-unexpected__what">{label}</span>
@@ -75,17 +79,21 @@ function MomentRow({
   moment,
   open,
   panel,
+  reveal,
+  place,
   onToggle,
 }: {
   moment: KeyMoment;
   open: boolean;
   panel: Moment;
+  reveal: RevealProps;
+  place: CSSProperties;
   onToggle: () => void;
 }) {
   const { point, reaction } = moment;
   const band = bandIdFor(point.band) ?? 'calm';
   return (
-    <li className="rp-moment">
+    <li className="rp-moment" {...reveal} style={place}>
       <div className="rp-moment__head">
         <MarkerGlyph kind={point.kind} />
         <StateBadge state={band} />
@@ -139,7 +147,14 @@ export function ExperienceSection({ report }: { report: CoachingReport }) {
   const moments = useMemo(() => keyMoments(journey, turns), [journey, turns]);
   const rows = useMemo(() => journeyTableRows(journey), [journey]);
   const [chosen, setChosen] = useState<{ turn: number; host: 'chart' | 'row' } | null>(null);
+  // The card under the chart is never shorter than the tallest shown since it was opened, so
+  // choosing another point does not pull the rest of the page up: the card that is about to be
+  // replaced says how tall it has been, as a point is chosen.
+  const card = useRef<HTMLDivElement>(null);
+  const [held, setHeld] = useState(0);
   const [tableOpen, setTableOpen] = useState(false);
+  const [journeyBox, journeyReveal] = useReveal<HTMLDivElement>();
+  const [momentList, momentReveal] = useReveal<HTMLOListElement>();
 
   const panelFor = (point: JourneyPoint, heading?: string): Moment => {
     const index = journey.points.indexOf(point);
@@ -158,6 +173,7 @@ export function ExperienceSection({ report }: { report: CoachingReport }) {
     if (!point) return;
     const same = chosen?.host === 'chart' && chosen.turn === turnOf(point);
     setChosen(same ? null : { turn: turnOf(point), host: 'chart' });
+    setHeld(same ? 0 : Math.max(held, card.current?.offsetHeight ?? 0));
     if (same) return;
     sync?.pickTurn(turnOf(point));
     announce(`Showing turn ${turnOf(point)}, under the chart.`);
@@ -167,6 +183,7 @@ export function ExperienceSection({ report }: { report: CoachingReport }) {
     const turn = turnOf(moment.point);
     const same = chosen?.host === 'row' && chosen.turn === turn;
     setChosen(same ? null : { turn, host: 'row' });
+    setHeld(0);
     if (!same) sync?.pickTurn(turn);
   };
 
@@ -229,7 +246,7 @@ export function ExperienceSection({ report }: { report: CoachingReport }) {
       lead="How the customer's mood moved through the call."
     >
       {journey.points.length > 0 ? (
-        <div className="rp-journey">
+        <div className="rp-journey" ref={journeyBox} {...journeyReveal} style={stagger(2)}>
           <div className="rp-journey__chart">
             <Suspense fallback={<ChartPlaceholder journey={journey} />}>
               <JourneyChart
@@ -240,26 +257,35 @@ export function ExperienceSection({ report }: { report: CoachingReport }) {
             </Suspense>
           </div>
           {underChart ? (
-            <div className="rp-journey__panel">
+            <div
+              className="rp-journey__panel"
+              key={turnOf(underChart)}
+              ref={card}
+              style={held > 0 ? ({ '--held': `${held}px` } as CSSProperties) : undefined}
+            >
               <EvidencePanel moment={panelFor(underChart)} />
             </div>
           ) : null}
           {tableDetails}
         </div>
       ) : (
-        <p className="rp-empty">{journeySentence(journey)}</p>
+        <Empty>{journeySentence(journey)}</Empty>
       )}
 
       {moments.length > 0 ? (
         <>
-          <h3 className="rp-subtitle">Important points</h3>
-          <ol className="rp-moments" role="list">
-            {moments.map((moment) => (
+          <h3 className="rp-subtitle" {...momentReveal} style={stagger(3)}>
+            Important points
+          </h3>
+          <ol className="rp-moments" role="list" ref={momentList}>
+            {moments.map((moment, index) => (
               <MomentRow
                 key={`${moment.point.turnIndex}-${moment.point.kind}`}
                 moment={moment}
                 open={chosen?.host === 'row' && chosen.turn === turnOf(moment.point)}
                 panel={panelFor(moment.point, moment.heading)}
+                reveal={momentReveal}
+                place={stagger(index + 3)}
                 onToggle={() => fromRow(moment)}
               />
             ))}

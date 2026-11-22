@@ -3,11 +3,16 @@ import type { PublicScenarioDTO } from '../shared/domain/api.ts';
 import { clippedText, expectAccessible, focusStop, overflow, tabTo } from './support/a11y.ts';
 import { callIdOf, callScreen } from './support/call-screen.ts';
 import { expect, test } from './support/fixtures.ts';
+import { cardOrder, countText, libraryCount, libraryWhere } from './support/scenario-library.ts';
 
 // The carousel of scenario cards, the product rail above it and the way from a card to a call, in a
 // real browser. What the workspace does with a choice (details, setup, the address) is in
 // scenarios.spec.ts. Screenshots of the workspace in both themes are kept in this run's output folder
-// (see playwright.config.ts) so they can be looked at.
+// (see playwright.config.ts) so they can be looked at. How many cards there are, and in which order,
+// comes from the library (support/scenario-library.ts), never from a number typed here.
+
+/** How many scenarios the library has, and so how many cards the carousel shows. */
+const TOTAL = libraryCount();
 
 const cardName = (scenario: Pick<PublicScenarioDTO, 'title' | 'shortTitle'>) =>
   scenario.shortTitle.trim() ? scenario.shortTitle : scenario.title;
@@ -164,7 +169,8 @@ test.describe('the keyboard', () => {
     const byId = new Map(scenarios.map((scenario) => [scenario.id, scenario]));
     await openWorkspace(page);
     const ids = await shownIds(page);
-    expect(ids).toHaveLength(16);
+    // Every scenario has a card, in the order the page lays them out.
+    expect(ids).toEqual(cardOrder().map((scenario) => scenario.id));
     const named = (index: number) => byId.get(ids[index] as string) as PublicScenarioDTO;
     const last = ids.length - 1;
 
@@ -182,10 +188,10 @@ test.describe('the keyboard', () => {
       await expect(radios(page).nth(1)).toBeFocused();
       await expect(page.getByRole('heading', { level: 2, name: named(1).title })).toBeVisible();
       await expect.poll(() => new URL(page.url()).searchParams.get('scenario')).toBe(ids[1]);
-      await expect(gallery(page)).toContainText('2 of 16');
+      await expect(gallery(page)).toContainText(`2 of ${TOTAL}`);
       await page.keyboard.press('ArrowLeft');
       await expect(radios(page).first()).toBeChecked();
-      await expect(gallery(page)).toContainText('1 of 16');
+      await expect(gallery(page)).toContainText(`1 of ${TOTAL}`);
     });
 
     await test.step('End chooses the last card and brings it into view, and the right arrow does not wrap', async () => {
@@ -193,7 +199,7 @@ test.describe('the keyboard', () => {
       await expect(radios(page).last()).toBeChecked();
       await expect(radios(page).last()).toBeFocused();
       await expect.poll(() => share(page, ids[last] as string)).toBeGreaterThan(0.98);
-      await expect(gallery(page)).toContainText('16 of 16');
+      await expect(gallery(page)).toContainText(`${TOTAL} of ${TOTAL}`);
       await expect(next(page)).toHaveAttribute('aria-disabled', 'true');
       await expect(previous(page)).not.toHaveAttribute('aria-disabled', 'true');
       await page.keyboard.press('ArrowRight');
@@ -247,7 +253,7 @@ test.describe('the keyboard', () => {
     // Moving the window is not choosing: the first card is still the one chosen.
     await expect(radios(page).first()).toBeChecked();
     await expect.poll(() => new URL(page.url()).searchParams.get('scenario')).toBe(ids[0]);
-    await expect(gallery(page)).toContainText('1 of 16');
+    await expect(gallery(page)).toContainText(`1 of ${TOTAL}`);
   });
 });
 
@@ -277,7 +283,9 @@ test.describe('the pointer', () => {
       await expect(gallery(page).getByRole('radio', { checked: true })).toHaveCount(1);
       expect(new URL(page.url()).searchParams.get('scenario')).toBe(ids[0]);
       // The count says so in words, so it does not look wrong beside the bar that did move.
-      await expect(gallery(page).locator('.ff-carousel__count')).toHaveText('Selected 1 of 16');
+      await expect(gallery(page).locator('.ff-carousel__count')).toHaveText(
+        `Selected 1 of ${TOTAL}`,
+      );
     });
 
     await test.step('a click (no movement) on a card chooses it', async () => {
@@ -387,26 +395,28 @@ test.describe('the product rail', () => {
     };
 
     await test.step('the arrow keys move along the chips and choose', async () => {
+      // The rail starts with Teams, and the library has Teams scenarios, so the first chip after All is its chip.
+      const ownTeams = libraryWhere({ product: 'teams' }).length;
       await rail(page)
         .getByRole('radio', { name: /^All\b/ })
         .focus();
       await page.keyboard.press('ArrowRight');
       const teams = rail(page).getByRole('radio', { name: /^Teams\b/ });
       await expect(teams).toBeChecked();
-      await expect(count(page)).toHaveText('1 of 16 scenarios');
-      await expect(radios(page)).toHaveCount(1);
+      await expect(count(page)).toHaveText(countText(ownTeams));
+      await expect(radios(page)).toHaveCount(ownTeams);
       await expect.poll(() => new URL(page.url()).searchParams.get('f_product')).toBe('teams');
       await expect.poll(() => placed(rail(page).locator('.scn-chip[data-selected]'))).toBe(true);
       await page.keyboard.press('Home');
       await expect(rail(page).getByRole('radio', { name: /^All\b/ })).toBeChecked();
-      await expect(count(page)).toHaveText('16 scenarios');
+      await expect(count(page)).toHaveText(countText(TOTAL));
     });
 
     await test.step('a chip far along the rail is brought into view and the carousel shows only its scenarios', async () => {
       await rail(page)
         .getByRole('radio', { name: /^Windows\b/ })
         .check();
-      await expect(count(page)).toHaveText(`${windows.length} of 16 scenarios`);
+      await expect(count(page)).toHaveText(countText(windows.length));
       await expect(radios(page)).toHaveCount(windows.length);
       await expect(gallery(page)).toContainText(`1 of ${windows.length}`);
       await expect(gallery(page).getByRole('radio', { checked: true })).toHaveCount(1);
@@ -442,7 +452,7 @@ test.describe('the product rail', () => {
       await rail(page)
         .getByRole('radio', { name: /^All\b/ })
         .check();
-      await expect(count(page)).toHaveText('16 scenarios');
+      await expect(count(page)).toHaveText(countText(TOTAL));
       const strip = rail(page).locator('.scn-rail__scroller');
       const before = await strip.evaluate((el) => el.scrollLeft);
       const box = await boxOf(rail(page).getByRole('radio', { name: /^Outlook\b/ }));
@@ -453,7 +463,7 @@ test.describe('the product rail', () => {
       await page.mouse.up();
       await expect.poll(() => strip.evaluate((el) => el.scrollLeft)).toBeGreaterThan(before + 100);
       await expect(rail(page).getByRole('radio', { name: /^All\b/ })).toBeChecked();
-      await expect(count(page)).toHaveText('16 scenarios');
+      await expect(count(page)).toHaveText(countText(TOTAL));
     });
   });
 });
@@ -475,7 +485,7 @@ test.describe('a link that names a scenario', () => {
     await expect.poll(() => share(page, far)).toBeGreaterThan(0.98);
     // The first card is out of the window, so the carousel did move to the one it was asked for.
     await expect.poll(() => share(page, ids[0] as string)).toBeLessThan(0.5);
-    await expect(gallery(page)).toContainText('13 of 16');
+    await expect(gallery(page)).toContainText(`13 of ${TOTAL}`);
     await expect(previous(page)).not.toHaveAttribute('aria-disabled', 'true');
     await expect(
       paneFor(page, scenario).getByRole('heading', { level: 2, name: scenario.title }),
@@ -489,7 +499,7 @@ test.describe('a link that names a scenario', () => {
     const hard = scenarios.filter((scenario) => scenario.difficulty === 'challenge');
     const target = hard.at(-1) as PublicScenarioDTO;
     await page.goto(`/scenarios?f_difficulty=challenge&scenario=${target.id}`);
-    await expect(count(page)).toHaveText(`${hard.length} of 16 scenarios`);
+    await expect(count(page)).toHaveText(countText(hard.length));
     await expect(radios(page)).toHaveCount(hard.length);
     await expect(cardOf(page, target.id).getByRole('radio')).toBeChecked();
     await expect.poll(() => share(page, target.id)).toBeGreaterThan(0.98);

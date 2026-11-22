@@ -1,11 +1,19 @@
-import { useEffect, useId, useState, type KeyboardEvent } from 'react';
-import { Icon, VisuallyHidden, cx, type IconName } from '../../design/index.ts';
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
+import {
+  Icon,
+  VisuallyHidden,
+  cx,
+  mergeRefs,
+  useReveal,
+  type IconName,
+} from '../../design/index.ts';
 import { useMediaQuery } from '../../lib/hooks.ts';
 import { INSUFFICIENT_EVIDENCE } from './copy.ts';
 import { EvidencePanel, type Moment } from './EvidencePanel.tsx';
 import type { CallEvent, EventKind } from './events-model.ts';
 import { Quote, Section } from './parts.tsx';
 import { usePrinting } from './print.tsx';
+import { stagger } from './reveal.ts';
 import { useTimelineSync } from './selection.tsx';
 import './timeline.css';
 
@@ -109,6 +117,8 @@ export function Timeline() {
   const printing = usePrinting();
   const base = useId();
   const [measure, width] = useMeasuredWidth();
+  const [revealed, reveal] = useReveal<HTMLDivElement>();
+  const box = useMemo(() => mergeRefs(measure, revealed), [measure, revealed]);
   // On the narrow list a moment can be closed again; the choice stays, only its panel goes.
   const [closed, setClosed] = useState<string | null>(null);
   if (!sync || sync.events.length === 0) return null;
@@ -160,7 +170,7 @@ export function Timeline() {
           : 'Choose a moment to see the exact turn.'
       }
     >
-      <div className="rp-tl__measure" ref={measure}>
+      <div className="rp-tl__measure" ref={box} {...reveal} style={stagger(2)}>
         {printing ? (
           <ol className="rp-tl__print" role="list">
             {events.map((event) => (

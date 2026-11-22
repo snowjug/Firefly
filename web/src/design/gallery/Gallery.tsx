@@ -107,6 +107,10 @@ const CALL_STATES = [
 function MotionDemo() {
   const [step, setStep] = useState(0);
   const [round, setRound] = useState(0);
+  const [arrivals, setArrivals] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const [waits, setWaits] = useState(0);
   const state = CALL_STATES[step % CALL_STATES.length] ?? CALL_STATES[0];
   return (
     <>
@@ -138,6 +142,51 @@ function MotionDemo() {
         <span className="t-meta">
           Press: 1 to 2 px down. Hover or focus: the arrow leans forward.
         </span>
+      </Row>
+      <Row label="Loading button">
+        <Button appearance="primary" loading={busy} onClick={() => setBusy((current) => !current)}>
+          Start the call
+        </Button>
+        <Button icon="refresh" loading={busy} onClick={() => setBusy((current) => !current)}>
+          Try again
+        </Button>
+        <span className="t-meta">
+          Press either: the label or the icon and the spinner trade places by fading, and the button
+          never changes width. Press again to stop.
+        </span>
+      </Row>
+      <Row label="A message arriving" column>
+        <div className="gx-narrow l-stack l-gap-3">
+          <Button size="small" onClick={() => setArrivals((current) => current + 1)}>
+            Show a message
+          </Button>
+          {arrivals > 0 ? (
+            <MessageBar key={arrivals} intent="success" title="Call saved">
+              It rises a few pixels as it fades in.
+            </MessageBar>
+          ) : null}
+        </div>
+      </Row>
+      <Row label="A field error" column>
+        <div className="gx-narrow l-stack l-gap-3">
+          <Field label="Name" error={error ? 'Enter a name for the call.' : undefined}>
+            <TextInput />
+          </Field>
+          <Button size="small" onClick={() => setError((current) => !current)}>
+            {error ? 'Clear the error' : 'Show the error'}
+          </Button>
+        </div>
+      </Row>
+      <Row label="A placeholder" column>
+        <div className="gx-narrow l-stack l-gap-3" key={waits}>
+          <Skeleton lines={3} />
+          <Button size="small" onClick={() => setWaits((current) => current + 1)}>
+            Replay
+          </Button>
+          <span className="t-meta">
+            Nothing for 150 ms, then a calm fade, so a quick load never flashes.
+          </span>
+        </div>
       </Row>
       <Row label="Speaking">
         <Avatar name="Maya Okafor" size="lg" speaking voice="customer" label="Maya is speaking" />

@@ -286,6 +286,16 @@ export class FakeRecognition {
     const result = Object.assign([{ transcript: text, confidence }], { isFinal: final });
     this.onresult?.({ resultIndex: 0, results: [result] });
   }
+  /**
+   * A continuous session reports every result it has so far each time, finals first and the words
+   * still being worked out last: `hear(['Hello there.'], ['how are', false])` is one such report.
+   */
+  hear(...parts: Array<readonly [text: string, final?: boolean]>): void {
+    const results = parts.map(([text, final = true]) =>
+      Object.assign([{ transcript: text, confidence: 0.9 }], { isFinal: final }),
+    );
+    this.onresult?.({ resultIndex: Math.max(0, results.length - 1), results });
+  }
   fail(code: string): void {
     this.onerror?.({ error: code });
   }
@@ -602,8 +612,11 @@ export interface FakeEnv {
   readonly contexts: FakeAudioContext[];
   readonly recognition: {
     readonly instances: FakeRecognition[];
-    /** Makes every `start()` throw, as a browser does when a session is already running. */
-    startThrows: boolean;
+    /**
+     * Makes every `start()` throw. `true` is what a browser does when a session is already running
+     * (`InvalidStateError`); a string is the name of another error.
+     */
+    startThrows: boolean | string;
     latest(): FakeRecognition;
     /** What `SpeechRecognition.available` reports; `undefined` removes the method. */
     setOnDevice(availability: 'available' | 'downloadable' | 'unavailable' | undefined): void;
@@ -825,7 +838,8 @@ export function installFakes(options: FakeOptions = {}): FakeEnv {
         recognitionInstances.push(this);
       }
       override start(): void {
-        if (env.recognition.startThrows) throw domError('InvalidStateError');
+        const failure = env.recognition.startThrows;
+        if (failure) throw domError(typeof failure === 'string' ? failure : 'InvalidStateError');
         super.start();
       }
     }

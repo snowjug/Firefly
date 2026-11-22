@@ -73,11 +73,14 @@ type Session = {
   status: string;
 };
 
+// Any scenario will do for these calls, so the smallest one is named, and the numbers do not move when
+// scenarios are added or reordered.
+const SCENARIO_ID = 'outlook-shared-mailbox-missing';
+
 async function createSession(request: APIRequestContext, messages = 0): Promise<Session> {
-  const catalogue = await (await request.get('/api/scenarios')).json();
   const created = await request.post('/api/sessions', {
     data: {
-      scenarioId: catalogue.scenarios[0].id,
+      scenarioId: SCENARIO_ID,
       overrides: { difficulty: 'starter' },
       clientRequestId: randomUUID(),
     },

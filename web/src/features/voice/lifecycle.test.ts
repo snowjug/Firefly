@@ -3,6 +3,7 @@ import { ApiError, type SpokenTurn } from '../../lib/api.ts';
 import { acquireMicrophone } from './capture/microphone.ts';
 import { createRecognitionCapture } from './capture/recognition.ts';
 import { createServerCapture } from './capture/server-capture.ts';
+import { CAPTURE_TUNING } from './capture/tuning.ts';
 import { MicrophoneError, type CaptureHandlers } from './capture/types.ts';
 import { createBrowserPlayback } from './playback/browser-playback.ts';
 import { createServerPlayback, type SpeakTurn } from './playback/server-playback.ts';
@@ -426,6 +427,10 @@ describe("the browser's own speech path", () => {
     expect(heldBy(env).recognitions).toBe(1);
     recognition.open();
     recognition.say('my order has not arrived', true);
+    // The turn is the trainee's to end by being quiet, so the words are held until then.
+    expect(heard.log).toEqual(['listening', 'start']);
+    expect(heldBy(env).recognitions).toBe(1);
+    vi.advanceTimersByTime(CAPTURE_TUNING.endpointSilenceMs);
     expect(heard.log).toEqual([
       'listening',
       'start',
@@ -452,11 +457,40 @@ describe("the browser's own speech path", () => {
     const session = browserSession();
     const heard = captureLog();
     session.capture.listen(heard.handlers);
-    env.recognition.latest().fail('network');
-    expect(heard.log).toEqual(['failure:service:network']);
+    env.recognition.latest().fail('audio-capture');
+    expect(heard.log).toEqual(['failure:microphone:missing']);
     expect(env.recognition.latest().aborts).toBe(1);
     session.end();
     expect(heldBy(env)).toEqual(NOTHING_HELD);
+  });
+
+  it('error: a recogniser that keeps failing is let go of, and nothing is left to start it again', async () => {
+    const session = browserSession();
+    const heard = captureLog();
+    session.capture.listen(heard.handlers);
+    for (let attempt = 1; attempt <= CAPTURE_TUNING.recognitionMaxFailedSessions; attempt++) {
+      env.recognition.latest().fail('network');
+      expect(heldBy(env).recognitions).toBe(0);
+      vi.advanceTimersByTime(CAPTURE_TUNING.recognitionRestartMs);
+    }
+    expect(heard.log).toEqual(['failure:service:network']);
+    expect(heldBy(env)).toEqual(NOTHING_HELD);
+    session.end();
+    expect(heldBy(env)).toEqual(NOTHING_HELD);
+  });
+
+  it('a pass that is waiting to start another session when the call ends starts nothing', async () => {
+    const session = browserSession();
+    const heard = captureLog();
+    session.capture.listen(heard.handlers);
+    env.recognition.latest().open();
+    env.recognition.latest().close();
+    expect(heldBy(env).timers).toBeGreaterThan(0);
+    session.end();
+    expect(heldBy(env)).toEqual(NOTHING_HELD);
+    vi.advanceTimersByTime(60_000);
+    expect(env.recognition.instances).toHaveLength(1);
+    expect(heard.log).toEqual(['listening']);
   });
 
   it('abort and unmount: a pass cancelled, and the customer stopped mid-word, leave nothing running', async () => {

@@ -1,5 +1,8 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import { wordCount } from '#shared/domain/scenario.ts';
@@ -675,6 +678,41 @@ describe('the microphone', () => {
       await screen.findByText('Voice is not available here. You can type the call.'),
     ).toBeVisible();
     expect(screen.queryByRole('button', { name: /Check microphone/ })).not.toBeInTheDocument();
+  });
+
+  it('puts a new line about the microphone in a new element, so its icon and words fade in together where the old one was', async () => {
+    const user = userEvent.setup();
+    const { value } = handle(0);
+    vi.mocked(acquireMicrophone).mockResolvedValue(value);
+    renderApp(briefPath());
+    const idle = (await screen.findByText('The browser will ask to use your microphone.')).closest(
+      '.brf-ready__message',
+    );
+    expect(idle).not.toBeNull();
+    expect(idle?.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    await user.click(await screen.findByRole('button', { name: 'Check microphone' }));
+    const listening = (await screen.findByText('Listening. Say a few words.')).closest(
+      '.brf-ready__message',
+    );
+    expect(listening).not.toBeNull();
+    expect(listening).not.toBe(idle);
+    // It is still one live line, read once: the status the Start button is described by.
+    expect(
+      screen.getAllByRole('status').filter((line) => line.id === 'brf-readiness'),
+    ).toHaveLength(1);
+    expect(await startVoice()).toHaveAccessibleDescription('Listening. Say a few words.');
+  });
+
+  it('keeps room for two lines of it, so a longer one never pushes the buttons below', () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'brief.css'),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    const status = css.match(/\.brf-ready__status\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(status).toMatch(/min-block-size:\s*calc\(var\(--lh-compact\) \* 2\)/);
+    // A new line fades in by opacity alone, which moves nothing, and has no animation on paper.
+    expect(css).toMatch(/\.brf-ready__message\s*\{[^}]*animation:\s*ff-fade var\(--dur-normal\)/);
+    expect(css).toMatch(/@media print\s*\{[^}]*\.brf-ready__message/);
   });
 });
 

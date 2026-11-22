@@ -21,6 +21,21 @@
   min-block-size: 18rem;
 }
 
+/* The card under the chart is a new card for each point chosen (the page keys it by turn). It is
+   never shorter than the tallest one shown before it (--held, set by the page), so choosing another
+   point does not pull the rest of the page up, and on a screen a new card fades in, where motion is
+   allowed. On paper it is as tall as it is. */
+@media screen {
+  .rp-journey__panel {
+    min-block-size: var(--held, 0);
+  }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  .rp-journey__panel {
+    animation: ff-fade var(--dur-normal) var(--ease-easy) backwards;
+  }
+}
+
 /* ---- Marker shapes ------------------------------------------------------------------------ */
 .rp-shape {
   fill: currentColor;

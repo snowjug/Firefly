@@ -20,6 +20,7 @@ import {
   VisuallyHidden,
   cx,
   useAnnouncer,
+  useReveal,
   type BadgeTone,
   type IconName,
 } from '../../design/index.ts';
@@ -27,6 +28,7 @@ import { pluralise, skillName } from './copy.ts';
 import { scrollToTurn } from './dom.ts';
 import { SectionLink, useEvidence } from './evidence.tsx';
 import { Section } from './parts.tsx';
+import { stagger } from './reveal.ts';
 import { useTimelineSync } from './selection.tsx';
 import {
   FILTER_FOUND,
@@ -248,6 +250,7 @@ export function TranscriptReview({
   const counts = useMemo(() => filterCounts(turns), [turns]);
   const sync = useTimelineSync();
   const announce = useAnnouncer();
+  const [head, reveal] = useReveal<HTMLParagraphElement>();
 
   const [filter, setFilter] = useState<TranscriptFilter>('all');
   const [query, setQuery] = useState('');
@@ -405,14 +408,14 @@ export function TranscriptReview({
 
   return (
     <Section id="transcript" title="Transcript">
-      <p className="rp-transcript__lead">
+      <p className="rp-transcript__lead" ref={head} {...reveal}>
         {lead ?? 'The conversation as it was saved. Nothing has been edited.'}
         {sync ? ' Choose a turn number to show it on the call journey.' : ''}
         {spoken
           ? ' Spoken turns were transcribed automatically and may contain recognition errors.'
           : ''}
       </p>
-      <div className="rp-tools">
+      <div className="rp-tools" {...reveal} style={stagger(1)}>
         <div className="rp-find">
           <div className="rp-find__box">
             <SearchBox

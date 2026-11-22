@@ -1,6 +1,7 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
 import { cx } from '../cx.ts';
 import { Icon, type IconName } from '../icons.tsx';
+import { useSelectionSlide } from '../interaction/use-selection-slide.ts';
 import './segmented-control.css';
 
 export interface SegmentedOption<V extends string = string> {
@@ -37,6 +38,10 @@ export interface SegmentedControlProps<V extends string = string> {
  * Choose exactly one of a few options. It is a native radio group (fieldset, legend, radio inputs),
  * so arrow keys move and select, Tab enters and leaves the group, and screen readers say
  * "1 of 3". For independent on/off choices use ToggleButton or Switch instead.
+ *
+ * In the joined-segments layout the selection glides from the old option to the new one (a transform
+ * only; see `useSelectionSlide`), and an option compresses a pixel while it is pressed. Cards have the
+ * press and a quick change of fill, but no glide: they sit in a grid, not in a row.
  */
 export function SegmentedControl<V extends string = string>({
   legend,
@@ -56,6 +61,8 @@ export function SegmentedControl<V extends string = string>({
   const group = name ?? `${base}-group`;
   const hintId = `${base}-hint`;
   const cards = layout === 'cards' || (layout === 'auto' && options.some((o) => o.description));
+  const track = useRef<HTMLDivElement>(null);
+  useSelectionSlide(track, cards ? null : '[data-selected]', value);
   return (
     <fieldset
       className={cx(
@@ -76,12 +83,16 @@ export function SegmentedControl<V extends string = string>({
           {hint}
         </p>
       ) : null}
-      <div className="ff-segmented__track">
+      <div className="ff-segmented__track" ref={track}>
         {options.map((option, index) => {
           const id = `${base}-${index}`;
           const descriptionId = option.description ? `${id}-description` : undefined;
           return (
-            <div className="ff-segmented__item" key={option.value}>
+            <div
+              className="ff-segmented__item"
+              key={option.value}
+              data-selected={value === option.value ? '' : undefined}
+            >
               <input
                 id={id}
                 className="ff-segmented__input"

@@ -18,6 +18,8 @@ import { describeProblem, type ProblemContext } from './problems.ts';
 // - One spoken or typed message is one `exchange` with one client message id, so it can never become
 //   two trainee turns, and a reply is applied only to the attempt that is still waiting for it.
 // - Every waiting phase has a timer, and firing it always leads somewhere the trainee can act.
+// - Hands-free listening is never ended by quiet: the idle timer only ticks, and only about ten
+//   minutes of it pauses the call. Only speech that gave no words counts towards giving up.
 
 export const TIMINGS = {
   /** The browser's permission prompt left unanswered. */
@@ -26,7 +28,10 @@ export const TIMINGS = {
   speakPrepare: 15_000,
   /** Added to the estimated length of a voice before it is cut off. */
   speakGrace: 5_000,
-  /** Nothing heard since the microphone opened. */
+  /**
+   * Nothing heard since the microphone opened. Push to talk: the pass ends. Hands-free: one idle
+   * tick, which softly says the call is still listening (see `IDLE_PAUSE_ROUNDS`).
+   */
   listenIdle: 15_000,
   /** Someone speaking for longer than any utterance can be. */
   listenSpeech: 35_000,
@@ -46,14 +51,28 @@ export const TIMINGS = {
   end: 30_000,
 } as const;
 
-/** After this many empty listening passes in a row, hands-free listening waits for the trainee. */
+/**
+ * Hands-free listening opens the microphone again by itself after a pass in which speech was picked
+ * up but gave no words, up to this many times in a row. After the next such pass (the fourth) it
+ * waits for the trainee. Quiet, and a pass with nothing at all in it, never count.
+ */
 export const MAX_SILENT_RETRIES = 3;
+
+/**
+ * Hands-free listening is never ended by quiet. The idle timer (`TIMINGS.listenIdle`) only ticks:
+ * the first tick shows a soft hint, and after this many ticks in a row (40 x 15 s, about ten minutes
+ * of quiet) the call pauses itself, exactly as Pause does, so a microphone is not left open for
+ * ever on a call nobody is at. Speech, or the trainee pressing a control, starts the count again.
+ */
+export const IDLE_PAUSE_ROUNDS = 40;
 
 export type MicReason = 'denied' | 'missing' | 'busy' | 'unsupported';
 
 export type HintCode =
   | 'nothing-heard'
   | 'no-words'
+  | 'still-listening'
+  | 'idle-paused'
   | 'muted'
   | 'paused'
   | 'captions-only'
@@ -126,6 +145,11 @@ export interface Timer {
   readonly id: number;
   readonly kind: TimerKind;
   readonly ms: number;
+  /**
+   * Which run of a timer that repeats this is (`listen-idle` in hands-free: the idle round). A new
+   * round is a new timer, so each one gets its full time.
+   */
+  readonly round?: number;
 }
 
 export interface MachineState {
@@ -157,6 +181,13 @@ export interface MachineState {
   /** Customer turns whose voice was cut short by the trainee. */
   readonly interrupted: readonly number[];
   readonly silentRetries: number;
+  /**
+   * How many times in a row the idle timer has run out in this listening pass, with nobody speaking.
+   * In hands-free that is a quiet tick, not an empty pass: it never counts towards `silentRetries`.
+   * It starts again at zero whenever the trainee speaks, whenever a listening pass begins and when
+   * the call resumes.
+   */
+  readonly idleRounds: number;
   readonly limitReached: boolean;
   readonly sessionEnded: boolean;
   readonly ending: 'draining' | 'closing' | null;
@@ -188,6 +219,7 @@ export function initialState(options: { handsFree?: boolean } = {}): MachineStat
     lastCustomerIndex: null,
     interrupted: [],
     silentRetries: 0,
+    idleRounds: 0,
     limitReached: false,
     sessionEnded: false,
     ending: null,
@@ -377,6 +409,13 @@ const problem = (code: CallProblemCode, context: ProblemContext = {}): ProblemSt
   context,
 });
 
+/**
+ * "Still listening" is only true while the microphone is open for the trainee, so it goes as soon as
+ * the call leaves listening. Every other hint belongs to whatever put it there and is left alone.
+ */
+const withoutStillListening = (hint: Hint | null): Hint | null =>
+  hint?.code === 'still-listening' ? null : hint;
+
 /** The trainee's turn: nothing is playing or being recorded. */
 function yourTurn(state: MachineState): MachineState {
   return {
@@ -386,6 +425,7 @@ function yourTurn(state: MachineState): MachineState {
     speechDetected: false,
     heard: false,
     finishing: false,
+    hint: withoutStillListening(state.hint),
   };
 }
 
@@ -401,6 +441,7 @@ function startSpeech(state: MachineState, turnIndex: number, phase: CallPhase): 
     speechDetected: false,
     heard: false,
     finishing: false,
+    hint: withoutStillListening(state.hint),
     // A new request gets its own deadline, even when the one before it was still waiting.
     timer: null,
   };
@@ -631,6 +672,7 @@ function step(state: MachineState, event: MachineEvent): MachineState {
         heard: false,
         finishing: false,
         silentRetries: 0,
+        idleRounds: 0,
         hint: null,
       };
     }
@@ -646,7 +688,9 @@ function step(state: MachineState, event: MachineEvent): MachineState {
       const next: MachineState = {
         ...state,
         muted,
-        hint: null,
+        // A paused call keeps what it says about the pause; otherwise the mute starts afresh (and a
+        // muted hands-free call is given its guidance by `keepMutedGuidance`).
+        hint: state.paused ? state.hint : null,
         // Unmuting starts hands-free listening afresh.
         silentRetries: muted ? state.silentRetries : 0,
       };
@@ -663,7 +707,13 @@ function step(state: MachineState, event: MachineEvent): MachineState {
       if (phase === 'idle' || phase === 'requesting-microphone') return state;
       if (phase === 'ending' || phase === 'completed') return state;
       if (state.paused) {
-        const resumed: MachineState = { ...state, paused: false, hint: null, silentRetries: 0 };
+        const resumed: MachineState = {
+          ...state,
+          paused: false,
+          hint: null,
+          silentRetries: 0,
+          idleRounds: 0,
+        };
         if (
           resumed.phase === 'ready-for-next-turn' &&
           resumed.pendingSpeech !== null &&
@@ -860,8 +910,9 @@ function step(state: MachineState, event: MachineEvent): MachineState {
     }
 
     case 'speech-start':
+      // Sound ends the quiet: the soft hint goes, and the count towards pausing starts again.
       return phase === 'listening' && !state.speechDetected
-        ? { ...state, speechDetected: true, heard: true, hint: null }
+        ? { ...state, speechDetected: true, heard: true, hint: null, idleRounds: 0 }
         : state;
 
     case 'speech-end': {
@@ -899,14 +950,27 @@ function step(state: MachineState, event: MachineEvent): MachineState {
       return state.speechDetected ? { ...state, speechDetected: false } : state;
     }
 
-    case 'nothing-heard':
-      return phase === 'listening'
+    case 'nothing-heard': {
+      if (phase !== 'listening') return state;
+      if (!state.handsFree) {
+        // Push to talk: nothing came after Talk. The pass ends, with a hint and a count.
+        return yourTurn({
+          ...state,
+          silentRetries: state.silentRetries + 1,
+          hint: { code: 'nothing-heard' },
+        });
+      }
+      // Hands-free: a pass that ended with nothing is quietly opened again and costs nothing, because
+      // quiet is never a reason to stop. Only a pass in which speech was picked up but no words came
+      // counts, so a recogniser that never finds words is not retried for ever.
+      return state.heard
         ? yourTurn({
             ...state,
             silentRetries: state.silentRetries + 1,
-            hint: { code: 'nothing-heard' },
+            hint: { code: 'no-words' },
           })
-        : state;
+        : yourTurn({ ...state, hint: null });
+    }
 
     case 'transcribe-done': {
       const exchange = state.exchange;
@@ -1142,6 +1206,26 @@ function step(state: MachineState, event: MachineEvent): MachineState {
   }
 }
 
+/**
+ * Hands-free listening never gives up because it is quiet. When the idle timer runs out it only
+ * ticks: the first tick softly says the call is still listening (and the hint stays, without being
+ * said again, until the trainee speaks), and after `IDLE_PAUSE_ROUNDS` ticks in a row the call pauses
+ * itself exactly as the Pause button does and says why. Nothing is cancelled by a tick: the pass
+ * that is open stays open.
+ */
+function idleTick(state: MachineState): MachineState {
+  const rounds = state.idleRounds + 1;
+  if (rounds >= IDLE_PAUSE_ROUNDS) {
+    const paused = step({ ...state, idleRounds: 0 }, { type: 'toggle-pause' });
+    if (paused.paused) return { ...paused, hint: { code: 'idle-paused' } };
+  }
+  return {
+    ...state,
+    idleRounds: rounds,
+    hint: rounds === 1 ? { code: 'still-listening' } : state.hint,
+  };
+}
+
 function onTimeout(state: MachineState, id: number): MachineState {
   const timer = state.timer;
   if (!timer || timer.id !== id) return state;
@@ -1169,6 +1253,11 @@ function onTimeout(state: MachineState, id: number): MachineState {
       // A voice that never reports its end: hand the turn to the trainee.
       return yourTurn({ ...state, pendingSpeech: null });
     case 'listen-idle':
+      // Push to talk: nothing was said, so the pass ends and the trainee presses Talk again.
+      // Hands-free: nobody has to say anything. It is only a tick.
+      return state.handsFree
+        ? idleTick(state)
+        : step({ ...state, finishing: false }, { type: 'nothing-heard' });
     case 'finish':
       return step({ ...state, finishing: false }, { type: 'nothing-heard' });
     case 'listen-speech':
@@ -1198,6 +1287,7 @@ function onTimeout(state: MachineState, id: number): MachineState {
             speechDetected: false,
             heard: false,
             finishing: false,
+            idleRounds: 0,
           }
         : state;
     case 'drain': {
@@ -1217,7 +1307,9 @@ function onTimeout(state: MachineState, id: number): MachineState {
 // Timers
 
 /** The one timer a state needs, or null. Waiting phases always have one. */
-export function timerFor(state: MachineState): { kind: TimerKind; ms: number } | null {
+export function timerFor(
+  state: MachineState,
+): { kind: TimerKind; ms: number; round?: number } | null {
   switch (state.phase) {
     case 'idle':
     case 'completed':
@@ -1238,9 +1330,11 @@ export function timerFor(state: MachineState): { kind: TimerKind; ms: number } |
       return state.phase === 'ready' ? { kind: 'ready', ms: TIMINGS.ready } : null;
     case 'listening':
       if (state.finishing) return { kind: 'finish', ms: TIMINGS.finish };
+      // The idle timer has a round, so that when it ticks (hands-free) it is armed again for a full
+      // wait. Toggling hands-free changes nothing about it: the next tick uses the new setting.
       return state.speechDetected
         ? { kind: 'listen-speech', ms: TIMINGS.listenSpeech }
-        : { kind: 'listen-idle', ms: TIMINGS.listenIdle };
+        : { kind: 'listen-idle', ms: TIMINGS.listenIdle, round: state.idleRounds };
     case 'transcribing':
       return { kind: 'transcribe', ms: TIMINGS.transcribe };
     case 'processing':
@@ -1258,9 +1352,20 @@ function withTimer(previous: MachineState, next: MachineState): MachineState {
   const wanted = timerFor(next);
   const current = next.timer;
   if (!wanted) return current ? { ...next, timer: null } : next;
-  if (current && current.kind === wanted.kind && current.ms === wanted.ms) return next;
+  if (
+    current &&
+    current.kind === wanted.kind &&
+    current.ms === wanted.ms &&
+    current.round === wanted.round
+  ) {
+    return next;
+  }
   const id = Math.max(next.timerSeq, previous.timerSeq) + 1;
-  return { ...next, timerSeq: id, timer: { id, kind: wanted.kind, ms: wanted.ms } };
+  const armed: Timer =
+    wanted.round === undefined
+      ? { id, kind: wanted.kind, ms: wanted.ms }
+      : { id, kind: wanted.kind, ms: wanted.ms, round: wanted.round };
+  return { ...next, timerSeq: id, timer: armed };
 }
 
 /**
@@ -1279,9 +1384,38 @@ function keepRetry(state: MachineState): MachineState {
   return { ...state, problem: problem('reply-failed', { saved: exchange.saved }) };
 }
 
+/**
+ * The guidance for a muted hands-free call. It is one object, so that the announcer, which compares
+ * hints by identity, does not say it again each time it is put back.
+ */
+const MUTED_GUIDANCE: Hint = { code: 'muted' };
+
+/**
+ * A hands-free call has no Talk to press, so it would never be told "You are muted." the way a
+ * push-to-talk call is when Talk is pressed, and a muted call that says nothing looks like a broken
+ * one. Whenever a muted hands-free spoken call is under way and no other hint is showing, the
+ * guidance says so. It goes with the mute, and with the pause, the end, typing and push to talk
+ * (a call that is paused keeps its own words, such as why it paused).
+ */
+function keepMutedGuidance(state: MachineState): MachineState {
+  const wanted =
+    state.begun &&
+    state.voice &&
+    state.handsFree &&
+    state.muted &&
+    !state.paused &&
+    !state.limitReached &&
+    !state.sessionEnded &&
+    state.phase !== 'idle' &&
+    state.phase !== 'ending' &&
+    state.phase !== 'completed';
+  if (wanted) return state.hint === null ? { ...state, hint: MUTED_GUIDANCE } : state;
+  return state.hint === MUTED_GUIDANCE ? { ...state, hint: null } : state;
+}
+
 /** The next state. Never throws; returns `state` itself when the event does nothing. */
 export function reduce(state: MachineState, event: MachineEvent): MachineState {
-  const next = keepRetry(step(state, event));
+  const next = keepMutedGuidance(keepRetry(step(state, event)));
   return next === state ? state : withTimer(state, next);
 }
 

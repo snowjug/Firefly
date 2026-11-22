@@ -5,7 +5,6 @@ import {
   PROVENANCE_KEYS,
   REVIEW_STATES,
   SOURCE_CATEGORIES,
-  type ScenarioDefinition,
 } from '#shared/domain/scenario.ts';
 import { createLogger } from '../log.ts';
 import { getScenarioLibrary, loadScenarios, semanticIssues } from './index.ts';
@@ -16,7 +15,11 @@ import { provenanceLeaks, provenanceTable } from './provenance.ts';
 // printed by `npm run validate:scenarios` and by nothing a trainee, a browser or a log can see.
 
 const library = getScenarioLibrary();
-const first = library[0] as ScenarioDefinition;
+// The smallest scenario, named by its id so that adding or reordering scenarios cannot change what
+// these checks are run against (one of them names its product, Outlook).
+const exemplar = library.find((s) => s.id === 'outlook-shared-mailbox-missing');
+if (!exemplar)
+  throw new Error('The library has no "outlook-shared-mailbox-missing", which these checks need.');
 
 const record = (patch: Record<string, unknown> = {}) => ({
   authoredOn: '2026-11-21',
@@ -108,25 +111,25 @@ describe('the provenance record', () => {
   });
 
   it('is required of every scenario, and names the field when it is missing or wrong', () => {
-    const without = structuredClone(first) as unknown as Record<string, unknown>;
+    const without = structuredClone(exemplar) as unknown as Record<string, unknown>;
     delete without.grounding;
     expect(loadScenarios([without]).errors.join('\n')).toMatch(/grounding/);
-    const wrong = structuredClone(first) as unknown as { grounding: Record<string, unknown> };
+    const wrong = structuredClone(exemplar) as unknown as { grounding: Record<string, unknown> };
     wrong.grounding.review = 'finished';
     expect(loadScenarios([wrong]).errors.join('\n')).toMatch(/grounding\.review/);
   });
 
   it('must name the family of the scenario’s own product', () => {
-    const wrong = structuredClone(first);
+    const wrong = structuredClone(exemplar);
     wrong.grounding.productFamily = 'azure';
     expect(semanticIssues(wrong).join('\n')).toMatch(
       /grounding\.productFamily "azure" is not the family of outlook \("microsoft-365"\)/,
     );
-    expect(semanticIssues(first)).toEqual([]);
+    expect(semanticIssues(exemplar)).toEqual([]);
   });
 
   it('keeps web addresses, and so internal links, out of its notes', () => {
-    const linked = structuredClone(first);
+    const linked = structuredClone(exemplar);
     linked.grounding.notes = 'Read the page at https://example.test/internal/page first.';
     expect(semanticIssues(linked).join('\n')).toMatch(/a web address in grounding\.notes/);
   });
@@ -182,7 +185,7 @@ describe('keeping the record internal', () => {
     try {
       expect(loadScenarios().errors).toEqual([]);
       expect(getScenarioLibrary()).toHaveLength(library.length);
-      const wrong = structuredClone(first) as unknown as { grounding: Record<string, unknown> };
+      const wrong = structuredClone(exemplar) as unknown as { grounding: Record<string, unknown> };
       wrong.grounding.review = 'a-value-nobody-should-see';
       wrong.grounding.notes = 'x'.repeat(301);
       const { errors } = loadScenarios([wrong]);

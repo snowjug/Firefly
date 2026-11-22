@@ -8,10 +8,16 @@ import {
   type TestInfo,
 } from '@playwright/test';
 import { GOOD_CALL } from './api.ts';
+import { settled } from './page-probes.ts';
 
 // Shared helpers for the accessibility and responsive specs (a11y.spec.ts, keyboard.spec.ts,
 // responsive.spec.ts). Nothing here hard-codes a port or a path: every address is relative to the
 // base URL the Playwright config provides.
+
+// `settled(page)` waits for every finite animation and transition to end. `scan` calls it first, so
+// that a contrast scan never measures a colour in the middle of a fade; it is exported here for the
+// other specs that measure, scan or take a screenshot of something that may still be moving.
+export { settled };
 
 // ---- axe -------------------------------------------------------------------------------------
 
@@ -26,17 +32,6 @@ export interface Scan {
   wcag: AxeViolation[];
   /** Violations of best-practice rules that are not WCAG success criteria. */
   bestPractice: AxeViolation[];
-}
-
-/** Waits for every finite CSS animation and transition to end, so colours are measured at rest. */
-export async function settle(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const running = document.getAnimations().filter((animation) => {
-      const end = animation.effect?.getComputedTiming().endTime;
-      return typeof end === 'number' && Number.isFinite(end);
-    });
-    await Promise.all(running.map((animation) => animation.finished.catch(() => undefined)));
-  });
 }
 
 /**
@@ -76,7 +71,7 @@ export async function scan(
   page: Page,
   options: { include?: string; exclude?: string[] } = {},
 ): Promise<Scan> {
-  await settle(page);
+  await settled(page);
   let builder = new AxeBuilder({ page }).withTags([...WCAG_TAGS, 'best-practice']);
   if (options.include) builder = builder.include(options.include);
   for (const selector of options.exclude ?? []) builder = builder.exclude(selector);

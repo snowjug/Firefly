@@ -158,6 +158,42 @@
   }
 }
 
+/* ---- Arrival: the block settles in, top to bottom --------------------------------------------
+   Each part rises a few pixels as it fades in (the shared ff-enter) a step (--dur-stagger) after the
+   one above it, so the whole block is in place well inside a second and the first line is readable
+   at once. The signal's number counts up in the same beat (count-up.tsx, which is given the signal's
+   step: keep the two in step). Only on a screen and only where motion is allowed; the fill is
+   backwards only, so nothing is held when it ends, and a printout or a person who asked for less
+   gets the still block. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .rp-exec__top,
+  .rp-exec__titles,
+  .rp-exec__facts,
+  .rp-exec__summary > *,
+  .rp-exec__actions {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate) backwards;
+    animation-delay: calc(var(--rp-step, 0) * var(--dur-stagger));
+  }
+  .rp-exec__titles {
+    --rp-step: 1;
+  }
+  .rp-exec__facts {
+    --rp-step: 2;
+  }
+  .rp-exec__summary > * {
+    --rp-step: 3;
+  }
+  .rp-exec__summary > .rp-exec__signal {
+    --rp-step: 4;
+  }
+  .rp-exec__summary > .rp-exec__note {
+    --rp-step: 5;
+  }
+  .rp-exec__actions {
+    --rp-step: 6;
+  }
+}
+
 @media (forced-colors: active) {
   .rp-exec {
     border-color: CanvasText;

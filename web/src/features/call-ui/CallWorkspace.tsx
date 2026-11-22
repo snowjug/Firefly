@@ -8,6 +8,7 @@ import {
   briefPathFor,
   composerGate,
   customerTurnCount,
+  describeCaption,
   describeConnection,
   describeControls,
   describeCustomerState,
@@ -32,7 +33,12 @@ import { JumpLinks } from './JumpLinks.tsx';
 import { Preflight } from './Preflight.tsx';
 import { Recovery, RecoveryConfirmed, useRecoveryFeedback } from './Recovery.tsx';
 import { Transcript } from './Transcript.tsx';
-import { findControlsZone, findTalkControl, useRescueFocus } from './use-rescue-focus.ts';
+import {
+  findControlsZone,
+  findPauseControl,
+  findTalkControl,
+  useRescueFocus,
+} from './use-rescue-focus.ts';
 import {
   useLayoutMode,
   useReducedMotion,
@@ -41,6 +47,14 @@ import {
 } from './use-layout.ts';
 import { VoiceSettings } from './VoiceSettings.tsx';
 import './workspace.css';
+
+/**
+ * How long the call-ended moment lasts at least, counted from the press of End and review: long
+ * enough to read "Call ended" and its time, and short enough that it is only what is left of a beat
+ * after the real work (the call is closed on the server in a moment). It is the time of the ring's
+ * collapse in the stylesheet (`--dur-slower`) and a little over; reduced motion has none.
+ */
+const ENDED_MOMENT_MS = 800;
 
 /** The screen's own open and closed state, which a fixture or a test can start from. */
 export interface InitialUi {
@@ -73,6 +87,12 @@ export interface CallWorkspaceProps {
   /** Called with the session id once ending has finished, so the page can open the report. */
   onEnded?(sessionId: string): void;
   /**
+   * Said when ending starts (true), and again (false) if it did not work. While ending, the way to
+   * the report is `onEnded` alone, which waits for the call-ended moment to be read: a page that
+   * also opens the report when the engine says the call is over must hold back until then.
+   */
+  onEndingChange?(ending: boolean): void;
+  /**
    * Leaves a call that has nothing to report (no message was ever sent) without a report. The end
    * dialog offers it only when ending failed for that reason.
    */
@@ -88,18 +108,29 @@ export interface CallWorkspaceProps {
  * The call screen as a pure view of a call's snapshot: it draws what the snapshot says and calls the
  * actions it is given, and never touches the microphone, audio or the speech APIs itself. Which
  * screen that is follows from the snapshot: loading, an error, the pre-flight step, or the workspace
- * with the end-of-call dialog over it.
+ * with the end-of-call dialog over it. A call that is over opens the report, and in the moment
+ * between, "Opening your review" is all there is; but when End and review was pressed here the
+ * call-ended moment stays until it has been read, and then the report opens.
  */
 export function CallWorkspace(props: CallWorkspaceProps) {
-  const { snapshot, actions } = props;
+  const { snapshot, actions, onEndingChange } = props;
   const session = snapshot.session;
+  const [endingHere, setEndingHere] = useState(false);
   if (snapshot.loading && !session) return <CallSkeleton />;
   if (snapshot.loadProblem) {
     return <CallLoadError problem={snapshot.loadProblem} onRetry={() => actions.retry()} />;
   }
   if (!session) return <CallUnavailable />;
-  if (session.status !== 'active') return <OpeningReport />;
-  return <ActiveCall {...props} />;
+  if (session.status !== 'active' && !endingHere) return <OpeningReport />;
+  return (
+    <ActiveCall
+      {...props}
+      onEndingChange={(ending) => {
+        setEndingHere(ending);
+        onEndingChange?.(ending);
+      }}
+    />
+  );
 }
 
 // ---- What a screen reader hears ------------------------------------------------------------------
@@ -167,6 +198,7 @@ function Workspace({
   showInputMode = false,
   initialUi,
   onEnded,
+  onEndingChange,
   onDiscard,
   loadClosingCheck,
   stateView,
@@ -227,6 +259,8 @@ function Workspace({
   const connection = describeConnection({ online, reconnecting: feedback.reconnecting });
   const limitReached = problem?.code === 'turn-limit';
   const blocking = problem?.severity === 'blocking' ? problem : null;
+  // A failure to end the call is told inside the end dialog, never as a second card.
+  const card = problem && !isEndFailure(problem) ? problem : feedback.retrying;
   const controls = describeControls({
     phase,
     stage,
@@ -238,29 +272,73 @@ function Workspace({
     blocked: blocking !== null,
     limitReached,
     micOpen: snapshot.micOpen,
+    handsFree: snapshot.handsFree,
+    speechHeard: snapshot.speechDetected,
+    autoListening: snapshot.autoListening,
+    cardShown: card !== null,
   });
   const gate = composerGate({ phase, problem });
+  // The words under the customer, where there is room for them (a narrow screen has the transcript
+  // beside the stage, with the same words highlighted).
+  const caption = useMemo(
+    () =>
+      narrow
+        ? undefined
+        : describeCaption({
+            statusId: status.id,
+            turns: snapshot.turns,
+            interim: snapshot.interim,
+          }),
+    [narrow, status.id, snapshot.turns, snapshot.interim],
+  );
 
-  // A failure to end the call is told inside the end dialog, never as a second card.
-  const card = problem && !isEndFailure(problem) ? problem : feedback.retrying;
   // A card that appears or goes takes the control that was pressed on it: if the keyboard was on
   // something that is gone, it goes to the call's controls and not to the top of the page.
   useRescueFocus(card?.code ?? null, findControlsZone);
   // Back to voice removes the reply box that held the keyboard: it goes to the microphone control.
   useRescueFocus(snapshot.mode, findTalkControl);
+  // Pausing swaps the Pause button for Resume in the slot, and resuming swaps it back: the keyboard
+  // follows to the button that now does the opposite.
+  useRescueFocus(snapshot.paused, snapshot.paused ? findTalkControl : findPauseControl);
+  // A hands-free call's slot holds what a press is for, and each thing in it leaves once it has been
+  // used (Done speaking when the turn is sent, Stop customer audio when the voice stops): the keyboard
+  // stays with the call's controls.
+  useRescueFocus(
+    `${controls.talk.kind}:${controls.finish.visible}:${controls.stopAudio.visible}`,
+    findControlsZone,
+  );
   // The pre-flight's button is gone once the call has begun: the keyboard starts on the microphone.
   useEffect(() => {
     const active = document.activeElement;
     if (!active || active === document.body) findTalkControl()?.focus({ preventScroll: true });
   }, []);
 
+  // Pressing End and review starts the call-ended moment, which is read before the report opens: a
+  // short beat counted from the press, so it is only what is left of it after the real work (and
+  // none at all when motion is reduced). The page holds back its own way to the report until then.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const confirmEnd = async () => {
+    const started = performance.now();
+    let opened = false;
     setEndBusy(true);
+    onEndingChange?.(true);
     try {
       const result = await actions.endCall();
-      if (result) onEnded?.(result.sessionId);
+      if (result) {
+        const left = reducedMotion ? 0 : ENDED_MOMENT_MS - (performance.now() - started);
+        if (left > 0) await new Promise((resolve) => window.setTimeout(resolve, left));
+        if (alive.current) onEnded?.(result.sessionId);
+        opened = true;
+      }
     } finally {
       setEndBusy(false);
+      if (!opened) onEndingChange?.(false);
     }
   };
   const continueCall = () => {
@@ -366,6 +444,7 @@ function Workspace({
               reducedMotion={reducedMotion}
               compact={narrow}
               trace={guided ? snapshot.stateHistory : null}
+              caption={caption}
             />
           </div>
           {narrow ? null : <div className="cw-stage__zone">{zone('panel')}</div>}
@@ -448,6 +527,7 @@ function Workspace({
         ending={closing}
         progressLabel={status.label}
         busy={endBusy || closing}
+        customerName={persona.name}
         elapsedSeconds={snapshot.elapsedSeconds}
         traineeTurns={traineeTurnCount(snapshot.turns)}
         stateLabel={stateView?.label ?? null}

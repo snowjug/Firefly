@@ -1,10 +1,20 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import type { FactImportance } from '#shared/domain/vocab.ts';
-import { Badge, Disclosure, Icon, Tag, VisuallyHidden, cx } from '../../design/index.ts';
+import {
+  Badge,
+  Disclosure,
+  Icon,
+  Tag,
+  VisuallyHidden,
+  cx,
+  useReveal,
+  type RevealProps,
+} from '../../design/index.ts';
 import { IMPORTANCE_WORDS, plainUnexpectedTurn } from './copy.ts';
+import { CountUp } from './count-up.tsx';
 import { useEvidence } from './evidence.tsx';
-import { Field, InsufficientEvidence, Quote, Section, TurnQuote } from './parts.tsx';
+import { Empty, Field, InsufficientEvidence, Quote, Section, TurnQuote } from './parts.tsx';
 import { usePrinting } from './print.tsx';
 import {
   discoveryGroups,
@@ -13,6 +23,7 @@ import {
   type DiscoveryGroup,
   type FactView,
 } from './report-model.ts';
+import { stagger } from './reveal.ts';
 import './coaching.css';
 
 /** How much a fact mattered, in a shape each: Critical is the strongest, Helpful the quietest. */
@@ -74,10 +85,18 @@ function Hidden({ view }: { view: FactView }) {
 }
 
 /** A fact that was missed: why it mattered, the question worth asking and what the customer would have said. */
-function MissedFact({ view }: { view: FactView }) {
+function MissedFact({
+  view,
+  reveal,
+  place,
+}: {
+  view: FactView;
+  reveal: RevealProps;
+  place: CSSProperties;
+}) {
   const { result } = view;
   return (
-    <li className="rp-fact rp-fact--missed" data-rp-origin={result.label}>
+    <li className="rp-fact rp-fact--missed" data-rp-origin={result.label} {...reveal} style={place}>
       <div className="rp-fact__head">
         <h4 className="rp-fact__title">{result.label}</h4>
         <Importance value={result.importance} />
@@ -99,13 +118,21 @@ function MissedFact({ view }: { view: FactView }) {
  * fact found only in part goes on to the question worth asking and what was still held back. On
  * paper every row is open.
  */
-function FoundFact({ view }: { view: FactView }) {
+function FoundFact({
+  view,
+  reveal,
+  place,
+}: {
+  view: FactView;
+  reveal: RevealProps;
+  place: CSSProperties;
+}) {
   const { result, question, answer } = view;
   const [open, setOpen] = useState(false);
   const printing = usePrinting();
   const partly = result.status === 'partial';
   return (
-    <li className="rp-fact" data-rp-origin={result.label}>
+    <li className="rp-fact" data-rp-origin={result.label} {...reveal} style={place}>
       <Disclosure
         appearance="row"
         headingLevel={4}
@@ -152,20 +179,26 @@ function FoundFact({ view }: { view: FactView }) {
   );
 }
 
+/**
+ * A heading and its facts, watched as one: the rows come in one after another when the list is seen,
+ * the facts that were missed exactly as the ones that were found (the same beat, the same rise).
+ */
 function FactGroup({ group }: { group: DiscoveryGroup }) {
   const { turns } = useEvidence();
+  const [list, reveal] = useReveal<HTMLUListElement>();
   return (
     <div className="rp-group">
-      <h3 className="rp-subtitle">
+      <h3 className="rp-subtitle" {...reveal} style={stagger(2)}>
         {group.title} ({group.results.length})
       </h3>
-      <ul className="rp-facts-list" role="list">
-        {group.results.map((result) => {
+      <ul className="rp-facts-list" role="list" ref={list}>
+        {group.results.map((result, index) => {
           const view = factView(result, turns);
+          const place = stagger(index + 3);
           return result.status === 'missed' ? (
-            <MissedFact key={result.factId} view={view} />
+            <MissedFact key={result.factId} view={view} reveal={reveal} place={place} />
           ) : (
-            <FoundFact key={result.factId} view={view} />
+            <FoundFact key={result.factId} view={view} reveal={reveal} place={place} />
           );
         })}
       </ul>
@@ -173,15 +206,24 @@ function FactGroup({ group }: { group: DiscoveryGroup }) {
   );
 }
 
-/** How many of the hidden facts were found, as segments with the count beside them in words. */
+/**
+ * How many of the hidden facts were found, as segments with the count beside them in words. Each
+ * fact is a segment: found ones fill from the start edge one after another when the line is seen,
+ * and one that was missed is the empty outline that was there from the start, so what was missed is
+ * never made to look worse by the way it is drawn.
+ */
 function Ratio({ discovery }: { discovery: CoachingReport['discovery'] }) {
   const order = (['discovered', 'partial', 'missed'] as const).flatMap((status) =>
     discovery.results.filter((r) => r.status === status).map((r) => ({ id: r.factId, status })),
   );
   return (
     <span className="rp-ratio" aria-hidden="true">
-      {order.map(({ id, status }) => (
-        <span className={`rp-ratio__seg rp-ratio__seg--${status}`} key={id} />
+      {order.map(({ id, status }, index) => (
+        <span
+          className={`rp-ratio__seg rp-ratio__seg--${status}`}
+          key={id}
+          style={{ '--seg': Math.min(index, 7) } as CSSProperties}
+        />
       ))}
     </span>
   );
@@ -201,15 +243,16 @@ export function DiscoveryReview({ report }: { report: CoachingReport }) {
   const found = groups.filter((g) => g.status !== 'missed');
   const missed = groups.filter((g) => g.status === 'missed');
   const columns = [found, missed].filter((column) => column.length > 0);
+  const [total, reveal] = useReveal<HTMLParagraphElement>();
   return (
     <Section id="discovery" title="Discovery review">
       {discovery.total === 0 ? (
-        <p className="rp-empty">This scenario had no hidden facts to find.</p>
+        <Empty>This scenario had no hidden facts to find.</Empty>
       ) : (
         <>
-          <p className="rp-discovery__total">
-            <span className="rp-discovery__number">{discovery.found}</span> of {discovery.total}{' '}
-            hidden facts found
+          <p className="rp-discovery__total" ref={total} {...reveal} style={stagger(1)}>
+            <CountUp className="rp-discovery__number" text={String(discovery.found)} /> of{' '}
+            {discovery.total} hidden facts found
             <Ratio discovery={discovery} />
             <span className="rp-discovery__split">
               {discovery.found} found, {discovery.partial} partly found, {discovery.missed} missed

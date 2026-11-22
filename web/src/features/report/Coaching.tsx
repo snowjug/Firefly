@@ -1,11 +1,12 @@
 import type { CoachingReport } from '#shared/domain/report.ts';
-import { Icon } from '../../design/index.ts';
+import { Icon, useReveal } from '../../design/index.ts';
 import { BetterWording } from './BetterWording.tsx';
 import { clampWords, countWords, dimensionLabel, plainUnexpectedTurn } from './copy.ts';
 import { TurnLink, useEvidence } from './evidence.tsx';
 import { customerReplyTo } from './evidence-model.ts';
-import { ClampedText, Quote, Section, SkillTag } from './parts.tsx';
+import { ClampedText, Empty, Quote, Section, SkillTag } from './parts.tsx';
 import { withoutTrend, wordingFor } from './report-model.ts';
+import { stagger } from './reveal.ts';
 import './coaching.css';
 
 /** The most words a strength (its title and its reason) shows before "Show more". */
@@ -39,6 +40,7 @@ function Reaction({ turnIndex, quote }: { turnIndex: number | null; quote: strin
 /** What the trainee did that helped, each with the words and the turn they happened at. */
 export function Strengths({ report }: { report: CoachingReport }) {
   const { strengths } = report;
+  const [list, reveal] = useReveal<HTMLUListElement>();
   return (
     <Section
       id="strengths"
@@ -46,18 +48,20 @@ export function Strengths({ report }: { report: CoachingReport }) {
       lead={strengths.length > 0 ? 'What worked, in your own words.' : undefined}
     >
       {strengths.length === 0 ? (
-        <p className="rp-empty">
+        <Empty>
           No clear strength stood out in this call. The improvements below are the best place to
           start.
-        </p>
+        </Empty>
       ) : (
-        <ul className="rp-items" role="list">
-          {strengths.map((s) => {
+        <ul className="rp-items" role="list" ref={list}>
+          {strengths.map((s, index) => {
             const title = plainUnexpectedTurn(s.title);
             return (
               <li
                 className="rp-item rp-item--strength"
                 key={`${s.dimension}-${s.turnIndex}-${s.title}`}
+                {...reveal}
+                style={stagger(index + 2)}
               >
                 <SkillTag>
                   <Icon name="check-circle" size={16} />
@@ -112,6 +116,7 @@ function ImprovementEvidence({ item }: { item: Improvement }) {
 export function Improvements({ report }: { report: CoachingReport }) {
   const { improvements } = report;
   const { turns } = useEvidence();
+  const [list, reveal] = useReveal<HTMLUListElement>();
   return (
     <Section
       id="improvements"
@@ -119,16 +124,18 @@ export function Improvements({ report }: { report: CoachingReport }) {
       lead={improvements.length > 0 ? 'Where a different choice would have helped.' : undefined}
     >
       {improvements.length === 0 ? (
-        <p className="rp-empty">No specific improvement stood out in this call.</p>
+        <Empty>No specific improvement stood out in this call.</Empty>
       ) : (
-        <ul className="rp-items" role="list">
-          {improvements.map((item) => {
+        <ul className="rp-items" role="list" ref={list}>
+          {improvements.map((item, index) => {
             const title = plainUnexpectedTurn(item.title);
             const wording = wordingFor(item, turns);
             return (
               <li
                 className="rp-item rp-item--improvement"
                 key={`${item.dimension}-${item.turnIndex}-${item.title}`}
+                {...reveal}
+                style={stagger(index + 2)}
               >
                 <SkillTag>
                   <Icon name="flag" size={16} />

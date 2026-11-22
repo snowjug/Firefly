@@ -16,6 +16,11 @@ import { fileURLToPath } from 'node:url';
 // work in a real browser. What it does NOT prove: that anything intelligible was heard. The server's
 // mock speech provider ignores the audio and answers with a scripted sentence, so the words of a
 // spoken turn never come from this file.
+//
+// A hands-free call (the default) keeps listening until the person mutes, pauses or ends it, so with
+// this file a spoken call that nobody stops takes a turn from every burst, again and again. A journey
+// that has to hold a state still (Listening, Hearing you, Paused) uses the tone it controls itself
+// instead: `installFakeMicrophone` and `speak` in support/a11y.ts.
 
 /**
  * Where the generated file is written: under the run's output folder (`test-results`, or

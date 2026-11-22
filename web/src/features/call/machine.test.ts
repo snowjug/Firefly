@@ -3,6 +3,7 @@ import { CALL_PHASES, CALL_STAGES, type CallPhase } from './contract.ts';
 import {
   autoListens,
   checkSend,
+  IDLE_PAUSE_ROUNDS,
   initialState,
   isCurrentSend,
   isCurrentTranscription,
@@ -174,6 +175,52 @@ function violations(state: MachineState): string[] {
   bad(
     WAITING_PHASES.includes(state.phase) && state.timer === null,
     'a waiting phase with no watchdog',
+  );
+  bad(
+    (state.phase === 'idle' || state.phase === 'completed') && state.timer !== null,
+    'a timer armed in a terminal phase',
+  );
+  bad(
+    state.paused && state.phase === 'ready-for-next-turn' && state.timer !== null,
+    'a paused call waiting for the trainee with a timer that could wake it',
+  );
+  bad(
+    !Number.isInteger(state.idleRounds) ||
+      state.idleRounds < 0 ||
+      state.idleRounds >= IDLE_PAUSE_ROUNDS,
+    'idle rounds out of range',
+  );
+  bad(
+    state.hint?.code === 'still-listening' && state.phase !== 'listening',
+    'still listening said while the microphone is closed',
+  );
+  // A hands-free call has no Talk to be told on, so a muted one that is under way is never left
+  // with nothing said; and the words belong to the mute alone.
+  bad(
+    state.begun &&
+      state.voice &&
+      state.handsFree &&
+      state.muted &&
+      !state.paused &&
+      !state.limitReached &&
+      !state.sessionEnded &&
+      state.phase !== 'idle' &&
+      state.phase !== 'ending' &&
+      state.phase !== 'completed' &&
+      state.hint === null,
+    'a muted hands-free call with nothing said about it',
+  );
+  bad(state.hint?.code === 'muted' && !state.muted, 'the muted hint on a call that is not muted');
+  bad(
+    state.phase === 'listening' &&
+      !['listen-idle', 'listen-speech', 'finish'].includes(state.timer?.kind ?? ''),
+    'listening with none of its own timers',
+  );
+  bad(
+    state.timer !== null &&
+      state.timer.round !== undefined &&
+      (state.timer.kind !== 'listen-idle' || state.timer.round !== state.idleRounds),
+    'a timer round that is not the idle round',
   );
   bad(state.timer !== null && state.timer.id > state.timerSeq, 'a timer from the future');
   bad(
@@ -515,6 +562,94 @@ describe('mute and pause', () => {
     expect(muted.hint).toEqual({ code: 'discarded-muted' });
     expect(targets(muted).transcribe).toBeNull();
     expectValid(muted);
+  });
+
+  it('says that a muted hands-free call is muted, since there is no Talk to press, and stops when it is unmuted', () => {
+    const muted = reduce(listening(), { type: 'toggle-mute' });
+    expect(muted).toMatchObject({
+      muted: true,
+      phase: 'ready-for-next-turn',
+      hint: { code: 'muted' },
+    });
+    expectValid(muted);
+    // One hint object, so that it is said once and not again whenever it is put back.
+    expect(run(muted, { type: 'hint', hint: null }).hint).toBe(muted.hint);
+
+    const unmuted = reduce(muted, { type: 'toggle-mute' });
+    expect(unmuted).toMatchObject({ muted: false, hint: null });
+    expectValid(unmuted);
+
+    // Typing instead lets go of the mute with the voice.
+    expect(reduce(muted, { type: 'use-text' })).toMatchObject({ muted: false, hint: null });
+  });
+
+  it('replaces "still listening" when the call is muted', () => {
+    const ticked = fire(listening());
+    expect(ticked.hint).toEqual({ code: 'still-listening' });
+    const muted = reduce(ticked, { type: 'toggle-mute' });
+    expect(muted.hint).toEqual({ code: 'muted' });
+    expectValid(muted);
+    expect(reduce(muted, { type: 'toggle-mute' }).hint).toBeNull();
+  });
+
+  it('goes on saying it while the trainee types and the customer replies, and gives way to a hint that has more to say', () => {
+    let state = reduce(connected({ canSpeak: true }), { type: 'toggle-mute' });
+    const guidance = state.hint;
+    expect(guidance).toEqual({ code: 'muted' });
+    state = reduce(state, { type: 'send-text', id: 't1', text: 'hi', createdAt: 'now' });
+    expect(state).toMatchObject({ phase: 'processing', muted: true });
+    expect(state.hint).toBe(guidance);
+
+    state = reduce(state, {
+      type: 'send-done',
+      id: 't1',
+      attempt: 1,
+      customerIndex: 3,
+      turnsRemaining: 9,
+      redactions: ['email'],
+    });
+    expect(state.hint).toMatchObject({ code: 'redacted' });
+    expectValid(state);
+    // When that is put away, the mute is what the call has to say again.
+    expect(reduce(state, { type: 'hint', hint: null }).hint).toBe(guidance);
+
+    // A sentence that was lost to the mute says so, and then the mute.
+    const discarded = reduce(atPhase('transcribing'), { type: 'toggle-mute' });
+    expect(discarded.hint).toEqual({ code: 'discarded-muted' });
+    expect(reduce(discarded, { type: 'hint', hint: null }).hint).toEqual({ code: 'muted' });
+  });
+
+  it('lets a call that paused itself go on saying why, even when it is muted, and says it is muted again on resume', () => {
+    let quiet = listening();
+    for (let tick = 1; tick <= IDLE_PAUSE_ROUNDS; tick++) quiet = fire(quiet);
+    expect(quiet).toMatchObject({ paused: true, hint: { code: 'idle-paused' } });
+
+    // Muting or unmuting a paused call is not said over the pause's own words.
+    const muted = reduce(quiet, { type: 'toggle-mute' });
+    expect(muted).toMatchObject({ muted: true, paused: true, hint: { code: 'idle-paused' } });
+    expect(reduce(muted, { type: 'toggle-mute' }).hint).toEqual({ code: 'idle-paused' });
+    expectValid(muted);
+
+    // Pausing a muted call says nothing about the mute, which is still true after Resume.
+    const pausedByHand = reduce(reduce(listening(), { type: 'toggle-mute' }), {
+      type: 'toggle-pause',
+    });
+    expect(pausedByHand).toMatchObject({ paused: true, muted: true, hint: null });
+    const resumed = reduce(pausedByHand, { type: 'toggle-pause' });
+    expect(resumed).toMatchObject({ paused: false, muted: true, hint: { code: 'muted' } });
+    expectValid(resumed);
+  });
+
+  it('follows the hands-free setting while muted: said when it is on, nothing when it is off until Talk is pressed', () => {
+    const pushToTalk = run(connected(), { type: 'set-hands-free', on: false });
+    const muted = reduce(pushToTalk, { type: 'toggle-mute' });
+    expect(muted).toMatchObject({ muted: true, hint: null });
+    expect(reduce(muted, { type: 'talk' }).hint).toEqual({ code: 'muted' });
+
+    const handsFree = reduce(muted, { type: 'set-hands-free', on: true });
+    expect(handsFree.hint).toEqual({ code: 'muted' });
+    expect(reduce(handsFree, { type: 'set-hands-free', on: false }).hint).toBeNull();
+    expectValid(handsFree);
   });
 
   it('releases the microphone and halts the voice when paused, and gets them back on resume', () => {
@@ -862,17 +997,169 @@ describe('the customer audio', () => {
 });
 
 describe('listening that hears nothing', () => {
-  it('says so and, hands-free, tries again a bounded number of times before waiting for the trainee', () => {
+  it('hands-free listening is never ended by quiet: the idle timer only ticks, and the first tick says it is still listening', () => {
     let state = listening();
-    for (let attempt = 1; attempt <= MAX_SILENT_RETRIES; attempt++) {
-      state = fire(state); // nothing heard for 15 s
-      expect(state.phase).toBe('ready-for-next-turn');
-      expect(state.hint).toEqual({ code: 'nothing-heard' });
+    expect(state.timer).toMatchObject({ kind: 'listen-idle', ms: TIMINGS.listenIdle, round: 0 });
+    state = fire(state);
+    expect(state).toMatchObject({
+      phase: 'listening',
+      idleRounds: 1,
+      silentRetries: 0,
+      hint: { code: 'still-listening' },
+    });
+    // The pass that is open stays open, and the timer starts again for a full wait.
+    expect(targets(state).capture).toBe('listen');
+    expect(state.timer).toMatchObject({ kind: 'listen-idle', ms: TIMINGS.listenIdle, round: 1 });
+    const hint = state.hint;
+    for (let tick = 2; tick < IDLE_PAUSE_ROUNDS; tick++) {
+      state = fire(state);
+      expect(state).toMatchObject({ phase: 'listening', silentRetries: 0, idleRounds: tick });
+      // The same hint, not a new one: it is said once and left alone.
+      expect(state.hint).toBe(hint);
+    }
+    expectValid(state);
+  });
+
+  it('pauses the call by itself at the 40th tick, about ten minutes of quiet, exactly as Pause does, and not before', () => {
+    expect(IDLE_PAUSE_ROUNDS * TIMINGS.listenIdle).toBe(10 * 60_000);
+    let state = listening();
+    for (let tick = 1; tick < IDLE_PAUSE_ROUNDS; tick++) {
+      state = fire(state);
+      expect(state.paused).toBe(false);
+    }
+    const byHand = reduce(state, { type: 'toggle-pause' });
+    const byQuiet = fire(state);
+    expect(byQuiet).toMatchObject({
+      paused: true,
+      phase: 'ready-for-next-turn',
+      micHeld: false,
+      idleRounds: 0,
+      silentRetries: 0,
+      hint: { code: 'idle-paused' },
+    });
+    // The same world as the button gives: no microphone, no listening, no timer to wake it.
+    expect({ ...targets(byQuiet), timer: null }).toEqual({ ...targets(byHand), timer: null });
+    expect(byQuiet.timer).toBeNull();
+    expect(stageOf(byQuiet)).toBe('paused');
+    expect(autoListens(byQuiet)).toBe(false);
+    expectValid(byQuiet);
+  });
+
+  it('listens again when the call is resumed after pausing itself, with the microphone asked for again', () => {
+    let state = listening();
+    for (let tick = 1; tick <= IDLE_PAUSE_ROUNDS; tick++) state = fire(state);
+    expect(state.paused).toBe(true);
+
+    const resumed = reduce(state, { type: 'toggle-pause' });
+    expect(resumed).toMatchObject({ paused: false, hint: null, idleRounds: 0, silentRetries: 0 });
+    expect(targets(resumed).microphone).toBe(true);
+    const back = fire(reduce(resumed, { type: 'permission-granted' }));
+    expect(back).toMatchObject({ phase: 'listening', idleRounds: 0 });
+    expect(targets(back)).toMatchObject({ capture: 'listen', microphone: true });
+    // And it begins counting the quiet afresh.
+    expect(fire(back).idleRounds).toBe(1);
+  });
+
+  it('says "still listening" only while the microphone is open: Replay closes it, and the words go with it', () => {
+    const ticked = fire(listening({ canSpeak: true }));
+    expect(ticked.hint).toEqual({ code: 'still-listening' });
+
+    const replayed = reduce(ticked, { type: 'replay' });
+    expect(replayed).toMatchObject({ phase: 'customer-speaking', hint: null });
+    expect(targets(replayed).capture).toBe('off');
+    expectValid(replayed);
+
+    // Nothing brings it back by itself: not the customer being cut off, not the microphone opening.
+    const cutOff = reduce(replayed, { type: 'interrupt' });
+    expect(cutOff).toMatchObject({ phase: 'ready-for-next-turn', hint: null });
+    const reopened = fire(cutOff);
+    expect(reopened).toMatchObject({ phase: 'listening', hint: null });
+    // A fresh spell of quiet says it afresh, which is the first tick of a new pass.
+    expect(fire(reopened).hint).toEqual({ code: 'still-listening' });
+  });
+
+  it('keeps other hints when the microphone closes, and the pause the quiet brings keeps its own', () => {
+    // Muting says that the call is muted (a hands-free call has no Talk to press to be told), and
+    // pausing and typing say nothing; the 40th tick leaves its explanation.
+    const ticked = fire(listening({ canSpeak: true }));
+    expect(reduce(ticked, { type: 'toggle-mute' })).toMatchObject({
+      muted: true,
+      hint: { code: 'muted' },
+    });
+    expect(reduce(ticked, { type: 'toggle-pause' })).toMatchObject({ paused: true, hint: null });
+    expect(reduce(ticked, { type: 'use-text' }).hint).toBeNull();
+
+    let quiet = listening();
+    for (let tick = 1; tick < IDLE_PAUSE_ROUNDS; tick++) quiet = fire(quiet);
+    expect(quiet.hint).toEqual({ code: 'still-listening' });
+    const paused = fire(quiet);
+    expect(paused).toMatchObject({ paused: true, hint: { code: 'idle-paused' } });
+    expectValid(paused);
+
+    // A hint that belongs to something else is not the quiet's to take away.
+    const waiting = run(
+      connected({ canSpeak: true }),
+      { type: 'hint', hint: { code: 'long-turn' } },
+      { type: 'replay' },
+    );
+    expect(waiting.hint).toEqual({ code: 'long-turn' });
+  });
+
+  it('counts only unbroken quiet: speech starts the count again, and so does every new listening pass', () => {
+    let state = listening();
+    for (let tick = 1; tick < IDLE_PAUSE_ROUNDS; tick++) state = fire(state);
+    // One tick from pausing, a cough: heard, then dropped as not a turn.
+    state = run(state, { type: 'speech-start' }, { type: 'speech-dropped' });
+    expect(state).toMatchObject({ phase: 'listening', idleRounds: 0, hint: null });
+    for (let tick = 1; tick < IDLE_PAUSE_ROUNDS; tick++) {
+      state = fire(state);
+      expect(state.paused).toBe(false);
+    }
+    expect(fire(state).paused).toBe(true);
+
+    // A pass that ends and begins again counts from zero too.
+    const ticked = fire(fire(listening()));
+    expect(ticked.idleRounds).toBe(2);
+    const next = fire(run(ticked, { type: 'stop-talking' }, { type: 'nothing-heard' }));
+    expect(next).toMatchObject({ phase: 'listening', idleRounds: 0 });
+  });
+
+  it('a hands-free pass that ends with nothing at all is opened again quietly, and never counts', () => {
+    let state = listening();
+    for (let pass = 1; pass <= MAX_SILENT_RETRIES * 3; pass++) {
+      state = run(state, { type: 'stop-talking' }, { type: 'nothing-heard' });
+      expect(state).toMatchObject({ phase: 'ready-for-next-turn', silentRetries: 0, hint: null });
       expect(state.timer?.kind).toBe('settle');
       state = fire(state);
       expect(state.phase).toBe('listening');
     }
-    state = fire(state);
+    expect(autoListens(run(state, { type: 'stop-talking' }, { type: 'nothing-heard' }))).toBe(true);
+  });
+
+  it('a pass in which speech was picked up but no words came counts, and after the limit hands-free waits for Talk', () => {
+    let state = listening();
+    for (let attempt = 1; attempt <= MAX_SILENT_RETRIES; attempt++) {
+      state = run(
+        state,
+        { type: 'speech-start' },
+        { type: 'stop-talking' },
+        { type: 'speech-dropped' },
+      );
+      expect(state).toMatchObject({
+        phase: 'ready-for-next-turn',
+        silentRetries: attempt,
+        hint: { code: 'no-words' },
+      });
+      expect(state.timer?.kind).toBe('settle');
+      state = fire(state);
+      expect(state.phase).toBe('listening');
+    }
+    state = run(
+      state,
+      { type: 'speech-start' },
+      { type: 'stop-talking' },
+      { type: 'nothing-heard' },
+    );
     expect(state.silentRetries).toBe(MAX_SILENT_RETRIES + 1);
     expect(state.phase).toBe('ready-for-next-turn');
     expect(state.timer).toBeNull();
@@ -885,10 +1172,50 @@ describe('listening that hears nothing', () => {
     });
   });
 
+  it('push to talk is as it always was: quiet ends the pass with a hint and a count, and nothing opens it again', () => {
+    let state = run(connected(), { type: 'set-hands-free', on: false }, { type: 'talk' });
+    expect(state.timer).toMatchObject({ kind: 'listen-idle', ms: TIMINGS.listenIdle });
+    state = fire(state);
+    expect(state).toMatchObject({
+      phase: 'ready-for-next-turn',
+      silentRetries: 1,
+      idleRounds: 0,
+      hint: { code: 'nothing-heard' },
+    });
+    expect(state.timer).toBeNull();
+    expect(autoListens(state)).toBe(false);
+    // Each press of Talk is a fresh pass with a fresh count.
+    expect(reduce(state, { type: 'talk' })).toMatchObject({ phase: 'listening', silentRetries: 0 });
+  });
+
+  it('uses the new setting at the next tick when hands-free is switched in the middle of a pass', () => {
+    // On, then off after some quiet: the next tick ends the pass the push-to-talk way.
+    const ticked = fire(fire(listening()));
+    const off = reduce(ticked, { type: 'set-hands-free', on: false });
+    expect(off.phase).toBe('listening');
+    expect(off.timer).toBe(ticked.timer);
+    expect(fire(off)).toMatchObject({
+      phase: 'ready-for-next-turn',
+      silentRetries: 1,
+      hint: { code: 'nothing-heard' },
+    });
+
+    // Off, then on: the next tick is a soft one, and the call carries on listening.
+    const talking = run(connected(), { type: 'set-hands-free', on: false }, { type: 'talk' });
+    const on = reduce(talking, { type: 'set-hands-free', on: true });
+    expect(on.timer).toBe(talking.timer);
+    expect(fire(on)).toMatchObject({
+      phase: 'listening',
+      idleRounds: 1,
+      hint: { code: 'still-listening' },
+    });
+  });
+
   it('ignores a click or cough (speech dropped) without leaving the listening phase', () => {
     const state = run(listening(), { type: 'speech-start' }, { type: 'speech-dropped' });
     expect(state.phase).toBe('listening');
     expect(state.speechDetected).toBe(false);
+    expect(state.silentRetries).toBe(0);
   });
 
   it('finishing with nothing said just closes the microphone', () => {
@@ -901,7 +1228,15 @@ describe('listening that hears nothing', () => {
   it('a microphone that never answers a finish request is given up on', () => {
     const state = run(listening(), { type: 'stop-talking' });
     expect(state.timer).toMatchObject({ kind: 'finish', ms: TIMINGS.finish });
-    expect(fire(state).hint).toEqual({ code: 'nothing-heard' });
+    // Hands-free reopens quietly; push to talk says so, as it always did.
+    expect(fire(state)).toMatchObject({ phase: 'ready-for-next-turn', hint: null });
+    const byHand = run(
+      connected(),
+      { type: 'set-hands-free', on: false },
+      { type: 'talk' },
+      { type: 'stop-talking' },
+    );
+    expect(fire(byHand).hint).toEqual({ code: 'nothing-heard' });
   });
 
   it('forces an utterance that runs on far too long to finish', () => {
@@ -1817,10 +2152,11 @@ describe('random event sequences', () => {
       for (let i = 0; i < LENGTH; i++) {
         state = reduce(state, randomEvent(random, state, counter));
         if (i % 3 !== 0) continue;
-        // From here, with no more events, only time passes.
+        // From here, with no more events, only time passes. Hands-free listening ticks up to forty
+        // times (about ten minutes of quiet) before it pauses the call, so the allowance is larger.
         let waiting = state;
         let firings = 0;
-        while (waiting.timer && firings < 24) {
+        while (waiting.timer && firings < IDLE_PAUSE_ROUNDS + 24) {
           waiting = reduce(waiting, { type: 'timeout', id: waiting.timer.id });
           const problems = violations(waiting);
           if (problems.length > 0) {
@@ -1839,5 +2175,174 @@ describe('random event sequences', () => {
         }
       }
     }
+  }, 60_000);
+});
+
+describe('quiet, in random sequences', () => {
+  const SEQUENCES = 300;
+  const LENGTH = 120;
+
+  const tickOnce = (state: MachineState) =>
+    reduce(state, { type: 'timeout', id: state.timer?.id ?? -1 });
+
+  /** A listening pass in which nobody has spoken and the idle timer is the one running. */
+  const isQuietListening = (state: MachineState) =>
+    state.phase === 'listening' && state.timer?.kind === 'listen-idle';
+
+  /**
+   * The walk's next step: random, except that time often passes when only the short settle before
+   * the microphone opens is waiting, and push to talk is often asked to talk, so that the walks
+   * spend a good part of their time in a listening pass.
+   */
+  function stepOf(random: () => number, state: MachineState, counter: { n: number }): MachineEvent {
+    if (state.timer?.kind === 'settle' && random() < 0.6) {
+      return { type: 'timeout', id: state.timer.id };
+    }
+    if (!state.handsFree && state.phase === 'ready-for-next-turn' && random() < 0.3) {
+      return { type: 'talk' };
+    }
+    return randomEvent(random, state, counter);
+  }
+
+  it('hands-free listening only ticks in the quiet: nothing but the 40th tick, and no other path, pauses the call', () => {
+    let spells = 0;
+    let pausedByQuiet = 0;
+    for (let seed = 1; seed <= SEQUENCES; seed++) {
+      const random = mulberry32(seed * 31);
+      const counter = { n: 0 };
+      let state = connected({ canSpeak: random() < 0.5 });
+      for (let i = 0; i < LENGTH; i++) {
+        const event = stepOf(random, state, counter);
+        const next = reduce(state, event);
+        // The call pauses itself only for quiet: the 40th tick in a row of a hands-free pass.
+        if (next.hint?.code === 'idle-paused' && next.hint !== state.hint) {
+          expect({ type: event.type, kind: state.timer?.kind, rounds: state.idleRounds }).toEqual({
+            type: 'timeout',
+            kind: 'listen-idle',
+            rounds: IDLE_PAUSE_ROUNDS - 1,
+          });
+          expect(state.handsFree).toBe(true);
+          expect(next.paused).toBe(true);
+        }
+        state = next;
+        if (!isQuietListening(state) || !state.handsFree || random() > 0.5) continue;
+
+        // A long quiet spell from here: ticks only. The pass stays open, nothing is counted against
+        // the trainee, and the call pauses at the 40th tick of the run of them.
+        spells++;
+        const before = state;
+        const remaining = IDLE_PAUSE_ROUNDS - before.idleRounds;
+        let quiet = before;
+        for (let tick = 1; tick < remaining; tick++) {
+          quiet = tickOnce(quiet);
+          const where = `seed ${seed}, step ${i}, tick ${tick}`;
+          expect(quiet.phase, where).toBe('listening');
+          expect(quiet.paused, where).toBe(false);
+          expect(quiet.silentRetries, where).toBe(before.silentRetries);
+          expect(targets(quiet).capture, where).toBe('listen');
+          expect(violations(quiet), where).toEqual([]);
+        }
+        const paused = tickOnce(quiet);
+        expect(paused, `seed ${seed}, step ${i}`).toMatchObject({
+          paused: true,
+          phase: 'ready-for-next-turn',
+          idleRounds: 0,
+          hint: { code: 'idle-paused' },
+        });
+        expect(violations(paused)).toEqual([]);
+        pausedByQuiet++;
+
+        // Resume listens again: the microphone is asked for, and then the pass opens by itself.
+        if (paused.problem === null) {
+          const resumed = reduce(paused, { type: 'toggle-pause' });
+          expect(resumed.paused).toBe(false);
+          const back = reduce(resumed, { type: 'permission-granted' });
+          expect(autoListens(back)).toBe(true);
+          expect(tickOnce(back).phase).toBe('listening');
+        }
+        // And the walk goes on from the paused call, so every control is tried against it too.
+        state = paused;
+      }
+    }
+    expect(spells).toBeGreaterThan(40);
+    expect(pausedByQuiet).toBe(spells);
+  }, 60_000);
+
+  it('push to talk keeps its old rule: quiet ends the pass with a hint and a count, and is never a tick', () => {
+    let checked = 0;
+    for (let seed = 1; seed <= SEQUENCES; seed++) {
+      const random = mulberry32(seed * 57);
+      const counter = { n: 0 };
+      let state = reduce(connected(), { type: 'set-hands-free', on: false });
+      for (let i = 0; i < LENGTH; i++) {
+        state = reduce(state, stepOf(random, state, counter));
+        if (!isQuietListening(state) || state.handsFree) continue;
+        checked++;
+        const ended = tickOnce(state);
+        expect(ended).toMatchObject({
+          phase: 'ready-for-next-turn',
+          silentRetries: state.silentRetries + 1,
+          idleRounds: state.idleRounds,
+          hint: { code: 'nothing-heard' },
+        });
+        expect(ended.timer).toBeNull();
+        expect(violations(ended)).toEqual([]);
+      }
+    }
+    expect(checked).toBeGreaterThan(20);
+  }, 60_000);
+
+  it('a hands-free switch in the middle of a pass is safe: the timer is left alone and the next tick follows the new setting', () => {
+    let checked = 0;
+    for (let seed = 1; seed <= SEQUENCES; seed++) {
+      const random = mulberry32(seed * 91);
+      const counter = { n: 0 };
+      let state = reduce(connected(), { type: 'set-hands-free', on: random() < 0.5 });
+      for (let i = 0; i < LENGTH; i++) {
+        state = reduce(state, stepOf(random, state, counter));
+        if (!isQuietListening(state)) continue;
+        checked++;
+        for (const on of [true, false]) {
+          const where = `seed ${seed}, step ${i}, hands-free ${on}`;
+          const switched = reduce(state, { type: 'set-hands-free', on });
+          expect(violations(switched), where).toEqual([]);
+          expect(switched.phase, where).toBe('listening');
+          expect(switched.timer?.id, where).toBe(state.timer?.id);
+          const ticked = tickOnce(switched);
+          expect(violations(ticked), where).toEqual([]);
+          if (on) {
+            expect(ticked.phase, where).toBe(
+              switched.idleRounds + 1 >= IDLE_PAUSE_ROUNDS ? 'ready-for-next-turn' : 'listening',
+            );
+            expect(ticked.silentRetries, where).toBe(switched.silentRetries);
+          } else {
+            expect(ticked.phase, where).toBe('ready-for-next-turn');
+            expect(ticked.silentRetries, where).toBe(switched.silentRetries + 1);
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(50);
+  }, 60_000);
+
+  it('never says "still listening" while the microphone is closed, whatever is done once the quiet has been noticed', () => {
+    let noticed = 0;
+    for (let seed = 1; seed <= SEQUENCES; seed++) {
+      const random = mulberry32(seed * 977);
+      const counter = { n: 0 };
+      let state = connected({ canSpeak: random() < 0.7 });
+      for (let i = 0; i < LENGTH; i++) {
+        // The quiet is often noticed, so that what is done next is done with the hint on the screen.
+        const event: MachineEvent =
+          isQuietListening(state) && random() < 0.4
+            ? { type: 'timeout', id: state.timer?.id ?? -1 }
+            : stepOf(random, state, counter);
+        state = reduce(state, event);
+        // One of the invariants is that the hint is only ever there while the call is listening.
+        expect(violations(state), `seed ${seed}, step ${i}, ${event.type}`).toEqual([]);
+        if (state.hint?.code === 'still-listening') noticed++;
+      }
+    }
+    expect(noticed).toBeGreaterThan(200);
   }, 60_000);
 });

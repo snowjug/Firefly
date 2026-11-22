@@ -188,8 +188,21 @@ export interface CallSnapshot {
   microphone: MicrophoneState;
   muted: boolean;
   paused: boolean;
-  /** Hands-free: the microphone reopens by itself after each customer reply. Otherwise push to talk. */
+  /**
+   * Hands-free: the microphone reopens by itself after each customer reply and stays open, however
+   * quiet it is, until the trainee mutes, pauses or ends the call (or about ten minutes of quiet
+   * pause the call). Otherwise push to talk.
+   */
   handsFree: boolean;
+  /**
+   * Hands-free is on and listening will carry on by itself: a spoken call, hands-free switched on,
+   * and the limit on empty recognitions in a row not reached (`MAX_SILENT_RETRIES`: a fourth one
+   * stops it). False in push to talk, in a typed call, and once that limit is reached, when only
+   * Talk opens the microphone again. It says nothing about the phase, a problem, mute or pause: the
+   * screen combines it with `stage`, `problem`, `muted` and `paused` as it needs to. Absent in
+   * snapshots made by code that predates it, which is read as false.
+   */
+  autoListening?: boolean;
   /**
    * The customer's voice: `on`, switched off for this call ("Continue without audio", replies are
    * captions), or `none` when this browser and server cannot speak at all.
@@ -225,7 +238,11 @@ export interface CallSnapshot {
   stateHistory: CallStatePoint[];
 
   problem: CallProblem | null;
-  /** Soft guidance that is not an error, such as "Nothing was heard." */
+  /**
+   * Soft guidance that is not an error, such as "Still listening. Speak when you are ready." A muted
+   * hands-free call always has "You are muted." here when nothing else is being said, because it has
+   * no Talk button to press to be told.
+   */
   hint: string | null;
   /** Seconds since the call started, counted from the server's start time. */
   elapsedSeconds: number;

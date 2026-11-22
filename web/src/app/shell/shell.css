@@ -1,4 +1,5 @@
-/* The shell: the main landmark, the offline notice and the loading screen. */
+/* The shell: the main landmark, the offline notice, the loading screen, the entrance of a routed page
+   and the progress line. */
 
 .ff-main {
   flex: 1 0 auto;
@@ -14,6 +15,28 @@
   place-items: center;
   min-block-size: 100vh;
   min-block-size: 100dvh;
+}
+/* The first page's code is on its way: nothing for the first moments, so a page that loads quickly is
+   never preceded by a flash of spinner, and then a calm fade. A screen reader hears it at once. */
+.ff-main--centred .ff-spinner {
+  animation: ff-fade var(--dur-slow) var(--ease-easy) var(--dur-fast) backwards;
+}
+
+/* A page that arrives by navigation (RouteStage sets data-enter) rises a little and fades in, once.
+   The page it replaces is already gone, so the two are never on screen together. Only while motion is
+   allowed. (A page that arrives inside a view transition, which crossfades the page itself, is not
+   given data-enter at all: a rule here that stood down for it would start the entrance when the
+   transition ended.) */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .ff-route[data-enter] {
+    animation: ff-route-in var(--dur-slow) var(--ease-decelerate);
+  }
+}
+@keyframes ff-route-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-sm));
+  }
 }
 
 /* A section reached by a link in the page, focused so the next thing read is its heading. */
@@ -32,14 +55,18 @@
   }
 }
 
+/* A line across the top while the next page is on its way: 2px, drawn only if the wait is long enough
+   to notice (Shell.tsx), fading in so it is calm rather than a flash. It is a state indicator, so it
+   keeps moving until the page arrives; transform only. */
 .ff-progress-line {
   position: fixed;
   inset-block-start: 0;
   inset-inline: 0;
   z-index: calc(var(--z-header) + 1);
-  block-size: 0.1875rem;
+  block-size: 0.125rem;
   overflow: hidden;
   pointer-events: none;
+  animation: ff-fade var(--dur-normal) var(--ease-easy);
 }
 .ff-progress-line__bar {
   block-size: 100%;

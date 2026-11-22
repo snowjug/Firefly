@@ -81,7 +81,7 @@ export function VoiceSettings({
       <div className="cw-settings">
         <Switch
           label="Hands-free"
-          description="Opens the microphone after each reply."
+          description="Keep listening between turns. Turn off to press Talk for each answer."
           checked={handsFree}
           onChange={(event) => actions.setHandsFree(event.currentTarget.checked)}
         />

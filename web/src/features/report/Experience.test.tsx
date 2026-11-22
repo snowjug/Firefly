@@ -10,7 +10,14 @@ import { CALLS, withReport, type CallName } from './fixtures.ts';
 import { EvidenceProvider, HIGHLIGHT_MS } from './evidence.tsx';
 import { evidenceTurns } from './evidence-model.ts';
 import { journeyListItems } from './journey-model.ts';
-import { must, renderAtReport, scriptedClient, stubScroll } from './test-utils.tsx';
+import {
+  FakeIntersectionObserver,
+  must,
+  renderAtReport,
+  scriptedClient,
+  stubIntersectionObserver,
+  stubScroll,
+} from './test-utils.tsx';
 
 // The customer's experience: the temperature chart (a drawing with real controls), the important
 // points as rows with the customer's own words, the unexpected turn, and the table that stands in
@@ -276,6 +283,170 @@ describe('the chart', () => {
     expect(
       within(screen.getByRole('group', { name: /Customer temperature/ })).getAllByRole('button'),
     ).toHaveLength(3);
+  });
+});
+
+describe('how the chart moves', () => {
+  /** Where a point stands, from the transform it is drawn with: `translate(x y)`. */
+  const placeOf = (element: Element): [number, number] => {
+    const [, x, y] =
+      /translate\(([\d.]+) ([\d.]+)\)/.exec(element.getAttribute('transform') ?? '') ?? [];
+    return [Number(x), Number(y)];
+  };
+  /** Where the ring stands, from its own style: `translate(xpx, ypx)`. */
+  const ringAt = (ring: Element): [number, number] => {
+    const [, x, y] =
+      /translate\(([\d.]+)px, ([\d.]+)px\)/.exec(ring.getAttribute('style') ?? '') ?? [];
+    return [Number(x), Number(y)];
+  };
+  const expectAt = (ring: Element, point: Element) => {
+    const [x, y] = ringAt(ring);
+    const [px, py] = placeOf(point);
+    expect(x).toBeCloseTo(px, 2);
+    expect(y).toBeCloseTo(py, 2);
+  };
+  const cursor = async () => (await chart()).querySelector('.rp-chart__cursor') as SVGCircleElement;
+
+  it('keeps its line covered until it is first seen, and then draws it once', async () => {
+    const observer = stubIntersectionObserver();
+    try {
+      show('strong');
+      const root = (await chart()).closest('.rp-chart') as HTMLElement;
+      expect(root).toHaveAttribute('data-draw', 'wait');
+      act(() => {
+        FakeIntersectionObserver.watching(root)[0]?.reportElement(root, true);
+      });
+      expect(root).toHaveAttribute('data-draw', 'go');
+    } finally {
+      observer.restore();
+    }
+  });
+
+  it('is drawn at once where nothing can tell when it is in view', async () => {
+    show('strong');
+    expect((await chart()).closest('.rp-chart')).toHaveAttribute('data-draw', 'go');
+  });
+
+  it('uncovers the line with a clip rectangle that spans the plot, and adds nothing to what the chart says', async () => {
+    show('strong');
+    const drawn = await chart();
+    const line = drawn.querySelector('.rp-chart__line') as SVGPathElement;
+    const id = /^url\(#(.+)\)$/.exec(line.getAttribute('clip-path') ?? '')?.[1];
+    expect(id).toBeTruthy();
+    const clip = drawn.querySelector(`clipPath[id="${id}"]`) as Element;
+    const rect = clip.querySelector('rect.rp-chart__reveal') as Element;
+    expect(Number(rect.getAttribute('width'))).toBeGreaterThan(100);
+    // Nothing in the clip is text, and the chart still has the name and the words it had.
+    expect(clip.textContent).toBe('');
+    expect(drawn).toHaveAccessibleName(/started Frustrated and ended Calm/);
+    expect(drawn).toHaveAccessibleName(/listed below the chart/);
+  });
+
+  it('puts each marker a place along the line, from none to all of it, so it comes in as the line reaches it', async () => {
+    show('strong');
+    const drawn = await chart();
+    const along = [...drawn.querySelectorAll<SVGGElement>('.rp-chart__point')].map((point) =>
+      Number(point.style.getPropertyValue('--t')),
+    );
+    expect(along[0]).toBe(0);
+    expect(along.at(-1)).toBe(1);
+    expect(along).toEqual([...along].sort((a, b) => a - b));
+  });
+
+  it('gives each turning point one soft ring, and no other point', async () => {
+    show('strong');
+    const drawn = await chart();
+    const turning = CALLS.strong.report.journey.points.filter((p) => p.kind === 'turning-point');
+    expect(turning.length).toBeGreaterThan(0);
+    expect(drawn.querySelectorAll('.rp-chart__pulse')).toHaveLength(turning.length);
+    for (const ring of drawn.querySelectorAll('.rp-chart__pulse')) {
+      expect(ring.closest('.rp-chart__point')).not.toBeNull();
+    }
+  });
+
+  it('moves one ring to the point that was chosen, glides it to the next, and lets it go where it is', async () => {
+    const user = userEvent.setup();
+    show('strong');
+    const buttons = await points();
+    const ring = await cursor();
+    expect(ring).not.toHaveAttribute('data-on');
+
+    await user.click(buttons[1] as HTMLElement);
+    expect(ring).toHaveAttribute('data-on');
+    expectAt(ring, buttons[1] as Element);
+    // The first choice appears where it is: there was nothing to glide from.
+    expect(ring).not.toHaveAttribute('data-glides');
+
+    await user.click(buttons[3] as HTMLElement);
+    expectAt(ring, buttons[3] as Element);
+    expect(ring).toHaveAttribute('data-glides');
+
+    await user.click(buttons[3] as HTMLElement);
+    expect(ring).not.toHaveAttribute('data-on');
+    expectAt(ring, buttons[3] as Element);
+    expect(ring).not.toHaveAttribute('data-glides');
+
+    await user.click(buttons[5] as HTMLElement);
+    expect(ring).toHaveAttribute('data-on');
+    expect(ring).not.toHaveAttribute('data-glides');
+    // One ring for the whole chart.
+    expect((await chart()).querySelectorAll('.rp-chart__cursor')).toHaveLength(1);
+  });
+
+  it('shows each point that is chosen on a card of its own, and a changed reading as a new line', async () => {
+    const user = userEvent.setup();
+    show('strong');
+    const buttons = await points();
+    const before = await readout();
+    await focus(buttons[1]);
+    expect(await readout()).not.toBe(before);
+
+    await user.click(buttons[1] as HTMLElement);
+    const first = section().querySelector('.rp-journey__panel');
+    await user.click(buttons[3] as HTMLElement);
+    const second = section().querySelector('.rp-journey__panel');
+    expect(first).not.toBeNull();
+    expect(second).not.toBe(first);
+  });
+
+  it('never makes the card under the chart shorter than the tallest one shown, until it is closed', async () => {
+    const user = userEvent.setup();
+    // jsdom has no layout: each card is as tall as this says, in the order they come, and at least
+    // as tall as the height it was told to keep.
+    const natural = [300, 180, 400];
+    const heights = new WeakMap<HTMLElement, number>();
+    const height = vi
+      .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        if (!this.classList.contains('rp-journey__panel')) return 0;
+        if (!heights.has(this)) heights.set(this, natural.shift() ?? 0);
+        const kept = Number.parseFloat(this.style.getPropertyValue('--held'));
+        return Math.max(heights.get(this) ?? 0, Number.isNaN(kept) ? 0 : kept);
+      });
+    try {
+      show('strong');
+      const buttons = await points();
+      const held = () =>
+        (section().querySelector('.rp-journey__panel') as HTMLElement).style.getPropertyValue(
+          '--held',
+        );
+
+      await user.click(buttons[1] as HTMLElement);
+      expect(held(), 'the first card is as tall as it is').toBe('');
+      await user.click(buttons[3] as HTMLElement);
+      expect(held(), 'the next keeps the height of the one before').toBe('300px');
+      await user.click(buttons[5] as HTMLElement);
+      expect(held(), 'a shorter card does not make the page shorter').toBe('300px');
+      await user.click(buttons[1] as HTMLElement);
+      expect(held(), 'a taller card has made it taller, and the next ones keep that').toBe('400px');
+
+      await user.click(buttons[1] as HTMLElement);
+      expect(section().querySelector('.rp-journey__panel')).toBeNull();
+      await user.click(buttons[3] as HTMLElement);
+      expect(held(), 'closing the card lets go of the height').toBe('');
+    } finally {
+      height.mockRestore();
+    }
   });
 });
 

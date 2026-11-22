@@ -228,7 +228,12 @@ test.describe('a spoken call', () => {
       await expectNoOverflow(page, `a spoken call at ${width}`);
       await expectNothingCut(page, `a spoken call at ${width}`);
       await expectReachable(page, 'End call', 44);
-      await expectReachable(page, /^(Talk|Done speaking|Return to voice)$/, 44);
+      // Nothing is pressed to be heard, so the first row is empty until there is speech to end.
+      await speak(page, true);
+      await expectStatus(page, 'speech-detected');
+      await expectReachable(page, 'Done speaking', width < 640 ? 44 : 24);
+      await expectNoOverflow(page, `a spoken call, hearing you, at ${width}`);
+      await expectNothingCut(page, `a spoken call, hearing you, at ${width}`);
       for (const name of ['Mute', 'Pause', 'Replay', 'Text', 'Settings']) {
         // On a phone every one of them is a full 44 px target, the quiet ones too.
         await expectReachable(page, name, width < 640 ? 44 : 24);

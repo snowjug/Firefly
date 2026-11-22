@@ -1,14 +1,16 @@
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
   type RefObject,
 } from 'react';
 import type { CoachingReport } from '#shared/domain/report.ts';
-import { CUSTOMER_STATE_ICONS, Icon, cx } from '../../design/index.ts';
+import { CUSTOMER_STATE_ICONS, Icon, cx, mergeRefs, useInViewOnce } from '../../design/index.ts';
 import { bandIdFor, CHART_FOOTNOTE, plainUnexpectedTurn } from './copy.ts';
 import { useEvidence } from './evidence.tsx';
 import {
@@ -28,6 +30,12 @@ import './journey-chart.css';
 // stop for the whole chart, the arrow keys move between points, and Enter (or a click or a tap)
 // shows that moment: the exact turn, in the panel under the chart. The list and the table under it
 // carry the same information in words, with a link on every row, so nothing depends on the chart.
+//
+// It moves, a little, and once: the first time it is seen the line is uncovered from the start to the
+// end (a clip rectangle that grows from the left, with transform only) and the markers come in as
+// the line reaches them, each turning point with one soft ring. The point that was chosen has a ring
+// that glides to the next one chosen. None of that is in the page's text, none of it is there under
+// reduced motion or on paper, and nothing repeats.
 
 type Journey = CoachingReport['journey'];
 
@@ -62,6 +70,9 @@ export default function JourneyChart({
   onChoose(point: ChartPoint, from: SVGGElement): void;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const [seenRef, seen] = useInViewOnce<HTMLDivElement>();
+  const boxRef = useMemo(() => mergeRefs(box, seenRef), [seenRef]);
+  const clip = `rp-chart-clip-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const nodes = useRef(new Map<number, SVGGElement>());
   const width = useWidth(box);
   const narrow = width < 520;
@@ -88,6 +99,32 @@ export default function JourneyChart({
   const first = geometry.points[0];
   const last = geometry.points[geometry.points.length - 1];
   const hit = 13;
+  // How far along the line a point is (0 to 1): the markers come in as the line reaches them.
+  const reach = first && last && last.x > first.x ? last.x - first.x : 0;
+  const along = (x: number): CSSProperties =>
+    ({ '--t': reach > 0 && first ? ((x - first.x) / reach).toFixed(3) : '0' }) as CSSProperties;
+
+  // The ring on the point that is open under the chart. It stays where it was when the point is let
+  // go (and fades there), and glides from one chosen point to the next, but only when a point was
+  // chosen before and the turn has changed: a resize moves it without gliding.
+  const chosen =
+    chosenTurn === null ? undefined : stops.find((point) => point.turnIndex === chosenTurn);
+  const [ring, setRing] = useState<{ turn: number | null; x: number; y: number; glides: boolean }>({
+    turn: null,
+    x: 0,
+    y: 0,
+    glides: false,
+  });
+  if (chosen && (ring.x !== chosen.x || ring.y !== chosen.y || ring.turn !== chosenTurn)) {
+    setRing({
+      turn: chosenTurn,
+      x: chosen.x,
+      y: chosen.y,
+      glides: ring.turn !== null && ring.turn !== chosenTurn,
+    });
+  } else if (!chosen && ring.turn !== null) {
+    setRing({ ...ring, turn: null, glides: false });
+  }
   // "Start" and "End" are written beside their markers; a label above would leave the chart at the top.
   const labelY = (y: number) => (y - plot.top < 20 ? y + 22 : y - 12);
 
@@ -130,8 +167,10 @@ export default function JourneyChart({
   };
 
   return (
-    <div className="rp-chart" ref={box}>
-      <p className="rp-chart__readout">{readout}</p>
+    <div className="rp-chart" ref={boxRef} data-draw={seen ? 'go' : 'wait'}>
+      <p className="rp-chart__readout" key={readout}>
+        {readout}
+      </p>
       <svg
         className="rp-chart__svg"
         width={width}
@@ -218,7 +257,26 @@ export default function JourneyChart({
           </text>
         </g>
 
-        <path className="rp-chart__line" d={geometry.path} />
+        <defs>
+          <clipPath id={clip}>
+            <rect
+              className="rp-chart__reveal"
+              x={plot.left}
+              y={0}
+              width={plot.right - plot.left}
+              height={height}
+            />
+          </clipPath>
+        </defs>
+        <path className="rp-chart__line" d={geometry.path} clipPath={`url(#${clip})`} />
+        <circle
+          className="rp-chart__cursor"
+          r={hit}
+          style={{ transform: `translate(${ring.x}px, ${ring.y}px)` }}
+          data-on={chosen ? '' : undefined}
+          data-glides={ring.glides ? '' : undefined}
+          aria-hidden="true"
+        />
         {geometry.points.map((point) => {
           const band = bandIdFor(point.band) ?? 'calm';
           const marker = (
@@ -226,6 +284,9 @@ export default function JourneyChart({
               <MarkerShape kind={point.kind} />
             </g>
           );
+          // One soft ring for a turning point, as the line passes it.
+          const pulse =
+            point.kind === 'turning-point' ? <circle className="rp-chart__pulse" r={8} /> : null;
           const place = `translate(${point.x} ${point.y})`;
           if (!stops.includes(point)) {
             return (
@@ -233,8 +294,10 @@ export default function JourneyChart({
                 key={`${point.turnIndex}-${point.kind}`}
                 className="rp-chart__point rp-chart__point--static"
                 transform={place}
+                style={along(point.x)}
                 aria-hidden="true"
               >
+                {pulse}
                 {marker}
               </g>
             );
@@ -252,6 +315,7 @@ export default function JourneyChart({
                 chosenTurn === point.turnIndex && 'rp-chart__point--chosen',
               )}
               transform={place}
+              style={along(point.x)}
               role="button"
               tabIndex={point.index === tabStop ? 0 : -1}
               aria-pressed={chosenTurn === point.turnIndex}
@@ -268,17 +332,30 @@ export default function JourneyChart({
             >
               <circle className="rp-chart__hit" r={hit} />
               <circle className="rp-chart__ring" r={hit} />
+              {pulse}
               {marker}
             </g>
           );
         })}
         {first ? (
-          <text className="rp-chart__note" x={first.x} y={labelY(first.y)} textAnchor="middle">
+          <text
+            className="rp-chart__note"
+            x={first.x}
+            y={labelY(first.y)}
+            textAnchor="middle"
+            style={along(first.x)}
+          >
             Start
           </text>
         ) : null}
         {last && last !== first ? (
-          <text className="rp-chart__note" x={last.x} y={labelY(last.y)} textAnchor="middle">
+          <text
+            className="rp-chart__note"
+            x={last.x}
+            y={labelY(last.y)}
+            textAnchor="middle"
+            style={along(last.x)}
+          >
             End
           </text>
         ) : null}

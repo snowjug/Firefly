@@ -22,8 +22,15 @@ export type SpeechEndReason = 'silence' | 'limit' | 'stopped';
 /**
  * What one listening pass tells the call engine. The order is always: (optionally) listening, speech
  * starts, speech ends, then either the audio (server speech) or the text (browser recognition). A pass
- * that hears nothing usable ends with `onNothing`; one that cannot continue ends with `onFailure`.
- * After either of those, or after `cancel`, nothing more is reported.
+ * that is finished by hand with nothing usable heard ends with `onNothing`; one that cannot continue
+ * ends with `onFailure`. After either of those, after the audio or text, or after `cancel`, nothing
+ * more is reported.
+ *
+ * A pass is a whole turn, and it never ends because it was quiet: it stays open, however long that
+ * is, until the trainee has spoken and been quiet for `endpointSilenceMs`, presses Done speaking
+ * (`finish`), or the engine cancels it. A sound that turns out not to be a turn (a cough, a click,
+ * "hmm") is `onSpeechDropped`, and the pass listens on. The browser's own recogniser may end and
+ * restart its sessions inside one pass; none of that is reported.
  *
  * Together these carry every step the call screen shows while the trainee speaks: `onListening`
  * (the microphone is open and recording), `onSpeechStart` (speech detected), `onSpeechEnd` (processing
@@ -40,14 +47,18 @@ export interface CaptureHandlers {
   onSpeechStart(): void;
   /** The trainee stopped speaking; what they said is being turned into text. */
   onSpeechEnd(info: { reason: SpeechEndReason }): void;
-  /** A burst too short or too quiet to be speech was ignored; listening carries on. */
+  /** A burst too short or too quiet to be speech, or sound with no usable words, was ignored; listening carries on. */
   onSpeechDropped(): void;
   /**
    * Listening was refused because the customer's voice is playing (or has only just stopped). Nothing
    * was recorded and the microphone was not opened. Only a capture wrapped by `guardCapture` says this.
    */
   onBlocked?(reason: 'customer-speaking'): void;
-  /** The words so far, while the trainee is still speaking (browser recognition only). */
+  /**
+   * The words so far, while the trainee is still speaking (browser recognition only): everything of
+   * the turn in progress, so a caption reads as one sentence. An empty string clears the caption,
+   * after what was heard turned out not to be a turn.
+   */
   onInterim(text: string): void;
   /** Server speech: the finished utterance as a 16 kHz mono WAV. Held in memory only. */
   onAudio(audio: Blob, info: { durationMs: number }): void;
@@ -58,7 +69,12 @@ export interface CaptureHandlers {
 }
 
 export interface CaptureSession {
-  /** Ends the utterance now instead of waiting for silence. */
+  /**
+   * Ends the utterance now instead of waiting for silence ("Done speaking"). With words heard, they
+   * are delivered; with none, the pass ends with `onNothing`. The server's capture answers at once.
+   * The browser's recognition asks its session to stop and answers when the session has handed back
+   * the words it had caught (or after a short wait), so the answer may follow by a moment.
+   */
   finish(): void;
   /** Stops listening and throws away anything heard. Nothing is reported afterwards. */
   cancel(): void;

@@ -169,6 +169,8 @@ describe('hintText', () => {
   const CODES: Record<HintCode, true> = {
     'nothing-heard': true,
     'no-words': true,
+    'still-listening': true,
+    'idle-paused': true,
     muted: true,
     paused: true,
     'captions-only': true,

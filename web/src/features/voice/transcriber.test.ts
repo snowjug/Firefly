@@ -236,6 +236,16 @@ describe('a recording with no words in it', () => {
       expect(transcriber.holds('m')).toBe(false);
     }
   });
+
+  it('returns a number said alone as the words: speech services write spoken numbers as digits, and a digit is a word', async () => {
+    for (const text of ['5', '4729', 'A1']) {
+      const { transcriber } = setup(async () => heard(text));
+      expect(await transcriber.run('m', recording(), 'en-GB')).toMatchObject({
+        kind: 'transcript',
+        text,
+      });
+    }
+  });
 });
 
 describe('giving up and leaving', () => {

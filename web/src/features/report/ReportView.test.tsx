@@ -14,7 +14,6 @@ import {
   renderAtReport,
   scriptedClient,
   stubIntersectionObserver,
-  stubMatchMedia,
   stubScroll,
   type FakeClient,
 } from './test-utils.tsx';
@@ -371,29 +370,64 @@ describe('the scores', () => {
     expect(new Set(names).size).toBe(6);
   });
 
-  it('brings the rows in when the section first scrolls into view, and has them there at once under reduced motion', () => {
+  it('brings the six rows in one after another when the list first scrolls into view, and fills the bars then', () => {
     const observer = stubIntersectionObserver();
     try {
       show('strong');
       const matrix = region('Scores').querySelector('.rp-skills') as HTMLElement;
-      expect(matrix).not.toHaveAttribute('data-revealed');
+      const rows = [...matrix.querySelectorAll<HTMLElement>('li.rp-skill')];
+      expect(rows).toHaveLength(6);
+      for (const row of rows) {
+        expect(row).toHaveAttribute('data-reveal');
+        expect(row).not.toHaveAttribute('data-revealed');
+      }
+      // Each row stands a step behind the one above it, after the heading and the line under it.
+      expect(rows.map((row) => row.style.getPropertyValue('--reveal-i'))).toEqual([
+        '2',
+        '3',
+        '4',
+        '5',
+        '6',
+        '7',
+      ]);
+      expect(matrix.querySelector('.ff-scorebar--animate')).toBeNull();
+      // One watcher for the list, not one for each row.
       const [watcher] = FakeIntersectionObserver.watching(matrix);
+      expect(rows.some((row) => FakeIntersectionObserver.watching(row).length > 0)).toBe(false);
       act(() => {
         watcher?.reportElement(matrix, true);
       });
-      expect(matrix).toHaveAttribute('data-revealed');
+      for (const row of rows) expect(row).toHaveAttribute('data-revealed');
+      expect(matrix.querySelectorAll('.ff-scorebar--animate')).toHaveLength(6);
     } finally {
       observer.restore();
     }
-    cleanup();
-    const media = stubMatchMedia((query) => query.includes('prefers-reduced-motion: reduce'));
-    const reduced = stubIntersectionObserver();
-    try {
-      show('strong');
-      expect(region('Scores').querySelector('.rp-skills')).toHaveAttribute('data-revealed');
-    } finally {
-      media();
-      reduced.restore();
+  });
+
+  it('leaves nothing waiting when the browser cannot say what is in view', () => {
+    show('strong');
+    for (const row of region('Scores').querySelectorAll('li.rp-skill')) {
+      expect(row).toHaveAttribute('data-revealed');
+    }
+  });
+
+  it('fills each bar to the length of its own score, from the start edge, and no further', () => {
+    show('weak');
+    for (const d of CALLS.weak.report.dimensions) {
+      const fills = [
+        ...row(DIMENSIONS[d.id].label).querySelectorAll<HTMLElement>('.ff-scorebar__fill'),
+      ];
+      expect(fills).toHaveLength(5);
+      // A segment is full at translateX(0%), empty at translateX(-100%), and part full in between:
+      // never beyond full, and never a spring.
+      const shown = fills.map((fill) => {
+        const moved = /translateX\((-?[\d.]+)%\)/.exec(fill.style.transform)?.[1];
+        return Math.round(100 + Number(moved)) / 100;
+      });
+      expect(shown).toEqual(
+        shown.map((_, index) => Math.round(Math.min(1, Math.max(0, d.score - index)) * 100) / 100),
+      );
+      for (const part of shown) expect(part).toBeLessThanOrEqual(1);
     }
   });
 });

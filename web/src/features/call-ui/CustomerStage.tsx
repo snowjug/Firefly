@@ -1,6 +1,5 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import {
-  Avatar,
   CUSTOMER_STATE_ICONS,
   cx,
   Icon,
@@ -9,8 +8,15 @@ import {
   VisuallyHidden,
 } from '../../design/index.ts';
 import type { CallStatePoint } from '../call/contract.ts';
-import type { CallStatus, CustomerStateView } from './call-model.ts';
+import {
+  describePresence,
+  type CallStatus,
+  type Caption,
+  type CustomerStateView,
+} from './call-model.ts';
+import { Captions } from './Captions.tsx';
 import { Crossfade } from './Crossfade.tsx';
+import { Presence } from './Presence.tsx';
 import { StateTrace } from './StateTrace.tsx';
 import { Waveform } from './Waveform.tsx';
 import './stage.css';
@@ -37,13 +43,27 @@ export interface CustomerStageProps {
    * (null) everywhere but guided practice; a narrow screen has no room for it.
    */
   trace?: readonly CallStatePoint[] | null;
+  /**
+   * What the caption strip says now, or null between turns. Left out where there is no strip (a
+   * narrow screen, where the transcript is beside it and shows the same words).
+   */
+  caption?: Caption | null;
+}
+
+/** How many times a value has changed since the screen first drew it: 0 until it does. */
+function useChanges(value: string): number {
+  const [seen, setSeen] = useState({ value, changes: 0 });
+  if (seen.value !== value) setSeen({ value, changes: seen.changes + 1 });
+  return seen.changes;
 }
 
 /**
- * The customer and the call as it is now: synthetic initials (never a photograph), their name,
- * role and organisation, how they feel, the status in words and the waveform. The status label
- * changes in place and is not a live region: the call's announcer says each change once. How they
- * feel crossfades when it changes, and shows no number.
+ * The customer and the call as it is now: synthetic initials (never a photograph) in a ring that
+ * shows what the call is doing, their name, role and organisation, how they feel, the status in
+ * words, the waveform and, where there is room, live captions. The ring and the captions are drawn
+ * for the eye and say nothing to assistive technology: the status label is the words for every
+ * state. It changes in place and is not a live region: the call's announcer says each change once.
+ * How they feel crossfades when it changes, with one soft pulse round it, and shows no number.
  */
 export const CustomerStage = memo(function CustomerStage({
   name,
@@ -59,18 +79,23 @@ export const CustomerStage = memo(function CustomerStage({
   reducedMotion,
   compact,
   trace = null,
+  caption,
 }: CustomerStageProps) {
   const level =
     status.wave === 'trainee' ? micLevel : status.wave === 'customer' ? customerLevel : 0;
+  const presence = describePresence(status.id);
+  const moodChanges = useChanges(state?.tone ?? '');
   return (
     <div className={cx('cw-person', compact && 'cw-person--compact')}>
       <div className="cw-person__card">
-        <Avatar
+        <Presence
           name={name}
-          size={compact ? 'md' : 'xl'}
+          mode={presence}
+          level={level}
+          measured={presence === 'speaking' ? customerLevelMeasured : true}
           speaking={speaking}
-          voice="customer"
-          className="cw-person__avatar"
+          size={compact ? 'md' : 'xl'}
+          reducedMotion={reducedMotion}
         />
         <div className="cw-person__id">
           <p className="cw-person__name">{name}</p>
@@ -83,13 +108,19 @@ export const CustomerStage = memo(function CustomerStage({
         <Tag size="small">Synthetic customer</Tag>
         {state ? (
           <span className="cw-mood" data-tone={state.tone} role="group" aria-label="Customer state">
-            <Crossfade id={`${state.tone}:${state.label}`}>
-              <StatusBadge
-                label={state.label}
-                tone={state.tone}
-                icon={CUSTOMER_STATE_ICONS[state.tone]}
-              />
-            </Crossfade>
+            <span className="cw-mood__chip">
+              {/* One soft pulse round the state when it changes, and never when it stays the same. */}
+              {moodChanges > 0 ? (
+                <span key={moodChanges} className="cw-mood__cue" aria-hidden="true" />
+              ) : null}
+              <Crossfade id={`${state.tone}:${state.label}`}>
+                <StatusBadge
+                  label={state.label}
+                  tone={state.tone}
+                  icon={CUSTOMER_STATE_ICONS[state.tone]}
+                />
+              </Crossfade>
+            </span>
             <span className="cw-mood__trend">
               <Icon name={state.trendIcon} size={16} />
               <span>
@@ -130,6 +161,7 @@ export const CustomerStage = memo(function CustomerStage({
           label={status.wave === 'thinking' ? (status.signal ?? undefined) : status.label}
         />
       </div>
+      {caption === undefined ? null : <Captions caption={caption} customerName={name} />}
     </div>
   );
 });

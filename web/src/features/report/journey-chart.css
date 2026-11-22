@@ -161,17 +161,106 @@
 .rp-chart__point--on .rp-chart__marker {
   transform: scale(1.25);
 }
-/* The point whose turn is open under the chart keeps its ring and its size. */
-.rp-chart__point--chosen .rp-chart__ring {
-  stroke: var(--brand-stroke);
-  stroke-width: 2;
-  opacity: 1;
-}
+/* The point whose turn is open under the chart keeps its size, and the ring round it is the
+   chart's one cursor (below), which glides from the point chosen before. */
 .rp-chart__point--chosen .rp-chart__marker {
   transform: scale(1.25);
 }
-.rp-chart__point--chosen:focus-visible .rp-chart__ring {
-  stroke: var(--focus-outer);
+.rp-chart__cursor {
+  fill: none;
+  stroke: var(--brand-stroke);
+  stroke-width: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-faster) var(--ease-easy);
+}
+.rp-chart__cursor[data-on] {
+  opacity: 1;
+}
+.rp-chart__cursor[data-glides] {
+  transition:
+    transform var(--dur-normal) var(--ease-decelerate),
+    opacity var(--dur-faster) var(--ease-easy);
+}
+
+/* One soft ring round a turning point as the line passes it: invisible at rest, so there is nothing
+   of it on paper or for a person who asked for less. */
+.rp-chart__pulse {
+  fill: none;
+  stroke: var(--brand-stroke);
+  stroke-width: 2;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  pointer-events: none;
+}
+/* The line is shown by uncovering it: a clip rectangle that grows from the left edge of the plot. */
+.rp-chart__reveal {
+  transform-box: fill-box;
+  transform-origin: 0 50%;
+}
+
+/* ---- It moves once, on a screen, where motion is allowed, and only transform and opacity --------
+   The first time the chart is seen (data-draw goes from wait to go) the line is uncovered from its
+   start to its end and the markers come in as it reaches them: --t, 0 to 1, is how far along the line
+   each one stands, and the line takes --dur-slower, so a marker is there as the line gets to it. A
+   turning point gets one ring, once. Before the chart is seen the markers wait, and the line is
+   covered; nothing is held when it ends. A changed reading fades in from a little below full. -------- */
+@keyframes rp-chart-draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes rp-chart-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes rp-chart-pulse {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  30% {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+@keyframes rp-chart-readout {
+  from {
+    opacity: 0.35;
+  }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  .rp-chart[data-draw='wait'] .rp-chart__reveal {
+    transform: scaleX(0);
+  }
+  .rp-chart[data-draw='wait'] .rp-chart__marker,
+  .rp-chart[data-draw='wait'] .rp-chart__note {
+    opacity: 0;
+  }
+  .rp-chart[data-draw='go'] .rp-chart__reveal {
+    animation: rp-chart-draw var(--dur-slower) linear backwards;
+  }
+  .rp-chart[data-draw='go'] .rp-chart__marker {
+    animation: rp-chart-in var(--dur-normal) var(--ease-decelerate)
+      calc(var(--t, 0) * var(--dur-slower)) backwards;
+  }
+  .rp-chart[data-draw='go'] .rp-chart__note {
+    animation: ff-fade var(--dur-normal) var(--ease-easy) calc(var(--t, 0) * var(--dur-slower))
+      backwards;
+  }
+  .rp-chart[data-draw='go'] .rp-chart__pulse {
+    animation: rp-chart-pulse var(--dur-slower) var(--ease-decelerate)
+      calc(var(--t, 0) * var(--dur-slower)) backwards;
+  }
+  .rp-chart__readout {
+    animation: rp-chart-readout var(--dur-fast) var(--ease-easy) backwards;
+  }
 }
 
 .rp-legend {
@@ -228,7 +317,9 @@
     stroke: CanvasText;
   }
   .rp-chart__ring,
-  .rp-chart__point--on:not(:focus-visible) .rp-chart__ring {
+  .rp-chart__point--on:not(:focus-visible) .rp-chart__ring,
+  .rp-chart__cursor,
+  .rp-chart__pulse {
     stroke: Highlight;
   }
   .rp-chart__marker,
@@ -277,7 +368,9 @@
   .rp-chart__line {
     stroke: CanvasText;
   }
-  .rp-chart__ring {
+  .rp-chart__ring,
+  .rp-chart__cursor,
+  .rp-chart__pulse {
     display: none;
   }
   .rp-chart {

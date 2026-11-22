@@ -16,15 +16,28 @@
 .scn-detail__side {
   display: contents;
 }
-/* The details fade in when another scenario is chosen. */
-.scn-detail__head,
-.scn-facts,
-.scn-setup {
-  animation: scn-fade var(--motion-component) var(--ease-decelerate) both;
+/* The details come in when another scenario is chosen: the header, the facts and the setup each fade in
+   and rise a few pixels, a beat apart, where they stand (nothing else moves). They start faint, not at
+   nothing: on the first visit they are the largest thing on the page, and a browser does not count text
+   at nothing as painted until its fade has ended. They are not held once they have arrived. Only on a
+   screen with motion allowed: with less motion, and on paper, they are simply there. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .scn-detail__head,
+  .scn-facts,
+  .scn-setup {
+    animation: scn-fade var(--motion-component) var(--ease-decelerate) backwards;
+  }
+  .scn-facts {
+    animation-delay: var(--dur-stagger);
+  }
+  .scn-setup {
+    animation-delay: calc(var(--dur-stagger) * 2);
+  }
 }
 @keyframes scn-fade {
   from {
-    opacity: 0;
+    opacity: 0.4;
+    transform: translateY(var(--move-xs));
   }
 }
 /* A value that changes (a mood, a level, a sentence) fades in, so a change is seen, not jumped to. */
@@ -232,6 +245,13 @@
   padding: var(--sp-4);
   border-radius: var(--r-xl);
   background: var(--bg-quiet);
+}
+/* Quiet stand-ins and the empty state arrive a moment late, so a quick load never flashes them. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  .scn-detail--quiet {
+    animation: ff-fade var(--dur-normal) var(--ease-easy) backwards;
+    animation-delay: var(--dur-fast);
+  }
 }
 .scn-detail--empty {
   align-items: center;

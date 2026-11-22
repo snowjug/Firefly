@@ -62,6 +62,8 @@ describe('mute', () => {
     h.do(() => h.actions().toggleMute());
     expect(h.snap()).toMatchObject({ muted: true, phase: 'ready-for-next-turn', micLevel: 0 });
     expect(h.snap().announcement?.text).toBe('Your microphone is muted.');
+    // A hands-free call has no Talk to press, so the screen is told what to say without it.
+    expect(h.snap().hint).toBe('You are muted.');
     expect(h.env.audio.listeningWorklets()).toHaveLength(0);
     // The track is switched off but held, so the browser's recording indicator stays on.
     expect(h.env.mic.tracks.every((track) => !track.enabled)).toBe(true);
@@ -77,6 +79,7 @@ describe('mute', () => {
 
     h.do(() => h.actions().toggleMute());
     expect(h.snap().announcement?.text).toBe('Microphone on.');
+    expect(h.snap().hint).toBeNull();
     expect(h.env.mic.tracks.every((track) => track.enabled)).toBe(true);
     await advance(400);
     expect(phase()).toBe('listening');

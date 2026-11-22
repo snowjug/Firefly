@@ -9,6 +9,7 @@ import {
   PRODUCT_FAMILY_LABELS,
 } from '#shared/domain/vocab.ts';
 import { api } from '../../lib/api.ts';
+import { stubIntersection, watching } from '../landing/test-utils.ts';
 import { CONTRIBUTORS_URL, ISSUES_URL, REPOSITORY_URL } from './links.ts';
 import { mockConfig, renderPublicPage, visibleText, visibleWords } from './test-support.tsx';
 
@@ -19,6 +20,36 @@ describe('the About page', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('brings each section in as it scrolls into view, once, and always shows the page’s own heading', async () => {
+    stubIntersection();
+    await renderPublicPage('/about');
+    const title = screen.getByRole('heading', { level: 1 });
+    // The heading and its line are the first thing on the page: nothing waits for them.
+    expect(title.closest('[data-reveal]')).toBeNull();
+
+    const sections = ['What it is', 'Coaching', 'Status', 'More'].map((name) =>
+      screen.getByRole('region', { name }),
+    );
+    for (const section of sections) {
+      expect(section).toHaveAttribute('data-reveal');
+      expect(section).not.toHaveAttribute('data-revealed');
+    }
+    watching(sections[2] as HTMLElement)?.report(true);
+    expect(sections[2]).toHaveAttribute('data-revealed');
+    // Only the section that was seen: the others wait for their turn, and a seen one is seen for good.
+    expect(sections[3]).not.toHaveAttribute('data-revealed');
+    expect(watching(sections[2] as HTMLElement)).toBeUndefined();
+  });
+
+  it('shows every section at once where the browser cannot say what is in view', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    await renderPublicPage('/about');
+    for (const name of ['What it is', 'Coaching', 'Status', 'More']) {
+      expect(screen.getByRole('region', { name })).toHaveAttribute('data-revealed');
+    }
   });
 
   it('names itself, leads with one short line and sets the document title', async () => {

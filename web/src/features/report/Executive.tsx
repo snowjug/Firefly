@@ -16,6 +16,7 @@ import {
 import { formatDateTime, formatDuration } from '../../lib/format.ts';
 import { SCENARIO_LIST } from './brief-href.ts';
 import { STAGE_WORDS, bandOf, plainUnexpectedTurn, scoreText } from './copy.ts';
+import { CountUp } from './count-up.tsx';
 import { jumpToSection } from './dom.ts';
 import { SectionLink } from './evidence.tsx';
 import { ClampedText } from './parts.tsx';
@@ -24,6 +25,9 @@ import './summary.css';
 
 /** The most words the summary shows before "Show more". */
 export const SUMMARY_WORDS = 45;
+
+/** Where the signal line stands in the block's arrival (`--rp-step` in summary.css): its number counts up as the line comes in. */
+const SIGNAL_STEP = 4;
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -126,8 +130,13 @@ export function ExecutiveSummary({
         />
         {overallScore !== null ? (
           <p className="rp-exec__signal">
-            Practice signal <span className="rp-exec__number">{scoreText(overallScore)}</span> of 5,
-            the average of six skills.
+            Practice signal{' '}
+            <CountUp
+              className="rp-exec__number"
+              text={scoreText(overallScore)}
+              step={SIGNAL_STEP}
+            />{' '}
+            of 5, the average of six skills.
           </p>
         ) : says.noScore ? null : (
           <p className="rp-exec__signal">No overall practice signal: not enough evidence.</p>

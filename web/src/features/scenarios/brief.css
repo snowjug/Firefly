@@ -386,11 +386,20 @@ ul.brf-details {
   display: flex;
   flex: 1 1 10rem;
   align-items: center;
-  gap: var(--sp-2);
+  /* Two lines of room, whatever the line says, so a longer one never pushes the buttons below it. */
+  min-block-size: calc(var(--lh-compact) * 2);
   min-inline-size: 0;
   color: var(--fg-1);
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
+}
+.brf-ready__message {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+  /* A new line (an icon and its words) fades in where the old one was. */
+  animation: ff-fade var(--dur-normal) var(--ease-easy) backwards;
 }
 .brf-ready__status .ff-icon {
   flex: none;
@@ -503,6 +512,7 @@ ul.brf-details {
 
 @media print {
   .brf-row,
+  .brf-ready__message,
   .brf-wave > span {
     animation: none;
   }

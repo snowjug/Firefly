@@ -131,6 +131,10 @@ export class FireflyApi {
     return scenarios;
   }
 
+  /**
+   * Starts a call. A rate limit is waited out, never failed on: a test that visits every scenario in
+   * turn starts more calls than one profile may start in a burst (twenty), and the library grows.
+   */
   async createCall(options: CreateCallOptions = {}): Promise<SessionDTO> {
     const data: CreateSessionRequest = {
       scenarioId: options.scenarioId ?? DEFAULT_SCENARIO,
@@ -139,11 +143,15 @@ export class FireflyApi {
       ...(options.timeOfDay ? { timeOfDay: options.timeOfDay } : {}),
       ...(options.clientRequestId ? { clientRequestId: options.clientRequestId } : {}),
     };
-    const { session } = await bodyOf<{ session: SessionDTO }>(
-      await this.request.post('/api/sessions', { data }),
-      '/api/sessions',
-    );
-    return session;
+    for (let attempt = 0; ; attempt++) {
+      const response = await this.request.post('/api/sessions', { data });
+      if (response.status() === 429 && attempt < 40) {
+        await sleep(1_100);
+        continue;
+      }
+      const { session } = await bodyOf<{ session: SessionDTO }>(response, '/api/sessions');
+      return session;
+    }
   }
 
   async session(id: string): Promise<SessionDTO> {

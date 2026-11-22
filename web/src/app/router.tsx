@@ -6,12 +6,16 @@ import { CallLayout } from './layouts/CallLayout.tsx';
 import { PublicLayout } from './layouts/PublicLayout.tsx';
 import { RootLayout } from './layouts/RootLayout.tsx';
 import { PageError, RootError } from './shell/RouteError.tsx';
+import type { RouteHandle } from './shell/RouteStage.tsx';
 
 // Every page is its own chunk, fetched when the route is first visited. The router waits for the
 // code before it commits the navigation, so the old page stays until the new one is ready.
 function lazyPage(load: () => Promise<{ default: ComponentType }>): Pick<RouteObject, 'lazy'> {
   return { lazy: async () => ({ Component: (await load()).default }) };
 }
+
+// The landing page sequences its own entrance, so the shell's page entrance leaves it alone.
+const OWN_ENTRANCE: RouteHandle = { ownEntrance: true };
 
 /** Shown only while the first page's code is on its way. */
 function AppFallback() {
@@ -39,7 +43,11 @@ export const appRoutes: RouteObject[] = [
             // and footer stay where they are.
             ErrorBoundary: PageError,
             children: [
-              { index: true, ...lazyPage(() => import('../pages/Landing.tsx')) },
+              {
+                index: true,
+                handle: OWN_ENTRANCE,
+                ...lazyPage(() => import('../pages/Landing.tsx')),
+              },
               {
                 path: 'responsible-ai',
                 ...lazyPage(() => import('../pages/ResponsibleAi.tsx')),

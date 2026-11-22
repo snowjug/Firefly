@@ -63,6 +63,8 @@ export function MessageBar({
       className={cx(
         'ff-message',
         `ff-message--${intent}`,
+        // A message that arrives while someone is looking eases in; a note that is part of the page does not.
+        live && 'ff-message--arriving',
         Boolean(actions) && 'ff-message--actions',
         onDismiss && 'ff-message--dismiss',
         className,

@@ -6,6 +6,8 @@ import {
   endCallAndOpenReport,
   startTypedCall,
 } from './support/call-screen.ts';
+import { countText, libraryCount } from './support/scenario-library.ts';
+import { settled } from './support/page-probes.ts';
 
 // The main journeys on a phone (the "mobile" project, a Pixel 7: touch, 412 px wide). The layout is
 // different at this width: the header keeps Scenarios and Responsible AI in a Menu, the scenarios are a
@@ -61,8 +63,8 @@ test('@mobile choose a scenario, read the brief, hold a typed call and open the 
   await test.step('a touch on Start call opens the scenarios, as a row of cards', async () => {
     await page.getByRole('banner').getByRole('link', { name: 'Start call' }).tap();
     await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
-    await expect(count(page)).toHaveText('16 scenarios');
-    await expect(gallery(page).getByRole('radio')).toHaveCount(16);
+    await expect(count(page)).toHaveText(countText(libraryCount()));
+    await expect(gallery(page).getByRole('radio')).toHaveCount(libraryCount());
     await expectNoSideways(page, 'The scenarios');
   });
 
@@ -137,6 +139,8 @@ test('@mobile the call keeps its controls in a dock at the bottom, and the case 
   await test.step('the controls are in the dock, inside the screen', async () => {
     const dock = page.locator('.cw-dock');
     await expect(dock.getByRole('group', { name: 'Call controls' })).toBeVisible();
+    // The page eases in for a moment, a few pixels lower at first: measure it where it comes to rest.
+    await settled(page);
     const box = (await dock.boundingBox())!;
     const view = page.viewportSize()!;
     expect(box.y + box.height).toBeLessThanOrEqual(view.height + 1);

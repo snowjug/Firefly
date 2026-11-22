@@ -75,6 +75,27 @@ describe('browser playback', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('hands each part to the browser inside the end of the one before it, with no timer, cancel or pause between them, so the code adds no gap of its own', async () => {
+    const reply = `${LONG_REPLY} I would also like to know who is looking after my case, because I have had to explain the whole thing again each time.`;
+    const playback = setup();
+    const { handlers } = listener();
+    playback.play(request(reply), handlers);
+    await vi.advanceTimersByTimeAsync(0);
+    const chunks = splitForSpeech(cleanForSpeech(reply));
+    expect(chunks.length).toBeGreaterThan(2);
+    const cancels = env.speech.cancels;
+
+    for (let index = 0; index < chunks.length - 1; index++) {
+      // No time passes between one part ending and the next being spoken.
+      env.speech.finishLatest();
+      expect(env.speech.spoken).toHaveLength(index + 2);
+      expect(env.speech.latest().text).toBe(chunks[index + 1]?.text);
+      expect(env.speech.paused).toBe(false);
+    }
+    expect(env.speech.cancels).toBe(cancels);
+    expect(env.speech.primes).toBe(0);
+  });
+
   it('chooses a natural online voice in the right language, and says what it is', async () => {
     const playback = setup();
     const { details, handlers } = listener();

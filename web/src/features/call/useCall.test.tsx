@@ -539,25 +539,112 @@ describe('a spoken turn', () => {
     expect(snap().hint).toMatch(/removed an email address before saving/i);
   });
 
-  it('listens again, with a hint, when nothing was heard, and gives up after a few tries', async () => {
-    await mount();
-    await openCall();
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      await advance(15_000);
-      expect(snap().phase).toBe('ready-for-next-turn');
-      expect(snap().hint).toMatch(/Nothing was heard/);
+  describe('with the server’s speech service, hands-free listening is never ended by quiet', () => {
+    it('stays listening through minutes of silence, says once that it is still listening, and the next sentence is sent exactly once and answered', async () => {
+      await mount();
+      await openCall();
+      await advance(15_000 - 100);
+      expect(snap().hint).toBeNull();
+      await advance(100);
+      expect(snap().hint).toBe('Still listening. Speak when you are ready.');
+      expect(snap().announcement?.text).toBe('Still listening. Speak when you are ready.');
+      const said = snap().announcement?.id;
+
+      // Five minutes of nothing: the same pass is still open, nothing is counted and nothing is said again.
+      await advance(5 * 60_000);
+      expect(snap()).toMatchObject({
+        phase: 'listening',
+        paused: false,
+        problem: null,
+        micOpen: true,
+        autoListening: true,
+        hint: 'Still listening. Speak when you are ready.',
+      });
+      expect(snap().announcement?.id).toBe(said);
+      expect(env.audio.listeningWorklets()).toHaveLength(1);
+      expect(mocked.transcribe).not.toHaveBeenCalled();
+
+      await say();
+      expect(mocked.transcribe).toHaveBeenCalledTimes(1);
+      expect(mocked.sendMessage).toHaveBeenCalledTimes(1);
+      expect(snap().phase).toBe('customer-speaking');
+      expect(snap().turns.map((turn) => turn.role)).toEqual(['customer', 'trainee', 'customer']);
+      expect(snap().hint).toBeNull();
+      await customerFinishes();
       await advance(400);
       expect(snap().phase).toBe('listening');
-    }
-    await advance(15_000);
-    expect(snap().phase).toBe('ready-for-next-turn');
-    await advance(5000);
-    // The call now waits for the trainee, with the microphone closed.
-    expect(snap().phase).toBe('ready-for-next-turn');
-    expect(env.audio.listeningWorklets()).toHaveLength(0);
-    act(() => actions().talk());
-    expect(snap().phase).toBe('listening');
-    expect(snap().hint).toBeNull();
+    });
+
+    it('pauses the call by itself after ten minutes of quiet, lets go of the microphone, and listens again on Resume', async () => {
+      await mount();
+      await openCall();
+      await advance(10 * 60_000 - 100);
+      expect(snap()).toMatchObject({ phase: 'listening', paused: false });
+      await advance(100);
+      expect(snap()).toMatchObject({
+        paused: true,
+        stage: 'paused',
+        hint: 'Paused after 10 minutes without sound. Press Resume to carry on.',
+        announcement: {
+          text: 'Paused after 10 minutes without sound. Press Resume to carry on.',
+        },
+      });
+      expect(env.mic.openTracks()).toHaveLength(0);
+      expect(env.audio.listeningWorklets()).toHaveLength(0);
+      await advance(60_000);
+      expect(snap().paused).toBe(true);
+
+      act(() => actions().togglePause());
+      await advance(400);
+      expect(snap()).toMatchObject({ paused: false, phase: 'listening', hint: null });
+      expect(env.mic.openTracks()).toHaveLength(1);
+      expect(env.audio.listeningWorklets()).toHaveLength(1);
+      await say();
+      expect(mocked.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts the ten minutes again whenever the trainee makes a sound, so only unbroken quiet pauses the call', async () => {
+      await mount();
+      await openCall();
+      await advance(9 * 60_000);
+      expect(snap().hint).toBe('Still listening. Speak when you are ready.');
+      // A cough: heard, and let go of as not a turn.
+      await say({ speechMs: 200 });
+      expect(mocked.transcribe).not.toHaveBeenCalled();
+      expect(snap()).toMatchObject({ phase: 'listening', hint: null, speechDetected: false });
+      await advance(9 * 60_000);
+      expect(snap().paused).toBe(false);
+      await advance(60_000);
+      expect(snap().paused).toBe(true);
+    });
+
+    it('still gives up on a recogniser that hears speech but never finds words: three tries, then Talk', async () => {
+      await mount();
+      server.transcripts.push(
+        { status: 'no-speech', text: '', durationMs: 900 },
+        { status: 'no-speech', text: '', durationMs: 900 },
+        { status: 'no-speech', text: '', durationMs: 900 },
+        { status: 'no-speech', text: '', durationMs: 900 },
+      );
+      await openCall();
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        await say();
+        expect(snap().hint).toMatch(/no words could be made out/i);
+        expect(snap().autoListening).toBe(true);
+        await advance(400);
+        expect(snap().phase).toBe('listening');
+      }
+      await say();
+      expect(snap().phase).toBe('ready-for-next-turn');
+      expect(snap().autoListening).toBe(false);
+      await advance(60_000);
+      expect(snap().phase).toBe('ready-for-next-turn');
+      expect(env.audio.listeningWorklets()).toHaveLength(0);
+      expect(mocked.sendMessage).not.toHaveBeenCalled();
+      act(() => actions().talk());
+      expect(snap().phase).toBe('listening');
+      expect(snap().hint).toBeNull();
+    });
   });
 
   it('treats a transcription with no words as nothing heard: no message, no empty turn, and typing is offered', async () => {

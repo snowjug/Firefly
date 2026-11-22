@@ -1,6 +1,13 @@
 import { useEffect, useRef } from 'react';
 import type { ClosingCheckDTO } from '#shared/domain/api.ts';
-import { Button, Dialog, MessageBar, ProgressBar } from '../../design/index.ts';
+import {
+  Avatar,
+  Button,
+  Dialog,
+  MessageBar,
+  ProgressBar,
+  VisuallyHidden,
+} from '../../design/index.ts';
 import type { CallProblem } from '../call/contract.ts';
 import { clock, isEndFailure, SHORT_CALL_TURNS } from './call-model.ts';
 import { ClosingCheck } from './ClosingCheck.tsx';
@@ -10,12 +17,14 @@ import './dialogs.css';
 export interface EndCallDialogProps {
   /** The person asked to end the call and has not answered yet. */
   open: boolean;
-  /** The call is being closed: the same dialog becomes the progress screen. */
+  /** The call is being closed: the same dialog becomes the call-ended moment and its progress. */
   ending: boolean;
   /** What the progress says now: "Ending call", "Preparing your review" or "Call complete". */
   progressLabel: string;
   /** Ending was confirmed and has not come back yet. */
   busy: boolean;
+  /** The customer's name, for the initials on the call-ended moment. */
+  customerName: string;
   elapsedSeconds: number;
   traineeTurns: number;
   stateLabel: string | null;
@@ -45,17 +54,21 @@ export interface EndCallDialogProps {
  * The question before a call ends, and what the screen looks like while it ends. The accurate length
  * and state are on the dialog, "Continue call" is where the keyboard starts so a stray Enter ends
  * nothing, and ending keeps the dialog open with a loading button. Once the call is closing the same
- * dialog becomes "Ending and preparing your review", with progress that has no percentage because
- * none is known, and its heading focused. A failure is explained inside it, with Retry. A call with
- * no message in it has no report: the way out is to carry on or to leave without one. In guided
- * practice the dialog is "Ready to close?" and shows what the call has covered; that look never
- * waits for anything, never disables a button and never blocks ending.
+ * dialog becomes the call-ended moment: the customer's initials with the ring that surrounded them
+ * collapsing and fading, "Call ended", how long the call was, and "Preparing your review" with
+ * progress that has no percentage because none is known. It is still the dialog named "Ending and
+ * preparing your review", with that heading focused (for assistive technology: what is seen is the
+ * moment). A failure is explained inside it, with Retry. A call with no message in it has no report:
+ * the way out is to carry on or to leave without one. In guided practice the dialog is "Ready to
+ * close?" and shows what the call has covered; that look never waits for anything, never disables a
+ * button and never blocks ending.
  */
 export function EndCallDialog({
   open,
   ending,
   progressLabel,
   busy,
+  customerName,
   elapsedSeconds,
   traineeTurns,
   stateLabel,
@@ -91,15 +104,27 @@ export function EndCallDialog({
         onClose={onContinue}
         dismissible={false}
         size="sm"
-        className="cw-end"
+        className="cw-end cw-end--ended"
         title={
+          // The dialog's name and what takes the keyboard, said as it always was; the moment itself is
+          // what is seen, so the heading is only for assistive technology.
           <span className="cw-end__heading" tabIndex={-1} ref={heading} data-autofocus>
             Ending and preparing your review
           </span>
         }
       >
-        <div className="cw-end__progress">
-          <ProgressBar label={progressLabel} showLabel />
+        <div className="cw-ended">
+          <span className="cw-ended__ring">
+            <Avatar name={customerName} size="lg" />
+          </span>
+          <p className="cw-ended__title">Call ended</p>
+          <p className="cw-ended__time">
+            <VisuallyHidden>Call length </VisuallyHidden>
+            {clock(elapsedSeconds)}
+          </p>
+          <div className="cw-ended__progress">
+            <ProgressBar label={progressLabel} showLabel />
+          </div>
         </div>
       </Dialog>
     );

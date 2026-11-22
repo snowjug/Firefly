@@ -36,12 +36,92 @@
 .cw-end__clock {
   font-variant-numeric: tabular-nums;
 }
-.cw-end__progress {
-  padding-block: var(--sp-2) var(--sp-3);
-}
 .cw-end__heading:focus-visible {
   outline: none;
   box-shadow: none;
+}
+
+/* The call-ended moment: the dialog's own heading is for assistive technology, and what is seen is the
+   customer's initials, the ring that surrounded them collapsing and fading, "Call ended", how long the
+   call was, and the progress of preparing the review. The pieces rise in one after another. Only
+   transform and opacity move; under reduced motion it is the still frame, with no ring. */
+.cw-end--ended .ff-dialog__header {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.cw-ended {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding-block: var(--sp-6) var(--sp-2);
+  text-align: center;
+}
+.cw-ended > * {
+  animation: cw-ended-in var(--motion-panel) var(--ease-decelerate) backwards;
+  animation-delay: calc(var(--cw-i, 0) * var(--dur-stagger));
+}
+.cw-ended__title {
+  --cw-i: 1;
+  margin-block-start: var(--sp-2);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+}
+.cw-ended__time {
+  --cw-i: 2;
+  color: var(--fg-2);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-variant-numeric: tabular-nums;
+}
+.cw-ended__progress {
+  --cw-i: 3;
+  align-self: stretch;
+  margin-block-start: var(--sp-4);
+}
+.cw-ended__ring {
+  --cw-i: 0;
+  position: relative;
+  display: inline-grid;
+  padding: var(--sp-3);
+}
+/* The ring that surrounded them on the call comes in to the avatar and goes. */
+.cw-ended__ring::before {
+  content: '';
+  position: absolute;
+  inset: var(--sp-3);
+  border: var(--stroke-w-thick) solid var(--brand-stroke);
+  border-radius: var(--r-pill);
+  opacity: 0;
+  animation: cw-ended-ring var(--dur-slower) var(--ease-easy) both;
+}
+@keyframes cw-ended-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-sm));
+  }
+}
+@keyframes cw-ended-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(1.5);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+@media (forced-colors: active) {
+  .cw-ended__ring::before {
+    border-color: Highlight;
+  }
 }
 
 /* The closing check of a guided call: a line saying what it is, then four rows, each a word and an

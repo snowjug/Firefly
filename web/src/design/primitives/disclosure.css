@@ -68,8 +68,12 @@
 .ff-disclosure__panel {
   padding: var(--sp-1) var(--sp-2) var(--sp-4);
 }
-.ff-disclosure__panel:not([hidden]) {
-  animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+/* A panel that opens fades in and rises a little. Only on a screen: getting a page ready to print
+   opens its panels, and paper takes the first frame, a panel that is not there yet. */
+@media screen {
+  .ff-disclosure__panel:not([hidden]) {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+  }
 }
 
 /* ---- Inline: a quiet toggle in the flow of text ------------------------------------------- */

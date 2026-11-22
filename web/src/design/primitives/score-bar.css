@@ -39,8 +39,10 @@
   background: var(--brand-stroke);
 }
 
-/* Filling once from empty, one segment after another. Only when motion is allowed. */
-@media (prefers-reduced-motion: no-preference) {
+/* Filling once from empty, one segment after another. Only on a screen, and only when motion is
+   allowed: getting a page ready to print reveals what it holds and starts this, and paper takes the
+   first frame, a bar caught partway. */
+@media screen and (prefers-reduced-motion: no-preference) {
   .ff-scorebar--animate .ff-scorebar__fill {
     animation: ff-scorebar-fill var(--dur-slower) var(--ease-decelerate) both;
   }

@@ -138,20 +138,140 @@ describe('the report\u2019s stylesheets', () => {
 describe('motion', () => {
   const all = STYLESHEETS.flatMap((name) => declarations(css(name)).map((d) => ({ ...d, name })));
 
+  /** Every declaration with the selector of its rule and the at-rules it sits inside. */
+  function rulesOf(sheet: string) {
+    const found: { selector: string; property: string; value: string; within: string[] }[] = [];
+    const stack: string[] = [];
+    let buffer = '';
+    const within = () => stack.filter((prelude) => prelude.startsWith('@'));
+    const record = (text: string) => {
+      const at = text.indexOf(':');
+      const selector = stack[stack.length - 1];
+      if (at > 0 && selector !== undefined && !selector.startsWith('@')) {
+        found.push({
+          selector,
+          property: text.slice(0, at).trim(),
+          value: text.slice(at + 1).trim(),
+          within: within(),
+        });
+      }
+    };
+    for (const char of sheet) {
+      if (char === '{') {
+        stack.push(buffer.trim());
+        buffer = '';
+      } else if (char === '}') {
+        record(buffer.trim());
+        buffer = '';
+        stack.pop();
+      } else if (char === ';') {
+        record(buffer.trim());
+        buffer = '';
+      } else buffer += char;
+    }
+    return found;
+  }
+
+  // Paper does not move: a part of the design system (a score bar, a disclosure's panel) that starts an
+  // animation when the page is made ready to print would be caught on its first frame.
+  const off = (value: string) => /^none(\s*!important)?$/.test(value);
+
   it('plays every animation only where motion is not reduced (or switches it off for paper)', () => {
     const animations = all.filter((d) => /^animation(-name|-delay)?$/.test(d.property));
     expect(animations.length).toBeGreaterThan(5);
     for (const d of animations) {
       const ok =
-        d.value === 'none' ||
-        d.within.some((at) => /prefers-reduced-motion:\s*no-preference/.test(at));
+        off(d.value) || d.within.some((at) => /prefers-reduced-motion:\s*no-preference/.test(at));
       expect(ok, `${d.name}: ${d.property}: ${d.value}`).toBe(true);
     }
   });
 
+  it('switches every animation inside the report off on paper, the design system’s included', () => {
+    const paper = rulesOf(css('report.css')).find(
+      (rule) =>
+        rule.selector.startsWith('.rp-page *') &&
+        rule.property === 'animation' &&
+        rule.within.includes('@media print'),
+    );
+    expect(paper?.value).toBe('none !important');
+  });
+
+  // What an entrance starts from (a block that waits to come in, a line at nothing, a number at 0) is
+  // only ever drawn on a screen where motion is allowed. On paper, for a person who asked for less and
+  // for a script that never runs, the page is whole: a start state that print can see is a bug.
+  it('draws what an entrance starts from only on a screen, where motion is allowed', () => {
+    const STARTS =
+      /\[data-draw=['"]wait['"]\]|:not\(\[data-(?:revealed|drawn)\]\)|\[data-counting\]/;
+    const starts = STYLESHEETS.flatMap((name) =>
+      rulesOf(css(name))
+        .filter((rule) => STARTS.test(rule.selector))
+        .map((rule) => ({ ...rule, name })),
+    );
+    expect(starts.length).toBeGreaterThan(5);
+    for (const rule of starts) {
+      expect(
+        rule.within.some((at) =>
+          /^@media screen and \(prefers-reduced-motion:\s*no-preference\)$/.test(at),
+        ),
+        `${rule.name}: ${rule.selector} { ${rule.property}: ${rule.value} }`,
+      ).toBe(true);
+    }
+  });
+
+  // The turn an evidence link led to is marked by an overlay that fades by opacity alone: its colour
+  // is not animated, so the words are never over a colour in the middle of a change.
+  it('marks the turn a link led to with an overlay whose opacity is the only thing that moves', () => {
+    const overlay = rulesOf(css('transcript.css')).filter(
+      (rule) => rule.selector === '.rp-turn::before',
+    );
+    const transition = overlay.find((rule) => rule.property === 'transition');
+    expect(transition?.value).toMatch(/^opacity var\(--dur-/);
+    expect(transition?.value).not.toMatch(/background|color|shadow/);
+    expect(overlay.find((rule) => rule.property === 'opacity')?.value).toBe('0');
+  });
+
+  // The card that suggests the next call lifts under a mouse, as the scenario cards do, but only for
+  // a pointer that can hover and where the page has switched the effects on (data-fx): a touch screen,
+  // reduced motion and a slow display never get it. The press settles it everywhere, by --press-grow,
+  // which is nothing when motion is reduced.
+  it('lifts the next practice card only for a fine hovering pointer with the effects on', () => {
+    const lift = rulesOf(css('report.css')).filter(
+      (rule) =>
+        rule.selector.startsWith(".rp-next[data-fx='on']:hover") && rule.property === 'transform',
+    );
+    expect(lift.length).toBeGreaterThan(1);
+    for (const rule of lift) {
+      expect(rule.within).toContain('@media (hover: hover) and (pointer: fine)');
+    }
+    expect(lift.map((rule) => rule.value).join(' ')).toMatch(/--move-lift/);
+    expect(lift.map((rule) => rule.value).join(' ')).toMatch(/--press-grow/);
+    const press = rulesOf(css('report.css')).find(
+      (rule) => rule.selector === '.rp-next:active' && rule.property === 'transform',
+    );
+    expect(press?.value).toMatch(/--press-grow/);
+  });
+
+  // The whole card is the button's target: its link's ::after is stretched over the card. A press gives a
+  // button a transform of its own, and that would make the button the box the stretch is measured from,
+  // so the target would shrink to the button as the press began and a press away from it would follow
+  // nothing. The press must leave the button where it is.
+  it('does not move the next practice button when it is pressed, so its stretched target stays the card', () => {
+    const rules = rulesOf(css('report.css'));
+    const stretch = rules.find(
+      (rule) => rule.selector === '.rp-next__cta::after' && rule.property === 'inset',
+    );
+    expect(stretch?.value).toBe('0');
+    const press = rules.find(
+      (rule) =>
+        rule.selector === '.rp-next .ff-button.rp-next__cta:active' &&
+        rule.property === 'transform',
+    );
+    expect(press?.value).toBe('none');
+  });
+
   it('takes durations from the shared tokens, and never transitions everything', () => {
     for (const d of all.filter((x) => x.property === 'transition' || x.property === 'animation')) {
-      if (d.value === 'none') continue;
+      if (off(d.value)) continue;
       expect(d.value, `${d.name}: ${d.property}`).toMatch(/var\(--dur-/);
       expect(d.value, `${d.name}: ${d.property}`).not.toMatch(/\ball\b/);
     }
@@ -253,10 +373,14 @@ describe('print', () => {
 });
 
 describe('the markup', () => {
-  it('has no inline style attribute, style tag or raw HTML in any component', () => {
+  it('has no inline style attribute written as a string, style tag or raw HTML in any component', () => {
     for (const name of SOURCES) {
       const text = read(name);
-      expect(text, name).not.toMatch(/\bstyle=/);
+      // `style={...}` is React setting properties on the element through the CSSOM, which the Content
+      // Security Policy (style-src 'self') allows: the stagger of a block (`--reveal-i`) and the
+      // place of a chart's markers are set that way. A style attribute written as a string, or a
+      // <style> element, is what it blocks.
+      expect(text, name).not.toMatch(/\bstyle=["']/);
       expect(text, name).not.toMatch(/<style[\s>]/);
       expect(text, name).not.toMatch(/dangerouslySetInnerHTML/);
     }

@@ -1,6 +1,14 @@
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState, type ReactNode, type RefObject } from 'react';
 import type { CareBehaviourResult, CareLevel } from '#shared/domain/report.ts';
-import { Badge, Icon, cx, type BadgeTone, type IconName } from '../../design/index.ts';
+import {
+  Badge,
+  Icon,
+  cx,
+  useInViewOnce,
+  useReveal,
+  type BadgeTone,
+  type IconName,
+} from '../../design/index.ts';
 import {
   BEHAVIOUR_STATUS_WORDS,
   CARE_LEVEL_WORDS,
@@ -12,12 +20,15 @@ import {
 import { TurnLink, useEvidence } from './evidence.tsx';
 import type { EvidenceTurn } from './evidence-model.ts';
 import { usePrinting } from './print.tsx';
+import { stagger } from './reveal.ts';
 import { locateQuote, segmentText } from './transcript-model.ts';
 import './report.css';
 
 /**
  * A titled part of the report. Its heading can take focus (when a link jumps here) and its
  * `data-rp-origin` is what "Back to ..." calls it after an evidence link was followed from inside.
+ * The heading and the line under it rise into place when the part is scrolled to, one step apart;
+ * what is in the part comes in a step behind them (each block watches itself).
  */
 export function Section({
   id,
@@ -36,6 +47,7 @@ export function Section({
   children?: ReactNode;
   className?: string;
 }) {
+  const [head, reveal] = useReveal<HTMLElement>();
   return (
     <section
       id={id}
@@ -43,16 +55,29 @@ export function Section({
       className={cx('rp-section', className)}
       data-rp-origin={title}
     >
-      <header className="rp-section__head">
+      <header ref={head} className="rp-section__head" {...reveal}>
         <h2 id={`${id}-title`} className="rp-section__title" tabIndex={-1} data-rp-heading>
           {title}
         </h2>
         {aside ? <div className="rp-section__aside no-print">{aside}</div> : null}
       </header>
-      {lead ? <p className="rp-section__lead">{lead}</p> : null}
+      {lead ? (
+        <p className="rp-section__lead" {...reveal} style={stagger(1)}>
+          {lead}
+        </p>
+      ) : null}
       {children}
     </section>
   );
+}
+
+/**
+ * Once the element has been seen, and then for good: the line beside a quote draws itself the first
+ * time the quote comes into view. Without a way to tell, it is drawn at once.
+ */
+function useDrawn<T extends Element>(): [RefObject<T | null>, { 'data-drawn'?: '' }] {
+  const [ref, seen] = useInViewOnce<T>();
+  return [ref, seen ? { 'data-drawn': '' } : {}];
 }
 
 /** A small label and the text it names, one under the other. */
@@ -70,6 +95,16 @@ export function Field({
       <p className="rp-field__label">{label}</p>
       <div className="rp-field__text">{children}</div>
     </div>
+  );
+}
+
+/** What stands where a part has nothing to show: said in a plain line, and risen into place like any block under a heading. */
+export function Empty({ children }: { children: ReactNode }) {
+  const [ref, reveal] = useReveal<HTMLParagraphElement>();
+  return (
+    <p className="rp-empty" ref={ref} {...reveal} style={stagger(1)}>
+      {children}
+    </p>
   );
 }
 
@@ -104,11 +139,12 @@ export function Quote({
   className?: string;
 }) {
   const { verify } = useEvidence();
+  const [ref, drawn] = useDrawn<HTMLElement>();
   if (!verify(turnIndex, quote)) {
     return <InsufficientEvidence className={className} />;
   }
   return (
-    <figure className={cx('rp-quote', className)}>
+    <figure ref={ref} className={cx('rp-quote', className)} {...drawn}>
       <blockquote className="rp-quote__text">
         <p className="t-quote">{`\u201c${quote}\u201d`}</p>
       </blockquote>
@@ -157,8 +193,9 @@ export const SkillTag = ({ children }: { children: ReactNode }) => (
  * text (the customer's reply, for example), so there is nothing to check it against.
  */
 export function TurnQuote({ turn, className }: { turn: EvidenceTurn; className?: string }) {
+  const [ref, drawn] = useDrawn<HTMLElement>();
   return (
-    <figure className={cx('rp-quote', className)}>
+    <figure ref={ref} className={cx('rp-quote', className)} {...drawn}>
       <blockquote className="rp-quote__text">
         <p className="t-quote" dir="auto">{`\u201c${turn.text}\u201d`}</p>
       </blockquote>

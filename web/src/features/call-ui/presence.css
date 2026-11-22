@@ -1,0 +1,233 @@
+/* The customer as a presence on the call: the avatar, and a ring around it that says what the call is
+   doing without a word (the status line is the words). Only transform and opacity move. A ring that
+   repeats is a state indicator, and each has a still form under reduced motion. The layers sit behind
+   the avatar, in room the wrapper keeps for them, so nothing shifts and the stage never scrolls. */
+
+.cw-presence {
+  --_c: var(--stroke-1);
+  /* How far the ring may grow past the avatar: its widest size (a loud voice) fits inside. */
+  --_room: var(--sp-6);
+  --_arc: calc(var(--_room) * 0.35);
+  position: relative;
+  z-index: -1;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  padding: var(--_room);
+}
+.cw-presence--lg {
+  --_room: var(--sp-4);
+}
+/* The customer's place on the stage: a little larger than the design system's largest avatar, with the
+   ring's room pulled in so the name sits close under it. */
+.cw-presence--xl {
+  margin-block: calc(var(--_room) * -0.5);
+}
+.cw-presence--xl .cw-presence__avatar {
+  --_size: 5rem;
+}
+/* The compact strip of a narrow screen has no room to spare: the ring grows into the strip's own
+   padding, and the avatar keeps its place. */
+.cw-presence--md {
+  --_room: 0px;
+  --_arc: calc(var(--sp-1) * -1);
+  padding: 0;
+}
+.cw-presence--sm,
+.cw-presence--xs {
+  --_room: 0px;
+  --_arc: 0px;
+  padding: 0;
+}
+
+.cw-presence[data-presence='connecting'] {
+  --_c: var(--brand-stroke);
+}
+.cw-presence[data-presence='working'] {
+  --_c: var(--brand-stroke-2);
+}
+.cw-presence[data-presence='listening'],
+.cw-presence[data-presence='hearing'] {
+  --_c: var(--voice-trainee);
+}
+.cw-presence[data-presence='speaking'] {
+  --_c: var(--voice-customer);
+}
+.cw-presence[data-presence='held'] {
+  --_c: var(--stroke-accessible);
+}
+
+.cw-presence__halo,
+.cw-presence__arc,
+.cw-presence__ripple {
+  position: absolute;
+  inset: var(--_room);
+  border-radius: var(--r-pill);
+  pointer-events: none;
+}
+.cw-presence__arc {
+  inset: var(--_arc);
+}
+
+/* The halo: a soft disc and its edge. It is only there while the microphone waits, while the trainee
+   is heard, while the customer speaks and while the call is held. */
+.cw-presence__halo {
+  border: var(--stroke-w-thick) solid var(--_c);
+  background: color-mix(in srgb, var(--_c) 14%, transparent);
+  opacity: 0;
+  transform: scale(1);
+  transition: opacity var(--dur-normal) var(--ease-easy);
+}
+.cw-presence__halo::after {
+  content: '';
+  position: absolute;
+  inset: calc(var(--stroke-w-thick) * -1);
+  border: var(--stroke-w) solid var(--_c);
+  border-radius: inherit;
+  opacity: 0.45;
+  transform: scale(1.1);
+}
+
+/* Listening: a slow breath. */
+.cw-presence[data-presence='listening'] .cw-presence__halo {
+  animation: cw-halo var(--dur-pulse) var(--ease-easy) infinite alternate;
+}
+@keyframes cw-halo {
+  from {
+    opacity: 0.12;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 0.5;
+    transform: scale(1.16);
+  }
+}
+
+/* Hearing the trainee, and the customer's voice when the page can measure it: the halo is brighter
+   than a breath and follows the level (set by the screen, 0 to 1, in steps). With no level it rests at
+   its base size and still reads as "heard". */
+.cw-presence[data-presence='hearing'] .cw-presence__halo {
+  opacity: 0.85;
+  transform: scale(1.12);
+}
+.cw-presence[data-presence='speaking'][data-measured='true'] .cw-presence__halo {
+  opacity: 0.7;
+  transform: scale(1.1);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cw-presence[data-presence='hearing'] .cw-presence__halo,
+  .cw-presence[data-presence='speaking'][data-measured='true'] .cw-presence__halo {
+    transform: scale(calc(1.06 + var(--cw-level, 0) * 0.34));
+    transition:
+      transform var(--dur-fast) var(--ease-easy),
+      opacity var(--dur-normal) var(--ease-easy);
+  }
+}
+/* The avatar's own pulse is the shaped one: where the halo follows a measured voice it is not used. */
+.cw-presence[data-measured='true'] .ff-avatar--speaking::after {
+  animation: none;
+}
+
+/* On hold: still, dashed and dimmed. */
+.cw-presence[data-presence='held'] .cw-presence__halo {
+  border-style: dashed;
+  background: none;
+  opacity: 1;
+}
+.cw-presence[data-presence='held'] .cw-presence__halo::after {
+  display: none;
+}
+.cw-presence__avatar {
+  transition: opacity var(--dur-normal) var(--ease-easy);
+}
+.cw-presence[data-presence='held'] .cw-presence__avatar {
+  opacity: 0.7;
+}
+
+/* Connecting, and a quieter turn while something is worked out: an arc that goes round. */
+.cw-presence__arc {
+  border: var(--stroke-w-thick) solid transparent;
+  border-block-start-color: var(--_c);
+  border-inline-end-color: var(--_c);
+  opacity: 0;
+}
+.cw-presence[data-presence='connecting'] .cw-presence__arc {
+  opacity: 1;
+  animation: cw-turn var(--dur-pulse) linear infinite;
+}
+.cw-presence[data-presence='working'] .cw-presence__arc {
+  opacity: 0.8;
+  animation: cw-turn calc(var(--dur-pulse) * 1.5) linear infinite;
+}
+@keyframes cw-turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* Connected: the avatar eases from a little smaller to full size, and one soft ripple goes out. It
+   is played once, by the screen, and not at all when motion is reduced. */
+.cw-presence__ripple {
+  border: var(--stroke-w-thick) solid var(--brand-stroke);
+  opacity: 0;
+  animation: cw-ripple var(--dur-slow) var(--ease-decelerate) both;
+}
+@keyframes cw-ripple {
+  from {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cw-presence[data-arrival] .cw-presence__avatar {
+    animation: cw-arrive var(--dur-slow) var(--ease-decelerate) both;
+  }
+}
+@keyframes cw-arrive {
+  from {
+    transform: scale(0.94);
+  }
+}
+
+/* Still, and clearly there, when motion is reduced: a breath is a steady halo, a turning arc is a
+   whole ring, and nothing follows the voice (the halo of a heard voice is simply the brighter one). */
+@media (prefers-reduced-motion: reduce) {
+  .cw-presence[data-presence='listening'] .cw-presence__halo {
+    animation: none;
+    opacity: 0.4;
+    transform: scale(1.08);
+  }
+  .cw-presence[data-presence='connecting'] .cw-presence__arc {
+    animation: none;
+    border-color: var(--_c);
+    opacity: 0.8;
+  }
+  .cw-presence[data-presence='working'] .cw-presence__arc {
+    animation: none;
+    border-color: var(--_c);
+    opacity: 0.6;
+  }
+  .cw-presence[data-presence='hearing'] .cw-presence__halo {
+    border-width: calc(var(--stroke-w-thick) + var(--stroke-w));
+  }
+}
+
+@media (forced-colors: active) {
+  .cw-presence__halo,
+  .cw-presence__halo::after,
+  .cw-presence__ripple {
+    border-color: Highlight;
+    background: none;
+  }
+  .cw-presence__arc {
+    border-block-start-color: Highlight;
+    border-inline-end-color: Highlight;
+  }
+  .cw-presence[data-presence='held'] .cw-presence__halo {
+    border-color: GrayText;
+  }
+}

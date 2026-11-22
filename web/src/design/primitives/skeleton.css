@@ -4,6 +4,14 @@
   overflow: hidden;
   background: var(--bg-section);
 }
+/* Nothing for the first moments, so a placeholder that is replaced by the real thing at once is
+   never seen as a flash of grey; after that, a calm fade. The space is kept all the while. Only on a
+   screen: paper has no wait to sit through. */
+@media screen {
+  .ff-skeleton {
+    animation: ff-fade var(--dur-slow) var(--ease-easy) var(--dur-fast) backwards;
+  }
+}
 /* The shimmer is a soft band that slides across: transform only, and none at all when motion is
    reduced (a still, flat grey). */
 .ff-skeleton::after {

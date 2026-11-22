@@ -30,6 +30,10 @@ export function Crossfade({ id, children }: CrossfadeProps) {
     setLeaving([...leaving.filter((layer) => layer.id !== id && layer.id !== current.id), current]);
     setCurrent({ id, node: children });
     setChanged(true);
+  } else if (current.node !== children) {
+    // What fades out is what was last drawn, not what was there when the content began: words that
+    // grew under one name (a caption being spoken) leave as the whole line, not as its first word.
+    setCurrent({ id, node: children });
   }
 
   useEffect(() => {

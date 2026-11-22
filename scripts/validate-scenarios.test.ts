@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
+import { getScenarioLibrary } from '../server/scenarios/index.ts';
 
 // The command a person runs before adding a scenario: `npm run validate:scenarios`. It prints a
 // coverage summary and each scenario's provenance, and fails when a scenario has no valid record.
@@ -17,12 +18,21 @@ describe('validate-scenarios', () => {
   it('passes the library and prints one provenance line for each scenario', () => {
     const { status, out } = run();
     expect(status).toBe(0);
-    expect(out).toMatch(/Scenarios loaded: 1\d/);
+    const library = getScenarioLibrary();
+    expect(out).toMatch(new RegExp(`^Scenarios loaded: ${library.length}$`, 'm'));
     expect(out).toMatch(/Provenance \(internal, never shown to trainees\)/);
     expect(out).toMatch(/id\s+family\s+authoredOn\s+behaviourCheck\s+review/);
-    expect(out).toMatch(
-      /outlook-shared-mailbox-missing\s+microsoft-365\s+\d{4}-\d{2}-\d{2}\s+\S+\s+\S+/,
-    );
+    // One line for each scenario, with what its own record says.
+    for (const { id, grounding } of library) {
+      const columns = [
+        id,
+        grounding.productFamily,
+        grounding.authoredOn,
+        grounding.behaviourCheck,
+        grounding.review,
+      ];
+      expect(out, id).toMatch(new RegExp(`^\\s+${columns.join('\\s+')}\\s*$`, 'm'));
+    }
     expect(out).toMatch(/All scenarios are valid\./);
   });
 

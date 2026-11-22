@@ -179,6 +179,15 @@ a:hover {
     opacity: 0;
   }
 }
+/* A selection that glides from the choice that was selected to the one that is (segments, tabs):
+   useSelectionSlide writes where the old one was, as seen from the new one, and the stylesheet plays
+   from there to rest. The end state is the ordinary one, so nothing is distorted when it is still. */
+@keyframes ff-slide-from {
+  from {
+    transform: translate(var(--slide-dx, 0px), var(--slide-dy, 0px))
+      scale(var(--slide-sx, 1), var(--slide-sy, 1));
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -35,7 +35,9 @@ import { ProblemRecorder } from './problems.ts';
 //   global-setup.ts     runs once: writes the WAV and refuses a server that is not set up for the suite.
 //   mock-speech.ts      the eight sentences the server's mock speech provider "hears", and a check.
 //   page-probes.ts      the in-page instrumentation, readProbe, and refuseMicrophone / allowMicrophone
-//                       (the browser's own refusal cannot be provoked the same way in every browser).
+//                       (the browser's own refusal cannot be provoked the same way in every browser),
+//                       and settled(page): wait for every finite animation and transition to end,
+//                       before a scan, a screenshot or a measurement of something that may move.
 //   problems.ts         the console and network recorder behind `problems`.
 //   raw-text.ts         expectNoRawFailureText: no provider text, codes or stack traces on screen.
 //   scenario-library.ts the server's real scenarios, to check that nothing hidden is ever shown.

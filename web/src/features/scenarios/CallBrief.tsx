@@ -9,6 +9,7 @@ import { MessageBar } from '../../design/primitives/MessageBar.tsx';
 import { ProductIcon } from '../../design/primitives/ProductIcon.tsx';
 import { Skeleton } from '../../design/primitives/Skeleton.tsx';
 import { Tag } from '../../design/primitives/Badge.tsx';
+import { useReveal } from '../../design/interaction/use-reveal.ts';
 import { accentClass } from '../../design/product-accent.ts';
 import { api, errorMessage, isApiError } from '../../lib/api.ts';
 import { useApi, useDocumentTitle, useOnline } from '../../lib/hooks.ts';
@@ -159,6 +160,9 @@ export function CallBrief() {
     voice,
   });
   const notice = useFirstUseNotice();
+  // The voice card, below the first screen on a phone, rises into place as it comes into view (the
+  // case's rows come in one after another by themselves, and the notice does its own).
+  const [side, sideReveal] = useReveal<HTMLElement>();
   const { check, begin: beginCheck, stop: stopCheck, meter } = useMicCheck();
   const permission = useMicrophonePermission();
   const preview = useVoicePreview(playback, language);
@@ -256,7 +260,7 @@ export function CallBrief() {
             />
           )}
         </div>
-        <aside className="brf-side" aria-labelledby="brf-side-title">
+        <aside ref={side} {...sideReveal} className="brf-side" aria-labelledby="brf-side-title">
           <h2 className="brf-side__title" id="brf-side-title">
             Voice call
           </h2>

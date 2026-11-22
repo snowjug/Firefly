@@ -73,7 +73,8 @@
   color: var(--fg-1);
   font-weight: var(--fw-semibold);
 }
-/* The selected tab carries a line, so selection is a shape and not only a colour. */
+/* The selected tab carries a line, so selection is a shape and not only a colour. In a row of tabs the
+   line glides from the tab that was selected to this one (useSelectionSlide marks the tab data-sliding). */
 .ff-tab--selected::before {
   content: '';
   position: absolute;
@@ -82,6 +83,13 @@
   block-size: 0.1875rem;
   border-radius: var(--r-pill);
   background: var(--brand-stroke);
+  transform-origin: 0 0;
+}
+/* Only on a screen: a glide that was running when the page was printed would be caught partway. */
+@media screen {
+  .ff-tab--selected[data-sliding]::before {
+    animation: ff-slide-from var(--dur-normal) var(--ease-decelerate);
+  }
 }
 .ff-tabs--vertical .ff-tab--selected::before {
   inset-inline: auto;

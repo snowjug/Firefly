@@ -9,7 +9,7 @@ import {
   SCORE_DESCRIPTIONS,
   SCORE_LABELS,
 } from '#shared/domain/vocab.ts';
-import { Icon, TextLink } from '../../design/index.ts';
+import { Icon, TextLink, useReveal } from '../../design/index.ts';
 import { formatDateTime } from '../../lib/format.ts';
 import { customerPlayedBy, evaluatorByline } from './copy.ts';
 import { usePrinting } from './print.tsx';
@@ -42,12 +42,15 @@ export function About({ session, report }: { session: SessionDTO; report: Coachi
   const { persona, config } = session.scenario;
   const [open, setOpen] = useState(false);
   const printing = usePrinting();
+  const [ref, reveal] = useReveal<HTMLElement>();
   return (
     <section
       id="about"
       aria-labelledby="about-title"
       className="rp-section rp-about"
       data-rp-origin="About this report"
+      ref={ref}
+      {...reveal}
     >
       <details
         className="rp-about__details"

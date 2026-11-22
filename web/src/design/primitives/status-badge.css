@@ -44,7 +44,12 @@
 
 .ff-status__label {
   display: inline-block;
-  animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+}
+/* A new word fades in where the old one was. Only on a screen. */
+@media screen {
+  .ff-status__label {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+  }
 }
 
 @media (forced-colors: active) {
