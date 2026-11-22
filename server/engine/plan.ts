@@ -188,10 +188,13 @@ export type CloseKind = 'asks-more' | 'wraps-up' | 'farewell';
  */
 export function closeKindOf(
   c: Pick<TurnClassification, 'wrapsUp' | 'asksAnythingElse' | 'summarises' | 'askedQuestion'>,
-  analysis?: Pick<TurnAnalysis, 'farewell' | 'asksCustomerSide'>,
+  analysis?: Pick<TurnAnalysis, 'farewell' | 'asksCustomerSide'> &
+    Partial<Pick<TurnAnalysis, 'anythingElseAboutCase'>>,
 ): CloseKind | null {
   if (analysis?.farewell) return 'farewell';
-  if (c.asksAnythingElse || analysis?.asksCustomerSide) return 'asks-more';
+  // "Did you change anything else?" is counted as asking for anything else, and is not the end.
+  const asksMore = c.asksAnythingElse && !analysis?.anythingElseAboutCase;
+  if (asksMore || analysis?.asksCustomerSide) return 'asks-more';
   if (c.wrapsUp && !(c.summarises && c.askedQuestion)) return 'wraps-up';
   return null;
 }
@@ -199,7 +202,8 @@ export function closeKindOf(
 /** Whether the engineer is ending the call (see `closeKindOf`). */
 export function closesCall(
   c: Pick<TurnClassification, 'wrapsUp' | 'asksAnythingElse' | 'summarises' | 'askedQuestion'>,
-  analysis?: Pick<TurnAnalysis, 'farewell' | 'asksCustomerSide'>,
+  analysis?: Pick<TurnAnalysis, 'farewell' | 'asksCustomerSide'> &
+    Partial<Pick<TurnAnalysis, 'anythingElseAboutCase'>>,
 ): boolean {
   return closeKindOf(c, analysis) !== null;
 }

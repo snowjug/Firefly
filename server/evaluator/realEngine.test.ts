@@ -5,7 +5,7 @@ import type { EvaluationInput } from '#server/engine/types.ts';
 import { mergeModelDraft } from './merge.ts';
 import { engineCall } from './engineCall.ts';
 import { evaluateWithRules } from './rules.ts';
-import { expectQuotesVerified } from './testing.ts';
+import { expectQuotesVerified, milestone } from './testing.ts';
 
 // Regression tests on reports for conversations that ran through the real simulation engine, so
 // the wording is checked against the state events and classifications the product really produces.
@@ -207,5 +207,45 @@ describe('reports for real engine conversations', () => {
         expect(text, path).not.toMatch(RAW_MOOD_NUMBER);
       }
     }
+  });
+});
+
+describe('a call in which the curveball was due as it ended', () => {
+  // The impact is acknowledged at once, so the scenario's deadline curveball waits for the engineer's
+  // eighth turn, when it is forced. The first line only greets, so the next seven are turns one to
+  // seven and the line after them is the eighth.
+  const GOING = [
+    'Hello, this is Sam from Microsoft support. How can I help?',
+    "I'm sorry, that sounds really stressful with patients waiting. What exactly happens when you sign in?",
+    'When did it start?',
+    'Is anyone else affected?',
+    'What have you already tried?',
+    'Does it fail on your phone as well?',
+    'Was anything changed shortly before it started?',
+    "I'll take ownership of this and call you back by 3 PM with an update.",
+  ];
+  const EIGHTH = 2 + 2 * GOING.length; // the conversation index of that turn
+
+  it('has no curveball in its report, where the same call going on has one raised at that turn', async () => {
+    const going = await evaluate('challenge', [...GOING, 'What browser are you using?']);
+    expect(going.input.finalState.curveball.firedCount).toBe(1);
+    expect(going.report.curveball?.firedAtTurn).toBe(EIGHTH);
+    expect(milestone(going.report, 'escalation').status).not.toBe('not-applicable');
+
+    const ended = await evaluate('challenge', [
+      ...GOING,
+      "Thank you. I'll call you at 3 PM. Have a good day.",
+    ]);
+    expect(ended.input.finalState.curveball).toEqual({
+      status: 'none',
+      type: null,
+      firedAtTurn: null,
+      resolvedAtTurn: null,
+      firedCount: 0,
+    });
+    expect(ended.input.stateEvents.some((e) => e.category === 'curveball')).toBe(false);
+    expect(ended.report.curveball).toBeNull();
+    expect(milestone(ended.report, 'escalation').status).toBe('not-applicable');
+    expectQuotesVerified(ended.report, ended.input);
   });
 });

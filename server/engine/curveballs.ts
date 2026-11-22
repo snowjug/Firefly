@@ -4,12 +4,13 @@ import { curveballEffects } from '#shared/domain/curveballs.ts';
 import type { CurveballDefinition } from '#shared/domain/scenario.ts';
 import { difficultyProfile, type CustomerState, type StateEvent } from '#shared/domain/state.ts';
 import { CURVEBALL_LABELS, type CurveballType } from '#shared/domain/vocab.ts';
+import type { CloseKind } from './plan.ts';
 import { applyEffects, type Effect } from './state.ts';
 import type { DiscoveryMap, EngineRuntime } from './types.ts';
 
 // Controlled curveballs: configured per scenario, appropriate to the difficulty, triggered by
-// explicit conditions (never random), fired at most once each, never back to back, and judged on
-// how the trainee responds.
+// explicit conditions (never random), fired at most once each, never back to back, never on a turn
+// that ends the call, and judged on how the trainee responds.
 
 export interface CurveballTurnInput {
   scenario: EffectiveScenario;
@@ -21,6 +22,8 @@ export interface CurveballTurnInput {
   /** The engineer's turn number, not counting a first exchange that was only a greeting. */
   effectiveTurn: number;
   discovery: DiscoveryMap; // including anything revealed this turn
+  /** How the engineer is ending the call on this turn, if they are (see `closeKindOf`). */
+  closing: CloseKind | null;
 }
 
 export interface CurveballTurnResult {
@@ -30,6 +33,8 @@ export interface CurveballTurnResult {
   followUp: CurveballDefinition | null;
   statusChange: 'resolved' | 'unresolved' | null;
   unlockedFactIds: string[];
+  /** The call is plainly closing as of this turn, so nothing more is raised in it. */
+  closing: boolean;
 }
 
 /** Did the trainee respond to this kind of curveball in a way that works? */
@@ -90,6 +95,20 @@ function conditionsHold(def: CurveballDefinition, input: CurveballTurnInput): bo
   return true;
 }
 
+/**
+ * Whether the call is plainly closing as of this turn: the engineer says goodbye, or asks if that
+ * is all or wraps up once the customer has been told what happens next, and asks nothing about the
+ * problem in the same breath. (Before a next step has been given, "Is there anything I can help you
+ * with?" may be an opening, and a recap may be in the middle of the call.) Once it is, it stays
+ * closing: a customer who has said that is everything, or goodbye, does not come back with a new
+ * demand, so a curveball that had not come up by then is dropped, not put off.
+ */
+function isClosing(input: CurveballTurnInput): boolean {
+  if (input.runtime.closingAtTurn > 0) return true;
+  if (input.classification.discoveryIntents.length > 0) return false;
+  return input.closing === 'farewell' || (input.closing !== null && input.customer.nextStepsStated);
+}
+
 function pickCurveball(input: CurveballTurnInput): CurveballDefinition | null {
   const { runtime, scenario, classification: c, traineeTurnNumber } = input;
   const profile = difficultyProfile(scenario.config.difficulty);
@@ -98,6 +117,9 @@ function pickCurveball(input: CurveballTurnInput): CurveballDefinition | null {
   if (runtime.lastCurveballTurn > 0 && traineeTurnNumber - runtime.lastCurveballTurn < 3)
     return null;
   if (c.wrapsUp || c.injectionAttempt) return null;
+  // The call is not reopened on the turn the engineer ends it, nor after the customer has said
+  // that is everything.
+  if (input.closing !== null || isClosing(input)) return null;
   // Only the types the scenario allows for this call are ever fired.
   const allowed = new Set(scenario.config.curveballTypes);
   return (
@@ -198,5 +220,13 @@ export function processCurveball(input: CurveballTurnInput): CurveballTurnResult
     for (const fact of next.introducesFacts ?? []) unlockedFactIds.push(fact.id);
   }
 
-  return { customer, events, fired, followUp, statusChange, unlockedFactIds };
+  return {
+    customer,
+    events,
+    fired,
+    followUp,
+    statusChange,
+    unlockedFactIds,
+    closing: isClosing(input),
+  };
 }

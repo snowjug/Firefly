@@ -460,6 +460,46 @@ describe('the customer prompt: taking a plan in, and closing the call', () => {
     }
   });
 
+  it('is not told to raise a curveball on the turn the engineer ends the call, nor after it, though one is due', async () => {
+    const due = makeScenario({
+      difficulty: 'challenge',
+      startingTemperature: 'calm',
+      curveballs: ['deadline'],
+    });
+    due.curveballs = due.curveballs.map((c) => ({
+      ...c,
+      trigger: { earliestTurn: 4, latestTurn: 4 },
+    }));
+    const statement = due.curveballs[0]?.statement as string;
+    const before = [
+      'Good morning, this is Alex from Microsoft support. How can I help?',
+      'What laptop are you using?',
+      'When did it start?',
+      OWNER,
+    ];
+
+    // The same call going on is told to raise it, so it was due.
+    const going = await lastContext([...before, 'What browser are you using?'], due);
+    expect(going.curveball.fired).not.toBeNull();
+    expect(replySection(systemOf(going))).toContain(statement);
+    expect(replySection(systemOf(going))).toMatch(/A new development in this reply/);
+
+    for (const ending of [
+      "Thank you. I'll call you at 3 PM. Have a good day.",
+      'Is there anything else I can help with?',
+    ]) {
+      const [closing, later] = (
+        await contextsFor([...before, ending, 'What browser are you using?'], due)
+      ).slice(-2) as [CustomerGenerationContext, CustomerGenerationContext];
+      for (const ctx of [closing, later]) {
+        expect(ctx.curveball.fired, ending).toBeNull();
+        expect(systemOf(ctx), ending).not.toContain(statement);
+        expect(replySection(systemOf(ctx)), ending).not.toMatch(/A new development in this reply/);
+      }
+      expect(planReply(closing).close, ending).not.toBeNull();
+    }
+  });
+
   it('is not told to challenge a vague promise twice, nor to say it at length when terse', async () => {
     const angry = makeScenario({ startingTemperature: 'angry', style: 'demanding' });
     const pressed = await section(["We'll look into it."], angry);

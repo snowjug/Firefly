@@ -5,6 +5,7 @@ import {
   ANYTHING_ELSE,
   ASKS_CUSTOMER_SIDE,
   ASKS_TO_CHECK,
+  asksIfThatIsAll,
   BASICS,
   CLARIFICATION,
   CONFIRMATION,
@@ -76,6 +77,12 @@ export interface TurnAnalysis {
   farewell: boolean;
   /** The engineer asked whether the customer has to do or provide anything ("...from your side?"). */
   asksCustomerSide: boolean;
+  /**
+   * The engineer asked "anything else" about the problem ("Did you change anything else?", "Is
+   * there anything else you noticed?"), and not whether that is all. A classifier counts both as
+   * asking for anything else; only the second ends the call.
+   */
+  anythingElseAboutCase: boolean;
   /**
    * Everything the engineer asked was a closing question ("Is there anything else?", "Is there
    * anything you need from your side?"): it asks nothing about the problem, whatever a classifier
@@ -519,10 +526,10 @@ export function analyseTurn(args: AnalyseArgs): TurnAnalysis {
   const questions = sentences.filter(isAsking);
   const closingQuestion = (sentence: string) => {
     const text = prep(sentence);
-    return (
-      ASKS_CUSTOMER_SIDE.test(text) || ANYTHING_ELSE.test(text) || isHousekeepingQuestion(text)
-    );
+    return ASKS_CUSTOMER_SIDE.test(text) || asksIfThatIsAll(text) || isHousekeepingQuestion(text);
   };
+  const asksCustomerSide = questions.some((s) => ASKS_CUSTOMER_SIDE.test(prep(s)));
+  const asksIfAll = questions.some((s) => asksIfThatIsAll(prep(s)));
 
   return {
     wording,
@@ -533,11 +540,9 @@ export function analyseTurn(args: AnalyseArgs): TurnAnalysis {
     confirmsEcho: runtime.awaitingConfirmation && wordCount <= 8 && AFFIRMS.test(lower),
     asksToCheck: ASKS_TO_CHECK.test(lower),
     farewell: FAREWELL.test(lower),
-    asksCustomerSide: questions.some((s) => ASKS_CUSTOMER_SIDE.test(prep(s))),
-    closingQuestionOnly:
-      questions.length > 0 &&
-      questions.some((s) => ASKS_CUSTOMER_SIDE.test(prep(s)) || ANYTHING_ELSE.test(prep(s))) &&
-      questions.every(closingQuestion),
+    asksCustomerSide,
+    anythingElseAboutCase: !asksIfAll && questions.some((s) => ANYTHING_ELSE.test(prep(s))),
+    closingQuestionOnly: (asksCustomerSide || asksIfAll) && questions.every(closingQuestion),
     restates: restatesTime(commitment, runtime.commitments),
     summary: judgeSummary(args, sentences, wording),
     commitment,

@@ -21,5 +21,6 @@ export function normaliseRuntime(stored: EngineRuntime): EngineRuntime {
     assumptionsCorrected: old.assumptionsCorrected ?? [],
     misunderstandings: old.misunderstandings ?? [],
     lastToldIds: old.lastToldIds ?? [],
+    closingAtTurn: old.closingAtTurn ?? 0,
   };
 }

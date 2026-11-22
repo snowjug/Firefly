@@ -7,7 +7,14 @@ import { conformCustomerReply, endListItems } from './conform.ts';
 import { processCurveball, type CurveballTurnResult } from './curveballs.ts';
 import { processDiscovery, type DiscoveryTurnResult, type MatchingMode } from './discovery.ts';
 import { analyseTurn, engineerNameOf, recordCommitment, type TurnAnalysis } from './memory.ts';
-import { OFFER_HELP, planReply, revealText, type Flavour, type PlanPush } from './plan.ts';
+import {
+  closeKindOf,
+  OFFER_HELP,
+  planReply,
+  revealText,
+  type Flavour,
+  type PlanPush,
+} from './plan.ts';
 import { isAsking } from './pressing.ts';
 import { rngFor, type Rng } from './rng.ts';
 import { applyTraineeTurn, weightedCoverage } from './state.ts';
@@ -250,6 +257,7 @@ export async function processTraineeTurn(args: ProcessTurnArgs): Promise<Process
     traineeTurnNumber,
     effectiveTurn,
     discovery: discoveryMap,
+    closing: closeKindOf(classification, analysis),
   });
 
   const customer = { ...curveball.customer };
@@ -301,6 +309,8 @@ export async function processTraineeTurn(args: ProcessTurnArgs): Promise<Process
       ? [...runtime.firedCurveballs, curveball.fired.id]
       : runtime.firedCurveballs,
     lastCurveballTurn: curveball.fired ? traineeTurnNumber : runtime.lastCurveballTurn,
+    closingAtTurn:
+      runtime.closingAtTurn > 0 || !curveball.closing ? runtime.closingAtTurn : traineeTurnNumber,
     behaviourStreak: stateResult.streaks,
     turnsWithoutEmpathy: stateResult.turnsWithoutEmpathy,
     lastTemperatureDelta: tempDelta,

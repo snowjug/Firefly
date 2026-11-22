@@ -1365,6 +1365,41 @@ describe('the end of the call', () => {
     expect(reply(sim, 4)).not.toMatch(/\bbye\b|goodbye/i);
   });
 
+  it('does not take "anything else" about the problem for the end of the call, and does take it when it asks if that is all', async () => {
+    const about = [
+      'Is there anything else you noticed about the error?',
+      'Did you change anything else on the machine?',
+      'Is there anything else that changed before it started?',
+      'Have you tried anything else?',
+      'Is there anything else I should know?',
+      'Is there anything else you can tell me about it?',
+    ];
+    const ends = [
+      'Is there anything else I can help with today?',
+      'Anything else?',
+      'Do you have any other questions?',
+      "Is there anything else you'd like to add?",
+      "Is there anything else you'd like to tell me?",
+    ];
+    const scenario = makeScenario({ startingTemperature: 'calm', style: 'talkative' });
+    for (const [lines, closing] of [
+      [about, false],
+      [ends, true],
+    ] as const) {
+      for (const text of lines) {
+        const ctx = (await captureContexts(scenario, [GREET, text])).at(-1);
+        expect(ctx?.analysis.closingQuestionOnly, text).toBe(closing);
+        expect(ctx?.analysis.anythingElseAboutCase, text).toBe(!closing);
+        expect(ctx && planReply(ctx).close, text).toBe(closing ? 'asks-more' : null);
+      }
+    }
+    // A question about the problem still reaches discovery: the customer is asked what changed.
+    const ctx = (
+      await captureContexts(scenario, [GREET, 'Did anything else change before it started?'])
+    ).at(-1);
+    expect(ctx?.classification.discoveryIntents).toContain('recent_changes');
+  });
+
   it('is only ever a goodbye when the words are one: thanks, and "thanks for calling", are not', async () => {
     for (const text of [
       'Thanks for calling Microsoft support, how can I help?',

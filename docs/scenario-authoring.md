@@ -147,7 +147,7 @@ A curveball is a complication the customer introduces mid-call. Curveball types 
 
 - `allowedCurveballs` lists the types a call of this scenario can be configured with (1 to 8). **Every authored curveball must be listed.** A listed type with no authored definition uses a generic one.
 - Author at most one curveball per type, in `curveballs` (up to six): a call looks a curveball up by its type. When a call chooses none, the default set for its difficulty is the first authored ones, in file order, that the difficulty allows, so put the most representative one first.
-- A `trigger` says when it may fire: an earliest turn, optionally a latest turn, a minimum temperature, an unacknowledged impact, unclear ownership, or a discovered fact (`afterFact`, which must be a hidden fact id).
+- A `trigger` says when it may fire: an earliest turn, optionally a latest turn, a minimum temperature, an unacknowledged impact, unclear ownership, or a discovered fact (`afterFact`, which must be a hidden fact id). Whatever the trigger, a curveball does not come on a turn that ends the call, and one that has not come up by then is dropped for that call, even past its latest turn ([customer-realism.md](customer-realism.md#curveballs)).
 - `statement` is in the customer's voice. `expectedResponse` says what a strong response looks like, for coaching.
 
 ## Coaching grounding

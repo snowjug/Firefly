@@ -19,6 +19,7 @@ describe('a call saved before the customer had a memory', () => {
     assumptionsCorrected: undefined,
     misunderstandings: undefined,
     lastToldIds: undefined,
+    closingAtTurn: undefined,
   } as unknown as EngineRuntime;
 
   it('continues as a call that is under way, with nothing remembered that was never kept', () => {
@@ -33,6 +34,8 @@ describe('a call saved before the customer had a memory', () => {
     expect(runtime.assumptionsCorrected).toEqual([]);
     expect(runtime.misunderstandings).toEqual([]);
     expect(runtime.lastToldIds).toEqual([]);
+    // A call that was under way has not begun to close, so a curveball can still come.
+    expect(runtime.closingAtTurn).toBe(0);
     // What the old call did record is untouched.
     expect(runtime.customer).toEqual(fresh.customer);
     expect(runtime.toldKnownFacts).toEqual(fresh.toldKnownFacts);

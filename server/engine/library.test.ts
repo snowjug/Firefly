@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyConfig, type EffectiveScenario } from '#shared/domain/config.ts';
 import type { ScenarioDefinition } from '#shared/domain/scenario.ts';
-import { sentences } from '#shared/domain/text.ts';
+import { fold, sentences } from '#shared/domain/text.ts';
 import { CALL_STAGES, STYLES } from '#shared/domain/vocab.ts';
 import { getScenarioLibrary } from '../scenarios/index.ts';
 import { AI_POLITENESS, addressesBy, sentenceCount } from './conform.ts';
@@ -357,5 +357,80 @@ describe('a customer who sounds like a person, in every scenario, style and stag
       }
     }
     expect(found.slice(0, 8)).toEqual([]);
+  }, 60_000);
+});
+
+describe('a curveball on the way out of a call', () => {
+  const OPEN = [
+    'Good morning, this is Alex from Microsoft support. How can I help?',
+    'What exactly is happening, and what does the message say?',
+    'When did it start, and was anything changed just before that?',
+    'Who else is affected by this?',
+    "I'll take ownership of this and update you by 3 PM today.",
+  ];
+  const ENDINGS = [
+    ['says goodbye', "Thank you. I'll call you at 3 PM. Have a good day."],
+    ['wraps up', 'So to recap, I will call you back by 3 PM.'],
+    ['asks if that is all', 'Is there anything else I can help with?'],
+    ['asks what the customer has to do', 'Is there anything you need to do from your side first?'],
+  ] as const;
+  const ASKS = 'What browser are you using?';
+  const spoken = (text: string) => fold(expandContractions(text));
+
+  it('is never said on the turn the engineer ends the call, or after it, though it is due on that very turn', async () => {
+    const found: string[] = [];
+    let raised = 0;
+    let said = 0;
+    for (const definition of library) {
+      for (const seed of [1, 5, 9]) {
+        const base = at(definition, { callStage: 'first-contact', difficulty: 'challenge' }, seed);
+        // The engineer's turn number the call has reached when it ends: every curveball is due then.
+        const dry = await simulate(base, [...OPEN, ASKS]);
+        const due = dry.runtime.traineeTurns - dry.runtime.greetingTurns;
+        const scenario = {
+          ...base,
+          curveballs: base.curveballs.map((c) => ({
+            ...c,
+            trigger: { earliestTurn: due, latestTurn: due },
+          })),
+        };
+        const markers = scenario.curveballs
+          .map((c) => spoken(firstSentence(c.statement)))
+          .filter((m) => m.split(' ').length >= 3);
+        const where = `${definition.id}/seed ${seed}`;
+
+        // The same call that goes on instead of ending does raise it, so it was due.
+        const goingOn = await simulate(scenario, [...OPEN, ASKS]);
+        if (scenario.curveballs.length > 0) {
+          if (goingOn.runtime.customer.curveball.firedCount !== 1) found.push(`${where}: not due`);
+          else raised += 1;
+          const last = spoken(goingOn.turns.at(-1)?.customer ?? '');
+          if (markers.some((m) => last.includes(m))) said += 1;
+        }
+
+        for (const [kind, ending] of ENDINGS) {
+          const sim = await simulate(scenario, [...OPEN, ending, ASKS, 'And which version is it?']);
+          const there = `${where}, ${kind}`;
+          for (const t of sim.turns) {
+            const reply = spoken(t.customer);
+            if (markers.some((m) => reply.includes(m))) found.push(`${there}: ${t.customer}`);
+          }
+          const { runtime } = sim;
+          if (runtime.customer.curveball.firedCount !== 0 || runtime.firedCurveballs.length > 0)
+            found.push(`${there}: recorded as fired`);
+          if (
+            runtime.customer.curveball.status !== 'none' ||
+            runtime.customer.curveball.firedAtTurn
+          )
+            found.push(`${there}: state ${JSON.stringify(runtime.customer.curveball)}`);
+          if (sim.events.some((e) => e.category === 'curveball'))
+            found.push(`${there}: a curveball event`);
+        }
+      }
+    }
+    expect(found.slice(0, 8)).toEqual([]);
+    // The check was a real one: most of the calls did have a curveball due, and said it when going on.
+    expect(raised).toBeGreaterThan(30);
+    expect(said).toBeGreaterThan(20);
   }, 60_000);
 });

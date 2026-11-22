@@ -521,6 +521,24 @@ export const WRAPS_UP =
 // are not closing behaviour on their own, so they are deliberately not matched here.
 export const ANYTHING_ELSE =
   /\b(?:anything else|is there anything (?:else|more|further|other|i can|we can|you(?:'d| would) like)|any (?:other|further) (?:questions|issues|concerns|problems)|have i (?:answered|covered)|any questions)\b/;
+
+// What makes "anything else" a question about the case: what the customer saw, changed or tried, or
+// what the engineer needs to be told ("Did you change anything else?", "Is there anything else you
+// noticed?", "Is there anything else I should know?").
+const ABOUT_THE_CASE =
+  /\b(?:notic\w*|saw|seen|see|chang\w*|tri(?:ed|y)\w*|install\w*|updat\w*|restart\w*|reset\w*|affect\w*|happen\w*|differen\w*|wrong|odd|unusual|strange|weird|fail\w*|stop\w*|errors?|messages?|going on|(?:can|could|might|may) (?:you )?(?:tell|show|give|send) (?:me|us)|(?:tell|show) (?:me|us) (?:about|more)|help(?:s|ed|ful)? (?:me|us)|(?:i|we) (?:should|need to|ought to|must) know)\b/;
+
+/**
+ * Whether a sentence asks the customer if that is all ("Is there anything else I can help with?",
+ * "Anything else?", "Any other questions?"). The words that ask it also turn up in questions about
+ * the problem, which are not the end of the call: a sentence about what the customer saw, changed
+ * or can tell the engineer is not the closing question.
+ */
+export function asksIfThatIsAll(sentenceLower: string): boolean {
+  if (!ANYTHING_ELSE.test(sentenceLower)) return false;
+  return !/\banything else\b/.test(sentenceLower) || !ABOUT_THE_CASE.test(sentenceLower);
+}
+
 export const THANKS_CLOSE =
   /\b(?:thank(?:s| you)(?: (?:so much|very much|for (?:your time|calling|your patience|bearing)))?|have a (?:good|great|nice|lovely)|take care|good ?bye|bye(?: for now)?|speak (?:to you )?soon)\b/;
 // Saying goodbye. A thank you alone is not one (it comes all through a call), and neither is "until
