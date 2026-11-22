@@ -88,6 +88,9 @@ export function ScenarioCard(props: ScenarioCardProps) {
           name={props.name}
           value={scenario.id}
           checked={selected}
+          // The visible title names the card; the same words as `aria-label` keep the name when the
+          // title is scrolled out of the carousel's window (a checker cannot read hidden text).
+          aria-label={cardTitle(scenario)}
           aria-labelledby={ids.title}
           aria-describedby={described}
           onChange={() => props.onSelect(scenario.id)}
