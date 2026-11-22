@@ -252,7 +252,18 @@ describe('isUsableTranscript', () => {
     expect(isUsableTranscript(text)).toBe(true);
   });
 
-  it.each(['', '   ', 'uh', 'Um, er...', 'hmm mm', 'a', '1234', '...'])('rejects %j', (text) => {
-    expect(isUsableTranscript(text)).toBe(false);
-  });
+  // Browsers write spoken numbers as digits, so a number said alone is a turn, however short.
+  it.each(['4729', '5', '1234', 'A1', 'room 5', 'uh 5', '3.5', '£20', '07700 900123'])(
+    'accepts %j: a word with a digit in it is something the trainee said',
+    (text) => {
+      expect(isUsableTranscript(text)).toBe(true);
+    },
+  );
+
+  it.each(['', '   ', 'uh', 'Um, er...', 'hmm mm', 'a', 'I', '...', '-', "'", '£'])(
+    'rejects %j',
+    (text) => {
+      expect(isUsableTranscript(text)).toBe(false);
+    },
+  );
 });

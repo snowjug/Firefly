@@ -43,7 +43,12 @@ export function announcementFor(previous: MachineState, next: MachineState): Ann
       politeness: copy.announce,
     };
   }
-  if (next.hint && next.hint !== previous.hint) return polite(hintText(next.hint));
+  // A hands-free call that is muted shows "You are muted." as its guidance. The mute has its own
+  // sentence, below, so the guidance that arrives with it is not said as well.
+  const guidanceOfTheMute = next.hint?.code === 'muted' && next.muted && !previous.muted;
+  if (next.hint && next.hint !== previous.hint && !guidanceOfTheMute) {
+    return polite(hintText(next.hint));
+  }
 
   // Muting or pausing also changes the phase; what the trainee did is what they need to hear.
   if (next.muted !== previous.muted) return next.muted ? said('muted') : polite('Microphone on.');

@@ -4,7 +4,9 @@
 //
 // Turn-taking is controlled, not interruptive: the trainee speaks after the customer has finished,
 // and a pause to think must not be taken for the end of their turn. So the end of a turn waits for
-// a generous silence, and the trainee can always end it sooner with "Done speaking".
+// a generous silence, and the trainee can always end it sooner with "Done speaking". Silence alone
+// never ends listening: the microphone stays open between turns until the trainee mutes, pauses or
+// ends the call (the call machine's own timers, in `TIMINGS`, only soften and finally pause that).
 
 export const CAPTURE_TUNING = {
   // --- Finding speech -------------------------------------------------------------------
@@ -42,8 +44,33 @@ export const CAPTURE_TUNING = {
   minSpeechRms: 0.015,
 
   // --- The browser's own recognition ------------------------------------------------------
-  /** How long to wait for the final words after the trainee has stopped speaking. */
-  recognitionResultWaitMs: 8000,
+  // The browser's recogniser ends its sessions by itself (after quiet, and after a minute or so), so
+  // one listening pass restarts them without the trainee noticing. The end of a turn is still
+  // `endpointSilenceMs` above, decided by Firefly and not by the browser.
+  /** The pause before a session that ended is started again. */
+  recognitionRestartMs: 250,
+  /**
+   * A session that ends by itself (with no error) sooner than this, without any words, did not show
+   * that the recogniser works; one that lives at least this long does. A session that ends with an
+   * error counts as failed however long it lived, and the browser's own "no speech" (a quiet room)
+   * is never a failure, however soon it comes.
+   */
+  recognitionMinLifeMs: 3000,
+  /**
+   * This many sessions in a row that did not show the recogniser works (ended by an error, or by
+   * themselves within `recognitionMinLifeMs` without words) end the pass with a failure, so a restart
+   * loop of failing sessions is impossible. A session that produces words, ends with "no speech" or
+   * lives long enough starts the count again.
+   */
+  recognitionMaxFailedSessions: 4,
+  /**
+   * After "Done speaking", how long to wait for the browser to hand back what it had captured but not
+   * yet turned into words (`stop()` returns a result from the audio so far, normally within a
+   * moment, where `abort()` returns none). Short, because the button is meant to be fast, and
+   * shorter than the call machine's own wait for a finish request (`TIMINGS.finish`, 5 s), so the
+   * recogniser always answers first.
+   */
+  recognitionStopWaitMs: 2000,
 
   // --- Taking turns ---------------------------------------------------------------------
   /**

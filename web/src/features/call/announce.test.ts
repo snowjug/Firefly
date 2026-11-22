@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { VOICE_STATE_TEXT } from '../voice/states.ts';
 import { announcementFor, listeningAnnouncement, type Announcement } from './announce.ts';
-import { initialState, reduce, type MachineEvent, type MachineState } from './machine.ts';
+import {
+  IDLE_PAUSE_ROUNDS,
+  initialState,
+  reduce,
+  type MachineEvent,
+  type MachineState,
+} from './machine.ts';
 
 const run = (state: MachineState, ...events: MachineEvent[]) => events.reduce(reduce, state);
 
@@ -205,6 +211,21 @@ describe('announcementFor', () => {
     expect(announcementFor(listening, muted)?.text).toBe('Your microphone is muted.');
   });
 
+  it('says a mute once, in its own sentence, though the guidance "You are muted." arrives with it', () => {
+    const listening = fire(connected());
+    expect(reduce(listening, { type: 'toggle-mute' }).hint).toEqual({ code: 'muted' });
+    expect(told(listening, { type: 'toggle-mute' }, { type: 'toggle-mute' })).toEqual([
+      'Your microphone is muted.',
+      'Microphone on.',
+    ]);
+  });
+
+  it('says "You are muted." when a call that is still muted is resumed, because that is what is new', () => {
+    const muted = reduce(fire(connected()), { type: 'toggle-mute' });
+    const paused = reduce(muted, { type: 'toggle-pause' });
+    expect(told(paused, { type: 'toggle-pause' })).toEqual(['You are muted.']);
+  });
+
   it('says only a blocked microphone assertively, in the voice layer’s own sentence', () => {
     const asking = run(initialState(), LOADED, {
       type: 'begin',
@@ -255,10 +276,41 @@ describe('announcementFor', () => {
 
   it('puts a problem before a hint, and a hint before a switch', () => {
     const listening = fire(connected());
-    const quiet = reduce(listening, { type: 'nothing-heard' });
-    expect(announcementFor(listening, quiet)?.text).toMatch(/^Nothing was heard\./);
+    const quiet = fire(listening);
+    expect(announcementFor(listening, quiet)?.text).toBe(
+      'Still listening. Speak when you are ready.',
+    );
     const muted = reduce(quiet, { type: 'toggle-mute' });
     expect(announcementFor(quiet, muted)?.text).toBe('Your microphone is muted.');
+  });
+
+  it('says it is still listening once, however long the quiet lasts, and says why the call paused itself', () => {
+    let state = fire(connected());
+    const said: string[] = [];
+    for (let tick = 1; tick < IDLE_PAUSE_ROUNDS; tick++) {
+      const next = fire(state);
+      const announcement = announcementFor(state, next);
+      if (announcement) said.push(announcement.text);
+      state = next;
+    }
+    expect(said).toEqual(['Still listening. Speak when you are ready.']);
+
+    const paused = fire(state);
+    expect(announcementFor(state, paused)).toEqual({
+      text: 'Paused after 10 minutes without sound. Press Resume to carry on.',
+      politeness: 'polite',
+    });
+    // A fresh quiet spell after speech says it again, once more.
+    const spoke = run(fire(connected()), { type: 'speech-start' }, { type: 'speech-dropped' });
+    expect(told(spoke, { type: 'timeout', id: spoke.timer?.id ?? -1 })).toEqual([
+      'Still listening. Speak when you are ready.',
+    ]);
+  });
+
+  it('keeps the old hint for push to talk: "Nothing was heard." when Talk got nothing', () => {
+    const talking = run(connected(), { type: 'set-hands-free', on: false }, { type: 'talk' });
+    const quiet = fire(talking);
+    expect(announcementFor(talking, quiet)?.text).toMatch(/^Nothing was heard\./);
   });
 
   it('says nothing when nothing the trainee needs to know has changed', () => {

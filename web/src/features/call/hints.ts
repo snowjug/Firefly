@@ -16,6 +16,10 @@ export function hintText(hint: Hint): string {
       return 'Nothing was heard. Check your microphone.';
     case 'no-words':
       return 'No words could be made out. Speak again, or use text.';
+    case 'still-listening':
+      return 'Still listening. Speak when you are ready.';
+    case 'idle-paused':
+      return 'Paused after 10 minutes without sound. Press Resume to carry on.';
     case 'muted':
       return 'You are muted.';
     case 'paused':

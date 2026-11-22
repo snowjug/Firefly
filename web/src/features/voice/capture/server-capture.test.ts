@@ -3,7 +3,7 @@ import { acquireMicrophone, type MicrophoneHandle } from './microphone.ts';
 import { createServerCapture } from './server-capture.ts';
 import type { Capture, CaptureHandlers } from './types.ts';
 import { installFakes, type FakeEnv } from '../testing/fakes.ts';
-import { sine } from '../testing/signals.ts';
+import { silence, sine } from '../testing/signals.ts';
 
 let env: FakeEnv;
 afterEach(() => env.uninstall());
@@ -100,6 +100,19 @@ describe('server capture', () => {
     expect(env.audio.listeningWorklets()).toHaveLength(1);
     env.audio.speakSentence({ speechMs: 1000 });
     expect(log.slice(2)).toEqual(['start', 'end:silence', 'audio']);
+  });
+
+  it('stays open through minutes of silence without saying anything, and still captures the next sentence, once', async () => {
+    const { capture } = await setup();
+    const { log, audio, handlers } = recorder();
+    capture.listen(handlers);
+    // Three minutes of a quiet room, a second at a time: nothing ends the pass but the trainee.
+    for (let second = 0; second < 180; second++) env.audio.feed(silence(1000, 16000));
+    expect(log).toEqual([]);
+    expect(env.audio.listeningWorklets()).toHaveLength(1);
+    env.audio.speakSentence({ speechMs: 1000 });
+    expect(log).toEqual(['start', 'end:silence', 'audio']);
+    expect(audio).toHaveLength(1);
   });
 
   it('cuts a very long utterance at the limit the server accepts', async () => {

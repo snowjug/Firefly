@@ -59,6 +59,7 @@ import {
   isCurrentSend,
   isCurrentTranscription,
   isTranscriptionProblem,
+  MAX_SILENT_RETRIES,
   reduce,
   targets,
   TIMINGS,
@@ -251,6 +252,8 @@ export function createCallController(
       muted: machine.muted,
       paused: machine.paused,
       handsFree: machine.handsFree,
+      autoListening:
+        machine.voice && machine.handsFree && machine.silentRetries <= MAX_SILENT_RETRIES,
       audio:
         store.playbackKind === 'none' ? 'none' : machine.begun && !machine.canSpeak ? 'off' : 'on',
       speechDetected: machine.speechDetected,

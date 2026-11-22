@@ -366,12 +366,13 @@ export function apiError(
 
 /**
  * Words with nothing in them: filler sounds and single letters. A transcript made only of these is
- * not something the trainee said, and is never sent as a message.
+ * not something the trainee said, and is never sent as a message. A number is something they said,
+ * however short: browsers write spoken numbers as digits ("5", "4729").
  */
 const FILLERS = new Set(['uh', 'um', 'er', 'erm', 'ah', 'eh', 'hm', 'hmm', 'mm', 'mhm', 'huh']);
 
 /** True when a transcript holds at least one real word. */
 export function isUsableTranscript(text: string): boolean {
-  const words = text.toLowerCase().match(/[\p{L}']+/gu) ?? [];
-  return words.some((word) => word.length >= 2 && !FILLERS.has(word));
+  const words = text.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+  return words.some((word) => /\p{N}/u.test(word) || (word.length >= 2 && !FILLERS.has(word)));
 }

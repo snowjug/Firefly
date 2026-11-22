@@ -80,6 +80,55 @@ describe('the details', () => {
     expect(details['typed-fallback']?.text).toMatch(/Typing a reply always works/);
   });
 
+  describe('a hands-free call keeps listening, and says so', () => {
+    it.each([AZURE, DEMO, BROWSER])(
+      'says Firefly listens whenever it is your turn, speaking or not, and not while the customer speaks, for %j',
+      (context) => {
+        const text = byId(context)['recording-status']?.text ?? '';
+        expect(text).toMatch(/hands-free call Firefly keeps listening whenever it is your turn/);
+        expect(text).toMatch(/whether or not you are speaking/);
+        expect(text).toMatch(/stops while the customer speaks/);
+      },
+    );
+
+    it.each([AZURE, DEMO, BROWSER])(
+      'says muting or pausing stops it at once, and that it pauses itself after ten minutes of quiet, for %j',
+      (context) => {
+        const text = byId(context)['stop-any-time']?.text ?? '';
+        expect(text).toMatch(/Muting or pausing stops Firefly listening at once/);
+        expect(text).toMatch(/pauses itself after 10 minutes without sound/);
+        expect(text).toMatch(/Pausing or ending the call lets go of the microphone/);
+      },
+    );
+
+    it('says nothing about hands-free listening when no speech service is in use: nothing is listening', () => {
+      expect(byId(TYPED)['recording-status']?.text).not.toMatch(/hands-free/);
+      expect(byId(TYPED)['stop-any-time']?.text).not.toMatch(/hands-free|10 minutes/);
+    });
+
+    it('with the browser’s recogniser, says it listens for as long as the microphone is open, not only while you speak, whoever runs it', () => {
+      expect(whoHearsYou(BROWSER)).toMatch(/online service run by the browser's maker/);
+      expect(whoHearsYou(BROWSER)).toMatch(
+        /listens for as long as the microphone is open, not only while you speak/,
+      );
+      const elsewhere = whoHearsYou({ ...BROWSER, chromium: false });
+      expect(elsewhere).toMatch(/up to the browser/);
+      expect(elsewhere).toMatch(
+        /listens for as long as the microphone is open, not only while you speak/,
+      );
+      expect(elsewhere).not.toMatch(/online service/);
+    });
+
+    it('with the server’s speech service, says speech is found on the device and only that is kept and sent, and the quiet is not', () => {
+      for (const context of [AZURE, DEMO]) {
+        const text = byId(context)['raw-audio']?.text ?? '';
+        expect(text).toMatch(/your browser listens for speech on your device/);
+        expect(text).toMatch(/keeps and sends only what sounds like speech, a sentence at a time/);
+        expect(text).toMatch(/throws away the quiet between/);
+      }
+    });
+  });
+
   it('says where the transcript is stored and that no audio is', () => {
     const { transcript } = byId(AZURE);
     expect(transcript?.text).toMatch(/Firefly server/);

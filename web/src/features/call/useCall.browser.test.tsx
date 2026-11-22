@@ -1,9 +1,11 @@
 import { act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../../lib/api.ts';
+import { CAPTURE_TUNING } from '../voice/capture/tuning.ts';
 import { pickVoice } from '../voice/playback/voices.ts';
 import { fakeVoice, type FakeRecognition } from '../voice/testing/fakes.ts';
 import type { UseCallOptions } from './contract.ts';
+import { IDLE_PAUSE_ROUNDS, TIMINGS } from './machine.ts';
 import { advance, flush, Harness, NO_SERVER_SPEECH } from './testing.ts';
 
 vi.mock('../../lib/api.ts', async (importOriginal) => {
@@ -27,6 +29,8 @@ vi.mock('../../lib/api.ts', async (importOriginal) => {
 const mocked = vi.mocked(api);
 const h = new Harness(mocked);
 
+const ENDPOINT = CAPTURE_TUNING.endpointSilenceMs;
+const RESTART = CAPTURE_TUNING.recognitionRestartMs;
 const EDGE =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0';
 const SAFARI =
@@ -68,7 +72,10 @@ async function openCall() {
   await customerFinishes();
 }
 
-/** The browser hears a sentence: interim words first, then the final text. */
+/**
+ * The browser hears a sentence: interim words first, then the final text. The turn is the trainee's
+ * to end by being quiet, so the call is then given the quiet that ends it.
+ */
 async function hears(text: string) {
   const recognition = h.env.recognition.latest();
   await act(async () => {
@@ -77,6 +84,7 @@ async function hears(text: string) {
     recognition.say(text.split(' ').slice(0, 2).join(' '), false);
     recognition.say(text, true);
   });
+  await advance(ENDPOINT);
   await flush();
 }
 
@@ -340,7 +348,7 @@ describe('the customer’s voice, spoken by the browser', () => {
 });
 
 describe('the trainee’s voice, recognised by the browser', () => {
-  it('listens for one sentence in the chosen language, shows captions, and sends the final words as voice with no audio going to the server', async () => {
+  it('listens continuously in the chosen language, shows the words as they come, and sends the whole turn once the trainee has been quiet, with no audio going to the server', async () => {
     await mountBrowser();
     await openCall();
     expect(phase()).toBe('listening');
@@ -348,7 +356,7 @@ describe('the trainee’s voice, recognised by the browser', () => {
     expect(recognition).toMatchObject({
       lang: 'en-GB',
       interimResults: true,
-      continuous: false,
+      continuous: true,
       running: true,
     });
     expect(h.snap().speechDetected).toBe(false);
@@ -364,6 +372,13 @@ describe('the trainee’s voice, recognised by the browser', () => {
     expect(h.snap().phase).toBe('listening');
 
     await act(async () => recognition.say('Hello Priya, how can I help?', true));
+    // The browser says the sentence is final; the trainee may be about to go on, so nothing is sent.
+    await advance(ENDPOINT - 100);
+    expect(phase()).toBe('listening');
+    expect(mocked.sendMessage).not.toHaveBeenCalled();
+    expect(h.snap().interim).toBe('Hello Priya, how can I help?');
+
+    await advance(100);
     await flush();
     expect(mocked.transcribe).not.toHaveBeenCalled();
     expect(mocked.sendMessage).toHaveBeenCalledTimes(1);
@@ -386,6 +401,66 @@ describe('the trainee’s voice, recognised by the browser', () => {
     expect(h.env.recognition.instances).toHaveLength(2);
   });
 
+  it('keeps a thought together across a pause: two sentences with a pause between them are one message', async () => {
+    await mountBrowser();
+    await openCall();
+    const recognition = h.env.recognition.latest();
+    await act(async () => {
+      recognition.open();
+      recognition.hear(['Yes, this is the account owner.']);
+    });
+    // A pause to think, shorter than the end of a turn: the customer does not answer yet.
+    await advance(ENDPOINT - 200);
+    expect(mocked.sendMessage).not.toHaveBeenCalled();
+    await act(async () => {
+      recognition.hear(['Yes, this is the account owner.'], ['what changed after the reset']);
+    });
+    await advance(ENDPOINT);
+    await flush();
+    expect(sentTexts()).toEqual(['Yes, this is the account owner. what changed after the reset']);
+    expect(phase()).toBe('customer-speaking');
+  });
+
+  it('shows the words as one growing sentence, and the quiet that follows them sends them even if the browser never calls them final', async () => {
+    await mountBrowser();
+    await openCall();
+    const recognition = h.env.recognition.latest();
+    await act(async () => {
+      recognition.open();
+      recognition.speechStart();
+      recognition.say('I will check your account', false);
+      recognition.speechEnd();
+    });
+    expect(phase()).toBe('listening');
+    expect(h.snap()).toMatchObject({ speechDetected: true, interim: 'I will check your account' });
+    await advance(ENDPOINT);
+    await flush();
+    expect(sentTexts()).toEqual(['I will check your account']);
+    expect(phase()).toBe('customer-speaking');
+  });
+
+  it('ignores a sound that gave no words: nothing is sent, nothing is said, and the call keeps listening', async () => {
+    await mountBrowser();
+    await openCall();
+    const recognition = h.env.recognition.latest();
+    await act(async () => {
+      recognition.open();
+      recognition.speechStart();
+      recognition.speechEnd();
+    });
+    expect(h.snap().speechDetected).toBe(true);
+    await advance(ENDPOINT);
+    expect(h.snap()).toMatchObject({
+      phase: 'listening',
+      speechDetected: false,
+      problem: null,
+      hint: null,
+    });
+    expect(h.snap().turns).toHaveLength(1);
+    expect(mocked.sendMessage).not.toHaveBeenCalled();
+    expect(recognition.running).toBe(true);
+  });
+
   it('moves the level meter while the trainee speaks, and holds it at zero otherwise', async () => {
     await mountBrowser();
     await openCall();
@@ -398,50 +473,6 @@ describe('the trainee’s voice, recognised by the browser', () => {
     expect(h.snap().micLevel).toBe(0);
     await advance(300);
     expect(h.snap().micLevel).toBe(0);
-  });
-
-  it('shows what was heard so far while the browser finishes, and uses it if the final words never come', async () => {
-    await mountBrowser();
-    await openCall();
-    const recognition = h.env.recognition.latest();
-    await act(async () => {
-      recognition.open();
-      recognition.speechStart();
-      recognition.say('I will check your account', false);
-      recognition.speechEnd();
-    });
-    expect(phase()).toBe('transcribing');
-    expect(h.snap().turns.at(-1)).toMatchObject({
-      role: 'trainee',
-      status: 'transcribing',
-      text: 'I will check your account',
-      inputMode: 'voice',
-    });
-
-    // The browser ends its session without a final result: what it heard is used.
-    await act(async () => recognition.close());
-    await flush();
-    expect(sentTexts()).toEqual(['I will check your account']);
-    expect(phase()).toBe('customer-speaking');
-  });
-
-  it('gives up, with a way to try again, when the browser never reports the words', async () => {
-    await mountBrowser();
-    await openCall();
-    const recognition = h.env.recognition.latest();
-    await act(async () => {
-      recognition.open();
-      recognition.speechStart();
-      recognition.speechEnd();
-    });
-    expect(phase()).toBe('transcribing');
-    await advance(10_000);
-    expect(phase()).toBe('ready-for-next-turn');
-    // The browser's own service never answered: it is the same as not being able to reach it.
-    expect(h.snap().problem).toMatchObject({ code: 'offline', retry: 'transcribe' });
-    expect(h.snap().turns).toHaveLength(1);
-    expect(mocked.sendMessage).not.toHaveBeenCalled();
-    expect(recognition.running).toBe(false);
   });
 
   // Recorded with a real Edge 158 and Chrome 157 fed clean synthetic speech: both heard it (speech
@@ -486,6 +517,7 @@ describe('the trainee’s voice, recognised by the browser', () => {
 
         // The retries are used up: the call waits for the trainee, and typing still works.
         expect(phase()).toBe('ready-for-next-turn');
+        expect(h.snap().autoListening).toBe(false);
         expect(h.env.recognition.instances).toHaveLength(4);
         await advance(60_000);
         expect(h.env.recognition.instances).toHaveLength(4);
@@ -499,16 +531,50 @@ describe('the trainee’s voice, recognised by the browser', () => {
       },
     );
 
-    it('says that nothing was heard, not that no words were made out, when no sound was picked up', async () => {
+    it('says nothing when a session ends without any sound: it is started again and the call carries on listening', async () => {
       await mountBrowser();
       await openCall();
       await act(async () => {
         h.env.recognition.latest().open();
         h.env.recognition.latest().close();
       });
-      expect(h.snap().hint).toMatch(/^Nothing was heard\./);
-      expect(h.snap().hint).toMatch(/Check your microphone/);
+      await advance(RESTART);
+      expect(h.snap()).toMatchObject({ phase: 'listening', hint: null, problem: null });
+      expect(h.snap().autoListening).toBe(true);
+      expect(h.env.recognition.instances).toHaveLength(2);
+      expect(h.env.recognition.latest().running).toBe(true);
     });
+
+    it.each([
+      [
+        'the browser ends the stopped session',
+        async () => {
+          await act(async () => h.env.recognition.latest().close());
+        },
+      ],
+      [
+        'the browser never answers, and the short wait is over',
+        () => advance(CAPTURE_TUNING.recognitionStopWaitMs),
+      ],
+    ])(
+      'in push to talk, finishing with nothing heard still says that nothing was heard (%s)',
+      async (_label, browserAnswers) => {
+        await mountBrowser();
+        h.do(() => h.actions().setHandsFree(false));
+        await openCall();
+        act(() => h.actions().talk());
+        await flush();
+        expect(phase()).toBe('listening');
+        act(() => h.actions().stopTalking());
+        await flush();
+        expect(h.env.recognition.latest().stops).toBe(1);
+        await browserAnswers();
+        await flush();
+        expect(phase()).toBe('ready-for-next-turn');
+        expect(h.snap().hint).toMatch(/^Nothing was heard\./);
+        expect(h.snap().hint).toMatch(/Check your microphone/);
+      },
+    );
   });
 
   it('never makes a second message from a repeated or late result', async () => {
@@ -533,7 +599,6 @@ describe('the trainee’s voice, recognised by the browser', () => {
     ['not-allowed', 'microphone-denied', 'denied', 'text'],
     ['service-not-allowed', 'microphone-denied', 'denied', 'text'],
     ['audio-capture', 'microphone-missing', 'unavailable', 'text'],
-    ['network', 'offline', 'granted', 'voice'],
     ['language-not-supported', 'speech-service-unavailable', 'granted', 'voice'],
     ['bad-grammar', 'transcription-failed', 'granted', 'voice'],
   ] as const)(
@@ -562,48 +627,191 @@ describe('the trainee’s voice, recognised by the browser', () => {
     },
   );
 
-  it('listens again from Try again after the browser’s service fails, and the problem clears', async () => {
-    await mountBrowser();
-    await openCall();
-    await act(async () => h.env.recognition.latest().fail('network'));
-    await flush();
-    // Hands-free does not retry a failing service by itself.
-    await advance(5000);
-    expect(phase()).toBe('ready-for-next-turn');
-    expect(h.env.recognition.instances).toHaveLength(1);
+  describe('when the browser’s service stops answering', () => {
+    /** The browser's session ends with a network error, as often as the call starts one. */
+    async function networkFailures(count: number) {
+      for (let attempt = 1; attempt <= count; attempt++) {
+        await act(async () => h.env.recognition.latest().fail('network'));
+        await advance(RESTART);
+      }
+    }
 
-    act(() => h.actions().retry());
-    await flush();
-    expect(phase()).toBe('listening');
-    expect(h.env.recognition.instances).toHaveLength(2);
-    await hears('Hello again, can you hear me?');
-    expect(sentTexts()).toEqual(['Hello again, can you hear me?']);
-    expect(h.snap().problem).toBeNull();
+    it('treats one network error as a hiccup: the session starts again, nothing is shown, and the call goes on listening', async () => {
+      await mountBrowser();
+      await openCall();
+      await networkFailures(1);
+      expect(h.snap()).toMatchObject({ phase: 'listening', problem: null, hint: null });
+      expect(h.env.recognition.instances).toHaveLength(2);
+      expect(h.env.recognition.latest().running).toBe(true);
+      await hears('Hello again, can you hear me?');
+      expect(sentTexts()).toEqual(['Hello again, can you hear me?']);
+    });
+
+    it('says so, with a way to try again and to type, when it keeps failing: never a silent dead microphone', async () => {
+      await mountBrowser();
+      await openCall();
+      await networkFailures(CAPTURE_TUNING.recognitionMaxFailedSessions);
+      expect(h.snap().problem).toMatchObject({ code: 'offline', textFallback: true });
+      expect(h.snap().microphone).toBe('granted');
+      expect(phase()).toBe('ready-for-next-turn');
+      expect(h.env.recognition.instances.filter((instance) => instance.running)).toHaveLength(0);
+      // Hands-free does not retry a failing service by itself.
+      await advance(60_000);
+      expect(h.env.recognition.instances).toHaveLength(CAPTURE_TUNING.recognitionMaxFailedSessions);
+      let accepted = false;
+      await act(async () => {
+        accepted = await h.actions().sendText('I can still type.');
+      });
+      await flush();
+      expect(accepted).toBe(true);
+    });
+
+    it('says so too when the service fails slowly, each session lasting many seconds before it errors, instead of listening for ever', async () => {
+      await mountBrowser();
+      await openCall();
+      for (let attempt = 1; attempt <= CAPTURE_TUNING.recognitionMaxFailedSessions; attempt++) {
+        await act(async () => h.env.recognition.latest().open());
+        await advance(20_000);
+        await act(async () => h.env.recognition.latest().fail('network'));
+        await advance(RESTART);
+      }
+      expect(h.snap().problem).toMatchObject({ code: 'offline', textFallback: true });
+      expect(phase()).toBe('ready-for-next-turn');
+      expect(h.env.recognition.instances.filter((instance) => instance.running)).toHaveLength(0);
+      await advance(60_000);
+      expect(h.env.recognition.instances).toHaveLength(CAPTURE_TUNING.recognitionMaxFailedSessions);
+    });
+
+    it('listens again from Try again, and the problem clears', async () => {
+      await mountBrowser();
+      await openCall();
+      await networkFailures(CAPTURE_TUNING.recognitionMaxFailedSessions);
+      expect(h.snap().problem?.code).toBe('offline');
+
+      act(() => h.actions().retry());
+      await flush();
+      expect(phase()).toBe('listening');
+      expect(h.env.recognition.latest().running).toBe(true);
+      await hears('Hello again, can you hear me?');
+      expect(sentTexts()).toEqual(['Hello again, can you hear me?']);
+      expect(h.snap().problem).toBeNull();
+    });
   });
 
-  it('treats the browser hearing nothing as silence: a hint, a few quiet retries, then it waits', async () => {
-    await mountBrowser();
-    await openCall();
-    for (let pass = 1; pass <= 4; pass++) {
-      expect(h.env.recognition.instances).toHaveLength(pass);
-      await act(async () => {
-        h.env.recognition.latest().fail('no-speech');
-        h.env.recognition.latest().close();
-      });
-      expect(h.snap().hint).toMatch(/Nothing was heard/);
-      expect(h.snap().problem).toBeNull();
-      await advance(400);
+  describe('quiet', () => {
+    // Chrome ends a quiet session after some seconds (an assumption: nobody checked here), and the
+    // call starts the next one without a sound or a change on screen.
+    let quietSeconds = 0;
+    async function sessionEnds() {
+      // The browser reports that the session started, and that it ended some seconds later.
+      await act(async () => h.env.recognition.latest().open());
+      await advance(7500);
+      await act(async () => h.env.recognition.latest().fail('no-speech'));
+      await advance(RESTART);
+      quietSeconds += (7500 + RESTART) / 1000;
     }
-    // After the retries are used up the microphone stays closed until the trainee asks for it.
-    expect(phase()).toBe('ready-for-next-turn');
-    expect(h.env.recognition.instances).toHaveLength(4);
-    await advance(60_000);
-    expect(h.env.recognition.instances).toHaveLength(4);
+    beforeEach(() => {
+      quietSeconds = 0;
+    });
 
-    act(() => h.actions().talk());
-    await flush();
-    expect(phase()).toBe('listening');
-    expect(h.env.recognition.instances).toHaveLength(5);
+    it('is never a reason to stop: the sessions the browser ends are started again, the call says once that it is still listening, and nothing is counted against the trainee', async () => {
+      await mountBrowser();
+      await openCall();
+      while (quietSeconds < TIMINGS.listenIdle / 1000) await sessionEnds();
+      expect(h.snap().hint).toBe('Still listening. Speak when you are ready.');
+      expect(h.snap().announcement?.text).toBe('Still listening. Speak when you are ready.');
+      const said = h.snap().announcement?.id;
+
+      while (quietSeconds < 5 * 60) await sessionEnds();
+      expect(h.snap()).toMatchObject({
+        phase: 'listening',
+        paused: false,
+        problem: null,
+        micOpen: true,
+        autoListening: true,
+        hint: 'Still listening. Speak when you are ready.',
+      });
+      // Said once: the same words are not announced again at every tick.
+      expect(h.snap().announcement?.id).toBe(said);
+      expect(h.env.recognition.latest().running).toBe(true);
+      expect(h.env.mic.openTracks()).toHaveLength(1);
+      expect(mocked.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('stops saying "still listening" as soon as the microphone is closed, as it is for a replay of the customer, and not before', async () => {
+      await mountBrowser();
+      await openCall();
+      await advance(TIMINGS.listenIdle);
+      expect(h.snap().hint).toBe('Still listening. Speak when you are ready.');
+      expect(h.env.recognition.latest().running).toBe(true);
+
+      act(() => h.actions().replay());
+      await flush();
+      expect(phase()).toBe('customer-speaking');
+      expect(h.env.recognition.latest().running).toBe(false);
+      expect(h.snap().hint).toBeNull();
+
+      // It stays gone when the customer has finished and the microphone is open again, until the
+      // next quiet is long enough to say it afresh.
+      await customerFinishes();
+      expect(phase()).toBe('listening');
+      expect(h.snap().hint).toBeNull();
+      await advance(TIMINGS.listenIdle);
+      expect(h.snap().hint).toBe('Still listening. Speak when you are ready.');
+    });
+
+    it('still hears the next sentence, sends it exactly once, and the customer replies', async () => {
+      await mountBrowser();
+      await openCall();
+      while (quietSeconds < 4 * 60) await sessionEnds();
+      expect(phase()).toBe('listening');
+
+      await hears('I am calling about the reset email.');
+      expect(sentTexts()).toEqual(['I am calling about the reset email.']);
+      expect(phase()).toBe('customer-speaking');
+      expect(h.snap().turns.map((turn) => turn.role)).toEqual(['customer', 'trainee', 'customer']);
+      expect(h.snap().hint).toBeNull();
+      await customerFinishes();
+      expect(phase()).toBe('listening');
+      // A fresh quiet: the soft hint comes again after its own 15 seconds, and not before.
+      await advance(TIMINGS.listenIdle - 1000);
+      expect(h.snap().hint).toBeNull();
+      await advance(1000);
+      expect(h.snap().hint).toBe('Still listening. Speak when you are ready.');
+      expect(sentTexts()).toHaveLength(1);
+    });
+
+    it('pauses the call by itself after ten minutes, lets go of the microphone, and listens again on Resume', async () => {
+      await mountBrowser();
+      await openCall();
+      for (let n = 0; n < 120 && !h.snap().paused; n++) await sessionEnds();
+      expect(quietSeconds).toBeGreaterThanOrEqual(
+        (IDLE_PAUSE_ROUNDS * TIMINGS.listenIdle) / 1000 - 8,
+      );
+      expect(quietSeconds).toBeLessThan((IDLE_PAUSE_ROUNDS * TIMINGS.listenIdle) / 1000 + 9);
+      expect(h.snap()).toMatchObject({
+        paused: true,
+        stage: 'paused',
+        hint: 'Paused after 10 minutes without sound. Press Resume to carry on.',
+        announcement: {
+          text: 'Paused after 10 minutes without sound. Press Resume to carry on.',
+        },
+      });
+      expect(h.env.recognition.instances.filter((instance) => instance.running)).toHaveLength(0);
+      expect(h.env.mic.openTracks()).toHaveLength(0);
+      expect(h.env.audio.openContexts()).toHaveLength(0);
+      const sessions = h.env.recognition.instances.length;
+      await advance(60_000);
+      expect(h.env.recognition.instances).toHaveLength(sessions);
+
+      act(() => h.actions().togglePause());
+      await advance(400);
+      expect(h.snap()).toMatchObject({ paused: false, phase: 'listening', hint: null });
+      expect(h.env.mic.openTracks()).toHaveLength(1);
+      expect(h.env.recognition.latest().running).toBe(true);
+      await hears('Sorry, I stepped away for a moment.');
+      expect(sentTexts()).toEqual(['Sorry, I stepped away for a moment.']);
+    });
   });
 
   it('uses on-device recognition when the browser offers it, and says so', async () => {
@@ -637,13 +845,14 @@ describe('the trainee’s voice, recognised by the browser', () => {
     expect(phase()).toBe('listening');
   });
 
-  it('is push to talk when hands-free is off: Talk opens the recogniser and Stop finishes the sentence', async () => {
+  it('is push to talk when hands-free is off: Talk opens the recogniser and Done speaking sends what was heard without waiting for the quiet', async () => {
     await mountBrowser();
     h.do(() => h.actions().setHandsFree(false));
     await openCall();
     expect(phase()).toBe('ready-for-next-turn');
     await advance(10_000);
     expect(h.env.recognition.instances).toHaveLength(0);
+    expect(h.snap().autoListening).toBe(false);
 
     act(() => h.actions().talk());
     await flush();
@@ -654,12 +863,205 @@ describe('the trainee’s voice, recognised by the browser', () => {
       recognition.speechStart();
       recognition.say('Push to talk works', false);
     });
+    // No waiting for the quiet that would end the turn by itself: the browser is asked to stop, and
+    // the turn is sent as soon as it has answered.
     act(() => h.actions().stopTalking());
+    await flush();
     expect(recognition.stops).toBe(1);
-    expect(phase()).toBe('transcribing');
-    await act(async () => recognition.say('Push to talk works', true));
+    expect(recognition.aborts).toBe(0);
+    expect(mocked.sendMessage).not.toHaveBeenCalled();
+    await act(async () => recognition.close());
     await flush();
     expect(sentTexts()).toEqual(['Push to talk works']);
+    expect(recognition.running).toBe(false);
+    expect(phase()).toBe('customer-speaking');
+  });
+
+  describe('Done speaking', () => {
+    /** The trainee is part-way through a sentence, and the browser has more of it than it has shown. */
+    async function almostThere(handsFree: boolean) {
+      await mountBrowser();
+      if (!handsFree) h.do(() => h.actions().setHandsFree(false));
+      await openCall();
+      if (!handsFree) {
+        act(() => h.actions().talk());
+        await flush();
+      }
+      const recognition = h.env.recognition.latest();
+      await act(async () => {
+        recognition.open();
+        recognition.speechStart();
+        recognition.say("I'd like to cancel my", false);
+      });
+      act(() => h.actions().stopTalking());
+      await flush();
+      return recognition;
+    }
+
+    it.each([
+      ['hands-free', true],
+      ['push to talk', false],
+    ])(
+      '%s: keeps the end of the sentence, the words the browser had caught and had not yet shown',
+      async (_label, handsFree) => {
+        const recognition = await almostThere(handsFree);
+        expect(recognition.stops).toBe(1);
+        expect(recognition.aborts).toBe(0);
+        // The browser hands back the rest as it stops.
+        await act(async () => {
+          recognition.say("I'd like to cancel my subscription", true);
+          recognition.close();
+        });
+        await flush();
+        expect(sentTexts()).toEqual(["I'd like to cancel my subscription"]);
+        expect(phase()).toBe('customer-speaking');
+        expect(h.env.recognition.instances.filter((instance) => instance.running)).toHaveLength(0);
+      },
+    );
+
+    it('does not wait for ever for a browser that never answers: what was shown is sent after a short wait', async () => {
+      const recognition = await almostThere(true);
+      await advance(CAPTURE_TUNING.recognitionStopWaitMs - 100);
+      expect(mocked.sendMessage).not.toHaveBeenCalled();
+      expect(phase()).toBe('listening');
+      await advance(100);
+      await flush();
+      expect(sentTexts()).toEqual(["I'd like to cancel my"]);
+      expect(recognition.running).toBe(false);
+      // Nothing is started again behind it, and nothing more is sent.
+      await advance(1000);
+      expect(h.env.recognition.instances).toHaveLength(1);
+      expect(sentTexts()).toHaveLength(1);
+    });
+
+    it('is cancelled by Mute pressed before the browser has answered: nothing is sent, now or later', async () => {
+      const recognition = await almostThere(true);
+      act(() => h.actions().toggleMute());
+      await flush();
+      expect(recognition.running).toBe(false);
+      recognition.say("I'd like to cancel my subscription", true);
+      recognition.close();
+      await advance(CAPTURE_TUNING.recognitionStopWaitMs + ENDPOINT * 5);
+      expect(mocked.sendMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  it('in push to talk, a pass nobody speaks into ends after fifteen seconds with the old hint, as it always did', async () => {
+    await mountBrowser();
+    h.do(() => h.actions().setHandsFree(false));
+    await openCall();
+    act(() => h.actions().talk());
+    await flush();
+    const recognition = h.env.recognition.latest();
+    await act(async () => recognition.open());
+    await advance(TIMINGS.listenIdle - 100);
+    expect(phase()).toBe('listening');
+    await advance(100);
+    expect(phase()).toBe('ready-for-next-turn');
+    expect(h.snap().hint).toMatch(/^Nothing was heard\./);
+    expect(recognition.running).toBe(false);
+    await advance(60_000);
+    expect(h.env.recognition.instances).toHaveLength(1);
+  });
+
+  describe('closing the microphone in the middle of a turn', () => {
+    /** The trainee is part-way through a sentence: the words are on the screen and have not been sent. */
+    async function midSentence() {
+      await mountBrowser();
+      await openCall();
+      const recognition = h.env.recognition.latest();
+      await act(async () => {
+        recognition.open();
+        recognition.speechStart();
+        recognition.say('I would like to', false);
+      });
+      expect(h.snap()).toMatchObject({ speechDetected: true, interim: 'I would like to' });
+      return recognition;
+    }
+
+    it.each([
+      ['Mute', () => h.actions().toggleMute()],
+      ['Pause', () => h.actions().togglePause()],
+    ])(
+      '%s: the sentence is not sent, the recogniser is let go of at once, and nothing runs afterwards',
+      async (_label, press) => {
+        const recognition = await midSentence();
+        act(() => press());
+        await flush();
+        expect(recognition.running).toBe(false);
+        expect(recognition.onresult).toBeNull();
+        expect(h.snap()).toMatchObject({ interim: '', speechDetected: false, micLevel: 0 });
+        // A late result from the browser, and all the time in the world, send nothing.
+        recognition.say('I would like to cancel', true);
+        await advance(ENDPOINT * 5);
+        expect(mocked.sendMessage).not.toHaveBeenCalled();
+        expect(h.env.recognition.instances).toHaveLength(1);
+      },
+    );
+
+    it('End call: the sentence is not sent, and the microphone and recogniser are let go of', async () => {
+      h.server.allowEmptyEnd = true;
+      const recognition = await midSentence();
+      await h.endCall();
+      expect(h.snap().phase).toBe('completed');
+      expect(recognition.running).toBe(false);
+      expect(h.env.mic.openTracks()).toHaveLength(0);
+      await advance(ENDPOINT * 5);
+      expect(mocked.sendMessage).not.toHaveBeenCalled();
+      expect(h.env.recognition.instances).toHaveLength(1);
+    });
+
+    it('typing instead: the spoken words are let go of, the typed message is the turn, and nothing spoken follows it', async () => {
+      const recognition = await midSentence();
+      let accepted = false;
+      await act(async () => {
+        accepted = await h.actions().sendText('I will type it.');
+      });
+      await flush();
+      expect(accepted).toBe(true);
+      expect(recognition.running).toBe(false);
+      await advance(ENDPOINT * 5);
+      expect(sentTexts()).toEqual(['I will type it.']);
+    });
+
+    it('the customer’s voice (Replay): the recogniser is let go of at once, and the words that were waiting are never sent', async () => {
+      const recognition = await midSentence();
+      act(() => h.actions().replay());
+      await flush();
+      expect(phase()).toBe('customer-speaking');
+      expect(recognition.running).toBe(false);
+      expect(h.snap().interim).toBe('');
+      await advance(ENDPOINT * 5);
+      expect(mocked.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('leaving the page: nothing is sent, and no timer or listener outlives the call', async () => {
+      const recognition = await midSentence();
+      h.call.unmount();
+      await flush();
+      expect(recognition.running).toBe(false);
+      expect(recognition.onresult).toBeNull();
+      expect(h.env.mic.openTracks()).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+      await advance(ENDPOINT * 5);
+      expect(mocked.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('a hidden tab pauses the call like Pause does, and the sentence is not sent', async () => {
+      const recognition = await midSentence();
+      const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+      try {
+        await act(async () => {
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+      } finally {
+        hidden.mockRestore();
+      }
+      expect(h.snap().paused).toBe(true);
+      expect(recognition.running).toBe(false);
+      await advance(ENDPOINT * 5);
+      expect(mocked.sendMessage).not.toHaveBeenCalled();
+    });
   });
 
   it('stops the recogniser when muted, and listens again when unmuted', async () => {
@@ -674,6 +1076,8 @@ describe('the trainee’s voice, recognised by the browser', () => {
     await flush();
     expect(first.running).toBe(false);
     expect(h.snap().muted).toBe(true);
+    // No Talk to press in a hands-free call, so the guidance line says it without one.
+    expect(h.snap().hint).toBe('You are muted.');
     expect(h.snap().micLevel).toBe(0);
     expect(h.env.mic.tracks[0]?.enabled).toBe(false);
     await advance(10_000);
@@ -682,6 +1086,7 @@ describe('the trainee’s voice, recognised by the browser', () => {
     act(() => h.actions().toggleMute());
     await advance(400);
     expect(phase()).toBe('listening');
+    expect(h.snap().hint).toBeNull();
     expect(h.env.recognition.latest()).not.toBe(first);
     expect(h.env.recognition.latest().running).toBe(true);
     expect(h.env.mic.tracks[0]?.enabled).toBe(true);
