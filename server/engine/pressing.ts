@@ -47,6 +47,11 @@ export interface Pressing {
   /** The engineer has named an owner and given a time: there is nothing left to ask for. */
   committed: boolean;
   /**
+   * Enough trainee turns have passed since the customer last asked for anything (or raised a
+   * concern) for them to ask again: not in two replies running, and a calm customer waits longest.
+   */
+  spaced: boolean;
+  /**
    * The customer may ask for something in this reply: enough turns since they last did (or raised
    * a concern), the engineer has scoped a first call, and no curveball is being raised or repeated.
    */
@@ -67,13 +72,11 @@ export function pressingOf(ctx: CustomerGenerationContext, tone: Tone): Pressing
   const scoped =
     scenario.config.callStage !== 'first-contact' ||
     Object.keys(runtime.askedIntents).length >= SCOPING_TOPICS;
+  const spaced = last === 0 || traineeTurnNumber - last >= gap;
   return {
     committed: runtime.customer.ownershipStated && runtime.customer.nextStepsStated,
-    open:
-      (last === 0 || traineeTurnNumber - last >= gap) &&
-      scoped &&
-      !curveball.fired &&
-      !curveball.followUp,
+    spaced,
+    open: spaced && scoped && !curveball.fired && !curveball.followUp,
     notBefore,
   };
 }

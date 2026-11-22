@@ -1192,6 +1192,121 @@ describe('a reply that only says again what the customer just said', () => {
   });
 });
 
+// What a model does that a customer does not: the stock phrases of an assistant, the engineer's name
+// in reply after reply, going through the whole case again, and agreeing with nothing in it twice.
+describe('a model that sounds like an assistant rather than a customer', () => {
+  const NAMED = 'Hi, I am Sam. What does the sign-in screen say?';
+  const PLAIN = 'I only see the sign-in page, and it will not let me in.';
+  const after = async (replied: string, next = 'And what does it say exactly?') =>
+    (await captureContexts(scenario, [{ text: NAMED, reply: replied }, next])).at(
+      -1,
+    ) as CustomerGenerationContext;
+  const reminders = () => llm.requests.map((r) => systemOf(r));
+
+  it('asks once more for a reply without cheerful assent, pledges of understanding or thanks for patience', async () => {
+    llm.enqueue(
+      {
+        reply:
+          'Certainly! I understand your concern. I only see the sign-in page, and it will not let me in. Thank you for your patience.',
+      },
+      { reply: PLAIN },
+    );
+    const result = await provider().generateCustomer(await lastContext([NAMED]));
+    expect(result.text).toBe(PLAIN);
+    expect(llm.requests).toHaveLength(2);
+    expect(reminders()[0]).not.toContain(CUSTOMER_REMINDERS.style);
+    expect(reminders()[1]).toContain(CUSTOMER_REMINDERS.style);
+  });
+
+  it('asks once more for a reply that praises the engineer, with the reminder about advice and praise', async () => {
+    llm.enqueue({ reply: `Good troubleshooting step. ${PLAIN}` }, { reply: PLAIN });
+    const result = await provider().generateCustomer(await lastContext([NAMED]));
+    expect(result.text).toBe(PLAIN);
+    expect(reminders()[1]).toContain(CUSTOMER_REMINDERS.coaching);
+  });
+
+  it('asks once more when the engineer is called by name again within five replies, and not before', async () => {
+    const ctx = await after('Thanks, Sam. It will not let me in.');
+    llm.enqueue({ reply: 'Thanks, Sam. The page says my account is locked.' }, { reply: PLAIN });
+    const again = await provider().generateCustomer(ctx);
+    expect(again.text).toBe(PLAIN);
+    expect(reminders()[1]).toContain(CUSTOMER_REMINDERS.style);
+
+    // Said for the first time, or after a gap, it is just a customer being friendly.
+    llm.reset();
+    llm.enqueue({ reply: 'Thanks, Sam. The page says my account is locked.' });
+    const first = await provider().generateCustomer(await lastContext([NAMED]));
+    expect(first.text).toBe('Thanks, Sam. The page says my account is locked.');
+    expect(llm.requests).toHaveLength(1);
+  });
+
+  it('asks once more for a reply that tells the case over again, and lets one that adds something through', async () => {
+    const ctx = (
+      await captureContexts(scenario, [
+        { text: NAMED, reply: 'It started on Monday morning after I changed my password.' },
+        {
+          text: 'And what does it say exactly?',
+          reply: 'The sign-in page says my account is temporarily locked.',
+        },
+        'Is anything else affected?',
+      ])
+    ).at(-1) as CustomerGenerationContext;
+    llm.enqueue(
+      {
+        reply:
+          'It started on Monday morning after I changed my password. The sign-in page says my account is temporarily locked. I have a deadline this afternoon and nobody else can do this for me.',
+      },
+      { reply: 'Nothing else has changed since then, as far as I know.' },
+    );
+    const result = await provider().generateCustomer(ctx);
+    expect(result.text).toBe('Nothing else has changed since then, as far as I know.');
+    expect(reminders()[1]).toContain(CUSTOMER_REMINDERS.style);
+
+    // Putting one thing right is not a recap.
+    llm.reset();
+    llm.enqueue({
+      reply:
+        'The sign-in page says my account is temporarily locked. I have a deadline this afternoon.',
+    });
+    await provider().generateCustomer(ctx);
+    expect(llm.requests).toHaveLength(1);
+  });
+
+  it('asks once more for a bare "Okay." straight after a bare "Okay.", and lets one through after a real answer', async () => {
+    const ctx = await after('Okay.', 'Could you try once more?');
+    llm.enqueue({ reply: 'Okay.' }, { reply: 'Yes, I can try that now.' });
+    expect((await provider().generateCustomer(ctx)).text).toBe('Yes, I can try that now.');
+    expect(reminders()[1]).toContain(CUSTOMER_REMINDERS.style);
+
+    llm.reset();
+    llm.enqueue({ reply: 'Okay.' });
+    const result = await provider().generateCustomer(
+      await after(PLAIN, 'Could you try once more?'),
+    );
+    expect(result.text).toBe('Okay.');
+    expect(llm.requests).toHaveLength(1);
+  });
+
+  it('keeps the second reply even if it still has them, and the pipeline takes them out of what is said', async () => {
+    llm.respondWith(() => ({
+      reply: `Certainly! ${PLAIN} Thank you for your patience. Is there anything else I can help with?`,
+    }));
+    const live = provider();
+    const result = await processTraineeTurn({
+      scenario,
+      runtime: createInitialRuntime(scenario),
+      traineeText: NAMED,
+      turnIndex: 2,
+      history: [{ index: 1, role: 'customer', text: openingMessage(scenario) }],
+      classify: mockClassifier(scenario),
+      generate: (ctx) => live.generateCustomer(ctx),
+    });
+    expect(llm.requests).toHaveLength(2);
+    expect(result.customerSource).toBe('live');
+    expect(result.customerText).toBe(PLAIN);
+  });
+});
+
 describe('a whole conversation through the real pipeline', () => {
   function modelLikeServer(request: RecordedRequest): Step {
     const messages = messagesOf(request);

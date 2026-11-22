@@ -1,9 +1,11 @@
 import type { TurnClassification } from '#shared/domain/classification.ts';
+import type { EffectiveScenario } from '#shared/domain/config.ts';
 import type { CommunicationStyle } from '#shared/domain/vocab.ts';
 import type { HiddenFact } from '#shared/domain/scenario.ts';
 import { sentences } from '#shared/domain/text.ts';
 import { IN_RECORD_IDS, type TellItem, type WithholdReason } from './discovery.ts';
 import { expects } from './expectation.ts';
+import type { TurnAnalysis } from './memory.ts';
 import { urgencyWarrantsImpact } from './opening.ts';
 import type { CustomerGenerationContext } from './pipeline.ts';
 import { rngFor } from './rng.ts';
@@ -21,6 +23,9 @@ import type { Commitment } from './types.ts';
 //
 // A plan is a pure function of the generation context (it draws its own seeded random numbers), so
 // it can be asked for as often as needed and always gives the same answer.
+
+/** What the customer remembers having said when they asked the engineer if they need anything. */
+export const OFFER_HELP = 'offer-help';
 
 /** How the customer reacts to what the engineer just did, strongest first. */
 export type Reaction =
@@ -53,6 +58,9 @@ export type Reaction =
   | 'impact-acknowledged'
   | 'summary-right'
   | 'confirmed' // a request to confirm, answered
+  | 'plan-accepted' // a clear commitment taken in briefly, with its time
+  | 'echo-confirmed' // the engineer said yes to "so you'll do that?"
+  | 'offer-answered' // the engineer answered "is there anything you need from our side?"
   | 'assumption-accepted'
   | 'assumption-challenged'
   | 'follow-up' // the same topic again, asked a new way: answered without irritation
@@ -89,7 +97,8 @@ export type SayKind =
   | 'irrelevant'
   | 'assumption'
   | 'record' // what the case already records, said again ("as I told you before")
-  | 'reminder'; // a short reminder of something already said
+  | 'reminder' // a short reminder of something already said
+  | 'addition'; // something already said that the engineer's recap left out
 
 /** Something the customer may say in this reply, and nothing else about the problem. */
 export interface Sayable {
@@ -97,6 +106,8 @@ export interface Sayable {
   /** The fact id, or the id of what the customer has now said (see `toldKnownFacts`). */
   id: string;
   text: string;
+  /** A shorter way to say it, for a reply with room for only a sentence of it. */
+  short?: string;
   /** Said first, then `text`: "Give me a moment." */
   checking?: string;
   /** Optional extra colour for a talkative customer. */
@@ -125,6 +136,22 @@ export interface ReplyPlan {
   flavour: Flavour | null;
   /** A commitment to say back to the engineer as a question. */
   echo: Commitment | null;
+  /**
+   * A clear commitment to take in briefly, naming its time ("Okay. Three o'clock, then."), for a
+   * customer who would not say it back. Never together with `echo`.
+   */
+  accept: Commitment | null;
+  /**
+   * The customer asks for a time after a vague commitment. It is the one ask the reaction makes, so
+   * it is remembered with the other asks (see pressing.ts).
+   */
+  presses: boolean;
+  /** How the engineer is closing the call, when they are. */
+  close: CloseKind | null;
+  /** The customer, being cooperative, asks once whether the engineer needs anything from them. */
+  asksOffer: boolean;
+  /** Who the customer can ask, from what they have already said, if the engineer asks what they can do. */
+  offer: string | null;
   /** The customer's own offer to check with someone, to mention again when the call closes. */
   customerCheck: Commitment | null;
   /** The engineer's latest clear commitment, to mention when the call closes. */
@@ -151,15 +178,30 @@ export function isSilent(ctx: CustomerGenerationContext): boolean {
   return ctx.curveball.fired?.type === 'go-silent' || ctx.runtime.customer.silentUntilEngaged;
 }
 
+/** How the engineer is ending the call: asking if that is all, wrapping up, or saying goodbye. */
+export type CloseKind = 'asks-more' | 'wraps-up' | 'farewell';
+
 /**
- * Whether the engineer is ending the call, as far as the customer can tell. A recap that ends by
- * asking whether it is right is a question to answer, not a goodbye: the customer says it is
- * right and the call goes on.
+ * Whether the engineer is ending the call, as far as the customer can tell, and how. A recap that
+ * ends by asking whether it is right is a question to answer, not a goodbye: the customer says it
+ * is right and the call goes on. Saying goodbye is the end, even with a promise in the same breath.
  */
+export function closeKindOf(
+  c: Pick<TurnClassification, 'wrapsUp' | 'asksAnythingElse' | 'summarises' | 'askedQuestion'>,
+  analysis?: Pick<TurnAnalysis, 'farewell' | 'asksCustomerSide'>,
+): CloseKind | null {
+  if (analysis?.farewell) return 'farewell';
+  if (c.asksAnythingElse || analysis?.asksCustomerSide) return 'asks-more';
+  if (c.wrapsUp && !(c.summarises && c.askedQuestion)) return 'wraps-up';
+  return null;
+}
+
+/** Whether the engineer is ending the call (see `closeKindOf`). */
 export function closesCall(
   c: Pick<TurnClassification, 'wrapsUp' | 'asksAnythingElse' | 'summarises' | 'askedQuestion'>,
+  analysis?: Pick<TurnAnalysis, 'farewell' | 'asksCustomerSide'>,
 ): boolean {
-  return c.asksAnythingElse || (c.wrapsUp && !(c.summarises && c.askedQuestion));
+  return closeKindOf(c, analysis) !== null;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -244,12 +286,18 @@ function hintSayables(ctx: CustomerGenerationContext): Sayable[] {
 function reasonSayables(ctx: CustomerGenerationContext): Sayable[] {
   const { scenario, runtime } = ctx;
   const cfg = scenario.config;
-  const reason = [scenario.stageFrame.opening, scenario.openingCore].filter(Boolean).join(' ');
+  const lead = scenario.stageFrame.opening;
+  const problem = firstSentenceOf(scenario.openingCore);
+  const reason = [lead, scenario.openingCore].filter(Boolean).join(' ');
+  // A terse customer says the problem in a sentence. When the scenario gives a lead ("I need this
+  // looked at now."), the lead is not the problem, so the problem comes with it.
+  const terse = [lead, problem].filter(Boolean).join(' ');
   const out: Sayable[] = [
     {
       kind: 'reason',
       id: 'reason',
-      text: cfg.style === 'terse' ? firstSentenceOf(reason) : reason,
+      text: cfg.style === 'terse' ? terse : reason,
+      short: problem,
     },
   ];
   if (!told(ctx, 'impact') && urgencyWarrantsImpact(scenario, runtime.customer.urgency)) {
@@ -372,15 +420,24 @@ function restatesClearCommitment(ctx: CustomerGenerationContext): boolean {
 
 function reactionsOf(
   ctx: CustomerGenerationContext,
-  echo: Commitment | null,
+  moves: {
+    echo: Commitment | null;
+    accept: Commitment | null;
+    presses: boolean;
+    close: CloseKind | null;
+  },
   inRecord: Sayable[],
 ): Reaction[] {
-  const { scenario, classification: c, analysis, discovery, stageMetNow } = ctx;
+  const { scenario, runtime, classification: c, analysis, discovery, stageMetNow } = ctx;
+  const { echo, accept, presses, close } = moves;
   const cfg = scenario.config;
   const stage = cfg.callStage;
   // The customer only responds to a belief they have voiced; one the engineer put right before
   // they said it is simply never voiced.
   const voiced = analysis.assumption !== null && told(ctx, `assumption-${analysis.assumption.id}`);
+  // Said when the call is not being closed: the closing line takes the place of a thank you for
+  // what was promised, so a customer does not thank the engineer twice.
+  const settled = echo === null && accept === null && close === null;
   const picks: [boolean, Reaction][] = [
     [c.blame, 'blamed'],
     [c.dismissive, 'dismissed'],
@@ -400,18 +457,15 @@ function reactionsOf(
     [cfg.proficiency === 'expert' && analysis.basics && c.troubleshooting, 'basics'],
     [c.promise === 'unverified', 'unsupported-promise'],
     [analysis.conflict !== null, 'conflicting-commitment'],
-    [
-      analysis.commitment?.clarity === 'vague' &&
-        analysis.commitment.supported &&
-        !restatesClearCommitment(ctx),
-      'vague-commitment',
-    ],
+    [presses, 'vague-commitment'],
     [analysis.summary.verdict === 'inaccurate', 'summary-wrong'],
     // Asked whether a recap is right, the customer says so before anything else.
     [c.summarises && c.askedQuestion && analysis.summary.verdict === 'accurate', 'summary-right'],
     [echo !== null, 'echo'],
-    [echo === null && c.ownership === 'clear', 'ownership'],
-    [echo === null && c.nextSteps === 'specific' && c.promise !== 'unverified', 'next-steps'],
+    [accept !== null, 'plan-accepted'],
+    [analysis.confirmsEcho, 'echo-confirmed'],
+    [settled && c.ownership === 'clear', 'ownership'],
+    [settled && c.nextSteps === 'specific' && c.promise !== 'unverified', 'next-steps'],
     [
       stageMetNow.includes('prior-context') || stageMetNow.includes('history-acknowledged'),
       'knows-case',
@@ -440,7 +494,9 @@ function reactionsOf(
       c.troubleshooting && !earlyUnscopedFix(ctx) && analysis.stage.repeatsPrior === null,
       'instruction',
     ],
-    [closesCall(c), 'closing'],
+    // The customer asked whether the engineer needs anything from them, and this is the answer.
+    [runtime.lastToldIds.includes(OFFER_HELP) && close === null, 'offer-answered'],
+    [close !== null, 'closing'],
   ];
   return picks
     .filter(([applies]) => applies)
@@ -451,8 +507,12 @@ function reactionsOf(
 // ---------------------------------------------------------------------------------------
 // Moves
 
-function wantsTimeline(ctx: CustomerGenerationContext, pressing: Pressing): boolean {
-  const { classification: c, runtime, scenario, effectiveTurn, traineeTurnNumber } = ctx;
+function wantsTimeline(
+  ctx: CustomerGenerationContext,
+  pressing: Pressing,
+  close: CloseKind | null,
+): boolean {
+  const { runtime, scenario, effectiveTurn, traineeTurnNumber } = ctx;
   const customer = runtime.customer;
   return (
     mayAsk(pressing, effectiveTurn) &&
@@ -463,30 +523,136 @@ function wantsTimeline(ctx: CustomerGenerationContext, pressing: Pressing): bool
       scenario.config.style === 'demanding' ||
       (effectiveTurn >= 4 && expects(scenario, 'next-update'))) &&
     traineeTurnNumber - runtime.asksForTimelineAtTurn >= 3 &&
-    !c.wrapsUp &&
-    !c.asksAnythingElse
+    close === null
   );
 }
 
-function echoOf(ctx: CustomerGenerationContext, tone: Tone): Commitment | null {
+/**
+ * Whether a customer says a commitment back in their own words ("So you'll own this and call me
+ * by 3pm, correct?") or takes it in briefly ("Okay. Three o'clock, then."). An anxious, demanding,
+ * talkative, upset or non-expert customer wants to be sure they have it. A terse customer, or a
+ * calm one, has it and says so.
+ */
+function confirmsBack(cfg: EffectiveScenario['config']): boolean {
+  if (cfg.style === 'terse') return false;
+  if (cfg.style === 'demanding' || cfg.style === 'talkative' || cfg.style === 'non-native') {
+    return true;
+  }
+  return cfg.proficiency === 'novice' || cfg.startingTemperature !== 'calm';
+}
+
+/**
+ * What the customer does with a clear commitment the engineer has just made: say it back as a
+ * question, or take it in. Not while the call is being closed (the closing line does that), and
+ * not for one they have already said back or taken in.
+ */
+function commitmentMove(
+  ctx: CustomerGenerationContext,
+  close: CloseKind | null,
+): { echo: Commitment | null; accept: Commitment | null } {
+  const none = { echo: null, accept: null };
   const made = ctx.analysis.commitment;
-  if (!made || !made.supported || made.clarity !== 'clear') return null;
+  if (close !== null || !made || !made.supported || made.clarity !== 'clear') return none;
   const entry = ctx.runtime.commitments.find(
     (c) => c.by === 'engineer' && c.kind === made.kind && c.action === made.action,
   );
-  if (!entry || entry.reflected) return null;
-  const { style } = ctx.scenario.config;
-  const likelihood =
-    style === 'demanding'
-      ? 1
-      : style === 'terse'
-        ? 0.3
-        : tone === 'hot' || tone === 'firm'
-          ? 0.9
-          : tone === 'worried'
-            ? 0.8
-            : 0.45;
-  return rngFor(ctx.scenario.config.seed, ctx.traineeTurnNumber, 11)() < likelihood ? entry : null;
+  if (!entry || entry.reflected) return none;
+  // A recap the engineer asked about is answered, not said back.
+  if (ctx.classification.summarises) return { echo: null, accept: entry };
+  return confirmsBack(ctx.scenario.config)
+    ? { echo: entry, accept: null }
+    : { echo: null, accept: entry };
+}
+
+/**
+ * The customer asks for a time after a vague commitment ("I'll look into it", "We'll get back to
+ * you soon"), once. A customer who will not take a vague answer, an angry or a demanding one,
+ * does so every time. The rest ask once, not in two replies running (a calm customer waits
+ * longest), and never again once a time has been given. An owner with no time is something only
+ * a customer who would ask presses on; the others take it as the good news it is.
+ */
+function pressesForTime(ctx: CustomerGenerationContext, pressing: Pressing, tone: Tone): boolean {
+  const made = ctx.analysis.commitment;
+  if (!made || made.clarity !== 'vague' || !made.supported || restatesClearCommitment(ctx)) {
+    return false;
+  }
+  const { scenario, runtime } = ctx;
+  const cfg = scenario.config;
+  if (cfg.startingTemperature === 'angry' || cfg.style === 'demanding') return true;
+  if (runtime.customer.nextStepsStated || !pressing.spaced) return false;
+  if (made.kind !== 'ownership') return true;
+  return (
+    cfg.startingTemperature !== 'calm' ||
+    tone !== 'calm' ||
+    cfg.impact === 'high' ||
+    runtime.customer.urgency >= 70 ||
+    expects(scenario, 'next-update')
+  );
+}
+
+/**
+ * Who the customer could ask, if the engineer asks what they can do or provide, from what they have
+ * already said: someone they offered to ask, or said would know. Never anything they have not been
+ * asked about, so nothing here can give away a hidden fact.
+ */
+function offerOf(ctx: CustomerGenerationContext): string | null {
+  const { scenario, runtime } = ctx;
+  const plain = (who: string | undefined): who is string =>
+    typeof who === 'string' && who.trim() !== '' && !/\bsupport\b/i.test(who);
+  const offered = [...runtime.commitments]
+    .reverse()
+    .find((k) => k.by === 'customer' && k.kind === 'check');
+  const who = offered?.action.replace(/^ask /, '');
+  if (plain(who)) return who;
+  const said = scenario.unknownFacts.find(
+    (f) => (runtime.toldKnownFacts[f.id] ?? 0) > 0 && plain(f.whoKnows),
+  );
+  return said?.whoKnows ?? null;
+}
+
+/**
+ * Something the customer already said that the engineer's right recap left out, said in a few
+ * words: who is affected, as they gave it. Only what has been said before, so it cannot give
+ * anything away.
+ */
+function additionSayables(ctx: CustomerGenerationContext): Sayable[] {
+  const { scenario, runtime, analysis } = ctx;
+  if (analysis.summary.verdict !== 'accurate' || !analysis.summary.omitsScope) return [];
+  const earned = scenario.hiddenFacts.find(
+    (f) => runtime.discovery[f.id]?.status === 'discovered' && f.intents.includes('affected_scope'),
+  );
+  const text = earned
+    ? fullStatement(earned, scenario.config.style)
+    : told(ctx, 'impact-detail')
+      ? scenario.impactVariant.detail
+      : '';
+  const first = firstSentenceOf(text);
+  if (first === '') return [];
+  return [{ kind: 'addition', id: earned ? earned.id : 'impact-detail', text: first }];
+}
+
+/**
+ * A cooperative customer, having taken in or confirmed a commitment, asks once whether the engineer
+ * needs anything from them: "That works for me. Is there anything you need from our side before
+ * then?" A terse, demanding, upset or hard-pressed customer does not offer.
+ */
+function asksOffer(
+  ctx: CustomerGenerationContext,
+  tone: Tone,
+  reactions: Reaction[],
+  close: CloseKind | null,
+): boolean {
+  const { scenario, curveball } = ctx;
+  const cfg = scenario.config;
+  if (close !== null || curveball.fired || told(ctx, OFFER_HELP)) return false;
+  if (!reactions.includes('echo-confirmed') && !reactions.includes('plan-accepted')) return false;
+  const cooperative =
+    cfg.style !== 'terse' &&
+    cfg.style !== 'demanding' &&
+    (cfg.startingTemperature === 'calm' || cfg.startingTemperature === 'anxious') &&
+    (tone === 'calm' || tone === 'worried') &&
+    cfg.difficulty !== 'challenge';
+  return cooperative && rngFor(cfg.seed, ctx.traineeTurnNumber, 19)() < 0.7;
 }
 
 function flavourOf(
@@ -494,11 +660,12 @@ function flavourOf(
   tone: Tone,
   reactions: Reaction[],
   pressing: Pressing,
+  close: CloseKind | null,
 ): Flavour | null {
   const { scenario, runtime, classification: c, analysis, effectiveTurn, curveball } = ctx;
   const cfg = scenario.config;
   const customer = runtime.customer;
-  if (curveball.fired || curveball.followUp || c.wrapsUp || c.asksAnythingElse) return null;
+  if (curveball.fired || curveball.followUp || close !== null) return null;
   if (reactions.length > 1 || reactions.some((r) => r === 'blamed' || r === 'dismissed'))
     return null;
   const draw = rngFor(cfg.seed, ctx.traineeTurnNumber, 13);
@@ -594,6 +761,11 @@ function buildPlan(ctx: CustomerGenerationContext): ReplyPlan {
     push: null,
     flavour: null,
     echo: null,
+    accept: null,
+    presses: false,
+    close: null,
+    asksOffer: false,
+    offer: null,
     customerCheck: null,
     closingCommitment: null,
     term: null,
@@ -605,12 +777,14 @@ function buildPlan(ctx: CustomerGenerationContext): ReplyPlan {
   if (isSilent(ctx)) return short('silent');
   if (c.lowEffort) return short('low-effort');
 
-  const closing = closesCall(c);
-  // A customer says a commitment back while it is being made, not while the call is closing or
-  // while the engineer is reading a recap back for them to confirm.
-  const echo = closing || c.summarises ? null : echoOf(ctx, tone);
+  const close = closeKindOf(c, analysis);
+  const pressing = pressingOf(ctx, tone);
+  // A customer says a commitment back, or takes it in, while it is being made: not while the call
+  // is closing (the closing line does that). Asked about a recap, they answer it.
+  const { echo, accept } = commitmentMove(ctx, close);
+  const presses = pressesForTime(ctx, pressing, tone);
   const record = recordSayables(ctx);
-  const reactions = reactionsOf(ctx, echo, record);
+  const reactions = reactionsOf(ctx, { echo, accept, presses, close }, record);
 
   const details = detailSayables(ctx);
   const facts: Sayable[] = [];
@@ -630,14 +804,21 @@ function buildPlan(ctx: CustomerGenerationContext): ReplyPlan {
   }
   for (const item of discovery.tell) if (!item.repeat) facts.push(tellSayable(item, cfg.style));
 
+  // A right recap that left out who is affected, which the customer has already said: they add it.
+  const adds =
+    reactions.includes('summary-right') &&
+    rngFor(cfg.seed, ctx.traineeTurnNumber, 23)() < (cfg.style === 'terse' ? 0.5 : 0.7);
+
   const say = [
     ...details,
     ...(beat === 'reason' ? reasonSayables(ctx) : []),
     ...facts,
     ...record,
-    ...(beat === 'reason' ? [] : hintSayables(ctx)),
+    // A clue or a belief is something new to bring up: not as the call closes.
+    ...(beat === 'reason' || close !== null ? [] : hintSayables(ctx)),
     ...(beat === 'reason' ? [] : reminderSayables(ctx, record)),
-    ...(beat === 'reason' ? [] : assumptionSayable(ctx)),
+    ...(beat === 'reason' || close !== null ? [] : assumptionSayable(ctx)),
+    ...(adds ? additionSayables(ctx) : []),
   ];
 
   // Something the customer holds back, or has no information on.
@@ -650,7 +831,6 @@ function buildPlan(ctx: CustomerGenerationContext): ReplyPlan {
     !discovery.repeated &&
     (withheld.includes('timing') || nothingToSay);
 
-  const pressing = pressingOf(ctx, tone);
   const asksAlready = reactions.some((r) => ASKS_THE_ENGINEER.has(r));
   const stage = stagePush({
     scenario,
@@ -659,13 +839,13 @@ function buildPlan(ctx: CustomerGenerationContext): ReplyPlan {
     effectiveTurn: ctx.effectiveTurn,
     traineeTurnNumber: ctx.traineeTurnNumber,
     hotTone: tone === 'firm' || tone === 'hot',
-    closing,
+    closing: close !== null,
     pressing,
   });
   const push: PlanPush | null =
     curveball.fired || asksAlready
       ? null
-      : (stage ?? (wantsTimeline(ctx, pressing) ? 'timeline' : null));
+      : (stage ?? (wantsTimeline(ctx, pressing, close) ? 'timeline' : null));
 
   const plan: ReplyPlan = {
     mode: 'normal',
@@ -676,10 +856,18 @@ function buildPlan(ctx: CustomerGenerationContext): ReplyPlan {
     holds: withheld.filter((r) => r !== 'timing'),
     notKnown,
     push,
-    // A terse customer says what was asked and no more: no lines of personality on top.
+    // A terse customer says what was asked and no more: no lines of personality on top, and a
+    // commitment taken in or said back needs nothing added to it.
     flavour:
-      push || echo || cfg.style === 'terse' ? null : flavourOf(ctx, tone, reactions, pressing),
+      push || echo || accept || cfg.style === 'terse'
+        ? null
+        : flavourOf(ctx, tone, reactions, pressing, close),
     echo,
+    accept,
+    presses,
+    close,
+    asksOffer: asksOffer(ctx, tone, reactions, close),
+    offer: close === 'asks-more' ? offerOf(ctx) : null,
     customerCheck: [...runtime.commitments].reverse().find((k) => k.by === 'customer') ?? null,
     closingCommitment:
       [...runtime.commitments]
@@ -694,7 +882,7 @@ function buildPlan(ctx: CustomerGenerationContext): ReplyPlan {
   if (
     cfg.style === 'talkative' &&
     beat === 'normal' &&
-    !closing &&
+    close === null &&
     !curveball.fired &&
     tone !== 'hot' &&
     plan.say.length < 2 &&

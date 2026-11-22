@@ -1,7 +1,9 @@
 import { sentences } from '#shared/domain/text.ts';
 import { conformCustomerReply } from '../engine/conform.ts';
+import { engineerNameOf } from '../engine/memory.ts';
 import type { CustomerGenerationContext } from '../engine/pipeline.ts';
 import { planReply } from '../engine/plan.ts';
+import { overlap, questionWords, wordCount } from '../engine/textutil.ts';
 import { factPolicy, type FactPolicy } from '../prompts/facts.ts';
 import { replyProblem } from './output.ts';
 
@@ -12,6 +14,12 @@ import { replyProblem } from './output.ts';
 //
 // A reply that is turned down is asked for once more. If that one is turned down too, what can be
 // said safely is kept, sentence by sentence, rather than failing the call over it.
+//
+// How a customer sounds is checked too: a customer does not praise the engineer, speak like an
+// assistant ("Certainly!", "I understand your concern"), use the engineer's name in every reply,
+// recap the whole case again or agree with "Understood." twice running. These are asked for once
+// more and then let through, because the pipeline's conformer takes the praise, the stock phrases
+// and the name out of whatever is used (see engine/conform.ts).
 
 export type GuardProblem =
   | 'empty'
@@ -21,6 +29,11 @@ export type GuardProblem =
   | 'invents'
   | 'coaching'
   | 'announces-facts'
+  | 'praise'
+  | 'assistant-speak'
+  | 'repeats-name'
+  | 'recaps'
+  | 'robotic-ack'
   | 'repeats-previous';
 
 export interface Guards {
@@ -29,6 +42,10 @@ export interface Guards {
   maxSentences: number;
   /** What the customer said last, so that a reply which only says it again can be caught. */
   previous: string | null;
+  /** The engineer's name, if they gave one, and what the customer said in their last few replies. */
+  engineerName: { name: string; recent: string[] } | null;
+  /** Everything the customer has said in earlier replies except the greeting that opened the call. */
+  earlier: string[];
 }
 
 export interface Verdict {
@@ -37,10 +54,14 @@ export interface Verdict {
 }
 
 export function guardsFor(ctx: CustomerGenerationContext): Guards {
+  const said = ctx.history.filter((turn) => turn.role === 'customer').map((turn) => turn.text);
+  const name = engineerNameOf(ctx.history, ctx.traineeText);
   return {
     policy: factPolicy(ctx),
     maxSentences: planReply(ctx).maxSentences,
-    previous: [...ctx.history].reverse().find((turn) => turn.role === 'customer')?.text ?? null,
+    previous: said.at(-1) ?? null,
+    engineerName: name ? { name, recent: said } : null,
+    earlier: said.slice(1),
   };
 }
 
@@ -62,13 +83,49 @@ export function nearlyTheSame(a: string, b: string, threshold = 0.8): boolean {
   return shared / (x.size + y.size - shared) > threshold;
 }
 
+// Agreement with nothing in it: how a machine says yes. Said twice running, it is robotic.
+const BARE_AGREEMENT =
+  /^(?:understood|got it|noted|acknowledged|very well|i understand|i see|okay|ok|sure|right|alright|fine)[\s.!]*$/i;
+
+/** Whether the reply is only "Understood." or "Okay.", and nothing else. */
+export function isBareAgreement(text: string): boolean {
+  return BARE_AGREEMENT.test(text.trim());
+}
+
+/**
+ * Whether the reply tells the case again: two or more of its sentences say, nearly word for word,
+ * something the customer has already said. Putting one thing right is not a recap; going through
+ * the whole case again is.
+ */
+export function recapsTheCase(text: string, earlier: readonly string[]): boolean {
+  const said = earlier.flatMap((reply) => sentences(reply)).filter((s) => wordCount(s) >= 5);
+  if (said.length === 0) return false;
+  const known = said.map((s) => questionWords(s));
+  const again = sentences(text)
+    .filter((s) => wordCount(s) >= 5)
+    .filter((s) => {
+      const words = questionWords(s);
+      return known.some((before) => overlap(words, before) >= 0.7);
+    });
+  return again.length >= 2;
+}
+
 export function judgeReply(text: string, guards: Guards): Verdict {
   const problems = new Set<GuardProblem>();
   const issue = replyProblem(text);
   if (issue) problems.add(issue);
-  const conformed = conformCustomerReply(text, { maxSentences: guards.maxSentences });
+  const conformed = conformCustomerReply(text, {
+    maxSentences: guards.maxSentences,
+    ...(guards.engineerName ? { engineerName: guards.engineerName } : {}),
+  });
   for (const problem of conformed.problems) {
-    if (problem === 'coaching' || problem === 'announces-facts') problems.add(problem);
+    if (problem === 'coaching' || problem === 'announces-facts' || problem === 'praise') {
+      problems.add(problem);
+    } else if (problem === 'ai-politeness') {
+      problems.add('assistant-speak');
+    } else if (problem === 'repeats-name') {
+      problems.add('repeats-name');
+    }
   }
   if (conformed.text === '') problems.add('empty');
   if (guards.policy.leaks(text)) problems.add('leaks');
@@ -76,15 +133,25 @@ export function judgeReply(text: string, guards: Guards): Verdict {
   if (guards.previous !== null && nearlyTheSame(conformed.text, guards.previous)) {
     problems.add('repeats-previous');
   }
+  if (guards.previous !== null && isBareAgreement(text) && isBareAgreement(guards.previous)) {
+    problems.add('robotic-ack');
+  }
+  if (recapsTheCase(conformed.text, guards.earlier)) problems.add('recaps');
   return { problems: [...problems] };
 }
 
 const ALWAYS = new Set<GuardProblem>(['empty', 'too-long', 'role-break', 'leaks', 'invents']);
-// Asked for once more, these are let through: the pipeline cuts the advice and the announcing out,
-// and a customer who is asked the same thing again may well say the same thing.
+// Asked for once more, these are let through: the pipeline cuts the advice, the praise, the stock
+// phrases, the announcing and the name out of whatever is used, and a customer who is asked the same
+// thing again may well say the same thing (or "Okay." twice).
 const FIRST_ATTEMPT_ONLY = new Set<GuardProblem>([
   'coaching',
   'announces-facts',
+  'praise',
+  'assistant-speak',
+  'repeats-name',
+  'recaps',
+  'robotic-ack',
   'repeats-previous',
 ]);
 

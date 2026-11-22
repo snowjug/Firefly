@@ -109,8 +109,11 @@ function reminderFor(problems: readonly GuardProblem[]): string {
   const has = (...codes: GuardProblem[]) => codes.some((code) => problems.includes(code));
   if (has('leaks')) return CUSTOMER_REMINDERS.facts;
   if (has('invents')) return CUSTOMER_REMINDERS.unknown;
-  if (has('coaching', 'announces-facts')) return CUSTOMER_REMINDERS.coaching;
+  if (has('coaching', 'announces-facts', 'praise')) return CUSTOMER_REMINDERS.coaching;
   if (has('repeats-previous')) return CUSTOMER_REMINDERS.repeat;
+  if (has('assistant-speak', 'repeats-name', 'recaps', 'robotic-ack')) {
+    return CUSTOMER_REMINDERS.style;
+  }
   return CUSTOMER_REMINDERS.reply;
 }
 

@@ -140,6 +140,39 @@ describe('what a model writes', () => {
       'It is slow today and I cannot sign in.',
     );
   });
+
+  it("has the engineer's name said once in five replies however often the model says it", async () => {
+    const scenario = makeScenario({ startingTemperature: 'calm' });
+    let runtime = createInitialRuntime(scenario);
+    const history: TranscriptTurn[] = [
+      { index: 1, role: 'customer', text: openingMessage(scenario) },
+    ];
+    const replies: string[] = [];
+    for (let n = 0; n < 11; n++) {
+      const traineeText =
+        n === 0 ? 'My name is Alex. What laptop are you using?' : 'What laptop are you using?';
+      const turnIndex = 2 + n * 2;
+      const result = await processTraineeTurn({
+        scenario,
+        runtime,
+        traineeText,
+        turnIndex,
+        history: [...history],
+        classify: mockClassifier(scenario),
+        generate: () =>
+          Promise.resolve({ text: 'Thanks, Alex. It is a Dell.', source: 'live' as const }),
+      });
+      runtime = result.runtime;
+      replies.push(result.customerText);
+      history.push(
+        { index: turnIndex, role: 'trainee', text: traineeText },
+        { index: turnIndex + 1, role: 'customer', text: result.customerText },
+      );
+    }
+    const said = replies.flatMap((text, i) => (/\bAlex\b/.test(text) ? [i] : []));
+    expect(said).toEqual([0, 5, 10]);
+    expect(replies[1]).toBe('Thanks. It is a Dell.');
+  });
 });
 
 describe('opening', () => {

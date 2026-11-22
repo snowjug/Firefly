@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { quoteInText } from '#shared/domain/text.ts';
 import { classifyTurnRules } from './classifier.ts';
+import { ASKS_CUSTOMER_SIDE, isHousekeepingQuestion } from './lexicon.ts';
 import { makeScenario } from './testing.ts';
 import { cueMatches } from './textutil.ts';
 
@@ -460,6 +461,30 @@ describe('rules classifier: everyday phrasing', () => {
       expect(c.askedQuestion, text).toBe(true);
       expect(c.discoveryIntents, text).toEqual([]);
       expect(c.factTargets, text).toEqual([]);
+    }
+  });
+
+  it('treats asking what the customer needs to do or give as housekeeping, and keeps real questions that sound alike', () => {
+    for (const text of [
+      'Is there anything you need to do from your side before then?',
+      'Is there anything I need from you before then?',
+      'Do you need anything from us in the meantime?',
+      'Is there anything you need from our side?',
+      'And what is your role there?',
+      'Do you have a case number?',
+    ]) {
+      const c = classify(text);
+      expect(c.askedQuestion, text).toBe(true);
+      expect(c.discoveryIntents, text).toEqual([]);
+      expect(c.factTargets, text).toEqual([]);
+      expect(isHousekeepingQuestion(text.toLowerCase()), text).toBe(true);
+    }
+    for (const text of [
+      'Is there anything on your side that could explain it?',
+      'Is there anything you changed on your side before it started?',
+    ]) {
+      expect(ASKS_CUSTOMER_SIDE.test(text.toLowerCase()), text).toBe(false);
+      expect(isHousekeepingQuestion(text.toLowerCase()), text).toBe(false);
     }
   });
 

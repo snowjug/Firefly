@@ -145,3 +145,101 @@ describe('conforming a customer reply', () => {
     }
   });
 });
+
+describe('what an assistant says and a customer does not', () => {
+  const NOTE = 'It keeps asking for a password.';
+
+  it('removes cheerful assent, pledges of understanding, thanks for patience and offers of help', () => {
+    for (const text of [
+      'Certainly!',
+      'Certainly, I can check that.',
+      'Absolutely!',
+      'I understand your concern.',
+      'I completely understand your frustration.',
+      'Thank you for your patience.',
+      'Thanks for your understanding.',
+      'Thank you for reaching out.',
+      "I'm happy to help with that.",
+      "I'd be glad to answer that.",
+      'How can I help you today?',
+      'Is there anything else I can help with?',
+      'Please let me know if you need anything else.',
+      'I apologise for any inconvenience.',
+    ]) {
+      const result = conform(`${NOTE} ${text}`);
+      expect(result.problems, text).toContain('ai-politeness');
+      expect(result.text, text).toBe(NOTE);
+    }
+  });
+
+  it('treats a bare "Understood." as the robotic agreement it is, and nothing longer than that', () => {
+    expect(conform('Understood.')).toMatchObject({
+      text: '',
+      problems: ['ai-politeness', 'empty'],
+    });
+    expect(conform('Noted!').text).toBe('');
+    // A customer who does understand, and says what, is just talking.
+    for (const text of [
+      'I understand it takes time. I just need it working by Friday.',
+      "I'm sorry, I didn't understand. Could you say that again?",
+      'Thanks for waiting.',
+      'Thank you.',
+      'Yes, please do.',
+    ]) {
+      expect(conform(text).problems, text).toEqual([]);
+    }
+  });
+
+  it('removes praise of a troubleshooting step, which is not what a customer says', () => {
+    for (const text of [
+      'Good troubleshooting step.',
+      "That's a great diagnostic question.",
+      'Good thinking.',
+      'Excellent follow-up question!',
+    ]) {
+      const result = conform(`${text} ${NOTE}`);
+      expect(result.problems, text).toContain('praise');
+      expect(result.text, text).toBe(NOTE);
+    }
+  });
+});
+
+describe('the engineer\u2019s name', () => {
+  const named = (text: string, recent: string[] = [], name = 'Alex') =>
+    conformCustomerReply(text, { maxSentences: 4, engineerName: { name, recent } });
+
+  it('is said once in any five replies: kept the first time, left out of the next four', () => {
+    expect(named('Thanks, Alex. It started on Monday.')).toEqual({
+      text: 'Thanks, Alex. It started on Monday.',
+      changed: false,
+      problems: [],
+    });
+    const earlier = ['Thanks, Alex. It started on Monday.', 'Okay.', 'Yes.', 'It is a Dell.'];
+    const result = named('Thanks, Alex. It is still down.', earlier);
+    expect(result.text).toBe('Thanks. It is still down.');
+    expect(result.problems).toEqual(['repeats-name']);
+    // Five replies on, it may be said again.
+    expect(named('Thanks, Alex.', [...earlier, 'Fine.']).problems).toEqual([]);
+  });
+
+  it('is said at most once within a reply', () => {
+    const result = named('Hi Alex, thanks. Alex, it is still down.');
+    expect(result.text).toBe('Hi Alex, thanks. It is still down.');
+    expect(result.problems).toEqual(['repeats-name']);
+  });
+
+  it('only counts as said when it is said to the engineer, not when it is a word like any other', () => {
+    for (const text of ['Will you call me back?', 'Will it be fixed today?']) {
+      expect(named(text, ['Thanks, Will.'], 'Will')).toMatchObject({ text, problems: [] });
+    }
+    expect(named('Thanks, Will. It is still down.', ['Thanks, Will.'], 'Will').text).toBe(
+      'Thanks. It is still down.',
+    );
+    // A customer with the same first name is not addressing anyone.
+    expect(named('My manager Alex is in on Monday.', ['Thanks, Alex.']).problems).toEqual([]);
+  });
+
+  it('is left alone when the conformer has not been told the name', () => {
+    expect(conform('Thanks, Alex. Thanks, Alex.').problems).toEqual([]);
+  });
+});

@@ -65,7 +65,24 @@ const ID_NOUN =
 const NO_SECOND_QUESTION =
   '(?:(?!\\b(?:when|what|which|who|how|why|where|did|has|have|had|is there|are there|since)\\b)[^?]){0,70}';
 
+// Asking whether the customer has to do or give anything before the next update: "Is there
+// anything you need to do from your side before then?", "Is there anything I need from you?", "Do
+// you need anything from us?". It closes the call; it asks nothing about the problem. "Is there
+// anything on your side that could explain it?" is a real question and is deliberately not matched.
+export const ASKS_CUSTOMER_SIDE = new RegExp(
+  [
+    String.raw`\b(?:anything|something)\b[^.?!]{0,40}\b(?:you|i|we)(?:'d| would)?\b[^.?!]{0,16}\b(?:need|needs|want|require)\b[^.?!]{0,40}\b(?:from (?:me|us|you|your (?:side|end)|our (?:side|end)|my (?:side|end))|to (?:do|provide|send|share)\b[^.?!]{0,30}\b(?:from|on) (?:your|our|my) (?:side|end)|(?:on|from) (?:your|our|my) (?:side|end))`,
+    String.raw`\bdo you need (?:me|us|anything)\b[^.?!]{0,30}\bfrom (?:me|us|you)\b`,
+    String.raw`\banything you need to do (?:before|until|in the meantime|while)\b`,
+  ].join('|'),
+);
+
+// Words that lead into a question without changing what it asks: "And what is your role there?"
+const QUESTION_LEAD =
+  /^(?:(?:and|so|ok(?:ay)?|right|alright|also|now|just|great|perfect|lovely|thanks|thank you|sorry|well)[,.]?\s+)+/;
+
 const HOUSEKEEPING: RegExp[] = [
+  ASKS_CUSTOMER_SIDE,
   // Asking for something to be repeated or said more slowly
   /^(?:(?:sorry|pardon|excuse me|apologies)[,.]? )?(?:could|can|would|will) you (?:please |just )?(?:say (?:that|it) (?:again|once more)|repeat (?:that|it|yourself|what you said)|speak (?:up|more (?:slowly|clearly)|a (?:bit|little) (?:louder|slower|more slowly))|slow down|spell\b)/,
   /^(?:sorry|pardon|come again|say again|what was that)\s*\??$/,
@@ -96,13 +113,19 @@ const HOUSEKEEPING: RegExp[] = [
     `^(?:what(?:'s| is| are)|can you (?:please )?(?:tell me|give me|confirm|provide|spell)|could (?:i|you) (?:please )?(?:have|get|take|confirm|give me|tell me)|may i (?:have|take|get)|can i (?:please )?(?:have|take|get|confirm)|is (?:that|this)) [^?]{0,12}?\\b${ID_NOUN}\\b${NO_SECOND_QUESTION}\\??$`,
   ),
   /^(?:who am i (?:speaking|talking) (?:with|to)|how would you like me to address you|what should i call you|is this the (?:number|phone|line) you(?:'re| are) (?:calling|ringing) (?:from|on))\b/,
+  // Whether they have a case number to give is asking for their details, not whether they have called before.
+  /^(?:do you (?:have|know)|have you got) (?:a|an|the|your) (?:case|ticket|reference|incident)(?: (?:number|id|reference|no\.?))?\b[^?]{0,30}\??$/,
 ];
 
 /** True for a question that is housekeeping, so it can be left out of discovery. */
 export function isHousekeepingQuestion(sentenceLower: string): boolean {
   const text = sentenceLower.trim();
   if (text.split(/\s+/).length > 18) return false;
-  return HOUSEKEEPING.some((pattern) => pattern.test(text));
+  // "And what is your role there?" asks what "what is your role there?" asks.
+  const bare = text.replace(QUESTION_LEAD, '');
+  return HOUSEKEEPING.some(
+    (pattern) => pattern.test(text) || (bare !== text && pattern.test(bare)),
+  );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -366,7 +389,7 @@ export const ACTION_COMMIT =
 export const CALLBACK_WITH_TIME =
   /\b(?:call|phone|text|ping|buzz|email|update|contact|ring|message|check in with) you (?:back )?(?:(?:at|by|in|within|before|tomorrow|today|this|on|every|each)\b|daily|hourly|twice a day)/;
 export const NEXT_STEPS_VAGUE =
-  /\b(?:get back to you|follow up|be in touch|let you know|update you|keep you (?:posted|updated|in the loop)|shortly|soon|as soon as (?:possible|i can)|asap|in due course|sometime)\b/;
+  /\b(?:get back to you|follow up|be in touch|let you know|update you|keep you (?:posted|updated|in the loop)|(?:call|phone|ring|email|message|text|contact|ping) you (?:back|later|again)|circle back|check back|shortly|soon|as soon as (?:possible|i can)|asap|in due course|sometime)\b/;
 
 // Durations people say aloud, which the numeric pattern above does not cover: "in half an hour",
 // "within a couple of hours", "in twenty minutes", "by ten o'clock".
@@ -500,6 +523,11 @@ export const ANYTHING_ELSE =
   /\b(?:anything else|is there anything (?:else|more|further|other|i can|we can|you(?:'d| would) like)|any (?:other|further) (?:questions|issues|concerns|problems)|have i (?:answered|covered)|any questions)\b/;
 export const THANKS_CLOSE =
   /\b(?:thank(?:s| you)(?: (?:so much|very much|for (?:your time|calling|your patience|bearing)))?|have a (?:good|great|nice|lovely)|take care|good ?bye|bye(?: for now)?|speak (?:to you )?soon)\b/;
+// Saying goodbye. A thank you alone is not one (it comes all through a call), and neither is "until
+// then", "thanks for calling" or "I'll speak to you at 3pm", which can open a call or promise
+// something in the middle of one as easily as end it.
+export const FAREWELL =
+  /\b(?:good ?bye|bye(?:[- ]bye)?(?: for now)?|take care|have a (?:good|great|nice|lovely|wonderful|pleasant|safe|productive)\s+(?:rest of (?:the|your) )?(?:day|morning|afternoon|evening|night|weekend)|have a (?:good|great|nice) one|enjoy the rest of your (?:day|morning|afternoon|evening)|(?:speak|talk|chat|catch up)(?: to you| with you)? (?:soon|later|then)|see you (?:then|soon|later)|thank(?:s| you) for your time)\b/;
 
 export const CORRECTS_ASSUMPTION =
   /\b(?:actually|in fact|just to (?:clarify|correct)|i (?:don'?t|do not) (?:think|know) (?:that'?s|it'?s|that is|it is|that)|that (?:might|may|could) not be|it (?:might|may|could) (?:not be|be something else)|rather than|not (?:necessarily|quite)|let'?s (?:verify|check|confirm|test) (?:that|whether)|what makes you (?:think|say|believe)|what (?:leads|led) you|how do you know|what (?:evidence|data|metrics|monitoring|information) (?:do you have|shows|supports)|could (?:it|this) (?:also )?be)\b/;
@@ -549,7 +577,7 @@ const NAME_NOUN =
 const ORGANISATION_NOUN =
   /\b(?:your|the) (?:company|organi[sz]ation|business|employer|firm|practice)(?: name)?\b|\bwhich (?:company|organi[sz]ation|business|firm) (?:are you|do you|is this)\b|\bwho do you work for\b|\bwhere do you work\b|\bwhat company\b|\bwhere are you calling from\b/;
 const ROLE_NOUN =
-  /\b(?:your|the) (?:job title|role|position|job)\b|\bwhat do you do\b|\bwhat(?:'s| is) your (?:job|role|position)\b/;
+  /\b(?:your|the) (?:job title|role|position|job)\b|\bwhat do you do\b|\bwhat(?:'s| is) your (?:job|role|position)\b|\b(?:name|title),? (?:and|&|plus) (?:your |the )?(?:role|job title|position)\b/;
 const CASE_NOUN =
   /\b(?:case|ticket|reference|incident|request)(?: |-)?(?:number|no\.?|id|reference|#)\b|\b(?:do you have|have you got|what(?:'s| is)|can you (?:give|tell|read) me|could you (?:give|tell|read) me) (?:a|the|your) (?:case|ticket|reference)\b/;
 

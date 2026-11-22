@@ -2,12 +2,15 @@ import type { TurnClassification } from '#shared/domain/classification.ts';
 import type { EffectiveScenario } from '#shared/domain/config.ts';
 import {
   AFFIRMS,
+  ANYTHING_ELSE,
+  ASKS_CUSTOMER_SIDE,
   ASKS_TO_CHECK,
   BASICS,
   CLARIFICATION,
   CONFIRMATION,
   detailsAsked,
   EXPLAINS_SITUATION,
+  FAREWELL,
   isAsking,
   isHousekeepingQuestion,
   isUnverifiedPromise,
@@ -50,6 +53,8 @@ export interface SummaryVerdict {
   verdict: 'none' | 'accurate' | 'inaccurate';
   /** What was wrong: the number of people, or other details the customer never gave. */
   fault: 'count' | 'detail' | null;
+  /** An accurate recap that says what is wrong but not who it affects, which the customer knows. */
+  omitsScope: boolean;
 }
 
 export interface TurnAnalysis {
@@ -67,6 +72,18 @@ export interface TurnAnalysis {
   /** A short yes to the customer's "so you'll do that?". */
   confirmsEcho: boolean;
   asksToCheck: boolean;
+  /** The engineer said goodbye ("Have a good day.", "Take care."). A thank you alone is not one. */
+  farewell: boolean;
+  /** The engineer asked whether the customer has to do or provide anything ("...from your side?"). */
+  asksCustomerSide: boolean;
+  /**
+   * Everything the engineer asked was a closing question ("Is there anything else?", "Is there
+   * anything you need from your side?"): it asks nothing about the problem, whatever a classifier
+   * made of it.
+   */
+  closingQuestionOnly: boolean;
+  /** The engineer said again, with the same time, a commitment they had already made clearly. */
+  restates: boolean;
   summary: SummaryVerdict;
   commitment: NewCommitment | null;
   /** An earlier commitment that this turn's time contradicts. */
@@ -125,11 +142,16 @@ function wordingOf(c: TurnClassification, lower: string): Wording | null {
 // ---------------------------------------------------------------------------------------
 // Summaries: does what the engineer played back match what the customer said?
 
-const SUMMARY_TALK = new Set(
-  'understand understood confirm summaris summarise summarize recap clarif hear hearing saying said right correct sure make check call back updat thank sorry help support issue problem case customer getting going seem sound basic essential tell told mean something anything still also just'.split(
+const SUMMARY_TALK = new Set([
+  ...'understand understood confirm summaris summarise summarize recap clarif hear hearing saying said right correct sure make check call back updat thank sorry help support issue problem case customer getting going seem sound basic essential tell told mean something anything still also just'.split(
     ' ',
   ),
-);
+  // The verbs and connectors of any recap ("it started after a change and only affects you") say
+  // nothing that can be wrong about this customer's case: the nouns around them do.
+  ...questionWords(
+    'start started starts begin began begun change changed changes affect affects affected only happen happened happens after before since because caused cause result resulted recently',
+  ),
+]);
 const FIRST_PERSON_FUTURE = /\b(?:i|we)(?:'ll| will|'m going to| am going to|'ll be)\b/;
 // What the engineer found or did is theirs to say, not a claim about what the customer told them.
 const ENGINEER_SIDE =
@@ -198,12 +220,16 @@ function withoutRecapTag(sentence: string): string {
   return trimmed.endsWith('?') ? trimmed.replace(RECAP_TAG, '').trim() : trimmed;
 }
 
+// Who a recap says is affected: a number, a count word, everyone, only the customer, a team.
+const SCOPE_TALK =
+  /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozen|several|everyone|everybody|nobody|only (?:me|you|one|a few)|just (?:me|you)|all of (?:us|you|them)|the whole|entire|some of (?:you|us|them)|colleagues?|staff|users?|people|team|teams|office|others|both of you)\b/i;
+
 function judgeSummary(
   args: AnalyseArgs,
   sentences: string[],
   wording: Wording | null,
 ): SummaryVerdict {
-  const none: SummaryVerdict = { verdict: 'none', fault: null };
+  const none: SummaryVerdict = { verdict: 'none', fault: null, omitsScope: false };
   if (wording !== 'summary' && wording !== 'confirmation') return none;
   // A recap of what the engineer will do or found is not a claim about the customer's situation,
   // and neither is the question that ends a recap ("Is that right?"). A recap in one sentence that
@@ -223,14 +249,14 @@ function judgeSummary(
   const claimed = countedIn(claimText);
   const truth = args.scenario.affectedUsers.count;
   if (claimed !== null && truth !== null && claimed !== truth && !known.numbers.has(claimed)) {
-    return { verdict: 'inaccurate', fault: 'count' };
+    return { verdict: 'inaccurate', fault: 'count', omitsScope: false };
   }
   const claimWords = questionWords(claimText).filter((w) => !SUMMARY_TALK.has(w));
-  if (claimWords.length < 3) return { verdict: 'accurate', fault: null };
+  if (claimWords.length < 3) return { verdict: 'accurate', fault: null, omitsScope: false };
   const unsupported = claimWords.filter((w) => !known.words.has(w));
   return claimWords.length >= 4 && unsupported.length / claimWords.length >= 0.5
-    ? { verdict: 'inaccurate', fault: 'detail' }
-    : { verdict: 'accurate', fault: null };
+    ? { verdict: 'inaccurate', fault: 'detail', omitsScope: false }
+    : { verdict: 'accurate', fault: null, omitsScope: !SCOPE_TALK.test(claimText) };
 }
 
 // ---------------------------------------------------------------------------------------
@@ -289,9 +315,20 @@ function extractCommitment(sentences: string[], c: TurnClassification): NewCommi
   };
 }
 
+/** A promised time as a person says it back: "by 3 PM", "by the end of the day". */
+export function spokenTime(due: string): string {
+  return due
+    .replace(/\beod\b/, 'the end of the day')
+    .replace(/\bcob\b/, 'close of business')
+    .replace(
+      /(\d)\s+(am|pm)\b/,
+      (_match, digits: string, half: string) => `${digits} ${half.toUpperCase()}`,
+    );
+}
+
 /** How a commitment sounds when the customer says it back: "own the case and update me by 3pm". */
 export function describeCommitment(commitment: Pick<Commitment, 'action' | 'due'>): string {
-  return commitment.due ? `${commitment.action} ${commitment.due}` : commitment.action;
+  return commitment.due ? `${commitment.action} ${spokenTime(commitment.due)}` : commitment.action;
 }
 
 interface ClockTime {
@@ -351,6 +388,25 @@ function findConflict(existing: Commitment[], next: NewCommitment): Commitment |
   return earlier && earlier.due && timesDiffer(earlier.due, next.due) ? earlier : null;
 }
 
+/**
+ * The engineer said again a time they had already given for something they committed to clearly
+ * ("I'll call you at 3 PM" after "I'll own this and update you by 3pm"). The words may differ, so
+ * it is the time that is compared, not the action. How often the customer will hear ("every
+ * hour") is not a time and never restates one.
+ */
+function restatesTime(next: NewCommitment | null, existing: Commitment[]): boolean {
+  const due = next?.due;
+  if (!due || RECURRING.test(due)) return false;
+  return existing.some(
+    (e) =>
+      e.by === 'engineer' &&
+      e.clarity === 'clear' &&
+      e.due !== null &&
+      !RECURRING.test(e.due) &&
+      !timesDiffer(e.due, due),
+  );
+}
+
 /** Adds a commitment to the ledger, or updates the one it repeats. Newest last, at most eight. */
 export function recordCommitment(
   ledger: Commitment[],
@@ -407,6 +463,15 @@ export function introducedAs(text: string): string | null {
   return found && !NOT_A_NAME.has(found.toLowerCase()) ? found : null;
 }
 
+/** The name the engineer has given for themselves in the call, the latest if they gave more than one. */
+export function engineerNameOf(history: TranscriptTurn[], traineeText: string): string | null {
+  let name: string | null = null;
+  for (const turn of history) {
+    if (turn.role === 'trainee') name = introducedAs(turn.text) ?? name;
+  }
+  return introducedAs(traineeText) ?? name;
+}
+
 // ---------------------------------------------------------------------------------------
 // Beliefs the customer holds that are not true
 
@@ -451,6 +516,14 @@ export function analyseTurn(args: AnalyseArgs): TurnAnalysis {
   const term =
     c.jargon === 'explained' ? null : unfamiliarTerm(mostlyCapitals ? raw.toLowerCase() : raw);
 
+  const questions = sentences.filter(isAsking);
+  const closingQuestion = (sentence: string) => {
+    const text = prep(sentence);
+    return (
+      ASKS_CUSTOMER_SIDE.test(text) || ANYTHING_ELSE.test(text) || isHousekeepingQuestion(text)
+    );
+  };
+
   return {
     wording,
     asks: detailsAsked(sentences),
@@ -459,6 +532,13 @@ export function analyseTurn(args: AnalyseArgs): TurnAnalysis {
     greetingOnly,
     confirmsEcho: runtime.awaitingConfirmation && wordCount <= 8 && AFFIRMS.test(lower),
     asksToCheck: ASKS_TO_CHECK.test(lower),
+    farewell: FAREWELL.test(lower),
+    asksCustomerSide: questions.some((s) => ASKS_CUSTOMER_SIDE.test(prep(s))),
+    closingQuestionOnly:
+      questions.length > 0 &&
+      questions.some((s) => ASKS_CUSTOMER_SIDE.test(prep(s)) || ANYTHING_ELSE.test(prep(s))) &&
+      questions.every(closingQuestion),
+    restates: restatesTime(commitment, runtime.commitments),
     summary: judgeSummary(args, sentences, wording),
     commitment,
     conflict: commitment ? findConflict(runtime.commitments, commitment) : null,

@@ -1,10 +1,10 @@
 import type { EffectiveScenario } from '#shared/domain/config.ts';
 import { fold, sentences } from '#shared/domain/text.ts';
 import { conformCustomerReply } from '../conform.ts';
-import { describeCommitment } from '../memory.ts';
+import { describeCommitment, spokenTime } from '../memory.ts';
 import type { CustomerGenerationContext } from '../pipeline.ts';
 import {
-  closesCall,
+  OFFER_HELP,
   planReply,
   type Flavour,
   type PlanPush,
@@ -48,6 +48,7 @@ export interface ComposeResult {
   timelineAsked: boolean;
   followUpGiven: boolean;
   echoed: string | null; // id of the commitment said back
+  accepted: string | null; // id of the commitment taken in briefly
   customerChecks: { id: string; whoKnows: string }[];
   confusedBy: string | null; // the term the customer asked about
   limit: number; // most sentences the reply was allowed to have
@@ -64,10 +65,15 @@ interface Segment {
   push?: PlanPush;
   flavour?: Flavour;
   echo?: string;
+  accept?: string;
   confused?: string;
   reaction?: boolean; // the customer's reaction to what the engineer just did
   followUp?: boolean; // the line that repeats an unresolved concern
 }
+
+// A reply never runs past this many sentences, however much the customer has to answer with. It is
+// the length a person says in one go, and the length the rest of the engine checks replies against.
+const MOST_SENTENCES = 6;
 
 // Words a sentence may start with and still be joined onto a lead ("I'm calling because ...",
 // "Well, ..."): the first letter can then be lower-cased without breaking a name or a product.
@@ -106,8 +112,10 @@ const MUST_REACT: ReadonlySet<Reaction> = new Set<Reaction>([
   'from-scratch',
   'unsupported-promise',
   'conflicting-commitment',
+  'vague-commitment',
   'summary-wrong',
   'echo',
+  'plan-accepted',
 ]);
 
 const fill = (template: string, values: Record<string, string>): string =>
@@ -142,9 +150,18 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
   const terse = style === 'terse';
   const used: string[] = [];
 
-  const say = (bank: Bank, simpleBank?: Bank): string => {
+  const lastReply = [...ctx.history].reverse().find((t) => t.role === 'customer')?.text ?? '';
+  const thankedLast = /\bthank/i.test(lastReply);
+  const foldedLast = fold(expandContractions(lastReply));
+
+  const say = (bank: Bank, simpleBank?: Bank, noThanks = false): string => {
     const lines = simple && simpleBank ? simpleBank[tone] : bank[tone];
-    const line = pickFresh(rng, lines, runtime.lastCustomerLines);
+    // A customer does not thank the engineer in every reply: one that just did says it another way.
+    const plain = thankedLast || noThanks ? lines.filter((l) => !/\bthank/i.test(l)) : lines;
+    const pool = plain.length > 0 ? plain : lines;
+    // Nor does one say what they have just said, word for word.
+    const fresher = pool.filter((l) => !foldedLast.includes(fold(expandContractions(l))));
+    const line = pickFresh(rng, fresher.length > 0 ? fresher : pool, runtime.lastCustomerLines);
     used.push(line);
     return line;
   };
@@ -162,6 +179,7 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
     if (
       first &&
       !first.reaction &&
+      plan.close === null &&
       SAFE_START.test(first.text) &&
       !first.text.trim().endsWith('?') &&
       !recent.some((l) => P.FILLERS.includes(l)) &&
@@ -191,6 +209,7 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
       timelineAsked: kept.some((s) => s.push === 'timeline'),
       followUpGiven: kept.some((s) => s.followUp),
       echoed: kept.find((s) => s.echo)?.echo ?? null,
+      accepted: kept.find((s) => s.accept)?.accept ?? null,
       customerChecks: kept.flatMap((s) => (s.check ? [s.check] : [])),
       confusedBy: kept.find((s) => s.confused !== undefined)?.confused ?? null,
       limit,
@@ -249,7 +268,7 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
   let reminderUsed = false;
   const reactionLine = (
     reaction: Reaction,
-  ): { text: string; extra?: Partial<Segment>; priority?: number } | null => {
+  ): { text: string; extra?: Partial<Segment>; priority?: number; whole?: boolean } | null => {
     switch (reaction) {
       case 'blamed':
         return { text: say(P.BLAMED) };
@@ -276,7 +295,13 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
       case 'in-record': {
         // The answer is what the case already says; the lead is the customer's reaction to being
         // asked. The answer is part of the same sentence, so it is never cut apart from the lead.
-        const answer = joinSentences(record.map((s) => s.text));
+        // Said again beside a fact the engineer has earned, or a concern raised, it is said in a
+        // sentence: the reply is already long enough.
+        const crowded =
+          curveball.fired !== null ||
+          plan.say.some((s) => ['full', 'partial', 'checkable', 'unknown'].includes(s.kind));
+        const whole = joinSentences(record.map((s) => s.text));
+        const answer = crowded ? firstSentenceOf(whole) : whole;
         if (answer === '') return null;
         const lead = say(P.IN_RECORD, P.IN_RECORD_SIMPLE);
         const joins = SAFE_START.test(answer);
@@ -303,8 +328,17 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
             new: analysis.commitment?.due ?? 'later',
           }),
         };
-      case 'vague-commitment':
-        return { text: say(P.VAGUE_COMMITMENT, P.VAGUE_COMMITMENT_SIMPLE) };
+      case 'vague-commitment': {
+        // Asking for a time is a request for a time, and is remembered with the other asks. A terse
+        // customer asks in a few words.
+        const lines = P.PUSH_SHORT.timeline;
+        return {
+          text: terse
+            ? say({ calm: lines, worried: lines, firm: lines, hot: lines })
+            : say(P.VAGUE_COMMITMENT, P.VAGUE_COMMITMENT_SIMPLE),
+          extra: { push: 'timeline' },
+        };
+      }
       case 'summary-wrong':
         return { text: `${say(P.SUMMARY_WRONG)} ${restate()}` };
       case 'echo':
@@ -314,6 +348,19 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
               extra: { echo: plan.echo.id },
             }
           : null;
+      case 'plan-accepted': {
+        const made = plan.accept;
+        if (!made?.due) return null;
+        const time = spokenTime(made.due);
+        return {
+          text: fill(say(P.ACCEPT_PLAN, P.ACCEPT_PLAN_SIMPLE), { time, Time: capFirst(time) }),
+          extra: { accept: made.id },
+        };
+      }
+      case 'echo-confirmed':
+        return { text: say(P.ECHO_CONFIRMED, P.ECHO_CONFIRMED_SIMPLE) };
+      case 'offer-answered':
+        return { text: say(P.OFFER_ANSWERED, P.OFFER_ANSWERED_SIMPLE) };
       case 'ownership':
         return { text: say(P.OWNERSHIP, P.OWNERSHIP_SIMPLE) };
       case 'next-steps':
@@ -404,7 +451,9 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
         break;
       case 'reason': {
         // A short reason is the first sentence of the reason itself, never a lead standing in for it.
-        const said = shortReason ? { ...item, text: firstSentenceOf(item.text) } : item;
+        const said = shortReason
+          ? { ...item, text: item.short ?? firstSentenceOf(item.text) }
+          : item;
         const line = reasonLine(said, { style, rng, short: shortReason });
         facts.push({ text: line, priority: 0, told: ['reason'] });
         break;
@@ -473,6 +522,15 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
       case 'assumption':
         facts.push({ text: item.text, priority: 3, told: [item.id], assumption: item.id });
         break;
+      case 'addition': {
+        // What the engineer's right recap left out, which the customer has already said.
+        const joins = SAFE_START.test(item.text);
+        facts.push({
+          text: joins ? `${pick(rng, P.ADD_LEADS)} ${lowerFirst(item.text)}` : item.text,
+          priority: 1,
+        });
+        break;
+      }
     }
   }
 
@@ -506,6 +564,29 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
     reaction = null;
   }
 
+  // A recap the engineer asked about is answered, and so is the plan inside it: "Yes, that's
+  // right. Okay, by 3pm then." Each is said in a sentence, so that neither is lost to the length.
+  const secondary =
+    (primary === 'summary-right' || primary === 'confirmed') &&
+    plan.reactions.includes('plan-accepted')
+      ? reactionLine('plan-accepted')
+      : null;
+  if (secondary) {
+    reaction = reaction
+      ? {
+          text: `${firstSentenceOf(reaction.text)} ${firstSentenceOf(secondary.text)}`,
+          extra: { ...reaction.extra, ...secondary.extra },
+          priority: 0,
+          whole: true,
+        }
+      : secondary;
+  }
+  // A cooperative customer, having taken the plan in, asks once whether the engineer needs anything.
+  const offerQuestion = plan.asksOffer
+    ? pickFresh(rng, simple ? P.ASKS_OFFER_SIMPLE : P.ASKS_OFFER, runtime.lastCustomerLines)
+    : null;
+  if (offerQuestion) used.push(offerQuestion);
+
   if (terse) {
     // A terse customer answers the question and nothing more: what has to be said, then the first
     // other answer, up to two sentences' worth of answers in all. What the engineer did that the
@@ -525,10 +606,11 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
       return false;
     });
     if (reaction && (answersBack || (answers.length === 0 && restated === null))) {
-      add(firstSentenceOf(reaction.text), reaction.priority ?? reactionPriority, {
-        ...reaction.extra,
-        reaction: true,
-      });
+      add(
+        reaction.whole ? reaction.text : firstSentenceOf(reaction.text),
+        reaction.priority ?? reactionPriority,
+        { ...reaction.extra, reaction: true },
+      );
     }
     // What the customer is asked about again is answered however few words the rest gets: the
     // answer is not part of the reaction's lead, which is all that is kept of a reaction here.
@@ -542,40 +624,98 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
       });
     }
     segments.push(...facts);
+    if (offerQuestion) add(offerQuestion, 1, { told: [OFFER_HELP] });
   }
 
   // -- A curveball, and what the customer asks for.
-  if (curveball.fired) add(curveball.fired.statement, 0);
+  if (curveball.fired) {
+    // Said whole, unless the answers already in the reply are long: someone who has just said five
+    // sentences asks the question and stops, rather than make the reply a speech.
+    const carried = sentences(
+      joinSentences(segments.filter((s) => s.priority === 0).map((s) => s.text)),
+    ).length;
+    const room = Math.max(1, MOST_SENTENCES - carried);
+    const said = sentences(curveball.fired.statement);
+    add(said.length > room ? said.slice(0, room).join(' ') : curveball.fired.statement, 0);
+  }
   // Repeating an unresolved concern comes after the reaction and the answers: it is the first thing
   // to go when the reply is too long, and it is only counted as given when it was said.
   if (curveball.followUp?.followUp) add(curveball.followUp.followUp, 2, { followUp: true });
 
-  const closing = closesCall(c);
+  const closing = plan.close !== null;
   if (plan.push) {
-    add(pushLine(plan.push, say, simple, terse), 2, { push: plan.push });
-  } else if (closing) {
+    const again = (runtime.pushes[plan.push] ?? 0) > 0;
+    const asked = pushLine(plan.push, say, simple, terse);
+    // Asking for something they asked for before, the customer says so rather than say it all again.
+    const lead = again
+      ? terse
+        ? say({
+            calm: P.ASKED_AGAIN_SHORT,
+            worried: P.ASKED_AGAIN_SHORT,
+            firm: P.ASKED_AGAIN_SHORT,
+            hot: P.ASKED_AGAIN_SHORT,
+          })
+        : say(P.ASKED_AGAIN, P.ASKED_AGAIN_SIMPLE)
+      : null;
+    add(lead ? afterLead(lead, asked) : asked, 2, { push: plan.push });
+  } else if (plan.close) {
     // Do not thank the engineer twice in one reply.
     const thanked = segments.some((s) => /\bthank/i.test(s.text));
+    const sayClosing = (bank: Bank, simpleBank?: Bank) => say(bank, simpleBank, thanked);
     const commitment = plan.closingCommitment;
+    const time = commitment?.due ? spokenTime(commitment.due) : null;
+    const withTime = (line: string) => (time ? fill(line, { time, Time: capFirst(time) }) : line);
     let line: string;
-    if (commitment?.due && !terse) {
-      const template = pickFresh(rng, P.CLOSING_WITH_COMMITMENT[tone], runtime.lastCustomerLines);
-      line = fill(template, { x: describeCommitment(commitment) });
-      used.push(template);
+    if (plan.close === 'asks-more') {
+      // "Is there anything else?" is answered. The plan is repeated only when the engineer has just
+      // read it back, and only as its time: the customer does not recap the case. A concern they
+      // raised earlier and say again is the answer: they cannot also say there is nothing.
+      if (segments.some((s) => s.followUp)) {
+        line = '';
+      } else if (plan.offer && !terse) {
+        line = fill(sayClosing(P.CLOSING_OFFER, P.CLOSING_OFFER_SIMPLE), { who: plan.offer });
+      } else if (time && (c.wrapsUp || c.summarises || rng() < 0.4) && !terse) {
+        line = withTime(
+          sayClosing(P.CLOSING_NOTHING_MORE_TIMED, P.CLOSING_NOTHING_MORE_TIMED_SIMPLE),
+        );
+      } else {
+        line = sayClosing(P.CLOSING_NOTHING_MORE, P.CLOSING_NOTHING_MORE_SIMPLE);
+      }
     } else {
-      line = thanked
-        ? say(P.CLOSING_CUSTOMER_NO_THANKS, P.CLOSING_CUSTOMER_NO_THANKS_SIMPLE)
-        : say(P.CLOSING_CUSTOMER, P.CLOSING_CUSTOMER_SIMPLE);
+      // The engineer is wrapping up or saying goodbye. Only a goodbye is answered with one.
+      const goodbye = plan.close === 'farewell';
+      const bank = terse
+        ? time
+          ? P.CLOSING_FAREWELL_TIMED_TERSE
+          : P.CLOSING_FAREWELL_TERSE
+        : time
+          ? P.CLOSING_FAREWELL_TIMED
+          : P.CLOSING_FAREWELL;
+      const simpleBank = time ? P.CLOSING_FAREWELL_TIMED_SIMPLE : P.CLOSING_FAREWELL_SIMPLE;
+      line = withTime(
+        sayClosing(
+          goodbye ? bank : withoutGoodbye(bank),
+          goodbye ? simpleBank : withoutGoodbye(simpleBank),
+        ),
+      );
     }
     add(line, 1);
     const offer = plan.customerCheck;
-    if (offer && !terse) {
+    if (offer && !terse && plan.close !== 'asks-more') {
       add(fill(P.CLOSING_CUSTOMER_CHECK, { who: offer.action.replace(/^ask /, '') }), 2);
     }
-  } else if (!terse && !c.askedQuestion && facts.length === 0 && !curveball.fired && !reaction) {
+  } else if (
+    !terse &&
+    !c.askedQuestion &&
+    facts.length === 0 &&
+    !curveball.fired &&
+    !reaction &&
+    !runtime.customer.nextStepsStated
+  ) {
     add(say(P.PROMPT, P.PROMPT_SIMPLE), 2);
   }
-  if (plan.flavour && !terse) {
+  // The challenge to a vague answer is the press for a time, already made: not said twice.
+  if (plan.flavour && !terse && !(plan.flavour === 'challenge' && plan.presses)) {
     add(flavourLine(plan.flavour, say, scenario), 4, { flavour: plan.flavour });
   }
 
@@ -593,8 +733,54 @@ export function composeCustomerReply(ctx: CustomerGenerationContext): ComposeRes
     add(line, 5);
   }
 
-  if (segments.length === 0) add(say(P.ACKS, P.ACKS_SIMPLE), 1);
+  // Nothing to say but "okay": not twice running, which is how a machine agrees.
+  if (segments.length === 0) {
+    add(
+      isBareAck(lastReply) ? say(P.ACKS_AGAIN, P.ACKS_AGAIN_SIMPLE) : say(P.ACKS, P.ACKS_SIMPLE),
+      1,
+    );
+  }
   return result(segments, plan.maxSentences);
+}
+
+/** A reply that is only "Okay." or "Right, okay.": agreement with nothing in it. */
+function isBareAck(text: string): boolean {
+  const words = text.toLowerCase().match(/[a-z']+/g) ?? [];
+  return (
+    words.length > 0 &&
+    words.length <= 3 &&
+    words.every((w) =>
+      [
+        'okay',
+        'ok',
+        'sure',
+        'right',
+        'fine',
+        'yes',
+        'yeah',
+        'mm',
+        'hm',
+        'hmm',
+        'mhm',
+        'i',
+        'see',
+        'understand',
+        'thanks',
+        'good',
+      ].includes(w),
+    )
+  );
+}
+
+/** The lines of a bank that do not say goodbye, so that wrapping up is not answered as if it were. */
+function withoutGoodbye(bank: Bank): Bank {
+  const out = {} as Bank;
+  for (const tone of Object.keys(bank) as (keyof Bank)[]) {
+    const lines = bank[tone];
+    const kept = lines.filter((l) => !/\b(?:bye|goodbye|speak to you then)\b/i.test(l));
+    out[tone] = kept.length > 0 ? kept : lines;
+  }
+  return out;
 }
 
 /**
@@ -626,6 +812,24 @@ function fit(segments: Segment[], limit: number): Segment[] {
   return kept;
 }
 
+const ACRONYM = /^[A-Z]{2,}$/;
+
+/** A job title as a person says it: "Head of Programme Delivery" is "head of programme delivery". */
+function spokenRole(role: string): string {
+  return role
+    .split(/\s+/)
+    .map((word) => (ACRONYM.test(word) ? word : word.toLowerCase()))
+    .join(' ');
+}
+
+/** "I'm the head of programme delivery", "I'm an operations manager": a role, in a sentence. */
+function roleClause(role: string): string {
+  const title = spokenRole(role);
+  // A head or director of something is the one, not one of several.
+  const only = /^(?:head|director|chief|vice president|vp)\b.*\bof\b/.test(title);
+  return only ? `I'm the ${title}` : `I'm ${aOrAn(title)} ${title}`;
+}
+
 function detailLine(
   items: Sayable[],
   how: { simple: boolean; terse: boolean; rng: () => number },
@@ -637,6 +841,9 @@ function detailLine(
   const reference = text('case-reference');
   const parts: string[] = [];
   const ids: string[] = [];
+  // One thing per answer unless more was asked for, and said the way a person says it: "My name is
+  // Priya, and I manage the finance team." never a form read out.
+  let roleSaid = false;
   if (name) {
     ids.push('name');
     const who = how.terse
@@ -644,27 +851,22 @@ function detailLine(
       : how.simple
         ? `My name is ${name}`
         : pick(how.rng as never, [`It's ${name}`, `My name's ${name}`]);
-    parts.push(
-      organisation && !how.terse
-        ? `${who}, from ${organisation}`
-        : how.terse && organisation
-          ? `${name}, ${organisation}`
-          : who,
-    );
-    if (organisation) ids.push('organisation');
+    if (organisation) {
+      parts.push(how.terse ? `${name}, ${organisation}` : `${who}, from ${organisation}`);
+      ids.push('organisation');
+    } else if (role && !how.terse) {
+      parts.push(`${who}, and ${roleClause(role)}`);
+      roleSaid = true;
+    } else {
+      parts.push(who);
+    }
   } else if (organisation) {
     ids.push('organisation');
     parts.push(how.terse ? organisation : `I'm with ${organisation}`);
   }
   if (role) {
     ids.push('role');
-    const where =
-      organisation && !name
-        ? ''
-        : organisation && !ids.includes('organisation')
-          ? ` at ${organisation}`
-          : '';
-    parts.push(how.terse ? role : `I'm ${aOrAn(role)} ${lowerFirst(role)}${where}`);
+    if (!roleSaid) parts.push(how.terse ? capFirst(spokenRole(role)) : roleClause(role));
   }
   if (reference) {
     ids.push('case-reference');

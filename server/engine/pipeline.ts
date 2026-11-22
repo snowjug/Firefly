@@ -6,8 +6,8 @@ import { quoteInText, redactSensitive, sanitizeModelText } from '#shared/domain/
 import { conformCustomerReply, endListItems } from './conform.ts';
 import { processCurveball, type CurveballTurnResult } from './curveballs.ts';
 import { processDiscovery, type DiscoveryTurnResult, type MatchingMode } from './discovery.ts';
-import { analyseTurn, recordCommitment, type TurnAnalysis } from './memory.ts';
-import { planReply, revealText, type Flavour, type PlanPush } from './plan.ts';
+import { analyseTurn, engineerNameOf, recordCommitment, type TurnAnalysis } from './memory.ts';
+import { OFFER_HELP, planReply, revealText, type Flavour, type PlanPush } from './plan.ts';
 import { isAsking } from './pressing.ts';
 import { rngFor, type Rng } from './rng.ts';
 import { applyTraineeTurn, weightedCoverage } from './state.ts';
@@ -67,6 +67,8 @@ export interface CustomerGeneration {
     /** The line of personality the customer said, when one was added to the reply. */
     flavoured?: Flavour | null;
     echoed?: string | null;
+    /** The id of the commitment the customer took in briefly, without saying it back as a question. */
+    accepted?: string | null;
     customerChecks?: { id: string; whoKnows: string }[];
     confusedBy?: string | null;
     /** Most sentences the reply was allowed to have. */
@@ -130,13 +132,18 @@ function defaultBookkeeping(ctx: CustomerGenerationContext) {
   const plan = planReply(ctx);
   const said = plan.say;
   return {
-    toldIds: said
-      .filter((s) => !['reminder', 'hint', 'full', 'partial'].includes(s.kind))
-      .map((s) => s.id),
+    toldIds: [
+      ...said
+        .filter((s) => !['reminder', 'addition', 'hint', 'full', 'partial'].includes(s.kind))
+        .map((s) => s.id),
+      ...(plan.asksOffer ? [OFFER_HELP] : []),
+    ],
     hintIds: said.filter((s) => s.kind === 'hint').map((s) => s.id),
-    pushed: plan.push,
+    // Asking for a time after a vague commitment is asking for a time, whatever else was planned.
+    pushed: plan.push ?? (plan.presses ? ('timeline' as const) : null),
     flavoured: plan.flavour,
     echoed: plan.echo?.id ?? null,
+    accepted: plan.accept?.id ?? null,
     customerChecks: said.flatMap((s) =>
       s.kind === 'unknown' && s.whoKnows ? [{ id: s.id, whoKnows: s.whoKnows }] : [],
     ),
@@ -145,7 +152,14 @@ function defaultBookkeeping(ctx: CustomerGenerationContext) {
 }
 
 // Sentences the conformer can remove. When it did, a fact the reply was meant to reveal may be gone.
-const REMOVING = new Set(['too-long', 'praise', 'coaching', 'announces-facts', 'empty']);
+const REMOVING = new Set([
+  'too-long',
+  'praise',
+  'coaching',
+  'announces-facts',
+  'ai-politeness',
+  'empty',
+]);
 
 /** Which of the facts this turn revealed are still in the reply. */
 function revealsSaid(ctx: CustomerGenerationContext, text: string, removed: boolean): Set<string> {
@@ -180,6 +194,14 @@ export async function processTraineeTurn(args: ProcessTurnArgs): Promise<Process
     traineeText,
   );
   const analysis = analyseTurn({ scenario, runtime, classification, traineeText, history });
+  // "Is there anything you need from your side before then?" asks nothing about the problem, however
+  // a model took it: it must not reveal a fact.
+  if (
+    analysis.closingQuestionOnly &&
+    (classification.discoveryIntents.length > 0 || classification.factTargets.length > 0)
+  ) {
+    classification = { ...classification, discoveryIntents: [], factTargets: [] };
+  }
   // A short yes to "so you'll call me at three?" answers a question; it is not a thin reply.
   if (analysis.confirmsEcho && classification.lowEffort) {
     classification = { ...classification, lowEffort: false };
@@ -312,7 +334,18 @@ export async function processTraineeTurn(args: ProcessTurnArgs): Promise<Process
   // Conform first, then record: nothing counts as said unless it is in the reply the customer gave.
   // The lines of a list become sentences before line breaks are collapsed, or they would run together.
   const cleaned = sanitizeModelText(endListItems(redactSensitive(generated.text).text), 900);
-  const conformed = conformCustomerReply(cleaned, { maxSentences: bk.limit ?? plan.maxSentences });
+  const engineerName = engineerNameOf(history, traineeText);
+  const conformed = conformCustomerReply(cleaned, {
+    maxSentences: bk.limit ?? plan.maxSentences,
+    ...(engineerName
+      ? {
+          engineerName: {
+            name: engineerName,
+            recent: history.filter((t) => t.role === 'customer').map((t) => t.text),
+          },
+        }
+      : {}),
+  });
   const customerText = conformed.text || NEUTRAL_REPLY;
   const removed = conformed.problems.some((p) => REMOVING.has(p));
   const revealed = bk.revealedIds
@@ -357,11 +390,12 @@ export async function processTraineeTurn(args: ProcessTurnArgs): Promise<Process
     ...(bk.followUpGiven ? { 'follow-up': traineeTurnNumber } : {}),
   };
 
-  // The customer said a commitment back, or offered to check with someone.
+  // The customer said a commitment back, took it in, or offered to check with someone.
   const echoed = bk.echoed !== undefined ? bk.echoed : fallback.echoed;
+  const accepted = bk.accepted !== undefined ? bk.accepted : fallback.accepted;
   const customerChecks = bk.customerChecks ?? fallback.customerChecks;
   let ledger = updated.commitments.map((k) =>
-    echoed && k.id === echoed ? { ...k, reflected: true } : k,
+    (echoed && k.id === echoed) || (accepted && k.id === accepted) ? { ...k, reflected: true } : k,
   );
   for (const check of customerChecks) {
     const id = `u-${check.id}`;

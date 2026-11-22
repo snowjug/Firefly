@@ -67,6 +67,30 @@ export const ACKS_SIMPLE: Bank = {
   firm: ['Okay.', 'Yes. Please continue.'],
   hot: ['Okay. Please continue.', 'Yes. And then?'],
 };
+/** A bare acknowledgement the reply before already was: something fuller, still short. */
+export const ACKS_AGAIN: Bank = {
+  calm: [
+    'No problem, thank you.',
+    "That's fine, thanks.",
+    "Sure, that's no problem.",
+    "Alright, I'll wait.",
+  ],
+  worried: [
+    "Okay, thank you. I'll wait.",
+    "That's all right, thank you.",
+    'Right, thanks for letting me know.',
+  ],
+  firm: ["Fine, I'll wait.", "That's fine. Carry on.", "Okay. I'm still here."],
+  hot: ["Fine. I'm listening.", 'Right. Go on, then.', "Well? I'm still here."],
+};
+export const ACKS_AGAIN_SIMPLE: Bank = {
+  calm: ['No problem. Thank you.', 'That is fine. Thank you.'],
+  worried: ['Okay. Thank you. I will wait.'],
+  firm: ['Fine. I will wait.'],
+  hot: ['Fine. I am listening.'],
+};
+/** What the customer adds to a right recap that left out something they had said. */
+export const ADD_LEADS: string[] = ['And', 'Oh, and', 'Also,'];
 
 export const EMPATHY: Bank = {
   calm: ['Thanks, I appreciate that.', "Thank you, that's kind."],
@@ -128,16 +152,114 @@ export const NEXT_STEPS_SIMPLE: Bank = {
 
 /** The customer says the engineer's commitment back: "So you'll own the case and update me by 3pm?" */
 export const ECHO: Bank = {
-  calm: ["Okay, so you'll {x}?", "Okay. So you'll {x}, is that right?"],
-  worried: ["Okay. So you'll {x}, yes?", "Thank you. So you'll {x}?"],
-  firm: ["So you'll {x}?", "Right. So you'll {x}. Is that right?"],
-  hot: ["So you'll {x}. Is that definitely right?", "Okay. So you'll {x}, yes?"],
+  calm: [
+    "Okay, so you'll {x}?",
+    "Okay. So you'll {x}, is that right?",
+    "Okay. So you'll {x}, correct?",
+    "Right, so you'll {x}?",
+  ],
+  worried: [
+    "Okay. So you'll {x}, yes?",
+    "Thank you. So you'll {x}?",
+    "Okay, so you'll {x}, correct?",
+    "Oh, good. So you'll {x}, is that right?",
+  ],
+  firm: [
+    "So you'll {x}?",
+    "Right. So you'll {x}. Is that right?",
+    "So you'll {x}, correct?",
+    "Okay. So you'll {x}, and that's definite?",
+  ],
+  hot: [
+    "So you'll {x}. Is that definitely right?",
+    "Okay. So you'll {x}, yes?",
+    "So you'll {x}. Correct?",
+  ],
 };
 export const ECHO_SIMPLE: Bank = {
-  calm: ['Okay. So you will {x}?'],
-  worried: ['Thank you. So you will {x}?'],
-  firm: ['So you will {x}?'],
-  hot: ['So you will {x}, yes?'],
+  calm: ['Okay. So you will {x}?', 'Okay. So you will {x}, correct?'],
+  worried: ['Thank you. So you will {x}?', 'Okay. So you will {x}, yes?'],
+  firm: ['So you will {x}?', 'So you will {x}, correct?'],
+  hot: ['So you will {x}, yes?', 'So you will {x}. Correct?'],
+};
+
+/**
+ * The customer takes a clear commitment in briefly, naming its time, instead of saying it back:
+ * a terse or calm customer has it and says so. The time is in the first sentence, because a terse
+ * customer says only that.
+ */
+export const ACCEPT_PLAN: Bank = {
+  calm: [
+    'Okay, {time} then.',
+    'Okay, {time} works for me.',
+    'Good, {time} is fine. Thank you.',
+    'Right, {time} it is.',
+    "That's fine, {time}. I'll wait to hear from you.",
+    "Okay, {time}. That's fine by me.",
+    'Alright, {time}. Thanks.',
+    "Sure, {time}. I'll expect to hear from you.",
+    'Fine, {time} suits me.',
+  ],
+  worried: [
+    "Okay, {time} then. That's a relief.",
+    'Thank you, {time} is fine.',
+    "Okay, {time}. I'll look out for it.",
+    "Okay, {time}. I'll feel better once I've heard from you.",
+    'Right, {time}. Thank you, that helps.',
+    'Okay, {time} is fine. Thank you for telling me.',
+  ],
+  firm: [
+    "Okay, {time}. I'll hold you to that.",
+    'Right, {time} then.',
+    "Fine, {time}. I'll expect it.",
+    "Okay, {time}. I'll wait for your call.",
+    'Right, {time}. Make sure it happens.',
+    'Fine, {time} it is.',
+  ],
+  hot: [
+    "Okay, {time}. Don't let it slip.",
+    "Right, {time} then. I'll be waiting.",
+    "Fine, {time}. I'm holding you to it.",
+    "Okay, {time}. I'll expect it then.",
+    'Right, {time}. And not a minute later.',
+  ],
+};
+export const ACCEPT_PLAN_SIMPLE: Bank = {
+  calm: [
+    'Okay, {time} is good. Thank you.',
+    'Yes, {time} is fine.',
+    'Good, {time} is fine for me.',
+  ],
+  worried: ['Okay, {time} is good. Thank you.', 'Thank you, {time} is fine.'],
+  firm: ['Okay, {time} is fine. I will wait.', 'Yes, {time}. I will wait for your call.'],
+  hot: ['Okay, {time}. I will wait for your call.', 'Yes, {time}. Please do it then.'],
+};
+
+/** The engineer said yes to "so you'll do that?". */
+export const ECHO_CONFIRMED: Bank = {
+  calm: [
+    'That works for me.',
+    'Good, that works for me. Thank you.',
+    "Great, that's fine by me.",
+    'Okay, good. That works.',
+  ],
+  worried: [
+    "Thank you, that's a relief.",
+    'Okay, good. That does help, thank you.',
+    'That works for me, thank you.',
+  ],
+  firm: ['Good. That works for me.', "Okay. I'll hold you to that.", 'Right. That works.'],
+  hot: [
+    'Good. Just make sure it happens.',
+    "Right. I'll be waiting.",
+    'Okay. That works, as long as it happens.',
+  ],
+};
+export const ECHO_CONFIRMED_SIMPLE: Bank = {
+  calm: ['Good. That works for me.', 'Okay. That is good for me.'],
+  worried: ['Thank you. That helps me.', 'Okay. Thank you. That is good.'],
+  firm: ['Good. That works for me.', 'Okay. I will wait.'],
+  hot: ['Good. Please do it.', 'Okay. I will wait.'],
 };
 
 /** A different time from the one given earlier. */
@@ -173,10 +295,16 @@ export const VAGUE_COMMITMENT_SIMPLE: Bank = {
 };
 
 export const SUMMARY: Bank = {
-  calm: ["Yes, that's right.", 'Yes, exactly.', "That's about it, yes."],
-  worried: ["Yes, that's right.", 'Yes. You have it right.'],
-  firm: ["Yes, that's right.", "Yes. That's it."],
-  hot: ["Yes. That's it.", "Yes, that's right."],
+  calm: [
+    "Yes, that's right.",
+    'Yes, exactly.',
+    "That's about it, yes.",
+    "Yes, that's it.",
+    'Yes, you have it.',
+  ],
+  worried: ["Yes, that's right.", 'Yes. You have it right.', "Yes, that's it, thank you."],
+  firm: ["Yes, that's right.", "Yes. That's it.", 'Yes, that is what I said.'],
+  hot: ["Yes. That's it.", "Yes, that's right.", "Yes. That's what I told you."],
 };
 export const SUMMARY_WRONG: Bank = {
   calm: ['Not quite, I think.', "Sorry, that's not quite what I said."],
@@ -560,33 +688,47 @@ export const PUSH_CADENCE: Bank = {
   ],
 };
 export const PUSH_CAUSE: Bank = {
-  calm: ['So what was it that changed?', 'Could you tell me what actually caused it?'],
+  calm: [
+    'So what was it that changed?',
+    'Could you tell me what actually caused it?',
+    "I'd really like to understand what caused it.",
+  ],
   worried: [
     "Could you tell me what it was that changed? I'd like to understand.",
     "Can you tell me what caused it? I'd really like to know.",
+    'Could you tell me what the cause was? It would put my mind at rest.',
   ],
-  firm: ['So what was it that changed?', 'What was the actual cause?'],
+  firm: [
+    'So what was it that changed?',
+    'What was the actual cause?',
+    'I need to know what caused it.',
+  ],
   hot: [
     'So what actually changed? That is why I called.',
     'What was the cause? I want a straight answer.',
+    "What caused it? I'm not closing this without knowing.",
   ],
 };
 export const PUSH_RESOLUTION: Bank = {
   calm: [
     "Before we close it, can we check it's definitely working?",
     "Could we just make sure it's really fixed first?",
+    "Can I just check it's working properly before we close this?",
   ],
   worried: [
     "Before we close it, can we make sure it's definitely working?",
     "Could we just check it's really fixed before we close it?",
+    "Would it be all right to check it's definitely working first?",
   ],
   firm: [
     "Before we close it, I want to be sure it's actually working.",
     "Let's check that it really works before we close this.",
+    'I want to see it working before we close this.',
   ],
   hot: [
     "Before we close this, I want to know it's actually working.",
     "I'm not closing this until I know it's really fixed.",
+    'Show me it works before this gets closed.',
   ],
 };
 export const PUSH_OWNER: Bank = {
@@ -608,10 +750,24 @@ export const PUSH_SHORT: Record<PlanPush, string[]> = {
   history: ['Have you read the earlier notes?', 'Have you seen the case history?'],
   escalation: ['Who has the case now?', 'What does the escalation change?'],
   cadence: ['How often will I hear from you?', 'How often do I get an update?'],
-  cause: ['What actually changed?', 'What was the cause?'],
-  resolution: ['Is it definitely working?', 'Can we check it works first?'],
+  cause: ['What actually changed?', 'What was the cause?', 'What caused it?'],
+  resolution: ['Is it definitely working?', 'Can we check it works first?', 'Is it working now?'],
   owner: ['Who is looking after this?', 'Who do I speak to?'],
 };
+/** The customer asks again for what they asked for before. Each ends so that the question follows. */
+export const ASKED_AGAIN: Bank = {
+  calm: ['Sorry to ask again,', "Sorry, I'll ask again:", 'If I could ask again,'],
+  worried: ['Sorry to ask again,', "Sorry, but I'd like to ask again:"],
+  firm: ['I did ask earlier.', 'I asked before,', 'To ask again,'],
+  hot: ["I've asked this already.", "I'll ask again.", 'I did ask.'],
+};
+export const ASKED_AGAIN_SIMPLE: Bank = {
+  calm: ['Sorry, I ask again.', 'Sorry, one more time.'],
+  worried: ['Sorry, I ask again.'],
+  firm: ['I ask again.', 'I asked before.'],
+  hot: ['I asked before.', 'I ask again.'],
+};
+export const ASKED_AGAIN_SHORT: string[] = ['Again,', 'Still,', 'I asked,'];
 export const TIMELINE: Bank = {
   calm: [
     'Do you have any idea how long this might take?',
@@ -873,42 +1029,211 @@ export const PROMPT_SIMPLE: Bank = {
 };
 
 // ---------------------------------------------------------------------------------------
-// Closing the call
+// Closing the call. Three different things happen at the end of a call, and a customer says a
+// different thing for each: the engineer asks whether that is all ("No, I think that's
+// everything."), the engineer wraps up or says goodbye ("Thank you. I'll wait for your update."),
+// and the customer asks, once, whether the engineer needs anything from them. Each has several
+// wordings per mood so that no call ends on the same line every time, and none of them raises a
+// new problem or recaps the case.
 
-export const CLOSING_CUSTOMER: Bank = {
-  calm: ["No, I think that's everything. Thank you for your help.", "That's all from me. Thanks."],
-  worried: ["I think that's everything. Thank you, I feel better."],
-  firm: ["No, that's everything. Thank you.", "That's all. I'll wait to hear from you."],
-  hot: ["That's everything for now. I'll expect to hear from you."],
+/** The engineer asked whether there is anything else, or anything needed from the customer. */
+export const CLOSING_NOTHING_MORE: Bank = {
+  calm: [
+    "No, I think that's everything.",
+    "No, that's everything for now. Thanks.",
+    "That's all from me, thank you.",
+    "No, I think we're covered.",
+    'Nothing else from me, no.',
+  ],
+  worried: [
+    "I think that's everything. Thank you, I feel a bit better.",
+    "No, I think that's all. I just hope it gets sorted soon.",
+    "No, that's everything. I'm glad someone has it now.",
+  ],
+  firm: [
+    "No, that's everything. I'll wait to hear from you.",
+    "That's all for now. Just keep to the time.",
+    'Nothing else from me. I just want it fixed.',
+  ],
+  hot: [
+    "No, that's everything. Just make sure you call when you said.",
+    "That's all. I'll expect your call.",
+    'Nothing else. I just need this sorted.',
+  ],
 };
-export const CLOSING_CUSTOMER_SIMPLE: Bank = {
-  calm: ['No, that is everything. Thank you for your help.'],
-  worried: ['That is everything. Thank you, I feel better.'],
-  firm: ['That is everything. Thank you.'],
-  hot: ['That is everything for now. I will wait.'],
+export const CLOSING_NOTHING_MORE_SIMPLE: Bank = {
+  calm: ['No, that is everything. Thank you.', 'No, that is all from me.'],
+  worried: [
+    'That is everything. Thank you, I feel better.',
+    'No, that is all. I hope it is fixed soon.',
+  ],
+  firm: ['That is everything. I will wait for your call.', 'No, that is all for now.'],
+  hot: ['That is everything for now. I will wait.', 'No, that is all. I need this fixed.'],
 };
-// Used when the reply already thanked the engineer, so the customer does not do it twice.
-export const CLOSING_CUSTOMER_NO_THANKS: Bank = {
-  calm: ["No, I think that's everything.", "That's all from me."],
-  worried: ["I think that's everything, and I feel better about it."],
-  firm: ["No, that's everything.", "That's all. I'll wait to hear from you."],
-  hot: ["That's everything for now. I'll expect to hear from you."],
+/** The same, after the engineer has just read the plan back: the time is the only thing repeated. */
+export const CLOSING_NOTHING_MORE_TIMED: Bank = {
+  calm: [
+    "No, that's everything. I'll expect to hear from you {time}.",
+    "That's all from me. So {time}, then.",
+    "No, I think that's everything. I'll wait for you {time}.",
+  ],
+  worried: [
+    "I think that's everything. I'll be waiting to hear from you {time}.",
+    "No, that's all. I'll look out for your call {time}.",
+  ],
+  firm: [
+    "No, that's everything. I'll expect your call {time}.",
+    "That's all. {Time}, then, and I'll hold you to it.",
+  ],
+  hot: [
+    "That's everything for now. I'll expect your call {time}.",
+    "No, that's all. {Time}, and not a minute later.",
+  ],
 };
-export const CLOSING_CUSTOMER_NO_THANKS_SIMPLE: Bank = {
-  calm: ['No, that is everything.'],
-  worried: ['That is everything. I feel better.'],
-  firm: ['That is everything.'],
-  hot: ['That is everything for now. I will wait.'],
+export const CLOSING_NOTHING_MORE_TIMED_SIMPLE: Bank = {
+  calm: ['No, that is everything. I will wait for you {time}.'],
+  worried: ['That is everything. I will wait for your call {time}.'],
+  firm: ['That is everything. I will wait for your call {time}.'],
+  hot: ['That is everything for now. I will wait for your call {time}.'],
 };
-/** The customer closes the call by saying back what they have been promised. */
-export const CLOSING_WITH_COMMITMENT: Bank = {
-  calm: ["That's everything, thanks. So you'll {x}.", "No, that's all. So you'll {x}. Thank you."],
-  worried: ["I think that's everything. So you'll {x}. Thank you."],
-  firm: ["That's everything. So you'll {x}."],
-  hot: ["That's everything for now. So you'll {x}, and I'll expect that."],
+/** The engineer asked what the customer can do, and they can ask someone they said would know. */
+export const CLOSING_OFFER: Bank = {
+  calm: [
+    "No, I think that's everything. I can ask {who} about it, if that would help.",
+    "Not that I know of. I could ask {who}, if you'd like.",
+  ],
+  worried: [
+    "No, I think that's all. I can ask {who} if it would help.",
+    "Not that I can think of. I'm happy to ask {who}, if it's useful.",
+  ],
+  firm: [
+    "No, that's everything. I can ask {who}, if you need it.",
+    "That's all. I can ask {who} if it helps.",
+  ],
+  hot: ["No, that's everything. I can ask {who}, if you want."],
+};
+export const CLOSING_OFFER_SIMPLE: Bank = {
+  calm: ['No, that is everything. I can ask {who} if you need.'],
+  worried: ['No, that is all. I can ask {who} if it helps.'],
+  firm: ['That is everything. I can ask {who} if you need.'],
+  hot: ['That is everything. I can ask {who} if you want.'],
+};
+
+/** The engineer is saying goodbye, or has wrapped up. Lines with "bye" are for a goodbye only. */
+export const CLOSING_FAREWELL: Bank = {
+  calm: [
+    "Thank you. I'll wait for your update.",
+    'Thanks, I appreciate it. Goodbye.',
+    'Okay, thank you. Speak to you then.',
+    'Thanks for your help. Bye for now.',
+    "Great, thanks. I'll wait to hear from you.",
+  ],
+  worried: [
+    "Thank you. I'll wait for your update.",
+    "Thanks. I'll be waiting for your call. Goodbye.",
+    'Okay, thank you. Speak to you then.',
+    "Thank you, that's a weight off. Goodbye.",
+  ],
+  firm: [
+    "Right. I'll wait for your call. Goodbye.",
+    "Okay. I'll expect your update. Goodbye.",
+    'Fine. Speak to you then.',
+    "Okay, thanks. I'll wait to hear from you.",
+  ],
+  hot: [
+    "Fine. I'll expect your call. Goodbye.",
+    "Right. I'll be waiting for that update.",
+    "Okay. I'll hold you to that. Goodbye.",
+  ],
+};
+/** A terse customer closes in a few words. */
+export const CLOSING_FAREWELL_TERSE: Bank = {
+  calm: ['Thanks, bye.', 'Okay, thanks. Bye.', 'Right, thank you. Goodbye.'],
+  worried: ['Thanks. Bye.', 'Thank you. Goodbye.'],
+  firm: ['Right. Bye.', "Okay. I'll wait for your call."],
+  hot: ['Fine. Bye.', "Right. I'll be waiting."],
+};
+/** With the time the engineer gave, said once. */
+export const CLOSING_FAREWELL_TIMED: Bank = {
+  calm: [
+    "Thank you. I'll wait for your update {time}.",
+    "Okay, thanks. I'll expect to hear from you {time}. Goodbye.",
+    "Thanks for your help. I'll look out for your call {time}.",
+    'Great, thanks. {Time}, then. Bye for now.',
+  ],
+  worried: [
+    "Thank you. I'll be waiting for your update {time}.",
+    "Okay, thanks. I'll look out for your call {time}. Goodbye.",
+    "Thank you. {Time}, then. I'll wait for you.",
+  ],
+  firm: [
+    "Right. I'll expect your update {time}. Goodbye.",
+    "Okay. {Time}, then. I'll hold you to that.",
+    "Fine. I'll wait for your call {time}.",
+  ],
+  hot: ["Fine. I'll expect your call {time}. Goodbye.", "Right. {Time}. I'll be waiting."],
+};
+export const CLOSING_FAREWELL_TIMED_TERSE: Bank = {
+  calm: ['Okay, {time}. Bye.', 'Right, {time}. Thanks.', 'Thanks, {time}. Bye.'],
+  worried: ['Okay, {time}. Thanks.', 'Thank you, {time}. Bye.'],
+  firm: ['Right, {time}. Bye.', "Okay, {time}. I'll wait."],
+  hot: ['Right, {time}. Bye.', "Fine, {time}. I'll be waiting."],
+};
+export const CLOSING_FAREWELL_SIMPLE: Bank = {
+  calm: [
+    'Thank you. I will wait for your update.',
+    'Thank you for your help. Goodbye.',
+    'Okay. Thank you. Goodbye.',
+  ],
+  worried: ['Thank you. I will wait for your update.', 'Okay. Thank you. Goodbye.'],
+  firm: ['Okay. I will wait for your call. Goodbye.', 'Okay. Thank you. Goodbye.'],
+  hot: ['Okay. I will wait for your call. Goodbye.'],
+};
+export const CLOSING_FAREWELL_TIMED_SIMPLE: Bank = {
+  calm: [
+    'Thank you. I will wait for your update {time}. Goodbye.',
+    'Okay. Thank you. I will wait for you {time}.',
+  ],
+  worried: [
+    'Thank you. I will wait for your call {time}.',
+    'Okay. Thank you. I will wait for you {time}.',
+  ],
+  firm: ['Okay. I will wait for your call {time}. Goodbye.'],
+  hot: ['Okay. I will wait for your call {time}. Goodbye.'],
 };
 /** And the customer remembers what they offered to do. */
 export const CLOSING_CUSTOMER_CHECK = "And I'll ask {who} and let you know.";
+
+/** The customer, being cooperative, asks once whether the engineer needs anything from them. */
+export const ASKS_OFFER: string[] = [
+  'Is there anything you need from our side before then?',
+  'Is there anything you need from us before then?',
+  'Do you need anything from our side in the meantime?',
+];
+export const ASKS_OFFER_SIMPLE: string[] = [
+  'Do you need anything from us before then?',
+  'Is there anything you need from our side?',
+];
+/** The engineer answered the customer's question about what they need from the customer. */
+export const OFFER_ANSWERED: Bank = {
+  calm: [
+    'Okay, good. Thank you.',
+    "Okay, that's good to know.",
+    "Right, thanks. I'll wait for your update.",
+  ],
+  worried: [
+    "Okay, good. That's one less thing to worry about.",
+    'Thank you. I will wait to hear from you.',
+  ],
+  firm: ['Okay. I will wait to hear from you.', 'Fine. Thanks.'],
+  hot: ['Right. I will wait for your update.'],
+};
+export const OFFER_ANSWERED_SIMPLE: Bank = {
+  calm: ['Okay. Thank you.', 'Okay. I will wait for your update.'],
+  worried: ['Okay. Thank you. I will wait.'],
+  firm: ['Okay. I will wait for your update.'],
+  hot: ['Okay. I will wait.'],
+};
 
 // ---------------------------------------------------------------------------------------
 // Chat that is not about the problem (talkative customers). A scenario's own irrelevant facts are
