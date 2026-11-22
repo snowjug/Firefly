@@ -187,6 +187,30 @@ describe('the Responsible AI page', () => {
     );
   });
 
+  it('says how tips, the closing check and better wording behave, and where the scenarios come from', async () => {
+    const user = userEvent.setup();
+    await renderPublicPage('/responsible-ai');
+    const ai = await open(user, 'AI customer and coaching', 'How the AI and coaching work');
+    expect(
+      within(ai)
+        .getAllByRole('heading', { level: 3 })
+        .map((heading) => heading.textContent),
+    ).toEqual([
+      'Demo mode and live mode',
+      'What a live model receives',
+      'How the output is checked',
+      'What is never penalised',
+      'Tips, the closing check and wording to try',
+      'Where the scenarios come from',
+    ]);
+    expect(ai).toHaveTextContent('never come from the facts the customer holds back');
+    expect(ai).toHaveTextContent('Assessment practice shows no tips.');
+    expect(ai).toHaveTextContent('never stops you from ending the call');
+    expect(ai).toHaveTextContent('something to try, not a script to repeat');
+    expect(ai).toHaveTextContent('Firefly did not use Microsoft’s internal support wiki');
+    expect(ai).toHaveTextContent('None is marked as reviewed by a mentor yet.');
+  });
+
   it('says what is kept and where, how to delete it, and what a provider receives', async () => {
     const user = userEvent.setup();
     await renderPublicPage('/responsible-ai');
