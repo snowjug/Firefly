@@ -11,6 +11,7 @@ The library holds sixteen scenarios today. Read one before you write one, for ex
 - **Invented organisations.** Use made-up company names in the style of Microsoft's sample companies (the library uses names such as Adventure Works, Woodgrove Bank and Litware). Check that a name you add is not a real organisation.
 - **A synthetic case number.** `caseReference` has the form `SIM-000000`, so it cannot be mistaken for a real service request. Every scenario needs one, because the call stage can be changed to a follow-up, escalated or closure call.
 - **The CBCF list stays empty.** `cbcfBehaviours` must be `[]`. No CBCF source material is available, so nothing is guessed (see [care-cbcf-rubric.md](care-cbcf-rubric.md#cbcf)).
+- **Say how far it was checked.** Every scenario carries an internal provenance record, `grounding`: when it was written, which public sources it rests on, whether its product wording was checked and whether anyone reviewed it. It is never shown to a trainee. See [Provenance](#provenance-grounding) and [Researching a scenario](#researching-a-scenario).
 
 ## How a scenario drives a call
 
@@ -37,8 +38,9 @@ Limits are from the schema. A word budget counts words, not characters.
 
 | Purpose                | Fields and limits                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Identity and listing   | `id` (lower-case kebab-case, at most 64), `version`, `enabled`, `title` (at most 80 characters), `listSummary` (at most 18 words), `summary` (at most 60 words), `tags` (up to 8), `estimatedMinutes` (5 to 30). `spotlight` exists in the schema, and nothing reads it: leave it `false`.                                                                                                                                                                                                                                                                                                                         |
+| Identity and listing   | `id` (lower-case kebab-case, at most 64), `version`, `enabled`, `title` (at most 80 characters), `shortTitle` (2 to 6 words, see [The short title](#the-short-title)), `listSummary` (at most 18 words), `summary` (at most 60 words), `tags` (up to 8), `estimatedMinutes` (5 to 30; trainees see a range around it, "8–12 min" for 10, from `formatEstimate` in `shared/domain/duration.ts`). `spotlight` exists in the schema, and nothing reads it: leave it `false`.                                                                                                                                          |
 | Product and case       | `product` (`id` from the list and an `area` such as "Meetings"), `caseReference`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Provenance (internal)  | `grounding`: `authoredOn`, `productFamily`, `sourceCategories`, `behaviourCheck`, `syntheticConfirmed`, `review`, and optionally `revisedOn`, `checkedOn` and `notes`. Required. See [Provenance](#provenance-grounding).                                                                                                                                                                                                                                                                                                                                                                                          |
 | Defaults               | `issueType`, `impact`, `startingTemperature`, `proficiency`, `style`, `callStage`, `difficulty`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | The customer           | `persona` (`name`, `role`, `organisation`, `background`, `voice`, optional `speaker`), `environment.details` (1 to 8), `customerObjective`, `customerExpectation`, `desiredOutcome`, `previousTroubleshooting` (up to 6), `recentChanges` (up to 5).                                                                                                                                                                                                                                                                                                                                                               |
 | Who is affected        | `affectedUsers` for low, medium and high: `count` (or `null`) and a `summary`. Internal: usually a hidden fact, so never in the brief.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -123,7 +125,21 @@ What the trainee reads before a call has a word budget, so that the screens stay
 
 **A first-contact scenario has no `previousContact`.** The public brief is the same at every call stage, and the trainee can set the call to a different stage. The interface shows **Previous contact** only on a follow-up, escalated or closure call (`web/src/features/scenarios/CaseRows.tsx` on the brief, `describeCase` in `web/src/features/call-ui/call-model.ts` on the call page). A scenario written for a first contact has no earlier contact to state. If it carried a `previousContact`, the text would be shown, and be wrong, once the call was set to a call-back. The validator rejects it with "publicBrief.previousContact: a first-contact scenario has no earlier contact to state (the brief is shown at every call stage)" (`semanticIssues` in `server/scenarios/index.ts`, run by `npm run validate:scenarios`). `server/scenarios/library.test.ts` covers it. A scenario written for a follow-up, escalated or closure call may have one.
 
-Never put a hidden fact in `publicBrief`, `brief` or the list text. The public scenario data (`toPublicScenario` in `server/services/dto.ts`) carries the persona's name, role and organisation, the brief, the stage briefs and the discovery areas. It never carries the persona's background or voice, a fact, a note or a coaching field.
+Never put a hidden fact in `publicBrief`, `brief` or the list text. The public scenario data (`toPublicScenario` in `server/services/dto.ts`) carries the persona's name, role and organisation, the title and short title, the brief, the stage briefs and the discovery areas. It never carries the persona's background or voice, a fact, a note, a coaching field or the provenance record.
+
+### The short title
+
+`shortTitle` is the title on a scenario card: two to six plain words in sentence case, with no full stop ("Shared mailbox missing"). It is a shorter way of saying what the title and `publicBrief.issue` already say. It must not add information, so it cannot hint at a hidden fact: the Teams scenario's hidden facts are about guests from outside the company and nothing public says so, so its short title is "Cannot join meetings", never "External users cannot join".
+
+The schema requires two to six words, a capital first letter and no closing punctuation. The validator (`semanticIssues` and `loadScenarios` in `server/scenarios/index.ts`) rejects a short title when:
+
+- it is longer than the title;
+- it shares no content word with the title;
+- it uses a content word that neither the title nor `publicBrief.issue` holds. It compares word roots, so "approvals" matches "approval" and "running" matches "run";
+- it repeats a hidden fact, by the same checks as the title;
+- another scenario already uses it, because two cards could not be told apart.
+
+`shortTitle` is part of the public scenario data. It is not stored with a call, which keeps the full title.
 
 ## Curveballs
 
@@ -168,20 +184,67 @@ If the story needs something like that, say what the customer sees in their own 
 - Scenarios clearly different from each other: a different product, issue, stakes and people.
 - Plain, human language. No marketing words. No jargon the persona would not use.
 
+## Provenance (`grounding`)
+
+Every scenario carries `grounding`, an internal record of where it came from and how far it was checked. It is for authors and reviewers, and it is required: a scenario without a valid one does not load.
+
+**It is never shown.** It is not in the public scenario (`PublicScenarioDTO`), not in the scenario view of a saved call, not in any `/api/*` response and not in any log line (the logger drops these field names). `server/scenarios/library.test.ts` and `server/http/api.test.ts` walk every public form, for every scenario, and fail if a provenance field turns up. Saved calls never held it: they snapshot the effective scenario, which does not carry it.
+
+| Field                | What it says                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authoredOn`         | When it was written: `YYYY-MM-DD`, a real calendar date.                                                                                                                                                                                                                                                                                                                                          |
+| `revisedOn`          | Optional. When it was last revised. Not before `authoredOn`.                                                                                                                                                                                                                                                                                                                                      |
+| `productFamily`      | `microsoft-365`, `windows`, `azure` or `dynamics-365`. It must be the family of the scenario's `product`, which the validator checks.                                                                                                                                                                                                                                                             |
+| `sourceCategories`   | At least one of `microsoft-learn`, `microsoft-support`, `product-blog`, `tech-community` and `author-experience`, each once. List only categories that were actually used. `author-experience` is the author's own knowledge of how support calls go: it is not a source about the product.                                                                                                       |
+| `behaviourCheck`     | `not-checked`, `checked-partly` or `checked-current`: whether the product wording and the symptom the customer reports were checked against current public pages. `checked-current` means at least one current, dated, official page directly supports the behaviour and the product terms used. `checked-partly` means some of it is supported and some could not be confirmed. Be conservative. |
+| `checkedOn`          | When that check was made. Required unless `behaviourCheck` is `not-checked`.                                                                                                                                                                                                                                                                                                                      |
+| `syntheticConfirmed` | Always `true`: the people, organisations, numbers and case reference are all invented.                                                                                                                                                                                                                                                                                                            |
+| `review`             | `unreviewed`, `assistant-reviewed` or `mentor-reviewed`.                                                                                                                                                                                                                                                                                                                                          |
+| `notes`              | Optional, at most 300 characters. What the check or the review rested on, in your own words. No web addresses, no internal links and no real names: the product-claim lint rejects the first two.                                                                                                                                                                                                 |
+
+Nothing here has a default, so a record cannot claim more than someone wrote. A new scenario starts as `behaviourCheck: 'not-checked'`, `review: 'unreviewed'` and `sourceCategories: ['author-experience']`, with `authoredOn` set to the day it was written. Raise a value only when the work was done. A check (`checked-partly` or `checked-current`) needs `checkedOn` and at least one public category. `checked-current` and `mentor-reviewed` also need `notes`, so neither can be left in by default.
+
+**The internal wiki was not used.** The Microsoft internal supportability wiki was not available to this project's tooling, so no scenario is grounded in it, and `sourceCategories` lists only public categories that were actually used. Nothing from it is copied into a scenario, and no internal link or internal resource name belongs in one.
+
+`npm run validate:scenarios` prints one line for each scenario (`id`, family, `authoredOn`, `behaviourCheck`, `review`) and fails when a record is missing or invalid.
+
+## Researching a scenario
+
+Work through these steps before you add or revise a scenario. The application is a conversation simulator: a scenario must never become a troubleshooting-answer repository.
+
+1. Identify the product family.
+2. Retrieve current public support guidance (see below).
+3. Identify the broad support-conversation situation.
+4. Identify what a customer would realistically know.
+5. Identify what the customer may misunderstand.
+6. Define the synthetic business impact.
+7. Define reasonable hidden facts.
+8. Define what the customer does not know.
+9. Define one appropriate curveball.
+10. Define the expected CARE behaviours (`careExpectations`).
+11. Map CBCF only when authoritative CBCF material is available. None is, so `cbcfBehaviours` stays `[]`.
+12. Have the scenario reviewed for realism and data safety, and record the result in `review`.
+13. Add automated behaviour checks. The library tests cover every scenario; add a case when a scenario needs one of its own.
+14. Add the scenario to the application only after it validates (`npm run validate:scenarios` and the tests below).
+
+For step 2, use current public Microsoft material only: Microsoft Learn, Microsoft Support, product blogs and the Microsoft Tech Community. Prefer a page with a visible last-updated date, and treat a retired or archived page as history, not as current behaviour. Use a source to understand the situation, the terms, the impact and the stage of a case, never to copy its text and never to put a product claim in the scenario (see [Product-claim lint](#product-claim-lint)). Record the categories you used in `sourceCategories` and the outcome in `behaviourCheck`. Never use a real case, customer, tenant, log or screenshot. Use no internal link in the product, and no secret anywhere.
+
 ## Validate and test
 
 ```
-npm run validate:scenarios                                          # the whole library, with a coverage summary
+npm run validate:scenarios                                          # the whole library, with a coverage summary and each scenario's provenance
 npm run validate:scenarios -- server/scenarios/library/<id>.ts      # one file
 ```
 
 Then run the tests that read the library:
 
 ```
-npx vitest run server/scenarios server/engine/library.test.ts server/evaluator/realLibrary.test.ts
+npx vitest run server/scenarios scripts server/engine/library.test.ts server/evaluator/realLibrary.test.ts
 ```
 
-- `server/scenarios/library.test.ts`: the library loads with no errors, covers every product family and the range of settings, keeps names and case numbers fictional and distinct, stays inside the word budgets, never carries a hidden fact into early text at any impact level, offers only the curveballs it allows, and rejects the cases above.
+- `server/scenarios/library.test.ts`: the library loads with no errors, covers every product family and the range of settings, keeps names, short titles and case numbers fictional or distinct, stays inside the word budgets, never carries a hidden fact into early text at any impact level, offers only the curveballs it allows, keeps the provenance record out of the public form, and rejects the cases above.
+- `server/scenarios/provenance.test.ts`: the rules of the provenance record, the table the validator prints, and that the record is never logged or printed.
+- `scripts/validate-scenarios.test.ts`: the command passes the library, prints the provenance table, and fails a scenario with no record.
 - `server/engine/library.test.ts`: the customer against every scenario in every stage: the opening, the case notes, whole scripted calls, and a plain style for a non-native customer.
 - `server/evaluator/realLibrary.test.ts`: the evaluator against every scenario, with a good call and a poor one for each.
 - `web/src/features/scenarios/behaviour.test.ts` runs the real library through the page's settings. It names no scenario and reads no text, so it follows the library when it changes.
@@ -190,7 +253,7 @@ The tests cover what a machine can check. After the file validates, read it once
 
 ## Adding a scenario
 
-1. Create `server/scenarios/library/<id>.ts`, default-exporting an object that satisfies `ScenarioInput`, and make `npm run validate:scenarios -- server/scenarios/library/<id>.ts` pass.
+1. Research it (see [Researching a scenario](#researching-a-scenario)), then create `server/scenarios/library/<id>.ts`, default-exporting an object that satisfies `ScenarioInput`, with a `shortTitle` and a `grounding` record, and make `npm run validate:scenarios -- server/scenarios/library/<id>.ts` pass.
 2. Import it in `server/scenarios/index.ts` and add it to `LIBRARY_INPUT`, easiest first (Starter, then Standard, then Challenge). `GET /api/scenarios` returns the list in that order.
 3. Run `npm run validate:scenarios` for the whole library, then the tests above. They tell you if a hidden fact cannot be found, leaks, or collides with another scenario's persona name.
 4. Play it once in the app in demo mode, as a trainee would: choose it in Scenarios, read the brief, start a call (typed is fine), and end it to read the report.

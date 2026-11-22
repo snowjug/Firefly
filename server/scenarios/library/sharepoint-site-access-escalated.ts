@@ -24,6 +24,7 @@ const scenario = {
   id: 'sharepoint-site-access-escalated',
   version: 1,
   title: 'Programme team still blocked from their SharePoint site',
+  shortTitle: 'Team still blocked from site',
   listSummary:
     "A programme head's team is still blocked from their site after a restructure, and he wants ownership.",
   summary:
@@ -33,6 +34,15 @@ const scenario = {
 
   product: { id: 'sharepoint-online', area: 'Site permissions' },
   caseReference: 'SIM-410004',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
   issueType: 'permissions',
   impact: 'high',
   startingTemperature: 'angry',

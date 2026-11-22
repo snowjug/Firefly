@@ -21,6 +21,7 @@ const scenario = {
   id: 'azure-vm-unreachable-production',
   version: 1,
   title: 'Production virtual machine unreachable, airport check-in affected',
+  shortTitle: 'Production virtual machine unreachable',
   listSummary:
     'An airline director reports a production virtual machine has stopped responding and airport check-in is affected.',
   summary:
@@ -30,6 +31,15 @@ const scenario = {
 
   product: { id: 'azure', area: 'Virtual machines' },
   caseReference: 'SIM-440001',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'azure',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'service-outage',
   impact: 'high',

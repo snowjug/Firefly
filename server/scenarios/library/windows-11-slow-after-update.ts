@@ -14,6 +14,7 @@ const scenario = {
   id: 'windows-11-slow-after-update',
   version: 1,
   title: 'Laptop has felt slow since an update',
+  shortTitle: 'Laptop slow since update',
   listSummary: 'A travel consultant says his laptop has felt slow since an update a few days ago.',
   summary:
     'A travel consultant says his work laptop has felt slow since an update a few days ago. He is friendly and chatty, which gives the call plenty of detail to sort through. Practise scoping a vague symptom, asking about what changed, and agreeing clear next steps.',
@@ -22,6 +23,15 @@ const scenario = {
 
   product: { id: 'windows-11', area: 'Performance' },
   caseReference: 'SIM-430004',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'windows',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'slow-performance',
   impact: 'low',

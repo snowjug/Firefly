@@ -18,6 +18,7 @@ const scenario = {
   id: 'entra-new-hires-blocked-sign-in',
   version: 1,
   title: 'New starters blocked from signing in on day one',
+  shortTitle: 'New starters cannot sign in',
   listSummary:
     'New starters cannot sign in on their first day, and the head of IT has a firm theory.',
   summary:
@@ -27,6 +28,15 @@ const scenario = {
 
   product: { id: 'entra-id', area: 'Sign-in' },
   caseReference: 'SIM-420003',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
   issueType: 'policy-security',
   impact: 'high',
   startingTemperature: 'frustrated',

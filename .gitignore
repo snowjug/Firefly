@@ -3,9 +3,11 @@ dist/
 coverage/
 playwright-report/
 test-results/
+test-results-*/
 blob-report/
 .vite/
 *.tsbuildinfo
+__pycache__/
 
 # Local data and configuration
 data/*

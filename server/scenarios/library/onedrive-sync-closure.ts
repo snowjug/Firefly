@@ -19,6 +19,7 @@ const scenario = {
   id: 'onedrive-sync-closure',
   version: 1,
   title: 'Closing a case on files that stopped syncing',
+  shortTitle: 'Files stopped syncing',
   listSummary:
     'A finance assistant calls back to understand what changed after her files started syncing again.',
   summary:
@@ -28,6 +29,15 @@ const scenario = {
 
   product: { id: 'onedrive-business', area: 'File sync' },
   caseReference: 'SIM-420001',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
   issueType: 'data-missing',
   impact: 'low',
   startingTemperature: 'calm',

@@ -24,6 +24,7 @@ const scenario = {
   id: 'azure-deployment-fails-permissions',
   version: 1,
   title: 'Scripted deployment now fails for a service account',
+  shortTitle: 'Deployment now fails',
   listSummary:
     'A scripted deployment that worked last week now fails for a service account. The case is already logged.',
   summary:
@@ -33,6 +34,15 @@ const scenario = {
 
   product: { id: 'azure', area: 'Deployments' },
   caseReference: 'SIM-440004',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'azure',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'setup-deployment',
   impact: 'medium',

@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { TurnClassification } from '#shared/domain/classification.ts';
 import type {
+  ClosingCheckDTO,
   CreateSessionRequest,
   EndSessionRequest,
   PublicScenarioDTO,
@@ -31,6 +32,7 @@ import { processTraineeTurn } from '../engine/pipeline.ts';
 import { createInitialRuntime, openingMessage, publicState } from '../engine/session.ts';
 import type { EvaluationInput, TranscriptTurn } from '../engine/types.ts';
 import { RUBRIC_VERSION } from '../engine/types.ts';
+import { closingCheck } from '../evaluator/closingCheck.ts';
 import { AppError, badRequest, conflict, isAbortError, notFound } from '../errors.ts';
 import type { FailureHooks } from '../hooks.ts';
 import { shortId, type Logger } from '../log.ts';
@@ -243,6 +245,25 @@ export class SessionService {
         createdAt: t.createdAt,
       })),
     };
+  }
+
+  /**
+   * A neutral look at an active call, for the moment the trainee presses End call: yes or no for a
+   * plan, an owner, an update time and the customer's agreement, and how many turns they have taken.
+   * Rules only, no model, nothing stored, so asking again changes nothing.
+   */
+  getClosingCheck(profileId: string, id: string): ClosingCheckDTO {
+    const row = this.deps.repo.getSession(id, profileId);
+    if (!row) throw notFound('That session');
+    if (row.status !== 'active') {
+      throw new AppError(
+        409,
+        'session_not_active',
+        'This call has ended, so there is nothing left to check.',
+      );
+    }
+    const { traineeTurns, checks } = closingCheck(this.buildEvaluationInput(row));
+    return { sessionId: row.id, traineeTurns, checks };
   }
 
   /**

@@ -20,6 +20,7 @@ const scenario = {
   id: 'exchange-mail-delays-follow-up',
   version: 1,
   title: 'Email to and from some recipients arrives late',
+  shortTitle: 'Email arriving late',
   listSummary: 'An IT service manager chases a case about late email to and from some recipients.',
   summary:
     'Elena Vasquez runs the IT service desk at Adventure Works. Email to and from some recipients arrives late. She raised a case yesterday and has not had an update. Own the case, find out what she knows and agree what happens next and when she will hear from you.',
@@ -28,6 +29,15 @@ const scenario = {
 
   product: { id: 'exchange-online', area: 'Mail flow' },
   caseReference: 'SIM-410003',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
   issueType: 'service-outage',
   impact: 'medium',
   startingTemperature: 'frustrated',

@@ -221,6 +221,12 @@ export function createApp(deps: AppDeps) {
     route('GET', '/api/sessions/:id/transcript', (c) => ({
       transcript: service.getTranscript(c.profileId, c.params.id as string),
     })),
+    // Yes or no for a plan, an owner, an update time and the customer's agreement, while the call is
+    // active. Rules only, so it costs one read and no model call, and it counts against the same
+    // allowance as every other read.
+    route('GET', '/api/sessions/:id/closing-check', (c) =>
+      service.getClosingCheck(c.profileId, c.params.id as string),
+    ),
     route('DELETE', '/api/sessions/:id', (c) => {
       service.deleteSession(c.profileId, c.params.id as string);
       return { deleted: true };

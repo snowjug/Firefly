@@ -27,6 +27,7 @@ export const FIXTURE_INPUT = {
   id: FIXTURE_ID,
   version: 1,
   title: 'Outlook will not sign in after a password change',
+  shortTitle: 'Outlook will not sign in',
   listSummary: 'A front-desk coordinator cannot sign in to Outlook after changing her password.',
   summary:
     'A front-desk coordinator changed her password this morning and now Outlook will not let her in. She is polite, a little worried about her morning, and not technical.',
@@ -35,6 +36,14 @@ export const FIXTURE_INPUT = {
 
   product: { id: 'outlook', area: 'Sign-in' },
   caseReference: 'SIM-990001',
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'sign-in-access',
   impact: 'low',

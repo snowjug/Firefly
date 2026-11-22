@@ -21,6 +21,7 @@ import {
   semanticIssues,
   sharedPhrase,
 } from './index.ts';
+import { provenanceLeaks } from './provenance.ts';
 
 // The library as a whole: what it covers, what a trainee can read before a call, and the checks
 // that keep authored text honest. How the customer behaves on these scenarios is tested in
@@ -173,6 +174,23 @@ describe('what a trainee can read before a call', () => {
       expect(applyConfig(s).environment.product, s.id).toBe(PRODUCT_INFO[s.product.id].name);
     }
   });
+
+  it('gives each scenario card a short title, and keeps the provenance record out of every public form', () => {
+    for (const s of library) {
+      const dto = toPublicScenario(s);
+      expect(dto.shortTitle, s.id).toBe(s.shortTitle);
+      expect(wordCount(dto.shortTitle), s.id).toBeGreaterThanOrEqual(2);
+      expect(wordCount(dto.shortTitle), s.id).toBeLessThanOrEqual(6);
+      expect(provenanceLeaks(dto), s.id).toEqual([]);
+      // A saved call snapshots the effective scenario, which carries neither new field, so a call
+      // saved before they existed reads exactly like one saved after.
+      const effective = applyConfig(s);
+      expect(effective, s.id).not.toHaveProperty('shortTitle');
+      expect(provenanceLeaks(effective), s.id).toEqual([]);
+    }
+    const shorts = library.map((s) => s.shortTitle.toLowerCase());
+    expect(new Set(shorts).size).toBe(shorts.length);
+  });
 });
 
 describe('configuring a call', () => {
@@ -289,7 +307,38 @@ describe('the checks on authored text', () => {
     expect(missing((s) => delete (s.stageFrames as Record<string, unknown>).escalated)).toBe(false);
     expect(missing((s) => (s.cbcfBehaviours = ['anything']))).toBe(false);
     expect(missing((s) => (s.listSummary = 'word '.repeat(19).trim()))).toBe(false);
+    expect(missing((s) => delete s.shortTitle)).toBe(false);
+    expect(missing((s) => delete s.grounding)).toBe(false);
+    // A card title is two to six words, in sentence case, with no full stop.
+    expect(missing((s) => (s.shortTitle = 'Mailbox'))).toBe(false);
+    expect(missing((s) => (s.shortTitle = 'Shared team mailbox is missing from Outlook'))).toBe(
+      false,
+    );
+    expect(missing((s) => (s.shortTitle = 'Shared mailbox missing.'))).toBe(false);
+    expect(missing((s) => (s.shortTitle = 'shared mailbox missing'))).toBe(false);
     expect(missing(() => undefined)).toBe(true);
+  });
+
+  it('rejects a short title that is longer than the title, shares no word with it or adds to what it says', () => {
+    const issuesFor = (shortTitle: string, id = first.id) => {
+      const s = structuredClone(library.find((item) => item.id === id) as ScenarioDefinition);
+      s.shortTitle = shortTitle;
+      return semanticIssues(s).join('\n');
+    };
+    // The first scenario's title is "Shared team mailbox missing from Outlook".
+    expect(issuesFor('Shared mailbox missing')).toBe('');
+    expect(issuesFor('The shared team mailbox is missing from Outlook again')).toMatch(
+      /longer than the title/,
+    );
+    expect(issuesFor('Calendar not syncing')).toMatch(/shares no content word/);
+    expect(issuesFor('Shared mailbox gone after migration')).toMatch(/adds "gone", "migration"/);
+    // Its words may come from the brief's issue line as well as the title, in another form.
+    expect(issuesFor('Cannot see mailbox')).toBe('');
+    // The Teams scenario's hidden facts are about guests from outside the company, and nothing
+    // public says so, so a card must not either.
+    const teams = 'teams-cannot-join-external-meetings';
+    expect(issuesFor('External users cannot join', teams)).toMatch(/adds "external", "users"/);
+    expect(issuesFor('Cannot join meetings', teams)).toBe('');
   });
 
   it('refuses a library that reuses a persona name, a curveball outside the allowlist or a missing case reference', () => {
@@ -298,6 +347,15 @@ describe('the checks on authored text', () => {
       s.caseReference = 'SIM-999999';
     });
     expect(loadScenarios([first, twin]).errors.join('\n')).toMatch(/persona name/);
+    // Two cards with the same short title could not be told apart.
+    const lookalike = copy((s) => {
+      s.id = 'a-third-scenario';
+      s.caseReference = 'SIM-999998';
+      s.persona.name = 'Someone Else';
+    });
+    expect(loadScenarios([first, lookalike]).errors.join('\n')).toMatch(
+      /shortTitle "Shared mailbox missing" is already used by outlook-shared-mailbox-missing/,
+    );
     const outside = copy((s) => {
       s.allowedCurveballs = ['go-silent'];
     });

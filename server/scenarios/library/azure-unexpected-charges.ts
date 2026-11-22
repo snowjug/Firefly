@@ -21,6 +21,7 @@ const scenario = {
   id: 'azure-unexpected-charges',
   version: 1,
   title: 'Azure bill far above budget after a team deployed a new project',
+  shortTitle: 'Bill far above budget',
   listSummary:
     'A finance controller wants an explanation for a much higher Azure bill, on his third contact.',
   summary:
@@ -30,6 +31,15 @@ const scenario = {
 
   product: { id: 'azure', area: 'Billing' },
   caseReference: 'SIM-440002',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'azure',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'billing-licence',
   impact: 'medium',
@@ -138,7 +148,7 @@ const scenario = {
     },
     escalated: {
       opening:
-        "I'm calling about our Azure bill. This is my third contact, and nobody has explained what's behind it. I need someone to take ownership.",
+        "I'm calling about our Azure bill. This is my third call, and nobody has explained what's behind it. I need someone to take ownership.",
       brief:
         'Two earlier contacts have not explained the charge. Trust is low and he has no patience for repeated questions or general advice.',
     },

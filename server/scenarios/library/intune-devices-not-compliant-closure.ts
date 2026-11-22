@@ -19,6 +19,7 @@ const scenario = {
   id: 'intune-devices-not-compliant-closure',
   version: 1,
   title: 'Closing a case on laptops that showed as not compliant',
+  shortTitle: 'Laptops showed as not compliant',
   listSummary:
     'An endpoint engineer wants to be sure the managed laptops are fine before closing the case.',
   summary:
@@ -28,6 +29,15 @@ const scenario = {
 
   product: { id: 'intune', area: 'Device compliance' },
   caseReference: 'SIM-420004',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
   issueType: 'setup-deployment',
   impact: 'medium',
   startingTemperature: 'calm',

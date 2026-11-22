@@ -17,6 +17,7 @@ const scenario = {
   id: 'defender-invoices-quarantined',
   version: 1,
   title: 'Genuine supplier invoices held in quarantine before a payment run',
+  shortTitle: 'Invoices held in quarantine',
   listSummary:
     'A finance director says genuine supplier invoices are held in quarantine, putting a payment run at risk.',
   summary:
@@ -33,6 +34,15 @@ const scenario = {
 
   product: { id: 'defender-office-365', area: 'Quarantine' },
   caseReference: 'SIM-430001',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'policy-security',
   impact: 'high',

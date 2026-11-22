@@ -76,6 +76,8 @@ export interface PublicScenarioDTO {
   id: string;
   version: number;
   title: string;
+  /** The title for a scenario card: two to six words, worded only from the title and the brief. */
+  shortTitle: string;
   listSummary: string; // one line, at most 18 words, for the scenario list
   summary: string; // at most 60 words, for the detail view
   tags: string[];
@@ -216,6 +218,17 @@ export interface TranscriptDTO {
   persona: { name: string; role: string; organisation: string };
   status: SessionStatus;
   turns: { index: number; role: 'customer' | 'trainee'; text: string; createdAt: string }[];
+}
+
+/**
+ * A neutral look at an active call, for the moment the trainee presses End call: whether a plan, an
+ * owner and a time for the next update have been stated, and whether the customer accepted them.
+ * Yes or no only. It carries no quotes, no wording to use, no score and nothing about the scenario.
+ */
+export interface ClosingCheckDTO {
+  sessionId: string;
+  traineeTurns: number;
+  checks: { plan: boolean; owner: boolean; updateTime: boolean; agreement: boolean };
 }
 
 export interface SendMessageRequest {

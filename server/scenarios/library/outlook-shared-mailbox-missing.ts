@@ -19,6 +19,7 @@ const scenario = {
   id: 'outlook-shared-mailbox-missing',
   version: 1,
   title: 'Shared team mailbox missing from Outlook',
+  shortTitle: 'Shared mailbox missing',
   listSummary:
     "An office coordinator cannot see his team's shared mailbox in Outlook and wants it back.",
   summary:
@@ -28,6 +29,15 @@ const scenario = {
 
   product: { id: 'outlook', area: 'Shared mailbox' },
   caseReference: 'SIM-410002',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
   issueType: 'permissions',
   impact: 'low',
   startingTemperature: 'calm',

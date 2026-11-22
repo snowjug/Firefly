@@ -21,6 +21,7 @@ const scenario = {
   id: 'dynamics-records-not-visible-after-role-change',
   version: 1,
   title: "Some sales staff can't see customer records after a reorganisation",
+  shortTitle: 'Sales staff cannot see records',
   listSummary:
     'A sales operations lead reports some staff cannot see customer records their colleagues can, after teams were reorganised.',
   summary:
@@ -30,6 +31,15 @@ const scenario = {
 
   product: { id: 'dynamics-365', area: 'Security roles' },
   caseReference: 'SIM-440003',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'dynamics-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'permissions',
   impact: 'medium',

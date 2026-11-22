@@ -43,6 +43,7 @@ export function toPublicScenario(def: ScenarioDefinition): PublicScenarioDTO {
     id: def.id,
     version: def.version,
     title: def.title,
+    shortTitle: def.shortTitle,
     listSummary: def.listSummary,
     summary: def.summary,
     tags: def.tags,

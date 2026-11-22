@@ -17,6 +17,7 @@ const scenario = {
   id: 'm365-apps-excel-crashes-after-update',
   version: 1,
   title: 'Excel keeps closing since an update',
+  shortTitle: 'Excel keeps closing',
   listSummary: 'An analyst says Excel closes by itself on his work laptop since a recent update.',
   summary:
     'Rafael is a financial analyst whose Excel has started closing by itself on his work laptop since a recent update. English is his second language, so simple, clear wording will help. He is calm at the start but may become worried as the call goes on. Find out what is happening and agree what happens next.',
@@ -25,6 +26,15 @@ const scenario = {
 
   product: { id: 'm365-apps', area: 'Excel' },
   caseReference: 'SIM-420002',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
   issueType: 'feature-not-working',
   impact: 'medium',
   startingTemperature: 'calm',
@@ -128,7 +138,7 @@ const scenario = {
   },
   stageFrames: {
     'first-contact': {
-      opening: 'I would like to report a problem.',
+      opening: 'I am calling about a problem with Excel.',
       brief: 'This is the first time Rafael has contacted your team about this problem.',
     },
     'follow-up': {

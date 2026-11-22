@@ -16,6 +16,7 @@ const scenario = {
   id: 'power-automate-approvals-stopped',
   version: 1,
   title: 'An approval process that used to run by itself has stopped',
+  shortTitle: 'Approvals stopped running',
   listSummary:
     'An editorial assistant says an approval process that used to run by itself has stopped.',
   summary:
@@ -25,6 +26,15 @@ const scenario = {
 
   product: { id: 'power-platform', area: 'Automated flows' },
   caseReference: 'SIM-430002',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'feature-not-working',
   impact: 'medium',

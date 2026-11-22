@@ -17,6 +17,7 @@ const scenario = {
   id: 'windows-bitlocker-recovery-prompt',
   version: 1,
   title: 'Work laptop asks for a recovery key after an update',
+  shortTitle: 'Laptop asks for recovery key',
   listSummary:
     "A researcher's work laptop asks for a recovery key after an update, and she fears losing work.",
   summary:
@@ -32,6 +33,15 @@ const scenario = {
 
   product: { id: 'windows-11', area: 'Disk encryption' },
   caseReference: 'SIM-430003',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'windows',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'sign-in-access',
   impact: 'medium',

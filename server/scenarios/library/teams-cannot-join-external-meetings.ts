@@ -20,6 +20,7 @@ const scenario = {
   id: 'teams-cannot-join-external-meetings',
   version: 1,
   title: 'Colleagues cannot join scheduled Teams meetings',
+  shortTitle: 'Cannot join meetings',
   listSummary:
     'An operations manager reports that colleagues cannot join scheduled Teams meetings as an executive presentation nears.',
   summary:
@@ -29,6 +30,15 @@ const scenario = {
 
   product: { id: 'teams', area: 'Meetings' },
   caseReference: 'SIM-410001',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
   issueType: 'feature-not-working',
   impact: 'high',
   startingTemperature: 'anxious',
