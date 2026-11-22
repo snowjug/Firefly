@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import type { CoachingReport } from '#shared/domain/report.ts';
+import { wordCount } from '#shared/domain/scenario.ts';
 import { DIMENSION_IDS } from '#shared/domain/vocab.ts';
 import { CALLS, asVersion1 } from './fixtures.ts';
+import { evidenceTurns, turnLookup } from './evidence-model.ts';
 import {
+  ROW_REASON_WORDS,
   careCounts,
   discoveryGroups,
+  factView,
   orderedDimensions,
   reportSections,
   restsOnLimitedEvidence,
+  skillRows,
   suggestedQuestion,
-  wordingPairs,
+  wordingFor,
 } from './report-model.ts';
+
+const lookup = (name: keyof typeof CALLS) => turnLookup(evidenceTurns(CALLS[name].session));
 
 describe('orderedDimensions', () => {
   it('lists the six skills in rubric order whatever order they arrive in', () => {
@@ -98,33 +105,122 @@ describe('careCounts', () => {
   });
 });
 
-describe('wordingPairs', () => {
-  it('pairs what was said with the better wording, and says nothing was said for a gap', () => {
-    const pairs = wordingPairs(CALLS.strong.report);
-    expect(pairs).toHaveLength(2);
-    expect(pairs[0]?.original).toBeNull();
-    expect(pairs[1]?.original).toMatch(/what you see in the meeting chat/);
-    expect(pairs[1]?.improved).toMatch(/confirm your organisation/);
+describe('wordingFor', () => {
+  const [gap, said] = CALLS.strong.report.improvements;
+  if (!gap || !said) throw new Error('fixture changed');
+
+  it('says nothing was said for a gap, and offers the better wording', () => {
+    expect(wordingFor(gap, lookup('strong'))).toEqual({
+      original: null,
+      state: 'omitted',
+      improved: gap.betterPhrasing,
+    });
   });
 
-  it('is empty for a report with nothing to improve', () => {
-    expect(wordingPairs({ ...CALLS.strong.report, improvements: [] })).toEqual([]);
+  it('gives what was said when the turn says it', () => {
+    const wording = wordingFor(said, lookup('strong'));
+    expect(wording?.state).toBe('said');
+    expect(wording?.original).toMatch(/what you see in the meeting chat/);
+    expect(wording?.improved).toMatch(/confirm your organisation/);
+  });
+
+  it('does not give words the turn does not say, or a quote taken from the customer', () => {
+    const altered = { ...said, quote: 'I promise the licence will be restored tonight.' };
+    expect(wordingFor(altered, lookup('strong'))).toMatchObject({
+      original: null,
+      state: 'unverified',
+    });
+    const customerTurn = { ...said, turnIndex: 1 };
+    expect(wordingFor(customerTurn, lookup('strong'))?.state).toBe('unverified');
+    expect(wordingFor({ ...said, turnIndex: 999 }, lookup('strong'))?.state).toBe('unverified');
+  });
+
+  it('is null when there is no better wording to offer', () => {
+    expect(wordingFor({ ...said, betterPhrasing: '  ' }, lookup('strong'))).toBeNull();
+  });
+});
+
+describe('skillRows', () => {
+  it('lists the six skills in rubric order with the quotes the transcript confirms', () => {
+    const rows = skillRows(CALLS.strong.report, lookup('strong'));
+    expect(rows.map((r) => r.dimension.id)).toEqual([...DIMENSION_IDS]);
+    for (const row of rows) {
+      expect(row.quotes).toEqual(row.dimension.evidence);
+    }
+  });
+
+  it('leaves out a quote the turn does not say, so a row can end up with none', () => {
+    const report: CoachingReport = {
+      ...CALLS.strong.report,
+      dimensions: CALLS.strong.report.dimensions.map((d, i) =>
+        i === 0 ? { ...d, evidence: d.evidence.map((e) => ({ ...e, quote: 'never said it' })) } : d,
+      ),
+    };
+    const [first] = skillRows(report, lookup('strong'));
+    expect(first?.quotes).toEqual([]);
+  });
+
+  it('keeps the reason on the row to its first words, ending cleanly', () => {
+    const long = 'The trainee did a very good job of this part of the call, and '.repeat(8);
+    const report: CoachingReport = {
+      ...CALLS.strong.report,
+      dimensions: CALLS.strong.report.dimensions.map((d, i) =>
+        i === 0 ? { ...d, rationale: `${long}Done.` } : d,
+      ),
+    };
+    const [first] = skillRows(report, lookup('strong'));
+    expect(wordCount(first?.preview ?? '')).toBeLessThanOrEqual(ROW_REASON_WORDS);
+    expect(first?.preview).not.toBe(first?.dimension.rationale);
+  });
+});
+
+describe('factView', () => {
+  const results = CALLS.strong.report.discovery.results;
+  const found = results.find((r) => r.status === 'discovered');
+  const missed = results.find((r) => r.status === 'missed');
+  if (!found || !missed) throw new Error('fixture changed');
+
+  it('gives the question that found a fact and the customer’s reply, both from the transcript', () => {
+    const view = factView(found, lookup('strong'));
+    expect(view.question).toBe(found.revealingQuestion);
+    expect(view.answer?.role).toBe('customer');
+    expect(view.answer?.index).toBe((found.revealedAtTurn ?? 0) + 1);
+  });
+
+  it('gives neither for a missed fact', () => {
+    expect(factView(missed, lookup('strong'))).toEqual({
+      result: missed,
+      question: null,
+      answer: null,
+    });
+  });
+
+  it('gives no question the turn does not say, and no answer when the call ended on the question', () => {
+    const invented = { ...found, revealingQuestion: 'a question nobody asked' };
+    expect(factView(invented, lookup('strong')).question).toBeNull();
+    // Cut the call after the trainee's turn 14, so the customer never answered it.
+    const { session } = CALLS.strong;
+    const cut = turnLookup(evidenceTurns({ ...session, turns: session.turns.slice(0, 14) }));
+    expect(cut.get(14)?.role).toBe('trainee');
+    expect(cut.has(15)).toBe(false);
+    expect(factView({ ...found, revealedAtTurn: 14 }, cut).answer).toBeNull();
   });
 });
 
 describe('reportSections', () => {
-  const ids = (report: CoachingReport) => reportSections(report).map((s) => s.id);
+  const ids = (report: CoachingReport, timeline = true) =>
+    reportSections(report, { timeline }).map((s) => s.id);
 
   it('lists every part, in page order, for a full report', () => {
     expect(ids(CALLS.strong.report)).toEqual([
       'summary',
+      'journey',
       'scores',
       'care',
-      'journey',
+      'experience',
+      'discovery',
       'strengths',
       'improvements',
-      'wording',
-      'discovery',
       'next-practice',
       'actions',
       'transcript',
@@ -132,9 +228,27 @@ describe('reportSections', () => {
     ]);
   });
 
-  it('leaves out CARE for an older report and better wording when there is nothing to improve', () => {
+  it('names the parts as the page does', () => {
+    expect(reportSections(CALLS.strong.report).map((s) => s.label)).toEqual([
+      'Summary',
+      'Call journey',
+      'Scores',
+      'CARE review',
+      'Customer experience',
+      'Discovery review',
+      'Strengths',
+      'Improvement opportunities',
+      'Next practice',
+      'Actions',
+      'Transcript',
+      'About this report',
+    ]);
+  });
+
+  it('leaves out CARE for an older report, and the call journey when no moment can be shown', () => {
     expect(ids(asVersion1(CALLS.strong.report))).not.toContain('care');
-    expect(ids({ ...CALLS.strong.report, improvements: [] })).not.toContain('wording');
     expect(ids(CALLS.legacy.report)).not.toContain('care');
+    expect(ids(CALLS.strong.report, false)).not.toContain('journey');
+    expect(ids(CALLS.strong.report, false)).toContain('experience');
   });
 });

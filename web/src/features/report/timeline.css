@@ -1,0 +1,391 @@
+/* The call journey: a rail of moments in call order on a wide screen, a list down the page on a
+   narrow one, and the panel that shows the exact turn behind the chosen moment. A moment that was
+   not seen is drawn quietly (a dashed marker and the words "Not seen"); a moment is never shown by
+   colour alone: its marker has an icon, its name and where it was are written. Tokens only. */
+
+.rp-tl {
+  --_marker: 2.25rem;
+  min-inline-size: 0;
+}
+
+/* ---- A marker: the same on the rail and in the list --------------------------------------- */
+.rp-tl__marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--_marker);
+  block-size: var(--_marker);
+  border: var(--stroke-w-thick) solid var(--brand-stroke);
+  border-radius: var(--r-pill);
+  background: var(--bg-raised);
+  color: var(--brand-fg);
+  transition:
+    background-color var(--dur-fast) var(--ease-easy),
+    border-color var(--dur-fast) var(--ease-easy),
+    color var(--dur-fast) var(--ease-easy),
+    box-shadow var(--dur-fast) var(--ease-easy);
+}
+.rp-tl__event[data-state='not-seen'] .rp-tl__marker {
+  border-style: dashed;
+  border-color: var(--stroke-accessible);
+  background: var(--bg-canvas);
+  color: var(--fg-3);
+}
+.rp-tl__event[data-state='unverified'] .rp-tl__marker,
+.rp-tl__item[data-state='unverified'] .rp-tl__marker {
+  border-style: dashed;
+  border-color: var(--status-warning-fg);
+  background: var(--bg-canvas);
+  color: var(--status-warning-fg);
+}
+.rp-tl__item[data-state='not-seen'] .rp-tl__marker {
+  border-style: dashed;
+  border-color: var(--stroke-accessible);
+  background: var(--bg-canvas);
+  color: var(--fg-3);
+}
+/* The chosen moment is a filled marker with a ring: a different shape of mark, not only a colour. */
+.rp-tl__event--on .rp-tl__marker {
+  border-style: solid;
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--fg-on-brand);
+  box-shadow:
+    0 0 0 2px var(--bg-canvas),
+    0 0 0 4px var(--brand-stroke);
+}
+
+.rp-tl__text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.rp-tl__label {
+  color: var(--fg-1);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.rp-tl__turn {
+  color: var(--fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-variant-numeric: tabular-nums;
+}
+.rp-tl__event[data-state='not-seen'] .rp-tl__label,
+.rp-tl__item[data-state='not-seen'] .rp-tl__label {
+  color: var(--fg-2);
+  font-weight: var(--fw-regular);
+}
+.rp-tl__event[data-state='not-seen'] .rp-tl__turn,
+.rp-tl__item[data-state='not-seen'] .rp-tl__turn {
+  color: var(--fg-3);
+}
+
+/* ---- Wide: a rail with a marker for each moment ------------------------------------------- */
+.rp-tl--wide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+/* The rail wraps onto a second row when there are more moments than room, so every moment is on
+   the screen and none is hidden behind a scroll. */
+.rp-tl__rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.25rem, 1fr));
+  row-gap: var(--sp-2);
+}
+.rp-tl--wide .rp-tl__event {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+  padding: var(--sp-1) var(--sp-1) var(--sp-2);
+  border: 0;
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--fg-1);
+  text-align: center;
+}
+.rp-tl--wide .rp-tl__text {
+  align-items: center;
+  gap: var(--sp-0h);
+}
+/* The line runs through the middle of every marker, from the first to the last. */
+.rp-tl--wide .rp-tl__event::before {
+  content: '';
+  position: absolute;
+  inset-block-start: calc(var(--sp-1) + var(--_marker) / 2 - 1px);
+  inset-inline: 0;
+  block-size: 2px;
+  background: var(--stroke-1);
+}
+.rp-tl--wide .rp-tl__event:first-child::before {
+  inset-inline-start: 50%;
+}
+.rp-tl--wide .rp-tl__event:last-child::before {
+  inset-inline-end: 50%;
+}
+@media (hover: hover) {
+  .rp-tl--wide .rp-tl__event:hover {
+    background: var(--bg-hover);
+  }
+}
+
+.rp-tl__panel {
+  min-block-size: 14rem;
+  padding: var(--sp-4) var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+}
+
+/* ---- Narrow: a list down the page, each moment opening in place --------------------------- */
+.rp-tl--narrow {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-tl__item {
+  position: relative;
+}
+/* The line down the markers: from the middle of the first to the middle of the last. */
+.rp-tl__item::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(var(--sp-2) + var(--_marker) / 2 - 1px);
+  inline-size: 2px;
+  background: var(--stroke-1);
+}
+.rp-tl__item:first-child::before {
+  inset-block-start: calc(var(--target) / 2);
+}
+.rp-tl__item:last-child::before {
+  block-size: calc(var(--target) / 2);
+  inset-block-end: auto;
+}
+.rp-tl__item:only-child::before {
+  display: none;
+}
+.rp-tl--narrow .rp-tl__event {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  inline-size: 100%;
+  min-block-size: var(--target);
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--fg-1);
+  text-align: start;
+}
+.rp-tl--narrow .rp-tl__text {
+  flex: 1 1 auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--sp-3);
+}
+.rp-tl--narrow .rp-tl__label {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.rp-tl--narrow .rp-tl__turn {
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-tl__chevron {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--fg-2);
+  transition: transform var(--dur-fast) var(--ease-easy);
+}
+.rp-tl__event[aria-expanded='true'] .rp-tl__chevron {
+  transform: rotate(180deg);
+}
+@media (hover: hover) {
+  .rp-tl--narrow .rp-tl__event:hover {
+    background: var(--bg-hover);
+  }
+}
+.rp-tl__inline {
+  margin-inline-start: calc(var(--sp-2) + var(--_marker) + var(--sp-3));
+  padding-block: var(--sp-1) var(--sp-4);
+}
+
+/* ---- The exact turn behind a moment ------------------------------------------------------- */
+.rp-ev {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+}
+.rp-ev__title {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-ev__detail {
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+}
+.rp-ev__none {
+  color: var(--fg-2);
+}
+.rp-ev__turns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.rp-ev__turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+  padding: var(--sp-2) var(--sp-4);
+  border-inline-start: 3px solid var(--stroke-1);
+  border-radius: 0 var(--r-lg) var(--r-lg) 0;
+}
+.rp-ev__turn--current {
+  padding-block: var(--sp-3);
+  border-inline-start-color: var(--brand-stroke);
+  background: var(--bg-quiet);
+}
+.rp-ev__turn--near {
+  border-inline-start-color: var(--stroke-2);
+}
+.rp-ev__who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-0h) var(--sp-3);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-ev__turn--current .rp-ev__who > :first-child {
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+.rp-ev__side {
+  color: var(--fg-3);
+  font-weight: var(--fw-semibold);
+}
+.rp-ev__clock {
+  font-variant-numeric: tabular-nums;
+}
+.rp-ev__text {
+  max-inline-size: var(--read-max);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* The turns on either side are for the sense of it: a few lines each; the transcript has the rest. */
+.rp-ev__text--near {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-ev__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* The exact turn comes in with a short spring when another moment is chosen: the report's one
+   evidence transition. Only where motion is not reduced, and only transform and opacity. */
+@keyframes rp-ev-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-sm));
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rp-ev__turn--current {
+    animation: rp-ev-in var(--dur-spring) var(--ease-spring) both;
+  }
+}
+
+/* ---- On paper: every moment with its words, one under another ---------------------------- */
+.rp-tl__print {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-tl__printitem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-block-end: var(--sp-2);
+  border-block-end: var(--stroke-w) solid var(--stroke-2);
+}
+.rp-tl__printhead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-3);
+}
+.rp-tl__printdetail {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+@media (forced-colors: active) {
+  .rp-tl__marker {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .rp-tl__event--on .rp-tl__marker {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+    box-shadow: none;
+  }
+  .rp-tl--wide .rp-tl__event::before,
+  .rp-tl__item::before {
+    background: CanvasText;
+  }
+  .rp-tl__panel,
+  .rp-ev__turn {
+    border-color: CanvasText;
+  }
+}
+
+@media print {
+  .rp-tl__panel,
+  .rp-ev__turn {
+    box-shadow: none;
+  }
+  .rp-ev__text--near {
+    display: block;
+    overflow: visible;
+  }
+  .rp-ev__turn--current {
+    animation: none;
+  }
+  .rp-tl__printitem,
+  .rp-ev {
+    break-inside: avoid;
+  }
+}

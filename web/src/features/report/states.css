@@ -81,10 +81,10 @@
   inset-block: 0;
   inset-inline-start: 0;
   inline-size: 3px;
-  background: var(--brand);
+  background: var(--brand-stroke);
 }
 .rp-step[data-status='current'] .rp-step__icon {
-  color: var(--brand);
+  color: var(--brand-fg);
 }
 .rp-step[data-status='current'] .rp-step__title,
 .rp-step[data-status='current'] .rp-step__status {

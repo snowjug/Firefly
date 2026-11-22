@@ -1,23 +1,26 @@
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { Icon } from '../../design/index.ts';
+import { BetterWording } from './BetterWording.tsx';
 import { countWords, dimensionLabel, plainUnexpectedTurn } from './copy.ts';
-import { TurnLink } from './evidence.tsx';
+import { TurnLink, useEvidence } from './evidence.tsx';
 import { ClampedText, Quote, Section, SkillTag } from './parts.tsx';
-import { wordingPairs } from './report-model.ts';
-import './report.css';
+import { wordingFor } from './report-model.ts';
+import './coaching.css';
 
 /** The most words a strength (its title and its reason) shows before "Show more". */
 export const STRENGTH_WORDS = 35;
 /** The most words an improvement (its title and its risk) shows before "Show more". */
 export const IMPROVEMENT_WORDS = 45;
-/** The most words the reason a better wording works shows before "Show more". */
-const WORDING_WORDS = 40;
 
 /** What the trainee did that helped, each with the words and the turn they happened at. */
 export function Strengths({ report }: { report: CoachingReport }) {
   const { strengths } = report;
   return (
-    <Section id="strengths" title="Strengths">
+    <Section
+      id="strengths"
+      title="Strengths"
+      lead={strengths.length > 0 ? 'What worked, in your own words.' : undefined}
+    >
       {strengths.length === 0 ? (
         <p className="rp-empty">
           No clear strength stood out in this call. The improvements below are the best place to
@@ -65,7 +68,6 @@ function ImprovementEvidence({ item }: { item: Improvement }) {
           <Icon name="info" size={16} />
           <span>Something that did not happen</span>
         </p>
-        {item.quote ? <Quote quote={item.quote} turnIndex={null} /> : null}
       </div>
     );
   }
@@ -77,17 +79,27 @@ function ImprovementEvidence({ item }: { item: Improvement }) {
   );
 }
 
-/** Where a different choice would have helped, with the words and the turn it happened at. */
+/**
+ * Where a different choice would have helped: the words said, or the plain statement that
+ * something never happened, the risk, the better wording as a comparison with what was said, and why
+ * it is stronger.
+ */
 export function Improvements({ report }: { report: CoachingReport }) {
   const { improvements } = report;
+  const { turns } = useEvidence();
   return (
-    <Section id="improvements" title="Improvements">
+    <Section
+      id="improvements"
+      title="Improvement opportunities"
+      lead={improvements.length > 0 ? 'Where a different choice would have helped.' : undefined}
+    >
       {improvements.length === 0 ? (
         <p className="rp-empty">No specific improvement stood out in this call.</p>
       ) : (
         <ul className="rp-items" role="list">
           {improvements.map((item) => {
             const title = plainUnexpectedTurn(item.title);
+            const wording = wordingFor(item, turns);
             return (
               <li
                 className="rp-item rp-item--improvement"
@@ -106,54 +118,14 @@ export function Improvements({ report }: { report: CoachingReport }) {
                   />
                 </div>
                 <ImprovementEvidence item={item} />
+                {wording ? (
+                  <BetterWording wording={wording} why={plainUnexpectedTurn(item.whyItWorks)} />
+                ) : null}
               </li>
             );
           })}
         </ul>
       )}
-    </Section>
-  );
-}
-
-/**
- * What was said, and what could have been said instead, side by side, for each improvement. The
- * improved wording eases in after the original; where there was nothing said, the original says so.
- */
-export function BetterWording({ report }: { report: CoachingReport }) {
-  const pairs = wordingPairs(report);
-  if (pairs.length === 0) return null;
-  return (
-    <Section id="wording" title="Better wording">
-      <ul className="rp-wordings" role="list">
-        {pairs.map(({ improvement, original, improved }) => (
-          <li
-            className="rp-wording"
-            key={`${improvement.dimension}-${improvement.turnIndex}-${improvement.title}`}
-          >
-            <h3 className="rp-wording__for">{plainUnexpectedTurn(improvement.title)}</h3>
-            <div className="rp-wording__pair">
-              <div className="rp-wording__before">
-                <p className="rp-wording__label">Original</p>
-                {original ? (
-                  <p className="rp-wording__text t-quote">{`\u201c${original}\u201d`}</p>
-                ) : (
-                  <p className="rp-wording__text rp-wording__none">Not said in this call</p>
-                )}
-              </div>
-              <Icon name="arrow-right" size={20} className="rp-wording__arrow" />
-              <div className="rp-wording__after">
-                <p className="rp-wording__label">Improved</p>
-                <p className="rp-wording__text t-quote">{`\u201c${improved}\u201d`}</p>
-              </div>
-            </div>
-            <ClampedText
-              className="rp-wording__why"
-              text={`Why it works: ${plainUnexpectedTurn(improvement.whyItWorks)}`}
-              budget={WORDING_WORDS}
-            />
-          </li>
-        ))}
-      </ul>
     </Section>
   );
 }

@@ -4,7 +4,7 @@ import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import { Badge, LinkButton } from '../../design/index.ts';
 import { practiceLink } from './brief-href.ts';
 import { dimensionLabel } from './copy.ts';
-import { ClampedText, Section } from './parts.tsx';
+import { ClampedText, Field, Section } from './parts.tsx';
 import type { ScenarioIndex } from './scenario-index.ts';
 import './report.css';
 
@@ -40,13 +40,15 @@ export function NextPractice({
             <Badge tone="neutral" appearance="outline" icon={null}>
               {DIFFICULTY_PROFILES[next.suggestedDifficulty].label}
             </Badge>
-            {link.scenario ? <span>Skill: {skill}</span> : null}
+            {link.scenario ? <span>Target skill: {skill}</span> : null}
           </p>
-          <ClampedText
-            className="rp-next__text"
-            text={next.recommendation}
-            budget={RECOMMENDATION_WORDS}
-          />
+          <Field label="Learning focus">
+            <ClampedText
+              className="rp-next__text"
+              text={next.recommendation}
+              budget={RECOMMENDATION_WORDS}
+            />
+          </Field>
         </div>
         <LinkButton
           to={link.to}
@@ -54,6 +56,7 @@ export function NextPractice({
           size="large"
           icon="arrow-right"
           iconPosition="end"
+          nudge
           className="rp-next__cta"
         >
           {link.scenario ? 'Practise this scenario' : 'Choose a scenario'}

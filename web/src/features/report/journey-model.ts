@@ -1,6 +1,12 @@
 import type { CoachingReport, JourneyPoint } from '#shared/domain/report.ts';
 import { TEMPERATURE_BANDS, type TemperatureBandId } from '#shared/domain/vocab.ts';
 import { plainUnexpectedTurn } from './copy.ts';
+import {
+  customerReplyTo,
+  isVerifiedQuote,
+  type EvidenceTurn,
+  type TurnLookup,
+} from './evidence-model.ts';
 
 // The customer's temperature through the call as plain data: the list under the chart, the table
 // that is the chart's alternative, and the geometry of the chart itself. The 0 to 100 temperature is
@@ -60,6 +66,36 @@ export function journeyListItems(journey: Journey): JourneyItem[] {
     });
   });
   return items;
+}
+
+/** An important point of the customer's journey, with what the transcript shows around it. */
+export interface KeyMoment extends JourneyItem {
+  /** How the mood moved there: "Frustrated to Concerned". */
+  change: string;
+  /** What the trainee said at that turn, only when the transcript confirms the words. */
+  confirmedQuote: string | null;
+  /** The customer's reply, exactly as it was said (the opening line for the start of the call). */
+  reaction: EvidenceTurn | null;
+}
+
+/**
+ * The points worth a line of their own (the start, each turning point, the unexpected turn and the
+ * end), each with the customer's reply from the transcript. Nothing here is the evaluator's
+ * paraphrase of the customer: the reaction is the customer's own turn.
+ */
+export function keyMoments(journey: Journey, turns: TurnLookup): KeyMoment[] {
+  return journeyListItems(journey).map((item) => {
+    const index = journey.points.indexOf(item.point);
+    const previous = index > 0 ? (journey.points[index - 1] ?? null) : null;
+    return {
+      ...item,
+      change: changeText(previous, item.point),
+      confirmedQuote: isVerifiedQuote(turns, item.point.turnIndex, item.point.quote)
+        ? item.point.quote
+        : null,
+      reaction: customerReplyTo(turns, item.point.turnIndex),
+    };
+  });
 }
 
 export interface JourneyRow {

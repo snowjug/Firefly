@@ -89,6 +89,41 @@
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
 }
+/* The turn's number is a button where there is a call journey: it marks the turn there and selects
+   the nearest moment. It looks like the plain number until it is used, and says it is pressed. */
+.rp-turn__pick {
+  min-block-size: var(--target-min);
+  padding: 0 var(--sp-1h);
+  margin-inline-start: calc(var(--sp-1h) * -1);
+  border: var(--stroke-w) solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--brand-fg-2);
+  font-size: inherit;
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 0.2em;
+}
+@media (hover: hover) {
+  .rp-turn__pick:hover {
+    background: var(--bg-hover);
+    text-decoration-style: solid;
+  }
+}
+.rp-turn__pick[aria-pressed='true'] {
+  border-color: var(--brand-stroke);
+  background: var(--brand-tint);
+  color: var(--fg-1);
+  text-decoration-style: solid;
+}
+.rp-turn__tolink {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  font-size: var(--fs-compact);
+}
 .rp-turn__speaker {
   color: var(--fg-1);
   font-weight: var(--fw-semibold);
@@ -131,13 +166,19 @@
   z-index: -1;
   border-radius: inherit;
   background: var(--brand-tint);
-  box-shadow: inset 0 0 0 var(--stroke-w-thick) var(--brand);
+  box-shadow: inset 0 0 0 var(--stroke-w-thick) var(--brand-stroke);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-slower) var(--ease-easy);
 }
 .rp-turn--cited::before {
   opacity: 1;
+}
+/* A turn the reader marked on the call journey keeps a brand-coloured edge, and stays marked until
+   they choose something else: it does not fade like the mark for an evidence link. The turn number
+   is a pressed button and "Show on the call journey" is written, so the edge is not the only cue. */
+.rp-turn--marked {
+  border-inline-start-color: var(--brand-stroke);
 }
 
 /* ---- Highlights --------------------------------------------------------------------------- */
@@ -152,7 +193,7 @@
 }
 .rp-mark--current {
   background: var(--brand-tint-pressed);
-  outline: var(--stroke-w-thick) solid var(--brand);
+  outline: var(--stroke-w-thick) solid var(--brand-stroke);
   outline-offset: 0;
 }
 /* Words that are both the quoted evidence and a search match keep the evidence colour. */

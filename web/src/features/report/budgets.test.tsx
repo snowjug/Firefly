@@ -5,8 +5,9 @@ import type { CoachingReport } from '#shared/domain/report.ts';
 import { wordCount } from '#shared/domain/scenario.ts';
 import { SCORE_DESCRIPTIONS } from '#shared/domain/vocab.ts';
 import { ReportView } from './ReportView.tsx';
+import { CARE_WORDS } from './Care.tsx';
 import { IMPROVEMENT_WORDS, STRENGTH_WORDS } from './Coaching.tsx';
-import { SUMMARY_WORDS } from './Summary.tsx';
+import { SUMMARY_WORDS } from './Executive.tsx';
 import { CALLS, withReport, type CallName } from './fixtures.ts';
 import { renderAtReport, scriptedClient } from './test-utils.tsx';
 
@@ -55,6 +56,8 @@ function overlong(): CoachingReport {
     summary: { ...report.summary, overall: long(report.summary.overall, 6) },
     strengths: report.strengths.map((s) => ({ ...s, whyItHelped: long(s.whyItHelped, 3) })),
     improvements: report.improvements.map((i) => ({ ...i, risk: long(i.risk, 3) })),
+    dimensions: report.dimensions.map((d) => ({ ...d, guidance: long(d.guidance, 3) })),
+    care: report.care?.map((p) => ({ ...p, summary: long(p.summary, 3) })),
   };
 }
 
@@ -155,17 +158,50 @@ describe('improvements', () => {
     for (const item of budgeted('improvement')) {
       expect(wordCount(copyOf(item))).toBeLessThanOrEqual(IMPROVEMENT_WORDS);
     }
-    const wording = screen.getByRole('region', { name: 'Better wording' });
-    for (const improvement of report.improvements) {
-      expect(wording).toHaveTextContent(improvement.betterPhrasing);
-    }
-    const section = screen.getByRole('region', { name: 'Improvements' });
+    const section = screen.getByRole('region', { name: 'Improvement opportunities' });
+    const tried = [...section.querySelectorAll('.rp-bw__line--after .rp-bw__text')].map((text) =>
+      (text.textContent ?? '').replace(/Added: /g, '').replace(/^\u201c|\u201d$/g, ''),
+    );
+    expect(tried).toEqual(report.improvements.map((improvement) => improvement.betterPhrasing));
     await userEvent.click(
       within(section).getAllByRole('button', { name: 'Show more' })[0] as HTMLElement,
     );
     expect(wordCount(copyOf(budgeted('improvement')[0] as HTMLElement))).toBeGreaterThan(
       IMPROVEMENT_WORDS,
     );
+  });
+});
+
+describe('the CARE review', () => {
+  it('shows at most 30 words of what was observed and of the next action, for every principle', () => {
+    for (const name of ['strong', 'curveball'] as const) {
+      show(name);
+      for (const key of ['care', 'care-next']) {
+        const texts = budgeted(key);
+        expect(texts.length, `${name} ${key}`).toBe(CALLS[name].report.care?.length);
+        for (const text of texts) {
+          expect(
+            wordCount(text.textContent ?? ''),
+            `${name}: ${text.textContent}`,
+          ).toBeLessThanOrEqual(CARE_WORDS);
+        }
+      }
+      cleanup();
+    }
+  });
+
+  it('keeps to 30 words when the evaluator sends more, and gives the rest behind Show more', async () => {
+    show('strong', overlong());
+    for (const key of ['care', 'care-next']) {
+      for (const text of budgeted(key)) {
+        expect(wordCount(text.textContent ?? '')).toBeLessThanOrEqual(CARE_WORDS);
+      }
+    }
+    const [first] = budgeted('care');
+    const more = first?.nextElementSibling as HTMLElement;
+    expect(more).toHaveTextContent('Show more');
+    await userEvent.click(more);
+    expect(wordCount(first?.textContent ?? '')).toBeGreaterThan(CARE_WORDS);
   });
 });
 
@@ -182,17 +218,19 @@ describe('the rest of the report', () => {
     expect(within(about).getByText(SCORE_DESCRIPTIONS[1] as string)).toBeVisible();
   });
 
-  it('shows only the six facts the header is for: product, date, duration, start and end state', () => {
+  it('shows only the facts the header is for: stage, date, duration and how the customer felt', () => {
     show('strong');
-    const labels = [...document.querySelectorAll('.rp-meta dt')].map((dt) => dt.textContent);
-    expect(labels).toEqual(['Product', 'Date', 'Duration', 'Start state', 'End state']);
+    const labels = [...document.querySelectorAll('.rp-exec__facts dt')].map((dt) => dt.textContent);
+    expect(labels).toEqual(['Stage', 'Date', 'Duration', 'Customer']);
   });
 
   it('keeps the details of every score, CARE principle and fact closed until asked', () => {
     show('strong');
-    for (const button of screen.getAllByRole('button', {
-      name: /Expand details|^Show behaviours|^Show details/,
-    })) {
+    const closed = screen.getAllByRole('button', {
+      name: /Expand details|^Show behaviours|^Show what the customer would have said/,
+    });
+    expect(closed.length).toBeGreaterThan(6);
+    for (const button of closed) {
       expect(button).toHaveAttribute('aria-expanded', 'false');
     }
   });

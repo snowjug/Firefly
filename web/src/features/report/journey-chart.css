@@ -24,24 +24,26 @@
   max-inline-size: 100%;
 }
 
-/* Five bands, hot at the top. A faint tint of each state, and its name and icon on the left. */
+/* Five bands, hot at the top, drawn as quiet stripes: the state is named on the left (its icon and
+   its word, in the state's own colour) and carried by the markers, so the picture is calm in light
+   and in dark, and the colours are never the only way to read it. */
 .rp-chart__stripe {
   fill: var(--bg-canvas);
 }
 .rp-chart__stripe--calm {
-  fill: var(--state-calm-bg);
+  fill: var(--bg-quiet);
 }
 .rp-chart__stripe--concerned {
-  fill: var(--state-concerned-bg);
+  fill: var(--bg-canvas);
 }
 .rp-chart__stripe--frustrated {
-  fill: var(--state-frustrated-bg);
+  fill: var(--bg-quiet);
 }
 .rp-chart__stripe--angry {
-  fill: var(--state-angry-bg);
+  fill: var(--bg-canvas);
 }
 .rp-chart__stripe--escalating {
-  fill: var(--state-escalating-bg);
+  fill: var(--bg-quiet);
 }
 .rp-chart__bandicon--calm {
   color: var(--state-calm-fg);
@@ -59,12 +61,12 @@
   color: var(--state-escalating-fg);
 }
 .rp-chart__rule {
-  stroke: var(--stroke-1);
+  stroke: var(--chart-grid);
   stroke-width: 1;
 }
 .rp-chart__axis,
 .rp-chart__tick {
-  stroke: var(--stroke-accessible);
+  stroke: var(--chart-axis);
   stroke-width: 1;
 }
 
@@ -72,7 +74,7 @@
 .rp-chart__tick-label,
 .rp-chart__axis-title,
 .rp-chart__note {
-  fill: var(--fg-2);
+  fill: var(--chart-axis);
   font-family: inherit;
   font-size: 12px;
 }
@@ -86,7 +88,7 @@
 
 .rp-chart__line {
   fill: none;
-  stroke: var(--fg-2);
+  stroke: var(--chart-line);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -143,12 +145,24 @@
   opacity: 1;
 }
 .rp-chart__point--on:not(:focus-visible) .rp-chart__ring {
-  stroke: var(--brand);
+  stroke: var(--brand-stroke);
   stroke-width: 1.5;
   opacity: 1;
 }
 .rp-chart__point--on .rp-chart__marker {
   transform: scale(1.25);
+}
+/* The point whose turn is open under the chart keeps its ring and its size. */
+.rp-chart__point--chosen .rp-chart__ring {
+  stroke: var(--brand-stroke);
+  stroke-width: 2;
+  opacity: 1;
+}
+.rp-chart__point--chosen .rp-chart__marker {
+  transform: scale(1.25);
+}
+.rp-chart__point--chosen:focus-visible .rp-chart__ring {
+  stroke: var(--focus-outer);
 }
 
 .rp-legend {

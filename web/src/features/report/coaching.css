@@ -1,0 +1,278 @@
+/* Strengths, improvement opportunities and the discovery review: short items with an edge that says
+   which kind they are (as well as the icon and the words), the facts that were found and missed,
+   and the one question to take into the next call. Tokens only. */
+
+/* ---- Strengths and improvement opportunities ---------------------------------------------- */
+.rp-items {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.rp-item + .rp-item {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.rp-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+  padding: var(--sp-4) var(--sp-5);
+  border-inline-start: 3px solid transparent;
+}
+.rp-item--strength {
+  border-inline-start-color: var(--status-success-fg);
+}
+.rp-item--improvement {
+  border-inline-start-color: var(--status-warning-fg);
+}
+.rp-item--strength .rp-skilltag .ff-icon {
+  color: var(--status-success-fg);
+}
+.rp-item--improvement .rp-skilltag .ff-icon {
+  color: var(--status-warning-fg);
+}
+.rp-item__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  max-inline-size: var(--read-max);
+}
+.rp-item__title {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-item__text {
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+.rp-item > .rp-quote,
+.rp-item > .rp-gap,
+.rp-item > .rp-bw,
+.rp-item > .rp-noevidence {
+  align-self: stretch;
+  max-inline-size: var(--read-max);
+}
+.rp-gap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.rp-gap__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--stroke-w) dashed var(--stroke-accessible);
+  border-radius: var(--r-md);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Discovery ---------------------------------------------------------------------------- */
+.rp-discovery__total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-discovery__number {
+  font-size: var(--fs-title2);
+  line-height: var(--lh-title2);
+  font-variant-numeric: tabular-nums;
+}
+.rp-discovery__split {
+  flex-basis: 100%;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-regular);
+}
+/* How many were found: a segment for each fact. Found is solid, partly found is light, missed is an
+   empty outline; the words are written under it. */
+.rp-ratio {
+  display: inline-flex;
+  align-self: center;
+  gap: 3px;
+  margin-inline-start: var(--sp-2);
+}
+.rp-ratio__seg {
+  inline-size: 1.25rem;
+  block-size: 0.5rem;
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 0 0 1px var(--stroke-accessible);
+}
+.rp-ratio__seg--discovered {
+  background: var(--status-success-fg);
+  box-shadow: inset 0 0 0 1px var(--status-success-fg);
+}
+.rp-ratio__seg--partial {
+  background: var(--status-success-border);
+  box-shadow: inset 0 0 0 1px var(--status-success-fg);
+}
+.rp-ratio__seg--missed {
+  background: transparent;
+}
+.rp-discovery__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5) var(--sp-6);
+  align-items: start;
+}
+@container (min-width: 48rem) {
+  .rp-discovery__columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.rp-discovery__column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-inline-size: 0;
+}
+.rp-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.rp-facts-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.rp-fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+  padding: var(--sp-3) var(--sp-4);
+}
+.rp-fact + .rp-fact {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.rp-fact__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+}
+.rp-fact__title {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+  font-weight: var(--fw-semibold);
+}
+.rp-fact__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1h);
+}
+.rp-fact__toggle {
+  min-inline-size: 0;
+}
+.rp-fact__hidden {
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-quiet);
+  overflow-wrap: anywhere;
+}
+.rp-suggestion {
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--status-success-border);
+  border-radius: var(--r-lg);
+  background: var(--status-success-bg);
+  overflow-wrap: anywhere;
+}
+.rp-suggest {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-4) var(--sp-5);
+  border: var(--stroke-w) solid var(--status-info-border);
+  border-radius: var(--r-xl);
+  background: var(--brand-tint);
+}
+.rp-suggest__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: var(--fw-semibold);
+}
+.rp-suggest__label .ff-icon {
+  color: var(--brand-fg);
+}
+.rp-suggest__text {
+  max-inline-size: var(--read-max);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  text-wrap: pretty;
+}
+.rp-suggest__why {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+@media (forced-colors: active) {
+  .rp-items,
+  .rp-facts-list,
+  .rp-fact__hidden,
+  .rp-suggestion,
+  .rp-suggest {
+    border-color: CanvasText;
+  }
+  .rp-item + .rp-item,
+  .rp-fact + .rp-fact {
+    border-color: CanvasText;
+  }
+  .rp-item--strength,
+  .rp-item--improvement {
+    border-inline-start-color: Highlight;
+  }
+  .rp-ratio__seg {
+    forced-color-adjust: none;
+    box-shadow: inset 0 0 0 1px CanvasText;
+  }
+  .rp-ratio__seg--discovered {
+    background: CanvasText;
+  }
+  .rp-ratio__seg--partial {
+    background: GrayText;
+  }
+}
+
+@media print {
+  .rp-items,
+  .rp-facts-list {
+    overflow: visible;
+  }
+  .rp-item,
+  .rp-fact,
+  .rp-suggest,
+  .rp-suggestion {
+    break-inside: avoid;
+  }
+  .rp-fact .ff-disclosure__button {
+    display: none;
+  }
+  .rp-ratio__seg {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

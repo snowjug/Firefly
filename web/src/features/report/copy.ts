@@ -4,6 +4,7 @@ import {
   DIMENSIONS,
   TEMPERATURE_BANDS,
   temperatureBand,
+  type CallStage,
   type DimensionId,
   type FactImportance,
   type TemperatureBandId,
@@ -69,6 +70,17 @@ export const MILESTONE_STATUS_WORDS: Record<MilestoneStatus, string> = {
   'not-reached': 'Not reached',
   'not-applicable': 'Not applicable',
 };
+
+/** The call stage in a word or two, for the header ("Follow-up"); the long labels are for the brief. */
+export const STAGE_WORDS: Record<CallStage, string> = {
+  'first-contact': 'First contact',
+  'follow-up': 'Follow-up',
+  escalated: 'Escalated',
+  closure: 'Closure',
+};
+
+/** What stands where a quote would be when the transcript does not back one. Never a made-up quote. */
+export const INSUFFICIENT_EVIDENCE = 'Insufficient evidence';
 
 export const dimensionLabel = (id: DimensionId): string => DIMENSIONS[id].label;
 

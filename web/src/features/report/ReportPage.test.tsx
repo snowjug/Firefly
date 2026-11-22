@@ -424,13 +424,12 @@ describe('the completed report', () => {
     expect(document.title).toBe('Coaching report \u00b7 Firefly');
   });
 
-  it('shows a call saved before the Microsoft scenarios without a product, CARE or milestones', async () => {
+  it('shows a call saved before the Microsoft scenarios without a product or CARE', async () => {
     renderAtReport(page(scriptedClient(CALLS.legacy.session)));
     await screen.findByRole('navigation', { name: 'On this page' });
     expect(screen.getByRole('heading', { level: 1, name: 'Coaching report' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'CARE summary' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Call milestones')).not.toBeInTheDocument();
-    expect(screen.queryByText('Product', { selector: 'dt' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'CARE review' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Microsoft/)).not.toBeInTheDocument();
   });
 
   it('asks which scenarios exist once, and only for a finished report', async () => {
@@ -450,8 +449,8 @@ describe('the completed report', () => {
     try {
       renderAtReport(page(scriptedClient(strong.session)));
       const nav = await screen.findByRole('navigation', { name: 'On this page' });
-      await userEvent.click(within(nav).getByRole('link', { name: 'Discovery' }));
-      expect(screen.getByRole('heading', { level: 2, name: 'Discovery' })).toHaveFocus();
+      await userEvent.click(within(nav).getByRole('link', { name: 'Discovery review' }));
+      expect(screen.getByRole('heading', { level: 2, name: 'Discovery review' })).toHaveFocus();
       expect(scroll).toHaveBeenCalled();
     } finally {
       restore();

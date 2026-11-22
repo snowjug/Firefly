@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { SessionDTO } from '#shared/domain/api.ts';
 import { DIMENSION_IDS } from '#shared/domain/vocab.ts';
 import { CALLS, CALL_NAMES } from './fixtures.ts';
+import { evidenceTurns, isVerifiedQuote, turnLookup } from './evidence-model.ts';
 import {
   TRANSCRIPT_FILTERS,
   buildTranscript,
@@ -13,8 +15,18 @@ import {
   segmentText,
   shownTurns,
   turnId,
+  type QuoteCheck,
   type TurnView,
 } from './transcript-model.ts';
+
+/** The check the page uses: the trainee really said the quote in the turn it names. */
+const checkFor = (session: SessionDTO): QuoteCheck => {
+  const lookup = turnLookup(evidenceTurns(session));
+  return (turnIndex, quote) => isVerifiedQuote(lookup, turnIndex, quote);
+};
+const build = (name: keyof typeof CALLS) =>
+  buildTranscript(CALLS[name].session, CALLS[name].report, checkFor(CALLS[name].session));
+const trusting: QuoteCheck = () => true;
 
 const view = (index: number, text: string, role: TurnView['role'] = 'trainee'): TurnView => ({
   index,
@@ -30,8 +42,8 @@ const view = (index: number, text: string, role: TurnView['role'] = 'trainee'): 
 describe('buildTranscript', () => {
   it('has one entry per turn, in order, with the words exactly as they were said', () => {
     for (const name of CALL_NAMES) {
-      const { session, report } = CALLS[name];
-      const turns = buildTranscript(session, report);
+      const { session } = CALLS[name];
+      const turns = build(name);
       expect(
         turns.map((t) => t.index),
         name,
@@ -44,8 +56,7 @@ describe('buildTranscript', () => {
   });
 
   it('names the speakers and reads the clock from the start of the call', () => {
-    const { session, report } = CALLS.strong;
-    const turns = buildTranscript(session, report);
+    const turns = build('strong');
     expect(turns[0]).toMatchObject({
       index: 1,
       role: 'customer',
@@ -57,7 +68,7 @@ describe('buildTranscript', () => {
   });
 
   it('knows which turns were spoken, and only the trainee\u2019s', () => {
-    const spoken = buildTranscript(CALLS.voice.session, CALLS.voice.report).filter((t) => t.spoken);
+    const spoken = build('voice').filter((t) => t.spoken);
     expect(spoken).toHaveLength(5);
     expect(spoken.every((t) => t.role === 'trainee')).toBe(true);
     expect(hasSpokenTurns(CALLS.voice.session)).toBe(true);
@@ -65,7 +76,7 @@ describe('buildTranscript', () => {
   });
 
   it('turns the engine\u2019s markers into labelled tags, in the report\u2019s words', () => {
-    const turns = buildTranscript(CALLS.strong.session, CALLS.strong.report);
+    const turns = build('strong');
     const fourth = turns[3] as TurnView;
     expect(fourth.markers.map((m) => m.tag)).toEqual(['Mood: eased', 'Fact uncovered']);
     expect(fourth.markers.find((m) => m.kind === 'discovery')?.text).toBe(
@@ -77,14 +88,11 @@ describe('buildTranscript', () => {
 
   it('never prints the engine\u2019s word for an unexpected turn', () => {
     for (const name of CALL_NAMES) {
-      const { session, report } = CALLS[name];
-      for (const turn of buildTranscript(session, report)) {
+      for (const turn of build(name)) {
         for (const marker of turn.markers) expect(marker.text, name).not.toMatch(/curveball/i);
       }
     }
-    const tags = buildTranscript(CALLS.curveball.session, CALLS.curveball.report).flatMap(
-      (t) => t.markers,
-    );
+    const tags = build('curveball').flatMap((t) => t.markers);
     expect(tags.filter((m) => m.kind === 'unexpected').map((m) => m.tag)).toEqual([
       'Unexpected turn',
     ]);
@@ -95,15 +103,30 @@ describe('buildTranscript', () => {
     const turns = buildTranscript(
       { ...session, turns: session.turns.map(({ markers: _m, ...t }) => t) },
       null,
+      trusting,
     );
     expect(turns.every((t) => t.markers.length === 0 && t.citedFor.length === 0)).toBe(true);
+  });
+
+  it('does not cite a turn for a quote the turn does not say', () => {
+    const { session, report } = CALLS.strong;
+    const [first] = report.strengths;
+    if (!first) throw new Error('fixture changed');
+    const altered = {
+      ...report,
+      dimensions: report.dimensions.map((d) => ({ ...d, evidence: [] })),
+      improvements: [],
+      strengths: [{ ...first, quote: 'words that are not in the turn' }],
+    };
+    const turns = buildTranscript(session, altered, checkFor(session));
+    expect(turns.filter((t) => t.citedFor.length > 0)).toEqual([]);
   });
 });
 
 describe('citedTurns', () => {
   it('lists every turn the evidence, strengths and improvements quote, with the skills that quote it', () => {
     const { report } = CALLS.strong;
-    const cited = citedTurns(report);
+    const cited = citedTurns(report, checkFor(CALLS.strong.session));
     for (const d of report.dimensions) {
       for (const e of d.evidence) expect(cited.get(e.turnIndex)).toContain(d.id);
     }
@@ -114,21 +137,36 @@ describe('citedTurns', () => {
   });
 
   it('keeps each turn\u2019s skills in rubric order, once each', () => {
-    for (const skills of citedTurns(CALLS.strong.report).values()) {
+    for (const skills of citedTurns(CALLS.strong.report, trusting).values()) {
       expect(new Set(skills).size).toBe(skills.length);
       const order = skills.map((id) => DIMENSION_IDS.indexOf(id));
       expect(order).toEqual([...order].sort((a, b) => a - b));
     }
   });
 
+  it('leaves out the turns whose quotes the check refuses, and keeps an opportunity that names a turn without quoting it', () => {
+    const { report } = CALLS.strong;
+    expect(citedTurns(report, () => false).size).toBe(0);
+    expect(citedTurns(report, (turnIndex) => turnIndex === 2).size).toBe(1);
+    const [improvement] = report.improvements;
+    if (!improvement) throw new Error('fixture changed');
+    const unquoted = {
+      ...report,
+      dimensions: [],
+      strengths: [],
+      improvements: [{ ...improvement, turnIndex: 4, quote: null }],
+    };
+    expect(citedTurns(unquoted, () => false).get(4)).toEqual([improvement.dimension]);
+  });
+
   it('is empty with no report', () => {
-    expect(citedTurns(null).size).toBe(0);
+    expect(citedTurns(null, trusting).size).toBe(0);
   });
 });
 
 describe('filters', () => {
-  const strong = () => buildTranscript(CALLS.strong.session, CALLS.strong.report);
-  const curveball = () => buildTranscript(CALLS.curveball.session, CALLS.curveball.report);
+  const strong = () => build('strong');
+  const curveball = () => build('curveball');
 
   it('count what they find', () => {
     const turns = strong();

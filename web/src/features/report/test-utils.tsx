@@ -125,6 +125,15 @@ export class FakeIntersectionObserver {
     if (!target) throw new Error(`Nothing observed with the id ${id}`);
     this.callback([{ target, isIntersecting } as IntersectionObserverEntry], this as never);
   }
+  /** The same for an element that has no id (a matrix of rows, a pair of lines). */
+  reportElement(target: Element, isIntersecting: boolean) {
+    if (!this.observed.has(target)) throw new Error('That element is not observed');
+    this.callback([{ target, isIntersecting } as IntersectionObserverEntry], this as never);
+  }
+  /** The observers that are watching this element (an element can be watched by more than one hook). */
+  static watching(target: Element): FakeIntersectionObserver[] {
+    return FakeIntersectionObserver.instances.filter((observer) => observer.observed.has(target));
+  }
 }
 
 export function stubIntersectionObserver() {

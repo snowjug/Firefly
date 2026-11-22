@@ -3,9 +3,18 @@ import type {
   CoachingReport,
   DimensionResult,
   DiscoveryResult,
+  Evidence,
   ImprovementItem,
 } from '#shared/domain/report.ts';
 import { DIMENSION_IDS, FACT_WEIGHT } from '#shared/domain/vocab.ts';
+import { clampWords, plainUnexpectedTurn } from './copy.ts';
+import {
+  customerReplyTo,
+  isVerifiedQuote,
+  verifiedEvidence,
+  type EvidenceTurn,
+  type TurnLookup,
+} from './evidence-model.ts';
 
 // Small decisions about the report's data, kept out of the components so they can be tested.
 
@@ -14,6 +23,29 @@ export function orderedDimensions(report: CoachingReport): DimensionResult[] {
   return DIMENSION_IDS.map((id) => report.dimensions.find((d) => d.id === id)).filter(
     (d): d is DimensionResult => d !== undefined,
   );
+}
+
+/** How many words of the reason for a score show on the row; the whole reason is in its details. */
+export const ROW_REASON_WORDS = 20;
+
+export interface SkillRow {
+  dimension: DimensionResult;
+  /** The quotes the transcript confirms, in the order the report gave them. */
+  quotes: Evidence[];
+  /** The reason in a line: its first words, ending where a sentence ends when one is near. */
+  preview: string;
+}
+
+/**
+ * The six skills as the rows of the score matrix. A quote the transcript does not confirm is not
+ * evidence, so it is neither counted nor shown: with none left the row says "Insufficient evidence".
+ */
+export function skillRows(report: CoachingReport, turns: TurnLookup): SkillRow[] {
+  return orderedDimensions(report).map((dimension) => ({
+    dimension,
+    quotes: verifiedEvidence(turns, dimension.evidence),
+    preview: clampWords(plainUnexpectedTurn(dimension.rationale), ROW_REASON_WORDS).shown,
+  }));
 }
 
 /** True when the report should say it rests on limited evidence. */
@@ -79,22 +111,51 @@ export function careCounts(principle: CarePrincipleResult): BehaviourCounts {
   return counts;
 }
 
-export interface WordingPair {
-  improvement: ImprovementItem;
-  /** What was said, or null for a gap that never happened. */
+export type OriginalState = 'said' | 'omitted' | 'unverified';
+
+export interface Wording {
+  /** What was said, when the transcript confirms it. */
   original: string | null;
+  /**
+   * `said`: the original is a quote the transcript backs. `omitted`: nothing was said (the gap is
+   * something that never happened). `unverified`: the report quotes words that the turn does not say,
+   * so they are not shown.
+   */
+  state: OriginalState;
   improved: string;
 }
 
-/** One "Original, Improved" pair for each improvement that offers better wording. */
-export function wordingPairs(report: CoachingReport): WordingPair[] {
-  return report.improvements
-    .filter((item) => item.betterPhrasing.trim() !== '')
-    .map((item) => ({
-      improvement: item,
-      original: item.quote && item.quote.trim() !== '' ? item.quote : null,
-      improved: item.betterPhrasing,
-    }));
+/** The better wording for an improvement, or null when the evaluator offered none. */
+export function wordingFor(item: ImprovementItem, turns: TurnLookup): Wording | null {
+  const improved = item.betterPhrasing.trim();
+  if (improved === '') return null;
+  if (item.turnIndex === null) return { original: null, state: 'omitted', improved };
+  const quote = item.quote?.trim() ?? '';
+  return quote !== '' && isVerifiedQuote(turns, item.turnIndex, quote)
+    ? { original: quote, state: 'said', improved }
+    : { original: null, state: 'unverified', improved };
+}
+
+export interface FactView {
+  result: DiscoveryResult;
+  /** The trainee's question that found the fact, when the transcript confirms it. */
+  question: string | null;
+  /** The customer's reply to that question, exactly as it was said. */
+  answer: EvidenceTurn | null;
+}
+
+/** A fact with the question that found it and the customer's answer, both from the transcript. */
+export function factView(result: DiscoveryResult, turns: TurnLookup): FactView {
+  if (result.status === 'missed' || result.revealedAtTurn === null) {
+    return { result, question: null, answer: null };
+  }
+  return {
+    result,
+    question: isVerifiedQuote(turns, result.revealedAtTurn, result.revealingQuestion)
+      ? result.revealingQuestion
+      : null,
+    answer: customerReplyTo(turns, result.revealedAtTurn),
+  };
 }
 
 export interface SectionItem {
@@ -102,17 +163,24 @@ export interface SectionItem {
   label: string;
 }
 
-/** The parts of the report, in page order. A part with nothing behind it is not listed. */
-export function reportSections(report: CoachingReport): SectionItem[] {
+/**
+ * The parts of the report, in page order. A part with nothing behind it is not listed: CARE for a
+ * report saved before it was read from the call, and the call journey when no moment can be shown.
+ */
+export function reportSections(
+  report: CoachingReport,
+  options: { timeline?: boolean } = {},
+): SectionItem[] {
+  const { timeline = true } = options;
   return [
     { id: 'summary', label: 'Summary' },
+    ...(timeline ? [{ id: 'journey', label: 'Call journey' }] : []),
     { id: 'scores', label: 'Scores' },
-    ...(report.care ? [{ id: 'care', label: 'CARE summary' }] : []),
-    { id: 'journey', label: 'Customer journey' },
+    ...(report.care ? [{ id: 'care', label: 'CARE review' }] : []),
+    { id: 'experience', label: 'Customer experience' },
+    { id: 'discovery', label: 'Discovery review' },
     { id: 'strengths', label: 'Strengths' },
-    { id: 'improvements', label: 'Improvements' },
-    ...(wordingPairs(report).length > 0 ? [{ id: 'wording', label: 'Better wording' }] : []),
-    { id: 'discovery', label: 'Discovery' },
+    { id: 'improvements', label: 'Improvement opportunities' },
     { id: 'next-practice', label: 'Next practice' },
     { id: 'actions', label: 'Actions' },
     { id: 'transcript', label: 'Transcript' },
