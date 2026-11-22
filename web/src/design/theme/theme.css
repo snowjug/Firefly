@@ -95,6 +95,10 @@
   opacity: 1;
   transform: none;
 }
+/* Not kept is not a success: it is said in plain text colour, and the words carry it. */
+.ff-theme-select__saved[data-on='not-kept'] {
+  color: var(--fg-1);
+}
 
 @media (forced-colors: active) {
   .ff-theme-toggle__core {
