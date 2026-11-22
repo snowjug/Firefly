@@ -118,7 +118,7 @@ describe('the status of the call', () => {
     expect(status({ stage: 'transcribing', micOpen: false })).toBe('processing-speech');
   });
 
-  it('says each state in the voice layer’s own words', () => {
+  it('says each state in the voice layer’s own words, apart from the trainee’s own turn', () => {
     const label = (input: Partial<StatusInput>) =>
       describeStatus({
         stage: 'ready',
@@ -129,7 +129,6 @@ describe('the status of the call', () => {
         ...input,
       }).label;
     expect(label({})).toBe(VOICE_STATE_TEXT['microphone-ready'].label);
-    expect(label({ stage: 'listening' })).toBe(VOICE_STATE_TEXT.listening.label);
     expect(label({ stage: 'listening', speechDetected: true })).toBe(
       VOICE_STATE_TEXT['speech-detected'].label,
     );
@@ -140,7 +139,6 @@ describe('the status of the call', () => {
     expect(label({ stage: 'customer-speaking' })).toBe(VOICE_STATE_TEXT['customer-speaking'].label);
     expect(label({ stage: 'paused' })).toBe(VOICE_STATE_TEXT.paused.label);
     expect(label({ stage: 'muted' })).toBe(VOICE_STATE_TEXT.muted.label);
-    expect(label({ mode: 'text' })).toBe(VOICE_STATE_TEXT['text-fallback'].label);
     expect(label({ stage: 'ending', phase: 'ending' })).toBe(VOICE_STATE_TEXT['ending-call'].label);
     expect(label({ stage: 'evaluating', phase: 'ending' })).toBe(VOICE_STATE_TEXT.evaluating.label);
     expect(label({ stage: 'completed', phase: 'completed' })).toBe(
@@ -149,6 +147,25 @@ describe('the status of the call', () => {
     // The states the voice layer has no word for keep ours.
     expect(label({ stage: 'retrying' })).toBe('Retrying');
     expect(label({ stage: 'ready', online: false })).toBe('Offline');
+  });
+
+  it('says whose turn it is: "Your turn" in a typed call and "Listening to you" while the microphone is open', () => {
+    const label = (input: Partial<StatusInput>) =>
+      describeStatus({
+        stage: 'ready',
+        mode: 'voice',
+        phase: 'ready-for-next-turn',
+        speechDetected: false,
+        microphone: 'granted',
+        ...input,
+      }).label;
+    // The voice layer's "Typing" reads as the customer typing, and its bare "Listening" does not say
+    // whose turn it is. Its announcements are unchanged, and the ids stay.
+    expect(label({ mode: 'text' })).toBe('Your turn');
+    expect(label({ stage: 'listening' })).toBe('Listening to you');
+    expect(status({ mode: 'text' })).toBe('text-fallback');
+    expect(status({ stage: 'listening' })).toBe('listening');
+    expect(VOICE_STATE_TEXT['text-fallback'].label).toBe('Typing');
   });
 
   it('puts being offline above a pause, and a pause above a problem, so it never lies about whose turn it is', () => {
@@ -452,7 +469,7 @@ describe('times and counts', () => {
     interrupted: false,
   });
 
-  it('stamps the first turn and then one every minute, counted from the last stamp', () => {
+  it('stamps every turn the same way, counted from the start of the call', () => {
     const turns = [
       turnAt('a', 0),
       turnAt('b', 20),
@@ -463,7 +480,10 @@ describe('times and counts', () => {
     ];
     expect([...timeMarks(turns, '2026-11-21T09:00:00.000Z')]).toEqual([
       ['a', '0:00'],
+      ['b', '0:20'],
+      ['c', '0:59'],
       ['d', '1:00'],
+      ['e', '1:40'],
       ['f', '2:01'],
     ]);
   });
@@ -786,9 +806,30 @@ describe('the reply box', () => {
   });
 
   it('waits, in a few words, while the customer replies and while the call closes', () => {
-    expect(gate('processing')).toEqual({ canSend: false, reason: 'Waiting for the customer.' });
+    expect(gate('processing')).toEqual({
+      canSend: false,
+      reason: 'Waiting for the customer.',
+      waiting: true,
+    });
     expect(gate('ending').reason).toBe('The call is ending.');
     expect(gate('completed').canSend).toBe(false);
+  });
+
+  it('holds the box read-only only while the customer replies, not for any other wait', () => {
+    // A message that was sent is shown, quietly, until the reply is in; every other wait (a problem to
+    // handle first, the limit, the end of the call) leaves the box as the person left it.
+    expect(gate('processing').waiting).toBe(true);
+    for (const other of [
+      gate('ready-for-next-turn'),
+      gate('ending'),
+      gate('completed'),
+      gate('ready', describeProblem('reply-failed')),
+      gate('ready', describeProblem('offline')),
+      gate('ready', describeProblem('turn-limit')),
+      gate('ready', describeProblem('session-ended')),
+    ]) {
+      expect(other.waiting).toBeFalsy();
+    }
   });
 
   it('waits for a problem that needs handling first, and says which', () => {

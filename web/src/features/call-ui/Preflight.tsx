@@ -59,7 +59,7 @@ function rows(snapshot: CallSnapshot, provider: { demo: boolean; label: string }
     support.playback === 'none'
       ? { label: 'Customer voice', value: 'Captions only', tone: 'info' }
       : support.speechDemo && support.playback === 'server-speech'
-        ? { label: 'Customer voice', value: 'Placeholder sound (demo)', tone: 'info' }
+        ? { label: 'Customer voice', value: 'A demo sound, not a voice', tone: 'info' }
         : { label: 'Customer voice', value: support.playbackLabel, tone: 'ok' };
   // The browser's own recognition is never shown as a sure thing: it can return no words for a
   // clear voice, so its row says so, and typing always works.

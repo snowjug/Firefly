@@ -102,7 +102,7 @@ describe('the transcript as a log', () => {
     expect(rows()).toHaveLength(0);
   });
 
-  it('stamps the first turn and then no more than one a minute, as real times a screen reader can read', () => {
+  it('stamps every turn, as real times a screen reader can read', () => {
     const turns = turnsOf('end-confirm');
     view({ turns });
     const stamps = [...log().querySelectorAll('time')];
@@ -110,7 +110,8 @@ describe('the transcript as a log', () => {
     expect(stamps.map((stamp) => stamp.textContent?.replace('at ', ''))).toEqual([
       ...expected.values(),
     ]);
-    expect(stamps.length).toBeLessThan(turns.length);
+    // One on each turn, so the log reads evenly: not some turns stamped and the rest bare.
+    expect(stamps).toHaveLength(turns.length);
     for (const stamp of stamps) {
       expect(stamp.getAttribute('datetime')).toMatch(/^2026-11-21T/);
       expect(stamp.querySelector('.visually-hidden')?.textContent).toBe('at ');

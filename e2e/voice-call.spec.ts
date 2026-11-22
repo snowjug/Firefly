@@ -57,7 +57,7 @@ test.describe('a spoken call', () => {
       await expect(screen.preflight.checks).toContainText(/Microphone\s*Not requested/);
       await expect(screen.preflight.checks).toContainText(/Speech\s*Demo speech \(scripted\)/);
       await expect(screen.preflight.checks).toContainText(
-        /Customer voice\s*Placeholder sound \(demo\)/,
+        /Customer voice\s*A demo sound, not a voice/,
       );
       await expect(screen.preflight.checks).toContainText(
         "Demo mode: Firefly's built-in rules engine",
@@ -266,7 +266,7 @@ test.describe('a spoken call', () => {
       await expect(screen.turns.last()).toHaveAttribute('aria-current', 'true');
     });
 
-    await test.step('finished: stopping the voice gives the turn back, and a pause settles the strip onto its quiet line', async () => {
+    await test.step('finished: stopping the voice gives the turn back, and a pause settles the strip down to its label alone', async () => {
       delays.transcribe = 0;
       delays.reply = 0;
       await screen.stopAudio.click();
@@ -274,8 +274,9 @@ test.describe('a spoken call', () => {
       await expect(screen.turns.last()).not.toHaveAttribute('aria-current', 'true');
       await screen.pause.click();
       await expectStatus(page, 'paused');
-      await expect(wave).toHaveAttribute('data-mode', 'idle');
-      await expect(wave).toHaveAttribute('data-shape', 'line', { timeout: 3_000 });
+      // Nothing is drawn for a silence: no flat line that would look like a meter that has stopped.
+      await expect(wave).toHaveCount(0, { timeout: 3_000 });
+      await expect(screen.status).toHaveText(STATUS.paused);
     });
   });
 
@@ -414,6 +415,112 @@ test.describe('a spoken call', () => {
       await expect(screen.status).not.toHaveText(STATUS.paused);
       await expect(screen.pause).toBeVisible();
     });
+  });
+
+  test('on a phone the call keeps its controls whole, the quiet ones a full 44 px, and room to read: 250 px of transcript at 320 by 640', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await startControlledCall(page);
+    const screen = callScreen(page);
+    await screen.stopAudio.click();
+    await expectStatus(page, 'listening');
+
+    await test.step('the bar is two rows, and the transcript has the room', async () => {
+      expect((await page.locator('.cw-bar').boundingBox())!.height).toBeLessThanOrEqual(112);
+      expect((await page.locator('#cw-transcript').boundingBox())!.height).toBeGreaterThanOrEqual(
+        250,
+      );
+    });
+
+    await test.step('every control is whole inside the window, and a full 44 px target', async () => {
+      for (const control of [screen.done, screen.mute, screen.text, screen.pause, screen.replay]) {
+        const box = (await control.boundingBox())!;
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(321);
+        expect(box.y + box.height).toBeLessThanOrEqual(641);
+        expect(box.height).toBeGreaterThanOrEqual(43.5);
+      }
+      const settings = (await screen.settings.boundingBox())!;
+      expect(settings.height).toBeGreaterThanOrEqual(43.5);
+      expect(settings.y + settings.height).toBeLessThanOrEqual(641);
+    });
+
+    await test.step('the "Demo mode" label is not on the bar below 360 px: Voice settings says it in words', async () => {
+      await expect(page.locator('.cw-bar').getByText('Demo mode', { exact: true })).toBeHidden();
+      await screen.settings.click();
+      await expect(screen.settingsDialog).toContainText(
+        "Demo mode: Firefly's built-in rules engine",
+      );
+      await screen.settingsDialog.getByRole('button', { name: 'Done' }).click();
+      await expect(screen.settingsDialog).toBeHidden();
+    });
+
+    await test.step('"Done speaking" fits on one line wherever there is the room for it', async () => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      const lines = await screen.done.evaluate((button) => {
+        const label = button.querySelector('.ff-button__label') ?? button;
+        const style = getComputedStyle(label);
+        return Math.round(label.getBoundingClientRect().height / parseFloat(style.lineHeight));
+      });
+      expect(lines).toBe(1);
+      // And the label of who plays the customer is on the bar again (it is only out of it below 360 px).
+      await expect(page.locator('.cw-bar').getByText('Demo mode', { exact: true })).toBeVisible();
+    });
+  });
+
+  test('the disabled controls stay readable (3:1 or better), and keep their fill', async ({
+    page,
+  }) => {
+    await startControlledCall(page);
+    const screen = callScreen(page);
+    await expect(screen.stopAudio).toBeVisible();
+    const read = (control: typeof screen.talk) =>
+      control.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const channels = (colour: string) => {
+          const numbers = (colour.match(/[\d.]+/g) ?? []).map(Number);
+          // A mixed colour comes back as color(srgb 0.7 0.8 0.9), each part from 0 to 1.
+          return colour.startsWith('color(')
+            ? numbers.map((value, i) => (i < 3 ? value * 255 : value))
+            : numbers;
+        };
+        const luminance = ([r = 0, g = 0, b = 0]: number[]) => {
+          const [lr = 0, lg = 0, lb = 0] = [r, g, b].map((value) => {
+            const c = value / 255;
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+        };
+        const ratio = (a: number[], b: number[]) => {
+          const [high = 0, low = 0] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+          return (high + 0.05) / (low + 0.05);
+        };
+        const fill = channels(style.backgroundColor);
+        // A button with no fill of its own sits on its dock or its panel, which is opaque.
+        const behind = channels(
+          getComputedStyle(element.closest('.cw-dock, .cw-stage__zone') ?? document.body)
+            .backgroundColor,
+        );
+        const base = fill.length === 4 && fill[3] === 0 ? behind : fill;
+        return { fill: style.backgroundColor, contrast: ratio(channels(style.color), base) };
+      });
+
+    // While the customer speaks Talk waits: dimmed, not washed out.
+    await expect(screen.talk).toHaveAttribute('aria-disabled', 'true');
+    const talk = await read(screen.talk);
+    expect(talk.contrast, 'Talk, disabled').toBeGreaterThanOrEqual(3);
+    // The fill is the primary button's own: not the grey of a button that has been washed out.
+    expect(talk.fill).not.toBe('rgb(240, 240, 240)');
+
+    // Once the customer has been stopped it is Stop customer audio that waits.
+    await screen.stopAudio.click();
+    await expectStatus(page, 'listening');
+    await expect(screen.stopAudio).toHaveAttribute('aria-disabled', 'true');
+    expect(
+      (await read(screen.stopAudio)).contrast,
+      'Stop customer audio, disabled',
+    ).toBeGreaterThanOrEqual(3);
   });
 });
 

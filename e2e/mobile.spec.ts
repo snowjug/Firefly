@@ -144,10 +144,16 @@ test('@mobile the call keeps its controls in a dock at the bottom, and the case 
 
   await test.step('the case opens in a sheet that closes with its button, and focus goes back', async () => {
     const open = page.getByRole('button', { name: 'Case', exact: true });
+    // There is room beside the icon on a phone this wide, so the button says what it is.
+    await expect(page.locator('.cw-bar__case-label')).toBeVisible();
+    // And the bar still says who plays the customer, beside the time and Live.
+    await expect(page.locator('.cw-bar').getByText('Demo mode', { exact: true })).toBeVisible();
     await open.tap();
     const sheet = page.getByRole('dialog', { name: 'Case' });
     await expect(sheet).toBeVisible();
-    await expect(sheet).toContainText('Context found');
+    await expect(sheet).toContainText('Objective');
+    // A standard call shows no live count of what has been found: that would be a cue.
+    await expect(sheet).not.toContainText('Context found');
     await sheet.getByRole('button', { name: 'Close', exact: true }).tap();
     await expect(sheet).toBeHidden();
     await expect(open).toBeFocused();

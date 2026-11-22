@@ -230,10 +230,94 @@ test.describe('a spoken call', () => {
       await expectReachable(page, 'End call', 44);
       await expectReachable(page, /^(Talk|Done speaking|Return to voice)$/, 44);
       for (const name of ['Mute', 'Pause', 'Replay', 'Text', 'Settings']) {
-        await expectReachable(page, name, 24);
+        // On a phone every one of them is a full 44 px target, the quiet ones too.
+        await expectReachable(page, name, width < 640 ? 44 : 24);
       }
     });
   }
+});
+
+test('the pre-flight keeps its main action whole in the window on a phone, and the card still scrolls to the rest', async ({
+  page,
+}) => {
+  for (const [width, height] of [
+    [375, 812],
+    [320, 640],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    const id = await createSession(page.request, HARD_SCENARIO_ID);
+    const screen = callScreen(page);
+    await page.goto(`/calls/${id}?input=voice`);
+    await expect(screen.preflight.heading).toBeVisible();
+    await expectNoOverflow(page, `the pre-flight at ${width} by ${height}`);
+    // The first button is the main one: whole in the window with nothing scrolled.
+    await expectReachable(page, /^Start (?:voice|text) call$/, 44);
+    // The card is longer than the window, and scrolling reaches all of it, with the buttons still there.
+    const scrolls = await page.evaluate(
+      () => document.documentElement.scrollHeight > window.innerHeight,
+    );
+    if (scrolls) {
+      await screen.preflight.voiceDetails.scrollIntoViewIfNeeded();
+      await expect(screen.preflight.voiceDetails).toBeVisible();
+      await expectReachable(page, /^Start (?:voice|text) call$/, 44);
+    }
+    await page.request.delete(`/api/sessions/${id}`);
+  }
+});
+
+test('on the smallest phone the call keeps room to read, even in a wide font: the bar is two rows and the transcript is not squeezed out', async ({
+  page,
+}) => {
+  // This file reads everything in a deliberately wide font (see above), so the floor here is the
+  // wide-font one; the full 250 px at 320 by 640 is measured in the usual font, in the call specs.
+  await page.setViewportSize({ width: 320, height: 640 });
+  const id = await createSession(page.request, HARD_SCENARIO_ID);
+  await openTextCall(page, id);
+  const room = async () => (await page.locator('#cw-transcript').boundingBox())!.height;
+  expect(await room(), 'the transcript of a typed call').toBeGreaterThanOrEqual(250);
+  expect((await page.locator('.cw-bar').boundingBox())!.height, 'the bar').toBeLessThanOrEqual(112);
+  await expectNoOverflow(page, 'a typed call at 320 by 640');
+  await page.request.delete(`/api/sessions/${id}`);
+
+  await startSpokenCall(page);
+  await callScreen(page).stopAudio.click();
+  await expectStatus(page, 'listening');
+  expect(await room(), 'the transcript of a spoken call').toBeGreaterThanOrEqual(190);
+  await expectNoOverflow(page, 'a spoken call at 320 by 640');
+  // Below 360 px the bar has no room for who plays the customer: Voice settings says it.
+  await expect(page.locator('.cw-bar').getByText('Demo mode', { exact: true })).toBeHidden();
+});
+
+test('the call bar keeps the "Demo mode" label whole in the window from 360 px up, in a wide font too, with the transcript still 250 px at 375 by 812', async ({
+  page,
+}) => {
+  const id = await createSession(page.request, HARD_SCENARIO_ID);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await openTextCall(page, id);
+  const chip = page.locator('.cw-bar').getByText('Demo mode', { exact: true });
+  for (const [width, height] of [
+    [375, 812],
+    [360, 740],
+    [430, 932],
+    [639, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(chip, `the label at ${width}`).toBeVisible();
+    const box = (await chip.boundingBox())!;
+    expect(box.x, `the label starts inside the window at ${width}`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `the label ends inside the window at ${width}`).toBeLessThanOrEqual(
+      width + 1,
+    );
+    await expectNoOverflow(page, `the call bar at ${width}`);
+  }
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(
+    (await page.locator('#cw-transcript').boundingBox())!.height,
+    'the transcript at 375 by 812',
+  ).toBeGreaterThanOrEqual(250);
+  await page.setViewportSize({ width: 359, height: 740 });
+  await expect(chip, 'and below 360 px it is left to Voice settings').toBeHidden();
+  await page.request.delete(`/api/sessions/${id}`);
 });
 
 test('400 percent zoom and an on-screen keyboard leave the call usable', async ({ page }) => {
@@ -370,16 +454,21 @@ test.describe('user preferences', () => {
       expect(await longAnimations(), `${path}: running animations`).toEqual([]);
     }
 
-    // The call still works, and each stage keeps its own words and icon.
+    // The call still works, and each stage keeps its own words and its own shape: an icon, or the three
+    // points that stand in for one while the customer works out a reply (one cue, not both).
     const { delays } = await startSpokenCall(page);
     const screen = callScreen(page);
     const seen = new Map<string, { label: string; icon: string }>();
     const record = async (status: string) => {
       await expectStatus(page, status, 30_000);
       const line = page.locator(`.cw-status[data-status="${status}"]`);
+      const icon = line.locator('.cw-status__icon');
       seen.set(status, {
         label: (await line.locator('.cw-status__label').textContent()) ?? '',
-        icon: (await line.locator('svg').first().innerHTML()) ?? '',
+        icon:
+          (await icon.count()) > 0
+            ? await icon.innerHTML()
+            : `${await line.locator('.cw-think__dot').count()} points`,
       });
       expect(await longAnimations(), `${status}: running animations`).toEqual([]);
     };

@@ -13,7 +13,7 @@ const RECENT_TURNS = 10;
 interface TurnItemProps {
   turn: CallTurn;
   who: string;
-  /** m:ss, only on a turn worth a timestamp (see `timeMarks`). */
+  /** m:ss since the call began, on every turn (see `timeMarks`). */
   time: string;
   /** Far enough back that the browser may skip laying it out until it is scrolled to. */
   old: boolean;
@@ -111,7 +111,7 @@ export interface TurnListProps {
   showInputMode?: boolean;
 }
 
-/** The conversation as whole turns: who spoke, a timestamp now and then, and what became of each. */
+/** The conversation as whole turns: who spoke, when, and what became of each. */
 export const TurnList = memo(function TurnList({
   turns,
   customerName,

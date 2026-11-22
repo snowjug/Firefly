@@ -19,8 +19,28 @@
   resize: none;
   field-sizing: content;
 }
+/* While the customer replies the box holds what was sent, dim and read-only (no caret), on one line:
+   it takes no more room than an empty box, so nothing around it moves, and it does not read as a
+   message that was not sent. Its padding leaves room for exactly one line, so a second is never
+   half in view. */
+.ff-input.cw-composer__input[readonly] {
+  block-size: var(--ctl-md);
+  padding-block: calc((var(--ctl-md) - 2 * var(--stroke-w) - var(--lh-body)) / 2);
+  overflow: hidden;
+  color: var(--fg-3);
+  caret-color: transparent;
+  cursor: default;
+  field-sizing: fixed;
+}
 .cw-composer__send {
   flex: none;
+}
+/* While it waits, Send keeps its fill: the line under the box says why, and a button washed out in
+   grey would be louder than the wait. Its label is lighter, still 3:1 or better. */
+.ff-button.cw-composer__send[aria-disabled='true']:not(.ff-button--loading) {
+  background: var(--_bg);
+  border-color: var(--_bd);
+  color: color-mix(in srgb, var(--fg-on-brand) 70%, var(--brand));
 }
 .cw-composer__meta {
   display: flex;
@@ -43,4 +63,10 @@
 }
 .cw-composer__count {
   font-variant-numeric: tabular-nums;
+}
+/* Below 64em the composer's edges are the gutter's, as the transcript's above it are. */
+@media (max-width: 63.99em) {
+  .cw-composer {
+    padding-inline: var(--gutter);
+  }
 }

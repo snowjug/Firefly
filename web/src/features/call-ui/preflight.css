@@ -1,11 +1,18 @@
 /* The step before the call: one card with who is calling, four facts and the ways to start. */
 
 .cw-pre {
+  /* The colour of the card, named once so the bar of buttons that sticks to the foot of a phone can
+     be exactly it. The dark theme sets it again further down. */
+  --cw-pre-card: var(--bg-canvas);
   display: flex;
   flex-direction: column;
   min-block-size: 100vh;
   min-block-size: 100dvh;
   background: var(--bg-subtle);
+}
+.ff-surface.cw-pre__card,
+.ff-surface.cw-pre__transcript {
+  background: var(--cw-pre-card);
 }
 .cw-pre__bar {
   border-block-end: var(--stroke-w) solid var(--stroke-2);
@@ -77,10 +84,15 @@
 }
 .cw-pre__scenario {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sp-2);
-  color: var(--brand-fg-2);
+  color: var(--fg-1);
   font-weight: var(--fw-semibold);
+}
+/* The product's icon sits on the first line of the title, whatever the title's length. */
+.cw-pre__scenario > :first-child {
+  flex: none;
+  margin-block-start: 0.125rem;
 }
 .cw-pre__resume {
   color: var(--fg-2);
@@ -115,8 +127,9 @@
 .cw-pre__check--ok .cw-pre__check-icon {
   color: var(--status-success-fg);
 }
+/* A row that only informs has a neutral icon: blue everywhere would carry no state at all. */
 .cw-pre__check--info .cw-pre__check-icon {
-  color: var(--status-info-fg);
+  color: var(--fg-3);
 }
 .cw-pre__check--blocked .cw-pre__check-icon {
   color: var(--status-danger-fg);
@@ -164,16 +177,44 @@
   gap: var(--sp-3);
 }
 
+/* A phone: the facts are one line each (the label, then what it says), so the card is short, and the
+   ways to start stay at the foot of the screen while the card is on it, with the primary one in full. */
 @media (max-width: 30em) {
   .cw-pre__check {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .cw-pre__check-value {
-    grid-column: 2;
+    grid-template-columns: auto 6.25rem minmax(0, 1fr);
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
   }
   .cw-pre__actions > .ff-button {
     flex: 1 1 100%;
   }
+}
+@media (max-width: 40em) {
+  .cw-pre__body {
+    margin-block-start: var(--sp-4);
+  }
+  .cw-pre__card {
+    gap: var(--sp-3);
+  }
+  .cw-pre__actions {
+    position: sticky;
+    inset-block-end: 0;
+    z-index: var(--z-sticky);
+    /* Across the card, as far as its padding (the surface has 16 px of it at this width). */
+    margin-inline: calc(var(--sp-4) * -1);
+    padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+    border-block-start: var(--stroke-w) solid var(--stroke-2);
+    background: var(--cw-pre-card);
+  }
+}
+
+/* Dark theme: the page is the darkest surface and the bar and the cards are one step up, as on the call. */
+:root[data-theme='dark'] .cw-pre {
+  --cw-pre-card: var(--bg-raised);
+  background: var(--bg-canvas);
+}
+:root[data-theme='dark'] .cw-pre__bar {
+  background: var(--bg-raised);
 }
 
 @media (forced-colors: active) {

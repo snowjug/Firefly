@@ -36,12 +36,12 @@ describe('the waveform', () => {
       Number(bar.getAttribute('height')),
     );
 
-  it('is a still line while nothing is happening, with no timer running', () => {
+  it('draws nothing while nothing is happening, with no timer running', () => {
     const interval = vi.spyOn(window, 'setInterval');
     const { container } = render(<Waveform mode="idle" level={0.9} reducedMotion={false} />);
-    const svg = container.querySelector('svg') as SVGElement;
-    expect(svg).toHaveAttribute('data-shape', 'line');
-    expect(svg).toHaveAttribute('aria-hidden', 'true');
+    // A flat line would look like a meter that has stopped: a silence has no signal to draw.
+    expect(container.querySelector('svg')).toBeNull();
+    expect(container).toBeEmptyDOMElement();
     tick(2000);
     expect(interval).not.toHaveBeenCalled();
   });
@@ -131,7 +131,7 @@ describe('the waveform', () => {
   });
 
   it('says nothing to assistive technology but the names of the shimmer and the points: the status says the rest', () => {
-    for (const mode of ['idle', 'trainee', 'customer'] as const) {
+    for (const mode of ['trainee', 'customer'] as const) {
       const { container, unmount } = render(
         <Waveform mode={mode} level={0.5} reducedMotion={false} />,
       );
@@ -142,6 +142,42 @@ describe('the waveform', () => {
     // Three points with no name are plain decoration: the status label beside them is the name.
     const { container } = render(<Waveform mode="thinking" level={0} reducedMotion={false} />);
     expect(container.textContent).toBe('');
+  });
+
+  describe('the heights of the bars', () => {
+    it('ripple over the customer’s voice even when the sound is steady, so it never reads as a progress bar', () => {
+      const { container } = render(<Waveform mode="customer" level={0.6} reducedMotion={false} />);
+      // Enough ticks to fill every bar with a measured sample, all of them the same level.
+      tick(66 * 40);
+      const heights = bars(container);
+      expect(heights).toHaveLength(28);
+      expect(new Set(heights).size).toBeGreaterThan(3);
+      // A fixed pattern, not noise: another run draws the very same bars.
+      cleanup();
+      const again = render(<Waveform mode="customer" level={0.6} reducedMotion={false} />);
+      tick(66 * 40);
+      expect(bars(again.container)).toEqual(heights);
+    });
+
+    it('leave the microphone’s own level as it is: a steady level is a row of equal bars', () => {
+      const { container } = render(<Waveform mode="trainee" level={0.6} reducedMotion={false} />);
+      tick(66 * 40);
+      expect(new Set(bars(container)).size).toBe(1);
+    });
+
+    it('ripple the calm pattern too, and are tall enough on a narrow screen to be seen', () => {
+      const { container } = render(
+        <Waveform mode="customer" level={0} measured={false} reducedMotion={false} size="thin" />,
+      );
+      const heights = bars(container);
+      expect(new Set(heights).size).toBeGreaterThan(3);
+      const svg = container.querySelector('svg') as SVGElement;
+      // Cropped, not squeezed, in a strip that is narrower than the drawing, so the bars keep their height.
+      expect(svg).toHaveAttribute('preserveAspectRatio', 'xMidYMid slice');
+      const [, , , boxHeight] = (svg.getAttribute('viewBox') ?? '').split(' ').map(Number);
+      expect(boxHeight).toBeGreaterThanOrEqual(24);
+      expect(Math.max(...heights)).toBeGreaterThan(8);
+    });
   });
 
   describe('when the customer’s level cannot be measured', () => {
@@ -174,7 +210,7 @@ describe('the waveform', () => {
     });
   });
 
-  it('settles onto the quiet line when a voice finishes, instead of cutting to it', () => {
+  it('settles onto nothing when a voice finishes, instead of cutting to it', () => {
     const { container, rerender } = render(
       <Waveform mode="customer" level={0.9} reducedMotion={false} />,
     );
@@ -187,14 +223,14 @@ describe('the waveform', () => {
     tick(66 * 2);
     expect(Math.max(...bars(container))).toBeLessThan(loud);
     tick(66 * 12);
-    expect(container.querySelector('svg')).toHaveAttribute('data-shape', 'line');
-    expect(container.querySelector('.cw-wave--settling')).toBeNull();
+    // Then nothing at all, and not a flat line.
+    expect(container.querySelector('svg')).toBeNull();
   });
 
-  it('does not settle under reduced motion: the meter simply goes quiet', () => {
+  it('does not settle under reduced motion: the meter simply goes away', () => {
     const { container, rerender } = render(<Waveform mode="customer" level={0.9} reducedMotion />);
     rerender(<Waveform mode="idle" level={0} reducedMotion />);
-    expect(container.querySelector('svg')).toHaveAttribute('data-shape', 'line');
+    expect(container.querySelector('svg')).toBeNull();
   });
 
   it('drops what is left of a voice at once when the strip shows something else', () => {
@@ -316,6 +352,21 @@ describe('the voice settings dialog', () => {
   it('calls scripted demo speech a demo, not a service that understands audio', () => {
     const { dialog } = settings({ support: { ...SERVER, speechDemo: true } });
     expect(dialog.getByText('Scripted demo: it does not understand audio.')).toBeInTheDocument();
+  });
+
+  it('says who plays the customer, in words, because a phone’s call bar has no room for the label', () => {
+    const demo = settings({ provider: { demo: true, label: 'Demo mode (built-in rules engine)' } });
+    expect(demo.dialog.getByText('Customer AI').nextElementSibling).toHaveTextContent(
+      "Demo mode: Firefly's built-in rules engine",
+    );
+    cleanup();
+    const live = settings({ provider: { demo: false, label: 'Azure OpenAI (gpt-4o)' } });
+    expect(live.dialog.getByText('Customer AI').nextElementSibling).toHaveTextContent(
+      'Live model: Azure OpenAI (gpt-4o)',
+    );
+    cleanup();
+    // Left out, it is not guessed.
+    expect(settings().dialog.queryByText('Customer AI')).toBeNull();
   });
 
   it('is honest when there is no recognition in this browser', () => {
@@ -485,6 +536,18 @@ describe('the customer on screen', () => {
       expect(trace.getAttribute('aria-label')).not.toMatch(/\d/);
     });
 
+    it('has a caption you can see, which a screen reader does not hear twice', () => {
+      const { container, rerender } = render(<CustomerStage {...baseProps()} trace={history} />);
+      const caption = container.querySelector('.cw-trail__label') as HTMLElement;
+      expect(caption).toHaveTextContent('State so far');
+      expect(caption).toHaveAttribute('aria-hidden', 'true');
+      // The picture keeps its own name, which holds the caption’s words.
+      expect(screen.getByRole('img', { name: /^Customer state so far: calm/ })).toBeInTheDocument();
+      // With nothing drawn there is nothing to name.
+      rerender(<CustomerStage {...baseProps()} trace={[]} />);
+      expect(container.querySelector('.cw-trail__label')).toBeNull();
+    });
+
     it('is left out on a narrow screen, where there is no room for it', () => {
       const { container } = render(<CustomerStage {...baseProps()} trace={history} compact />);
       expect(container.querySelector('.cw-trace')).toBeNull();
@@ -561,8 +624,53 @@ describe('the customer on screen', () => {
   });
 
   it('becomes one row on a narrow screen', () => {
-    const { container } = render(<CustomerStage {...baseProps()} compact />);
+    const speaking = describeStatus({
+      stage: 'customer-speaking',
+      mode: 'voice',
+      phase: 'customer-speaking',
+      speechDetected: false,
+      microphone: 'granted',
+    });
+    const { container } = render(<CustomerStage {...baseProps()} status={speaking} compact />);
     expect(container.querySelector('.cw-person--compact')).not.toBeNull();
     expect(container.querySelector('.cw-wave--thin')).not.toBeNull();
+  });
+
+  describe('the status strip', () => {
+    const statusOf = (stage: Parameters<typeof describeStatus>[0]['stage'], mode = 'voice') =>
+      describeStatus({
+        stage,
+        mode: mode as 'voice' | 'text',
+        phase: 'ready-for-next-turn',
+        speechDetected: false,
+        microphone: 'granted',
+      });
+
+    it('is only its label when there is no signal to show: no flat line, in a typed call or a quiet voice one', () => {
+      const typed = render(<CustomerStage {...baseProps()} status={statusOf('ready', 'text')} />);
+      expect(typed.container.querySelector('.cw-status__label')).toHaveTextContent('Your turn');
+      expect(typed.container.querySelector('svg.cw-wave')).toBeNull();
+      typed.unmount();
+      const quiet = render(<CustomerStage {...baseProps()} status={statusOf('paused')} />);
+      expect(quiet.container.querySelector('svg.cw-wave')).toBeNull();
+    });
+
+    it('has one cue while the customer works out a reply: the three points with the words, and no icon as well', () => {
+      const thinking = describeStatus({
+        stage: 'processing',
+        mode: 'voice',
+        phase: 'processing',
+        speechDetected: false,
+        microphone: 'granted',
+      });
+      const { container } = render(<CustomerStage {...baseProps()} status={thinking} />);
+      expect(container.querySelectorAll('.cw-think__dot')).toHaveLength(3);
+      expect(container.querySelector('.cw-status__icon')).toBeNull();
+      // Every other state keeps its icon: a word and a shape, never colour alone.
+      const speaking = render(
+        <CustomerStage {...baseProps()} status={statusOf('customer-speaking')} />,
+      );
+      expect(speaking.container.querySelector('.cw-status__icon')).not.toBeNull();
+    });
   });
 });

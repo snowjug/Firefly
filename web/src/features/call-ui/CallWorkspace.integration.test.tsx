@@ -41,14 +41,16 @@ vi.mock('../../lib/api.ts', async (importOriginal) => {
 
 const mocked = vi.mocked(api);
 const OPTIONS = defaultOptions();
-// The status line speaks the voice layer's vocabulary, so these follow it.
+// The status line speaks the voice layer's vocabulary, so these follow it, apart from the trainee's own
+// turn: the screen says "Your turn" for a typed call (not "Typing", which reads as the customer typing)
+// and "Listening to you" for a spoken one.
 const LABEL = {
-  typing: VOICE_STATE_TEXT['text-fallback'].label,
+  typing: 'Your turn',
   tryAgain: VOICE_STATE_TEXT['retry-required'].label,
   replying: VOICE_STATE_TEXT['generating-customer-reply'].label,
   processing: VOICE_STATE_TEXT['processing-speech'].label,
   speaking: VOICE_STATE_TEXT['customer-speaking'].label,
-  listening: VOICE_STATE_TEXT.listening.label,
+  listening: 'Listening to you',
   ready: VOICE_STATE_TEXT['microphone-ready'].label,
 };
 let env: FakeEnv;
@@ -289,7 +291,7 @@ describe('a spoken call, stage by stage', () => {
 
     await act(async () => env.element.latest().finish());
     await advance(400);
-    expect(status()).toBe('Listening');
+    expect(status()).toBe(LABEL.listening);
     expect(within(controls()).getByRole('button', { name: 'Done speaking' })).toBeInTheDocument();
     expect(customerRegion().querySelector('.ff-avatar--speaking')).toBeNull();
 
@@ -342,7 +344,7 @@ describe('a spoken call, stage by stage', () => {
       'true',
     );
     await advance(400);
-    expect(status()).toBe('Listening');
+    expect(status()).toBe(LABEL.listening);
     expect(within(controls()).getByRole('button', { name: 'Done speaking' })).toBeInTheDocument();
   });
 
@@ -544,7 +546,7 @@ describe('ending the call', () => {
     await typeAndSend('Hello');
     await press('End call');
     const question = screen.getByRole('dialog', { name: 'End the call?' });
-    expect(within(question).getByText('Messages').nextElementSibling).toHaveTextContent('1');
+    expect(within(question).getByText('Your messages').nextElementSibling).toHaveTextContent('1');
     await press('End and review');
     expect(server.endCalls).toBe(1);
     expect(onEnded).toHaveBeenCalledExactlyOnceWith(SESSION_ID);

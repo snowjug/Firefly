@@ -439,6 +439,7 @@ function Workspace({
         voice={snapshot.voiceDetails.voice}
         style={snapshot.voiceDetails.style}
         support={snapshot.support}
+        provider={provider}
         actions={actions}
       />
 

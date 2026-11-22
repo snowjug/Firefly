@@ -1,5 +1,7 @@
 import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { wordCount } from '#shared/domain/scenario.ts';
 import type { CallSnapshot, CallTurn } from '../call/contract.ts';
@@ -297,6 +299,22 @@ describe('the top bar', () => {
     expect(within(bar()).getByText('Reconnecting')).toBeInTheDocument();
   });
 
+  it('keeps the demo label on the bar down to 360 px: the stylesheet hides it below that width and nowhere else', () => {
+    const css = readFileSync(resolve('web/src/features/call-ui/workspace.css'), 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    const blocks = [...css.matchAll(/@media\s*([^{]+)\{((?:[^{}]|\{[^{}]*\})*)\}/g)];
+    const hiding = blocks
+      .filter((block) => /cw-bar__provider\s*\{[^}]*display:\s*none/.test(block[2] ?? ''))
+      .map((block) => (block[1] ?? '').trim());
+    expect(hiding).toEqual(['(max-width: 22.49em)']);
+    // Outside a media query nothing styles it, so it is there at every other width.
+    expect(css.replace(/@media[^{]+\{(?:[^{}]|\{[^{}]*\})*\}/g, '')).not.toMatch(
+      /cw-bar__provider/,
+    );
+  });
+
   it('shows no product for a call saved before scenarios named one, and guesses nothing', () => {
     renderCall('legacy-call');
     const bar = document.querySelector('header') as HTMLElement;
@@ -330,11 +348,18 @@ describe('the case', () => {
     expect(within(caseColumn()).getByText(/shared Windows desktop PCs/)).not.toBeVisible();
   });
 
-  it('shows a count of what was found, never a total and never what it is', () => {
-    renderCall('mic-ready');
+  it('shows a count of what was found in guided practice, never a total and never what it is', () => {
+    renderCall('guided-hints');
     const found = within(caseColumn()).getByText('Context found').nextElementSibling;
-    expect(found).toHaveTextContent(/^0$/);
+    expect(found).toHaveTextContent(/^3$/);
     expect(caseColumn().textContent).not.toMatch(/of \d+|\/ ?\d+/);
+  });
+
+  it('shows no count of what was found in a standard call, where a count that ticks up is a cue', () => {
+    renderCall('mic-ready');
+    expect(within(caseColumn()).queryByText('Context found')).toBeNull();
+    // The objective is on the brief page already, so it is not a leak.
+    expect(within(caseColumn()).getByText('Objective')).toBeInTheDocument();
   });
 
   it('adds the areas worth exploring only in guided practice', () => {
@@ -621,7 +646,9 @@ describe('what a screen reader hears', () => {
 
   it('keeps the status line plain text, not a live region, so nothing is read twice', () => {
     renderCall('listening');
-    const label = within(screen.getByRole('region', { name: 'Customer' })).getByText('Listening');
+    const label = within(screen.getByRole('region', { name: 'Customer' })).getByText(
+      'Listening to you',
+    );
     expect(label.closest('[aria-live]')).toBeNull();
     expect(label.closest('[role="status"]')).toBeNull();
   });

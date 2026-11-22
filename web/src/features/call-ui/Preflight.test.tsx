@@ -115,10 +115,10 @@ describe('what is ready', () => {
     expect(document.querySelector('.cw-pre__check--info .cw-pre__check-value')).not.toBeNull();
   });
 
-  it('calls scripted speech a demonstration: a placeholder voice and a scripted recogniser', () => {
+  it('calls scripted speech a demonstration: a demo sound, not a voice, and a scripted recogniser', () => {
     renderCall('preflight-demo-speech');
     expect(rows()).toMatchObject({
-      'Customer voice': 'Placeholder sound (demo)',
+      'Customer voice': 'A demo sound, not a voice',
       Speech: 'Demo speech (scripted)',
     });
   });

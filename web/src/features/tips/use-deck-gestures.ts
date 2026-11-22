@@ -85,7 +85,10 @@ function attach(
   const write = () => {
     if (!gesture) return;
     gesture.frame = 0;
-    track.style.setProperty('--tp-drag', `${Math.round(gesture.shift * 10) / 10}px`);
+    const shift = `${Math.round(gesture.shift * 10) / 10}px`;
+    track.style.setProperty('--tp-drag', shift);
+    // The window has the same number: the soft edge it fades its cards by grows with the drag.
+    viewport.style.setProperty('--tp-drag', shift);
   };
 
   const end = (released: PointerEvent | null) => {
@@ -120,6 +123,7 @@ function attach(
       options.onRelease('none');
     }
     track.style.removeProperty('--tp-drag');
+    viewport.style.removeProperty('--tp-drag');
     viewport.removeAttribute('data-dragging');
     options.onDragChange?.(false);
   };
@@ -188,6 +192,7 @@ function attach(
     viewport.removeEventListener('pointerdown', onDown);
     end(null);
     track.style.removeProperty('--tp-drag');
+    viewport.style.removeProperty('--tp-drag');
     viewport.removeAttribute('data-dragging');
   };
 }
@@ -195,9 +200,10 @@ function attach(
 /**
  * Lets the tip cards be dragged sideways. The card follows the pointer at about 60 percent and the
  * drag ends in a decision (next, previous or none) from `decideSwipe`; a click that ends a drag is
- * swallowed so a drag never presses a control. It writes `--tp-drag` on the track and `data-dragging`
- * on the viewport, and never changes React state on a pointer move. Attach it while the deck is on
- * screen. The latest options are always used.
+ * swallowed so a drag never presses a control. It writes `--tp-drag` on the track (which moves by it)
+ * and on the viewport (whose edge fade follows it), and `data-dragging` on the viewport, and never
+ * changes React state on a pointer move. Attach it while the deck is on screen. The latest options
+ * are always used.
  */
 export function useDeckGestures(
   viewport: RefObject<HTMLElement | null>,

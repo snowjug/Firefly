@@ -30,7 +30,7 @@ describe('the question', () => {
     renderCall('end-confirm');
     const fact = (label: string) => inQuestion().getByText(label).nextElementSibling;
     expect(fact('Call length')).toHaveTextContent(clock(snapshot.elapsedSeconds));
-    expect(fact('Messages')).toHaveTextContent(String(traineeTurnCount(snapshot.turns)));
+    expect(fact('Your messages')).toHaveTextContent(String(traineeTurnCount(snapshot.turns)));
     expect(fact('Customer state')).toHaveTextContent('Concerned');
   });
 

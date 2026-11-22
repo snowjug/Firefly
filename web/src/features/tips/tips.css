@@ -62,6 +62,33 @@
 .tp-deck[data-dragging='true'] {
   user-select: none;
 }
+/* Where a card is cut by the edge of the window it fades out, not in the middle of a letter: the peek of
+   the next card at rest (a phone has none), and either edge while a card is dragged, by as much as it
+   has moved (up to a card's margin). It is a mask, so only its opacity matters and it takes no colour
+   of its own. */
+.tp-deck {
+  --_cut: min(1.5rem, abs(var(--tp-drag, 0px)));
+  --_fade-start: var(--_cut);
+  --_fade-end: var(--_cut);
+  --_fade: linear-gradient(
+    to right,
+    transparent,
+    currentColor var(--_fade-start),
+    currentColor calc(100% - var(--_fade-end)),
+    transparent
+  );
+}
+.tp-deck[data-dragging='true'] {
+  -webkit-mask-image: var(--_fade);
+  mask-image: var(--_fade);
+}
+@media (min-width: 40em) {
+  .tp-deck {
+    --_fade-end: 2.5rem;
+    -webkit-mask-image: var(--_fade);
+    mask-image: var(--_fade);
+  }
+}
 
 .tp-nav {
   grid-area: nav;
@@ -177,8 +204,22 @@
   .tp-card[data-current][data-fx='on']:active .tp-card__face {
     --_press: calc(1 - var(--press-grow));
   }
+  /* While its reason is open the card keeps still: no lift, no light following the pointer (it would
+     smear across the words and the button) and no press. The thick edge of the card in hand stays. */
+  .tp-card[data-current][data-fx='on'][data-why='open']:hover .tp-card__face {
+    --_lift: 0px;
+    border-color: var(--stroke-2);
+    border-inline-start-color: var(--brand-stroke);
+    box-shadow: var(--shadow-2);
+  }
+  .tp-card[data-current][data-fx='on'][data-why='open']:hover .tp-card__face::before {
+    opacity: 0;
+  }
+  .tp-card[data-current][data-fx='on'][data-why='open']:active .tp-card__face {
+    --_press: 1;
+  }
 }
-/* The keyboard gets the same prominence, without the tilt. */
+/* The keyboard gets the same prominence, without the tilt (and, while the reason is open, without the light). */
 .tp-card__face:has(:focus-visible) {
   --_lift: calc(var(--move-lift) * -1);
   border-color: var(--edge-light);
@@ -189,6 +230,9 @@
 }
 .tp-card[data-current] .tp-card__face:has(:focus-visible) {
   border-inline-start-color: var(--brand-stroke);
+}
+.tp-card[data-why='open'] .tp-card__face:has(:focus-visible)::before {
+  opacity: 0;
 }
 
 .tp-card__icon {
@@ -226,22 +270,29 @@
 .ff-button.tp-card__why {
   margin-inline-start: calc(var(--sp-2) * -1);
 }
+/* The arrow turns over while the reason is open. */
+.ff-button.tp-card__why .ff-icon {
+  transition: transform var(--dur-fast) var(--ease-easy);
+}
+.ff-button.tp-card__why[aria-expanded='true'] .ff-icon {
+  transform: rotate(180deg);
+}
 
-/* "Learn why": a card of its own above the strip, over the end of the transcript and never over the
-   controls. It fades in a short way; it does not move the strip. */
+/* "Learn why": the reason opens in place, under the card it belongs to and as wide as that card, as one
+   more row of the strip. The strip grows by a few lines and the transcript above gives way; nothing is
+   laid over the conversation. It fades in a short way. */
 .tp-why {
-  position: absolute;
-  inset-inline: var(--sp-4);
-  inset-block-end: calc(100% + var(--sp-2));
-  z-index: var(--z-sticky);
-  padding: var(--sp-3) var(--sp-4);
-  border: var(--stroke-w) solid var(--stroke-2);
-  border-radius: var(--r-xl);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-16);
+  grid-column: 1;
+  box-sizing: border-box;
+  inline-size: calc(100% - var(--_peek));
+  margin-block-start: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border-inline-start: var(--stroke-w-thick) solid var(--brand-stroke-2);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
   color: var(--fg-1);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
   animation: ff-enter var(--motion-component) var(--ease-decelerate) both;
 }
 
@@ -275,6 +326,17 @@
   }
   .ff-button.tp-strip__hide {
     justify-self: stretch;
+  }
+  /* The buttons that put the tips away and bring them back are 44 px high on a phone, where a finger
+     is the pointer whatever the browser says. */
+  .ff-button.tp-strip__hide,
+  .tp-strip--quiet .ff-button {
+    min-block-size: var(--target);
+  }
+  /* The reason has the whole width of the strip, under the card and its buttons. */
+  .tp-why {
+    grid-column: 1 / -1;
+    inline-size: auto;
   }
   .tp-nav {
     flex-direction: row;

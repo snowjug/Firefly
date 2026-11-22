@@ -210,16 +210,44 @@ describe('the tips stylesheet', () => {
     expect(focus.filter((d) => /tilt/.test(d.property + d.value))).toEqual([]);
   });
 
-  it('reserves its space: the strip does not flex, the window has a floor, the “Learn why” card floats', () => {
+  it('reserves its space: the strip does not flex, the window has a floor, and “Learn why” opens in a row of the strip', () => {
     const rule = (selector: string, property: string) =>
       all().find((d) => d.selector.trim() === selector && d.property === property)?.value;
     expect(rule('.tp-strip', 'flex')).toBe('none');
     expect(rule('.tp-deck', 'min-block-size')).toBe('var(--_deck-h)');
     expect(rule('.tp-deck', 'overflow')).toBe('hidden');
     expect(rule('.tp-card', 'flex')).toBe('0 0 var(--_card)');
-    // Opening “Learn why” moves nothing: it is laid over the transcript, above the strip.
-    expect(rule('.tp-why', 'position')).toBe('absolute');
-    expect(rule('.tp-why', 'inset-block-end')).toMatch(/100%/);
+    // Opening “Learn why” is in place: one more row of the strip, which pushes the transcript up and is
+    // laid over none of it.
+    expect(rule('.tp-why', 'position')).toBeUndefined();
+    expect(rule('.tp-why', 'inset-block-end')).toBeUndefined();
+    expect(rule('.tp-why', 'z-index')).toBeUndefined();
+    expect(rule('.tp-why', 'grid-column')).toBe('1');
+    expect(rule('.tp-why', 'inline-size')).toMatch(/--_peek/);
+  });
+
+  it('fades a card where the window cuts it, with a mask that takes no colour of its own', () => {
+    const masks = all().filter(
+      (d) => d.property === 'mask-image' && d.selector.includes('.tp-deck'),
+    );
+    // While a card is dragged, and at rest where the next one peeks (a phone has no peek).
+    expect(masks.some((d) => d.selector.includes("[data-dragging='true']"))).toBe(true);
+    expect(masks.some((d) => d.within.some((at) => /min-width:\s*40em/.test(at)))).toBe(true);
+    expect(css()).toMatch(/--_fade:\s*linear-gradient\([^;]*currentColor/);
+  });
+
+  it('keeps the card still while its reason is open: no lift, no light, no press', () => {
+    const open = all().filter((d) => d.selector.includes("[data-why='open']"));
+    expect(open.some((d) => d.property === 'opacity' && d.value === '0')).toBe(true);
+    expect(open.some((d) => d.property === '--_lift' && d.value === '0px')).toBe(true);
+    expect(open.some((d) => d.property === '--_press' && d.value === '1')).toBe(true);
+    // The effects under a mouse stay under a mouse, on the card in hand.
+    for (const d of open.filter((x) => x.selector.includes("[data-fx='on']"))) {
+      expect(
+        d.within.some((at) => FINE_POINTER.test(at)),
+        d.selector,
+      ).toBe(true);
+    }
   });
 
   it('has no peek of the next card on a phone, and a rule for forced colours', () => {

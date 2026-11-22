@@ -339,6 +339,43 @@ describe('Learn why', () => {
     expect(shown()).toBe(textOf(bare));
     expect(screen.queryByRole('button', { name: 'Learn why' })).toBeNull();
   });
+
+  it('opens in place, as a row of the strip under the cards, so it never lies over the conversation', async () => {
+    const user = userEvent.setup();
+    mount();
+    expect(strip().querySelector('.tp-why')).toBeNull();
+    await user.click(learnWhy());
+    // Inside the strip (a child of it, after the deck), not a layer over the page.
+    const reason = strip().querySelector('.tp-why') as HTMLElement;
+    expect(reason).not.toBeNull();
+    expect(reason.parentElement).toBe(strip());
+    const deck = strip().querySelector('.tp-deck') as HTMLElement;
+    expect(deck.compareDocumentPosition(reason) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(reason).toHaveTextContent(TIPS[0]?.why as string);
+  });
+
+  it('marks the card in hand as open, so its pointer light can go out while the reason is read', async () => {
+    const user = userEvent.setup();
+    mount();
+    const card = () => document.querySelector('.tp-card[data-current="true"]') as HTMLElement;
+    expect(card()).not.toHaveAttribute('data-why');
+    await user.click(learnWhy());
+    expect(card()).toHaveAttribute('data-why', 'open');
+    expect(document.querySelectorAll('.tp-card[data-why]')).toHaveLength(1);
+    await user.click(learnWhy());
+    expect(card()).not.toHaveAttribute('data-why');
+  });
+});
+
+describe('Hide tips and Show tips', () => {
+  it('are buttons with an edge, not bare text', async () => {
+    const user = userEvent.setup();
+    mount();
+    const hide = screen.getByRole('button', { name: 'Hide tips' });
+    expect(hide).toHaveClass('ff-button--outline');
+    await user.click(hide);
+    expect(screen.getByRole('button', { name: 'Show tips' })).toHaveClass('ff-button--outline');
+  });
 });
 
 describe('the pluck effects', () => {
@@ -482,8 +519,11 @@ describe('dragging the cards', () => {
     expect(written).toBeCloseTo(dragShift(-100, { first: true, last: false }), 0);
     expect(written).toBeLessThan(-50);
     expect(written).toBeGreaterThan(-70);
+    // The window has the same number, which its soft edge reads: the fade grows with the drag.
+    expect(parseFloat(deck().style.getPropertyValue('--tp-drag'))).toBe(written);
     up(200, 100);
     expect(track().style.getPropertyValue('--tp-drag')).toBe('');
+    expect(deck().style.getPropertyValue('--tp-drag')).toBe('');
     expect(deck()).not.toHaveAttribute('data-dragging');
   });
 

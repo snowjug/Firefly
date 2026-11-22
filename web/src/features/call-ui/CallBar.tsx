@@ -19,11 +19,15 @@ export interface CallBarProps {
 
 /**
  * The top bar: Firefly, the Microsoft product, the scenario, how long the call has run, whether it
- * is connected, and End call. The scenario is written out in full (it wraps, it is never cut short),
- * the timer counts up without ever being announced, and End call is always here, at every width,
- * and last in the tab order. The demo label shows wherever the customer is the built-in rules. On a
- * tablet the bar is two rows and on a phone three (the CSS decides), and there the case button
- * shows only its icon, its word kept for a screen reader.
+ * is connected, and End call. The scenario is written out in full from a tablet up (it wraps), the
+ * timer counts up without ever being announced, and End call is always here, at every width, and
+ * last in the tab order. The demo label ("Demo mode", or "Live model") shows wherever the customer
+ * is the built-in rules, on the bar from 360 px wide up. On a tablet the bar is two rows; a phone has
+ * two as well, the buttons first and then the case with the time, the connection and that label
+ * beside it, or as a line under it where they do not fit (the CSS decides). There the product is its
+ * icon (its name is kept for a screen reader), the scenario takes two lines, and the case button
+ * shows only its icon below 360 px. Below 360 px the bar has no room for the label, and it is in
+ * Voice settings and the pre-flight, which have the room to say it in words.
  */
 export function CallBar({
   showCase,
@@ -39,28 +43,30 @@ export function CallBar({
     <header className="cw-bar">
       <div className="cw-bar__inner">
         <Wordmark size="sm" className="cw-bar__brand" />
-        <div className="cw-bar__case">
-          {product ? (
-            <span className="cw-bar__product">
-              <ProductIcon product={product.id} size={18} />
-              {product.name}
+        <div className="cw-bar__line">
+          <div className="cw-bar__case">
+            {product ? (
+              <span className="cw-bar__product">
+                <ProductIcon product={product.id} size={18} />
+                <span className="cw-bar__product-name">{product.name}</span>
+              </span>
+            ) : null}
+            <p className="cw-bar__scenario">{scenarioTitle}</p>
+          </div>
+          <div className="cw-bar__status">
+            <span className="cw-bar__timer" role="timer" aria-live="off" aria-label="Call time">
+              {clock(elapsedSeconds)}
             </span>
-          ) : null}
-          <p className="cw-bar__scenario">{scenarioTitle}</p>
-        </div>
-        <div className="cw-bar__status">
-          <span className="cw-bar__timer" role="timer" aria-live="off" aria-label="Call time">
-            {clock(elapsedSeconds)}
-          </span>
-          <StatusBadge label={connection.label} tone={connection.tone} size="medium" />
-          <Badge
-            tone="neutral"
-            appearance="outline"
-            icon={provider.demo ? 'info' : null}
-            className="cw-bar__provider"
-          >
-            {provider.demo ? 'Demo mode' : 'Live model'}
-          </Badge>
+            <StatusBadge label={connection.label} tone={connection.tone} size="medium" />
+            <Badge
+              tone="neutral"
+              appearance="outline"
+              icon={provider.demo ? 'info' : null}
+              className="cw-bar__provider"
+            >
+              {provider.demo ? 'Demo mode' : 'Live model'}
+            </Badge>
+          </div>
         </div>
         <div className="cw-bar__actions">
           {showCase ? (

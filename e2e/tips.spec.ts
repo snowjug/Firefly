@@ -53,6 +53,18 @@ const same = (a: Rect, b: Rect) =>
     (key) => Math.abs(a[key as keyof Rect] - b[key as keyof Rect]) < 0.5,
   );
 
+/** A box once it has stopped moving: two reads 50 ms apart agree (a tip glides after a tap). */
+async function settledRect(locator: Locator): Promise<Rect> {
+  let before = await rect(locator);
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await locator.page().waitForTimeout(50);
+    const now = await rect(locator);
+    if (same(before, now)) return now;
+    before = now;
+  }
+  return before;
+}
+
 const setTheme = (page: Page, theme: 'light' | 'dark') =>
   page.evaluate((value) => document.documentElement.setAttribute('data-theme', value), theme);
 
@@ -234,22 +246,35 @@ for (const [width, height] of SIZES) {
       expect(same(await rect(screen.controls), before.controls)).toBe(true);
     });
 
-    await test.step('“Learn why” is laid over the transcript, above the strip, and moves nothing', async () => {
+    await test.step('“Learn why” opens in place: the strip grows a few lines, the transcript gives way, and nothing is covered', async () => {
       await screen.tips.previous.click();
       await page.keyboard.press('Home');
       const strip = await rect(screen.tips.region);
-      const transcript = await rect(screen.transcript);
+      const scroller = await rect(page.locator('#cw-transcript'));
       await screen.tips.learnWhy.click();
       const line = page.locator('.tp-why');
       await expect(line).toBeVisible();
-      const over = await rect(line);
-      expect(over.y + over.height).toBeLessThanOrEqual(strip.y + 1);
-      expect(shared(over, await rect(screen.controls))).toBeLessThan(1);
-      expect(same(await rect(screen.tips.region), strip)).toBe(true);
-      expect(same(await rect(screen.transcript), transcript)).toBe(true);
+      const opened = await rect(screen.tips.region);
+      const reason = await rect(line);
+      // It is a row of the strip, so the strip is taller by about its height, with its foot where it was.
+      expect(opened.height).toBeGreaterThan(strip.height + 10);
+      expect(Math.abs(opened.y + opened.height - (strip.y + strip.height))).toBeLessThan(1);
+      expect(reason.y).toBeGreaterThanOrEqual(opened.y);
+      expect(reason.y + reason.height).toBeLessThanOrEqual(opened.y + opened.height + 1);
+      // The transcript above it is shorter by what the strip took, and meets none of it.
+      const after = await rect(page.locator('#cw-transcript'));
+      expect(after.height).toBeLessThan(scroller.height - 10);
+      expect(shared(reason, after)).toBeLessThan(1);
+      expect(after.y + after.height).toBeLessThanOrEqual(opened.y + 1);
+      expect(shared(reason, await rect(screen.controls))).toBeLessThan(1);
+      expect(opened.x).toBeGreaterThanOrEqual(-0.5);
+      expect(opened.x + opened.width).toBeLessThanOrEqual(width + 0.5);
       await page.keyboard.press('Escape');
       await expect(line).toHaveCount(0);
       await expect(screen.tips.learnWhy).toBeFocused();
+      // Closed, everything is as it was.
+      expect(same(await rect(screen.tips.region), strip)).toBe(true);
+      expect(same(await rect(page.locator('#cw-transcript')), scroller)).toBe(true);
     });
   });
 }
@@ -421,12 +446,15 @@ test.describe('how a tip changes', () => {
     api,
   }) => {
     const { screen } = await guidedTypedCall(page, api);
+    // Hide tips is a button with an edge, not bare text.
+    await expect(screen.tips.hide).toHaveCSS('border-top-width', '1px');
     await screen.tips.next.click();
     const where = (await screen.tips.current.innerText()).trim();
     await screen.tips.hide.click();
     await expect(screen.tips.cards).toHaveCount(0);
     await expect(screen.tips.heading).toHaveCount(0);
     await expect(screen.tips.show).toBeFocused();
+    await expect(screen.tips.show).toHaveCSS('border-top-width', '1px');
     // Only the one quiet button is left in the region.
     await expect(screen.tips.region.getByRole('button')).toHaveCount(1);
     await screen.tips.show.click();
@@ -535,6 +563,98 @@ test.describe('under a mouse', () => {
     expect((await transformOf(peekFace)).lift).toBeLessThan(before.lift + 0.5);
     expect(await peek.evaluate((el) => el.style.getPropertyValue('--tilt-y'))).toBe('');
   });
+
+  test('while “Learn why” is open the card keeps still and the pointer light is out: it smears across neither the words nor the button', async ({
+    page,
+    api,
+  }) => {
+    const { screen } = await guidedTypedCall(page, api);
+    const face = currentFace(page);
+    const light = () => face.evaluate((el) => getComputedStyle(el, '::before').opacity);
+
+    await test.step('closed, a pointer over the words lights the card', async () => {
+      const box = await rect(currentCard(page));
+      await page.mouse.move(box.x + box.width / 2, box.y + 14, { steps: 4 });
+      await expect.poll(light).toBe('1');
+    });
+
+    await test.step('open, the light is out, and stays out over the button and the words', async () => {
+      await screen.tips.learnWhy.click();
+      await expect(page.locator('.tp-why')).toBeVisible();
+      // The strip has grown and the card is higher: the pointer goes back onto the button, then the words.
+      const button = await rect(screen.tips.learnWhy);
+      await page.mouse.move(button.x + button.width / 2, button.y + button.height / 2, {
+        steps: 4,
+      });
+      await page.waitForTimeout(300);
+      expect(await light()).toBe('0');
+      expect((await transformOf(face)).lift).toBeLessThan(0.5);
+      const words = await rect(screen.tips.current);
+      await page.mouse.move(words.x + words.width / 2, words.y + words.height / 2, { steps: 4 });
+      await page.waitForTimeout(300);
+      expect(await light()).toBe('0');
+      expect((await transformOf(face)).lift).toBeLessThan(0.5);
+      // The one in hand keeps its edge in the brand colour all the same.
+      const edge = await face.evaluate((el) => getComputedStyle(el).borderLeftWidth);
+      expect(parseFloat(edge)).toBeGreaterThanOrEqual(2);
+    });
+
+    await test.step('closed again, a pointer over the words lights the card once more', async () => {
+      await screen.tips.learnWhy.click();
+      await expect(page.locator('.tp-why')).toHaveCount(0);
+      const box = await rect(currentCard(page));
+      await page.mouse.move(2, 2);
+      await page.mouse.move(box.x + box.width / 2, box.y + 14, { steps: 4 });
+      await expect.poll(light).toBe('1');
+    });
+  });
+
+  test('a card that the window cuts off fades out: where the next one peeks at rest, and at either edge while one is dragged', async ({
+    page,
+    api,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    const { screen } = await guidedTypedCall(page, api);
+    const mask = () => screen.tips.deck.evaluate((el) => getComputedStyle(el).maskImage);
+    // Only its opacity matters, so it takes no colour of its own.
+    await test.step('at rest the peek of the next card fades at the right-hand edge', async () => {
+      expect(await mask()).toContain('linear-gradient');
+    });
+
+    await test.step('dragged, both edges fade by as much as the card has moved', async () => {
+      const box = await rect(screen.tips.current);
+      const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(start.x - 60, start.y, { steps: 6 });
+      await expect(screen.tips.deck).toHaveAttribute('data-dragging', 'true');
+      const dragged = await screen.tips.deck.evaluate((el) =>
+        el.style.getPropertyValue('--tp-drag'),
+      );
+      expect(parseFloat(dragged)).toBeLessThan(0);
+      expect(await mask()).toContain('linear-gradient');
+      await page.mouse.up();
+      await expect
+        .poll(() => screen.tips.deck.evaluate((el) => el.style.getPropertyValue('--tp-drag')))
+        .toBe('');
+    });
+
+    await test.step('on a phone, where nothing peeks, nothing fades until a card is dragged', async () => {
+      await page.setViewportSize({ width: 375, height: 812 });
+      await expect(screen.tips.deck).toBeVisible();
+      expect(await mask()).toBe('none');
+      const box = await rect(screen.tips.current);
+      const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(start.x - 60, start.y, { steps: 6 });
+      await expect(screen.tips.deck).toHaveAttribute('data-dragging', 'true');
+      expect(await mask()).toContain('linear-gradient');
+      await page.mouse.up();
+      await expect(screen.tips.deck).not.toHaveAttribute('data-dragging', 'true');
+      await expect.poll(mask).toBe('none');
+    });
+  });
 });
 
 test.describe('with reduced motion', () => {
@@ -581,6 +701,7 @@ test.describe('on a phone', () => {
         expect(size?.height, selector).toBeGreaterThanOrEqual(43.5);
         expect(size?.width, selector).toBeGreaterThanOrEqual(43.5);
       }
+      await expect(screen.tips.hide).toHaveCSS('border-top-width', '1px');
       const offenders = (await overflow(page)).offenders;
       expect(offenders.filter((item) => !/\btp-(?:track|card)/.test(item))).toEqual([]);
     });
@@ -594,8 +715,9 @@ test.describe('on a phone', () => {
     });
 
     await test.step('a swipe to the left moves one tip, and one to the right moves back', async () => {
-      // Start on the words, not on “Learn why”: a button keeps its own press.
-      const box = await rect(screen.tips.current);
+      // Start on the words, not on “Learn why”: a button keeps its own press. The words are measured
+      // once the tip has stopped gliding from the taps above, or a swipe could start off the screen.
+      const box = await settledRect(screen.tips.current);
       const y = box.y + box.height / 2;
       const cdp = await page.context().newCDPSession(page);
       const swipe = async (from: number, to: number) => {
@@ -615,19 +737,40 @@ test.describe('on a phone', () => {
       };
       await swipe(box.x + box.width - 20, box.x + 20);
       await expect(screen.tips.current).not.toHaveText(first);
-      await swipe(box.x + 20, box.x + box.width - 20);
-      await expect(screen.tips.current).toHaveText(first);
+      // A touch that follows a swipe can be spent by the browser settling the one before it, so it is made
+      // again if it did nothing. Swiping back from the first tip, or pressing Hide tips, is harmless twice.
+      await expect(async () => {
+        await swipe(box.x + 20, box.x + box.width - 20);
+        await expect(screen.tips.current).toHaveText(first, { timeout: 1500 });
+      }).toPass({ timeout: 10_000 });
     });
 
     await test.step('Hide tips and Show tips work by touch, and the page is no wider than the screen', async () => {
-      await screen.tips.hide.tap();
-      await expect(screen.tips.show).toBeVisible();
+      await expect(async () => {
+        if (await screen.tips.hide.isVisible()) await screen.tips.hide.tap();
+        await expect(screen.tips.show).toBeVisible({ timeout: 1500 });
+      }).toPass({ timeout: 10_000 });
       await screen.tips.show.tap();
       await expect(screen.tips.next).toBeVisible();
       expect((await overflow(page)).scrollWidth).toBeLessThanOrEqual(
         (await overflow(page)).innerWidth,
       );
     });
+  });
+
+  test('a phone-sized window gives Hide tips and Show tips a full 44 px, whatever the pointer', async ({
+    page,
+    api,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    const { screen } = await guidedTypedCall(page, api);
+    await expect(screen.tips.region).toBeVisible();
+    expect((await targetSize(page, '.tp-strip__hide'))?.height).toBeGreaterThanOrEqual(43.5);
+    await screen.tips.hide.click();
+    await expect(screen.tips.show).toBeVisible();
+    expect((await targetSize(page, '.tp-strip--quiet .ff-button'))?.height).toBeGreaterThanOrEqual(
+      43.5,
+    );
   });
 });
 

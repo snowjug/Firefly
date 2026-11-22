@@ -1,11 +1,25 @@
-/* The transcript: whole turns, who spoke, a timestamp now and then. A turn that arrives fades in with
-   a short rise; the customer's turn that is being spoken is marked. Rows far back skip layout. */
+/* The transcript: whole turns, who spoke and when, in the same quiet way on every turn. A turn that
+   arrives fades in with a short rise; the customer's turn that is being spoken is marked. Rows far
+   back skip layout. */
 
 .cw-log-wrap {
   position: relative;
   display: flex;
   flex: 1 1 0px;
   min-block-size: 0;
+}
+/* A message scrolled up under the panel above fades out instead of being sliced through a line. The
+   fade is the panel's own colour, over the top few pixels, and the first message never meets it: it
+   starts below that, at the scroller's own padding. */
+.cw-log-wrap::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  z-index: 1;
+  block-size: var(--sp-3);
+  background: linear-gradient(to bottom, var(--cw-panel, var(--bg-canvas)), transparent);
+  pointer-events: none;
 }
 .cw-log-scroll {
   flex: 1 1 auto;
@@ -120,6 +134,8 @@
   color: var(--status-warning-fg);
 }
 .cw-turn__text {
+  /* A line of about 70 characters is the longest that reads comfortably: wider panels do not stretch it. */
+  max-inline-size: 70ch;
   font-size: var(--fs-reading);
   line-height: var(--lh-reading);
   white-space: pre-wrap;
@@ -160,6 +176,7 @@
 }
 .cw-interim__text {
   grid-column: 2;
+  max-inline-size: 70ch;
   font-size: var(--fs-reading);
   line-height: var(--lh-reading);
   overflow-wrap: anywhere;
@@ -172,9 +189,14 @@
   box-shadow: var(--shadow-8);
 }
 
+/* Below 64em the transcript is not a card: its edges are the gutter's, as the bar's and the
+   customer's are, and the rule down a turn's edge sits on it. */
 @media (max-width: 63.99em) {
   .cw-log-scroll {
-    padding-inline: var(--sp-4);
+    padding-inline: var(--gutter);
+  }
+  .cw-turn {
+    margin-inline-start: 0;
   }
 }
 

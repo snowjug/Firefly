@@ -13,13 +13,16 @@ import type { CreateCallOptions, FireflyApi } from './api.ts';
 //   await screen.preflight.startVoice.click();
 //   await expect(screen.status).toHaveText(STATUS.speaking);
 
-/** The words of the status line: the voice vocabulary the call and its announcements share. */
+/**
+ * The words of the status line: the voice vocabulary the call and its announcements share, apart from
+ * the trainee's own turn, where the screen says "Your turn" (typed) and "Listening to you" (spoken).
+ */
 export const STATUS = {
   micOff: 'Microphone off',
   waiting: 'Waiting for permission',
   blocked: 'Microphone blocked',
   micReady: 'Microphone ready',
-  listening: 'Listening',
+  listening: 'Listening to you',
   hearing: 'Hearing you',
   processing: 'Processing speech',
   replying: 'Customer is replying',
@@ -32,7 +35,7 @@ export const STATUS = {
   ending: 'Ending call',
   preparing: 'Preparing your review',
   complete: 'Call complete',
-  typing: 'Typing',
+  typing: 'Your turn',
 } as const;
 
 /** The status line's `data-status`, for the states that a spoken call moves through. */
@@ -58,7 +61,7 @@ export function callScreen(page: Page) {
   const card = page.locator('.cw-recovery');
   return {
     customer,
-    /** The status line: "Listening", "Hearing you", "Customer speaking" ... */
+    /** The status line: "Listening to you", "Hearing you", "Customer speaking" ... */
     status: customer.locator('[data-status] .cw-status__label'),
     /** The status line itself: its `data-status` says which state the call is in. */
     statusLine: customer.locator('[data-status]'),

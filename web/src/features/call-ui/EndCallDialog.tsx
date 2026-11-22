@@ -165,7 +165,7 @@ export function EndCallDialog({
             <dd className="cw-end__clock">{clock(elapsedSeconds)}</dd>
           </div>
           <div className="cw-end__fact">
-            <dt>Messages</dt>
+            <dt>Your messages</dt>
             <dd>{traineeTurns}</dd>
           </div>
           {stateLabel ? (

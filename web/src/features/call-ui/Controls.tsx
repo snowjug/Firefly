@@ -26,8 +26,9 @@ export interface ControlsProps {
 }
 
 /**
- * The call controls. Microphone is the one large control: Talk on the trainee's turn, Done speaking
- * while the microphone is open, and Return to voice in a typed call. Mute, Stop customer audio and
+ * The call controls. Microphone is the one large control: Talk on the trainee's turn and Done
+ * speaking while the microphone is open. In a typed call the typed reply is the main thing, so the
+ * way back, Return to voice, is a quiet button. Mute, Stop customer audio and
  * Text sit under it; Pause, Replay and settings are quieter. A control that cannot be used right
  * now is disabled but keeps its place and its focus, and the status label says why. Barge-in is not
  * supported: the microphone never opens while the customer's voice plays, so the trainee stops the
@@ -50,8 +51,10 @@ export function Controls({ layout, view, statusId, hint, actions, onSettings }: 
       tabIndex={-1}
     >
       <Button
-        appearance="primary"
-        size="large"
+        // Returning to voice from a typed call is a choice, not the main thing on the screen: the
+        // typed reply is, so it is the quiet kind of button, and it is not the larger one.
+        appearance={talk.kind === 'voice' ? 'outline' : 'primary'}
+        size={talk.kind === 'voice' ? 'medium' : 'large'}
         icon={talk.icon}
         className="cw-talk"
         data-kind={talk.kind}

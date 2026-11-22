@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClosingCheckDTO } from '#shared/domain/api.ts';
 import {
   CLOSING_CHECK_DEADLINE_MS,
+  CLOSING_LEAD,
   CLOSING_ROWS,
   ClosingCheck,
   readClosingChecks,
@@ -32,6 +33,35 @@ describe('the closing check', () => {
     expect(waiting).toHaveAttribute('aria-hidden', 'true');
     expect(waiting.querySelectorAll('li')).toHaveLength(CLOSING_ROWS.length);
     expect(waiting.textContent).toBe('');
+    // And the room of the line that comes before them, so the rows do not move when it arrives.
+    expect(container.querySelector('.cw-closing__skeleton')).not.toBeNull();
+    expect(container.textContent).toBe('');
+  });
+
+  it('says what the rows are in one neutral line before them, and that it is not a score', async () => {
+    render(<ClosingCheck load={() => Promise.resolve(answer({ plan: true }))} />);
+    const list = await screen.findByRole('list', { name: 'Closing check' });
+    expect(CLOSING_LEAD).toBe('What the call has covered so far. This is not a score.');
+    const lead = screen.getByText(CLOSING_LEAD);
+    expect(lead.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The line is not one of the rows: they hold the four things and no talk of a score.
+    expect(list).not.toContainElement(lead);
+    expect(within(list).getAllByRole('listitem')).toHaveLength(CLOSING_ROWS.length);
+  });
+
+  it('gives a covered row its mark and leaves the others plain: one tick, and no tick, never a count', async () => {
+    render(
+      <ClosingCheck
+        load={() => Promise.resolve(answer({ plan: true, owner: false, updateTime: false }))}
+      />,
+    );
+    const list = await screen.findByRole('list', { name: 'Closing check' });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows.filter((row) => row.classList.contains('cw-close__row--done'))).toHaveLength(1);
+    // Each row has one icon whichever it is: the clock for what is not yet covered, the tick for what is.
+    for (const row of rows) expect(row.querySelectorAll('svg')).toHaveLength(1);
+    expect(within(list).getAllByText('Not yet')).toHaveLength(3);
+    expect(within(list).getAllByText('Done')).toHaveLength(1);
   });
 
   it('lists the four things in order, each by words and not colour alone', async () => {

@@ -768,7 +768,7 @@ export async function watchAnnouncements(page: Page): Promise<() => Promise<stri
 /**
  * The call's status line has reached this state. The line carries it as `data-status`: `customer-speaking`,
  * `mic-ready`, `listening`, `speech-detected` ("Hearing you"), `processing-speech`,
- * `generating-reply` ("Customer is replying"), `muted`, `paused`, `text-fallback` ("Typing") ...
+ * `generating-reply` ("Customer is replying"), `muted`, `paused`, `text-fallback` ("Your turn") ...
  */
 export async function expectStatus(page: Page, status: string, timeout = 20_000): Promise<void> {
   await expect(page.locator(`.cw-status[data-status="${status}"]`)).toBeVisible({ timeout });

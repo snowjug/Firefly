@@ -94,16 +94,29 @@ export const CustomerStage = memo(function CustomerStage({
               <Icon name={state.trendIcon} size={16} />
               <span>
                 <VisuallyHidden>Trend: </VisuallyHidden>
-                {state.trendWord}
+                <span className="cw-mood__word">{state.trendWord}</span>
               </span>
             </span>
           </span>
         ) : null}
       </div>
-      {trace && !compact ? <StateTrace history={trace} tone={state?.tone ?? null} /> : null}
+      {trace && !compact ? (
+        <div className="cw-trail">
+          {/* The line has a name you can see; a screen reader has the line's own words instead. */}
+          {trace.length > 0 ? (
+            <span className="cw-trail__label" aria-hidden="true">
+              State so far
+            </span>
+          ) : null}
+          <StateTrace history={trace} tone={state?.tone ?? null} />
+        </div>
+      ) : null}
       <div className="cw-status" data-status={status.id} data-who={status.who}>
         <p className="cw-status__line" id={statusId}>
-          <Icon name={status.icon} size={20} className="cw-status__icon" />
+          {/* The three points beside the label are the cue while the customer works out a reply: an icon too would say it twice. */}
+          {status.wave === 'thinking' ? null : (
+            <Icon name={status.icon} size={20} className="cw-status__icon" />
+          )}
           <span key={status.id} className="cw-status__label">
             {status.label}
           </span>

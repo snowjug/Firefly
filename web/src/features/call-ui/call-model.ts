@@ -29,7 +29,10 @@ import { VOICE_STATE_TEXT, type VoiceState } from '../voice/states.ts';
  * What the screen shows for the call, one at a time. These are the states of the product brief
  * (section 15), each mapped from a machine stage (`CallStage`, see contract.ts); "transcript
  * available" is the trainee's turn showing its words while the status says the customer is replying.
- * The words are the voice layer's (`VOICE_STATE_TEXT`) wherever it has a state of the same name.
+ * The words are the voice layer's (`VOICE_STATE_TEXT`) wherever it has a state of the same name,
+ * except for the trainee's own turn: its "Typing" reads as the customer typing and its bare
+ * "Listening" does not say whose turn it is, so the screen says "Your turn" and "Listening to you".
+ * The announcements stay the voice layer's.
  */
 export type StatusId =
   | 'mic-not-requested'
@@ -54,7 +57,7 @@ export type StatusId =
   | 'evaluating'
   | 'completed';
 
-/** How the waveform strip is drawn: whose voice, a quiet line, a shimmer, or dots while the customer thinks. */
+/** How the status strip's signal is drawn: whose voice, nothing at all (`idle`), a shimmer, or dots while the customer thinks. */
 export type WaveMode = 'idle' | 'trainee' | 'customer' | 'transcribing' | 'thinking';
 
 export interface CallStatus {
@@ -116,7 +119,7 @@ const STATUS: Record<StatusId, StatusSpec> = {
     wave: 'idle',
     who: 'trainee',
   },
-  listening: { label: voice('listening'), icon: 'microphone', wave: 'trainee', who: 'trainee' },
+  listening: { label: 'Listening to you', icon: 'microphone', wave: 'trainee', who: 'trainee' },
   'speech-detected': {
     label: voice('speech-detected'),
     icon: 'waveform',
@@ -148,7 +151,7 @@ const STATUS: Record<StatusId, StatusSpec> = {
   retrying: { label: 'Retrying', icon: 'refresh', wave: 'thinking', who: 'trainee' },
   'limit-reached': { label: 'Message limit', icon: 'flag', wave: 'idle', who: 'alert' },
   'text-fallback': {
-    label: voice('text-fallback'),
+    label: 'Your turn',
     icon: 'keyboard',
     wave: 'idle',
     who: 'trainee',
@@ -217,7 +220,8 @@ export function describeStatus(input: StatusInput): CallStatus {
 
   // A voice step that failed (speech that could not be turned into text, the customer's voice that
   // could not be made or played) is "Try again" while it is the trainee's turn, as the voice layer
-  // says it. Once the microphone is open again it is Listening, and a typed call stays Typing.
+  // says it. Once the microphone is open again it is "Listening to you", and a typed call stays on
+  // "Your turn".
   if (
     mode === 'voice' &&
     stage === 'ready' &&
@@ -400,26 +404,16 @@ export function clockSince(startedAt: string, at: string): string {
   return clock((moment - start) / 1000);
 }
 
-/** A time is only worth showing when a minute has passed since the last one that was shown. */
-const TIME_EVERY_SECONDS = 60;
-
 /**
- * Which turns carry a timestamp: the first, and then one a minute or more after the last that did.
- * A stamp on every line is noise; a stamp now and then is orientation. Returns turn key to m:ss.
+ * The time on each turn, as m:ss since the call started. Every turn has one, the same quiet way, so
+ * the log reads evenly: a stamp on some turns and not others looks like a mistake. Returns turn key
+ * to m:ss; a turn whose time cannot be read has none. (It is a map so a turn is looked up by key.)
  */
 export function timeMarks(turns: readonly CallTurn[], startedAt: string): Map<string, string> {
   const marks = new Map<string, string>();
-  let shown = Number.NEGATIVE_INFINITY;
   for (const turn of turns) {
-    const at = Date.parse(turn.createdAt);
-    if (Number.isNaN(at)) continue;
-    if (marks.size === 0 || at - shown >= TIME_EVERY_SECONDS * 1000) {
-      const text = clockSince(startedAt, turn.createdAt);
-      if (text) {
-        marks.set(turn.key, text);
-        shown = at;
-      }
-    }
+    const text = clockSince(startedAt, turn.createdAt);
+    if (text) marks.set(turn.key, text);
   }
   return marks;
 }
@@ -684,6 +678,11 @@ export interface ComposerGate {
   canSend: boolean;
   /** Why sending waits, in a few words. Null when it does not. */
   reason: string | null;
+  /**
+   * The customer is replying to what was just sent. The box then shows that message, quietly, and
+   * cannot be edited until the reply is in, so it never reads as a message that was not sent.
+   */
+  waiting?: boolean;
 }
 
 const BLOCKED_BY_PROBLEM: Partial<Record<CallProblem['code'], string>> = {
@@ -706,7 +705,7 @@ export function composerGate(input: {
     return { canSend: false, reason: 'Message limit reached.' };
   }
   if (phase === 'processing') {
-    return { canSend: false, reason: 'Waiting for the customer.' };
+    return { canSend: false, reason: 'Waiting for the customer.', waiting: true };
   }
   if (problem && problem.severity === 'blocking' && !problem.textFallback) {
     return { canSend: false, reason: BLOCKED_BY_PROBLEM[problem.code] ?? RETRY_FIRST };

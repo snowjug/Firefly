@@ -27,9 +27,11 @@ const ARROWS: Record<string, -1 | 1> = { ArrowLeft: -1, ArrowRight: 1 };
  * "During the call": short tips for Guided practice, one prominent card and a peek of the next. A
  * card changes only when the person moves it (the buttons, the arrow keys, a swipe or a drag) and once
  * when a customer turn has finished; never on a timer and never while the customer speaks. The strip
- * has the same size whichever tip shows, and sits above the controls, never over them. "Hide tips"
- * puts it away for this call, and "Show tips" brings it back. It announces nothing: it is not a live
- * region, and the polite announcer is not used for it.
+ * has the same size whichever tip shows, and sits above the controls, never over them. "Learn why"
+ * opens the reason in place, as one more row of the strip: the strip grows by a few lines and the
+ * transcript gives way, so nothing is ever laid over the conversation. "Hide tips" puts the strip away
+ * for this call, and "Show tips" brings it back. It announces nothing: it is not a live region, and
+ * the polite announcer is not used for it.
  */
 export function TipsStrip({
   stage,
@@ -119,7 +121,7 @@ export function TipsStrip({
       <section className="tp-strip tp-strip--quiet" aria-label="Tips for this call" ref={root}>
         <Button
           ref={show}
-          appearance="subtle"
+          appearance="outline"
           size="small"
           icon="lightbulb"
           onClick={() => put(false)}
@@ -153,7 +155,7 @@ export function TipsStrip({
       <Nav deck={deck} />
       <Button
         ref={hide}
-        appearance="subtle"
+        appearance="outline"
         size="small"
         className="tp-strip__hide"
         onClick={() => put(true)}
@@ -277,6 +279,7 @@ function TipCard({
       className="tp-card"
       ref={tiltRef}
       data-current={current ? 'true' : undefined}
+      data-why={current && whyOpen ? 'open' : undefined}
       aria-current={current ? 'true' : undefined}
       aria-label={`Tip ${position + 1} of ${total}`}
     >

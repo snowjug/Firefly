@@ -7,10 +7,12 @@
 .cw-think {
   display: block;
   inline-size: 100%;
-  block-size: 2.5rem;
+  /* No wider than the drawing is: its bars keep their height, and a box any wider would crop them. */
+  max-inline-size: 17.5rem;
+  block-size: 2rem;
 }
 .cw-wave--thin {
-  block-size: 1.25rem;
+  block-size: 1.5rem;
 }
 .cw-wave-shimmer,
 .cw-think {

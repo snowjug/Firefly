@@ -72,6 +72,18 @@
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
 }
+/* Where the state sits beside the "Synthetic customer" tag in the middle or at the end of a row, the
+   pill and the trend keep the room of the widest state, so the tag does not move when the state
+   changes. (Left-aligned, on a phone, nothing is to the left of it to move.) */
+@media (min-width: 48em) {
+  .cw-mood .cw-fade .ff-badge {
+    min-inline-size: 7.5rem;
+    justify-content: center;
+  }
+  .cw-mood__trend {
+    min-inline-size: 4.25rem;
+  }
+}
 
 /* The thin trace of how they have felt, in guided practice: a line and a dot, in the state's colour. It
    has its size from the start, so the line arriving moves nothing. */
@@ -116,15 +128,27 @@
 .cw-trace[data-tone='recovering'] {
   color: var(--state-recovering-fg);
 }
+/* The caption that names the line, beside it. */
+.cw-trail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
 
-/* The status: one label that changes in place, with the waveform under it. */
+/* The status: one label that changes in place, and beside it the signal when there is one (a voice,
+   three points, a shimmer). With nothing to show there is only the label: a silence draws no line.
+   The row is as tall as the signal is, with it or without it, so nothing moves when one appears. */
 .cw-status {
   --_c: var(--fg-2);
   align-self: stretch;
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-3);
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   border: var(--stroke-w) solid var(--stroke-2);
   border-radius: var(--r-xl);
   background: var(--bg-subtle);
@@ -142,9 +166,10 @@
 }
 .cw-status__line {
   display: flex;
+  flex: none;
   align-items: center;
-  justify-content: center;
   gap: var(--sp-2);
+  min-block-size: 2rem;
   font-size: var(--fs-subtitle2);
   line-height: var(--lh-subtitle2);
   font-weight: var(--fw-semibold);
@@ -156,6 +181,19 @@
 .cw-status__label {
   display: inline-block;
   animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+}
+.cw-status .cw-wave,
+.cw-status .cw-wave-shimmer,
+.cw-status .cw-think {
+  flex: 1 1 0;
+  min-inline-size: 3rem;
+}
+.cw-status .cw-wave,
+.cw-status .cw-wave-shimmer {
+  margin-inline-start: auto;
+}
+.cw-status .cw-think {
+  justify-content: flex-start;
 }
 
 /* A narrow screen: the initials and the name, how they feel, then the status on its own slim row. A
@@ -190,22 +228,42 @@
 }
 .cw-person--compact .cw-status {
   grid-column: 1 / -1;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-1h) var(--sp-3);
+  padding: var(--sp-1) var(--sp-3);
 }
 .cw-person--compact .cw-status__line {
-  flex: none;
+  min-block-size: 0;
 }
-.cw-person--compact .cw-status .cw-wave,
-.cw-person--compact .cw-status .cw-wave-shimmer,
-.cw-person--compact .cw-status .cw-think {
-  flex: 1 1 0;
-  min-inline-size: 3rem;
-}
-.cw-person--compact .cw-status .cw-think {
-  justify-content: flex-start;
+/* Under 360 px the status is folded into the customer's block: no card of its own and no room above
+   it (a state that needs the trainee keeps its edge), the trend is its arrow alone (its word is still
+   read aloud) and the role takes one line. The transcript needs the height, and the line of tag,
+   state and trend the width. */
+@media (max-width: 22.49em) {
+  .cw-person--compact {
+    gap: var(--sp-1) var(--sp-3);
+  }
+  .cw-person--compact .cw-status:not([data-who='alert']) {
+    padding: 0;
+    border-width: 0;
+    background: transparent;
+  }
+  .cw-person--compact .cw-mood__word {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* The role and the company are one line (a long one is cut short; the pre-flight has it whole). */
+  .cw-person--compact .cw-person__role {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
 }
 
 @media (forced-colors: active) {
