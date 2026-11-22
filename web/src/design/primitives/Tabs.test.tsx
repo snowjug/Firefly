@@ -146,3 +146,45 @@ describe('Tabs with stacked panels', () => {
     expect(document.querySelectorAll('[role="tabpanel"][data-selected]')).toHaveLength(1);
   });
 });
+
+describe('Tabs: the selected tab’s line gliding', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // Tabs side by side, 100 px wide; jsdom has no layout, so each tab's box comes from here.
+  function layOut() {
+    const left: Record<string, number> = { Summary: 0, Skills: 110, Transcript: 330 };
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      const name = this.getAttribute('role') === 'tab' ? (this.textContent ?? '') : '';
+      return name in left ? new DOMRect(left[name], 0, 100, 44) : new DOMRect();
+    });
+  }
+
+  it('tells the newly selected tab where the old one was, so its line can glide', async () => {
+    layOut();
+    const user = userEvent.setup();
+    render(<Report />);
+    await user.click(screen.getByRole('tab', { name: 'Transcript' }));
+    const tab = screen.getByRole('tab', { name: 'Transcript' });
+    expect(tab).toHaveAttribute('data-sliding');
+    expect(tab.style.getPropertyValue('--slide-dx')).toBe('-330px');
+  });
+
+  it('has no glide in a column, where the line is on the side', async () => {
+    layOut();
+    const user = userEvent.setup();
+    render(
+      <Tabs defaultValue="summary" orientation="vertical">
+        <TabList label="Report sections">
+          <Tab value="summary">Summary</Tab>
+          <Tab value="skills">Skills</Tab>
+        </TabList>
+        <TabPanel value="summary">Summary panel</TabPanel>
+        <TabPanel value="skills">Skills panel</TabPanel>
+      </Tabs>,
+    );
+    await user.click(screen.getByRole('tab', { name: 'Skills' }));
+    expect(document.querySelector('[data-sliding]')).toBeNull();
+  });
+});

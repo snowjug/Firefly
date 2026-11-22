@@ -185,12 +185,20 @@ a.ff-button:hover {
   align-items: center;
   justify-content: center;
 }
+/* The label and the spinner trade places by crossfading, so the button never changes width and
+   nothing blinks: the label fades out as the spinner fades in. */
 .ff-button--loading-centre .ff-button__label {
   opacity: 0;
+}
+@media screen {
+  .ff-button .ff-spinner {
+    animation: ff-fade var(--dur-fast) var(--ease-easy) both;
+  }
 }
 
 .ff-button__label {
   min-inline-size: 0;
+  transition: opacity var(--dur-fast) var(--ease-easy);
 }
 
 /* ---- Forced colours: system colours, and an edge on every button ------------------------ */

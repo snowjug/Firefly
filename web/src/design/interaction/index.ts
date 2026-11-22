@@ -19,6 +19,9 @@ export {
   type SwipeThresholds,
 } from './use-drag-scroll.ts';
 export { useInViewOnce, useOnScreen, type InViewOptions } from './use-in-view.ts';
+export { useReveal, type RevealProps } from './use-reveal.ts';
+export { useSelectionSlide } from './use-selection-slide.ts';
+export { prefersReducedMotion } from './reduced-motion.ts';
 export { mergeRefs } from './merge-refs.ts';
 export { usePageVisible } from './use-page-visible.ts';
 export { useScrolled } from './use-scrolled.ts';

@@ -18,6 +18,14 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas: 'icon body actions';
 }
+/* A message that appears (a live one) rises a few pixels as it fades in: transform and opacity only,
+   so what is around it does not move. It is dismissed at once, because letting its space go would
+   take a height animation, which Firefly never does. Only on a screen. */
+@media screen {
+  .ff-message--arriving {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+  }
+}
 .ff-message--dismiss {
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas: 'icon body dismiss';

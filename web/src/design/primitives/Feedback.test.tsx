@@ -40,6 +40,19 @@ describe('MessageBar', () => {
     expect(screen.getByText('A note')).toBeInTheDocument();
   });
 
+  it('eases in when it arrives (a live message), and not when it is a note that is part of the page', () => {
+    render(
+      <>
+        <MessageBar intent="info" title="Arrives" />
+        <MessageBar intent="info" live={false} title="Part of the page" />
+      </>,
+    );
+    expect(screen.getByRole('status')).toHaveClass('ff-message--arriving');
+    expect(screen.getByText('Part of the page').closest('.ff-message')).not.toHaveClass(
+      'ff-message--arriving',
+    );
+  });
+
   it('writes the intent in words as well as colour and an icon', () => {
     render(<MessageBar intent="warning" title="You are offline" />);
     expect(screen.getByRole('status')).toHaveTextContent('Warning: You are offline');

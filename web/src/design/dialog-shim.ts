@@ -40,7 +40,8 @@ export function installDialogShim(): void {
 
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || event.defaultPrevented) return;
-    const open = document.querySelectorAll<HTMLDialogElement>('dialog[open]');
+    // The picture a closing dialog leaves behind to fade out is not a dialog anyone can reach.
+    const open = document.querySelectorAll<HTMLDialogElement>('dialog[open]:not([data-picture])');
     const top = open[open.length - 1];
     if (!top) return;
     const cancel = new Event('cancel', { cancelable: true });

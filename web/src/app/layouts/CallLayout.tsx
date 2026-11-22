@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router';
+import { RouteStage } from '../shell/RouteStage.tsx';
 import { SkipLink } from '../shell/Shell.tsx';
 import '../shell/shell.css';
 
@@ -11,7 +11,7 @@ export function CallLayout() {
     <>
       <SkipLink />
       <main id="main" tabIndex={-1} className="ff-main">
-        <Outlet />
+        <RouteStage />
       </main>
     </>
   );

@@ -65,10 +65,26 @@
   border: var(--stroke-w) solid var(--stroke-accessible);
   border-radius: var(--r-md);
   background: var(--bg-canvas);
-  color: transparent;
+  color: var(--fg-on-brand);
   transition:
     background-color var(--dur-faster) var(--ease-easy),
     border-color var(--dur-faster) var(--ease-easy);
+}
+/* The tick (or the dash) is drawn as the box fills: it grows from half size as it fades in, and shrinks
+   as it fades out, with transform and opacity only. Unchecked, it is there but invisible. */
+.ff-choice__box .ff-icon,
+.ff-choice__thumb .ff-icon {
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity var(--dur-faster) var(--ease-easy),
+    transform var(--dur-fast) var(--ease-decelerate);
+}
+.ff-choice__input:checked + .ff-choice__box .ff-icon,
+.ff-choice__input:indeterminate + .ff-choice__box .ff-icon,
+.ff-choice__input:checked + .ff-choice__track .ff-choice__thumb .ff-icon {
+  opacity: 1;
+  transform: none;
 }
 .ff-choice:hover .ff-choice__input:not(:disabled) + .ff-choice__box {
   border-color: var(--fg-1);
@@ -127,7 +143,7 @@
   translate: 0 -50%;
   border-radius: var(--r-pill);
   background: var(--fg-2);
-  color: transparent;
+  color: var(--brand-fg);
   /* The thumb slides by transform, so no layout is touched while the switch moves. */
   transition:
     transform var(--dur-fast) var(--ease-decelerate),
@@ -144,7 +160,6 @@
   /* From the left stop to the right one: the track's inner width less the thumb and its two gaps. */
   transform: translateX(calc(1.125rem - 2 * var(--stroke-w)));
   background: var(--bg-canvas);
-  color: var(--brand-fg);
 }
 .ff-choice:hover .ff-choice__input:checked:not(:disabled) + .ff-choice__track {
   border-color: var(--brand-hover);

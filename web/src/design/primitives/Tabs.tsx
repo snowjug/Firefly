@@ -2,12 +2,14 @@ import {
   createContext,
   useContext,
   useId,
+  useRef,
   useState,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import { cx } from '../cx.ts';
 import { Icon, type IconName } from '../icons.tsx';
+import { useSelectionSlide } from '../interaction/use-selection-slide.ts';
 import './tabs.css';
 
 type Orientation = 'horizontal' | 'vertical';
@@ -79,7 +81,11 @@ export interface TabListProps {
 }
 
 export function TabList({ label, children, className }: TabListProps) {
-  const { orientation, activation, select } = useTabs();
+  const { orientation, activation, select, value } = useTabs();
+  const list = useRef<HTMLDivElement>(null);
+  // In a row of tabs the selected tab's line glides from the old tab to the new one; a column has no
+  // such line to slide (its line is on the side, and its tabs differ in width).
+  useSelectionSlide(list, orientation === 'horizontal' ? '.ff-tab--selected' : null, value);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const keys =
       orientation === 'horizontal'
@@ -107,6 +113,7 @@ export function TabList({ label, children, className }: TabListProps) {
     // eslint-disable-next-line jsx-a11y/interactive-supports-focus
     <div
       role="tablist"
+      ref={list}
       aria-label={label}
       aria-orientation={orientation}
       className={cx('ff-tablist', className)}

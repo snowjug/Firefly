@@ -32,6 +32,13 @@
   font-size: var(--fs-body);
   line-height: var(--lh-body);
 }
+/* The error is a new line of text: it fades in with a small rise, nothing around it moves. Only on a
+   screen, like every entrance of the design system. */
+@media screen {
+  .ff-field__error {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+  }
+}
 .ff-field__error .ff-icon {
   margin-block-start: 0.15rem;
 }

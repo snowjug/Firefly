@@ -229,3 +229,106 @@ export function containsInOrder(actual: readonly string[], expected: readonly st
   }
   return expected.length === 0;
 }
+
+// ---- Waiting for movement to end -----------------------------------------------------------------
+//
+// An axe contrast scan taken while something fades in measures a blended colour and fails for no
+// real reason, and Playwright's `toBeVisible` is true at opacity 0. So a scan, a measurement or a
+// screenshot is taken only after the page has settled. The scan helpers in `a11y.ts` call `settled`
+// first; call it yourself before measuring a box that may still be moving.
+
+export interface SettledOptions {
+  /** How long the page may take to come to rest, in milliseconds. */
+  timeout?: number;
+}
+
+/** One animation or transition that is still going: what it is, where it is and how long is left. */
+interface Moving {
+  what: string;
+  where: string;
+  left: number;
+}
+
+/**
+ * Runs in the page, so it must not use anything from this module. After two animation frames (a
+ * change that was just made may only start to move at the next paint) it waits, for at most `budget`
+ * ms, for every finite animation and transition that is running, and returns those still running.
+ * An endless one (a spinner, a shimmer, a listening pulse) is the state itself and is not waited for,
+ * and nor is a paused animation or one driven by scrolling: none of them ends by itself.
+ */
+async function stillMoving(budget: number): Promise<Moving[]> {
+  // A page in the background runs no frames, so a timer is the way out.
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    setTimeout(resolve, 120);
+  });
+  const running = () =>
+    document.getAnimations().filter((animation) => {
+      const timing = animation.effect?.getComputedTiming();
+      return (
+        timing !== undefined &&
+        Number.isFinite(timing.endTime) &&
+        animation.playState === 'running' &&
+        animation.timeline === document.timeline
+      );
+    });
+  const going = running();
+  if (going.length > 0) {
+    await Promise.race([
+      Promise.all(going.map((animation) => animation.finished.catch(() => undefined))),
+      new Promise((resolve) => setTimeout(resolve, budget)),
+    ]);
+  }
+  const ms = (value: unknown) => (typeof value === 'number' ? value : 0);
+  return running().map((animation) => {
+    const effect = animation.effect as KeyframeEffect;
+    const target = effect.target;
+    const classes = target ? [...target.classList].slice(0, 3).map((name) => `.${name}`) : [];
+    const where = target
+      ? `${target.localName}${target.id ? `#${target.id}` : ''}${classes.join('')}${effect.pseudoElement ?? ''}`
+      : 'the document';
+    const what =
+      animation instanceof CSSAnimation
+        ? `animation ${animation.animationName}`
+        : animation instanceof CSSTransition
+          ? `transition of ${animation.transitionProperty}`
+          : `animation ${animation.id || '(from script)'}`;
+    const end = ms(effect.getComputedTiming().endTime);
+    return { what, where, left: Math.max(0, Math.round(end - ms(animation.currentTime))) };
+  });
+}
+
+/**
+ * Resolves once every finite animation and transition on the page has finished, and stays that way
+ * for two looks a frame or two apart (so one that starts as another ends is seen). Endless ones, such
+ * as a spinner, a shimmer or a listening pulse, are ignored. Gives up after `timeout` (5 s) with an
+ * error that names what was still moving. Under reduced motion there is almost nothing to wait for.
+ */
+export async function settled(page: Page, { timeout = 5_000 }: SettledOptions = {}): Promise<void> {
+  const deadline = Date.now() + timeout;
+  let calm = 0;
+  while (calm < 2) {
+    let moving: Moving[];
+    try {
+      moving = await page.evaluate(stillMoving, Math.max(0, deadline - Date.now()));
+    } catch (error) {
+      // The page was replaced while it was being watched: watch the new one.
+      if (/context was destroyed|navigation/i.test(String(error)) && Date.now() < deadline) {
+        calm = 0;
+        continue;
+      }
+      throw error;
+    }
+    if (moving.length === 0) {
+      calm += 1;
+      continue;
+    }
+    calm = 0;
+    if (Date.now() >= deadline) {
+      const list = moving.map((item) => `${item.what} on ${item.where} (${item.left} ms left)`);
+      throw new Error(
+        `The page did not settle within ${timeout} ms. Still moving: ${list.join('; ')}.`,
+      );
+    }
+  }
+}

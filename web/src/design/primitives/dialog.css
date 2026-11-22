@@ -30,6 +30,31 @@
   background: var(--bg-scrim);
   animation: ff-dialog-fade var(--dur-normal) var(--ease-easy);
 }
+/* The exit is shorter and quieter than the entrance: a fade and a small settle back. The dialog itself
+   goes the moment its owner closes it; Dialog.tsx puts a picture of it (data-picture) and of its
+   backdrop (.ff-dialog-scrim) in the page for the length of this. The picture takes no press, so the
+   page answers at once; its contents are held still, so nothing inside it starts again; and, being an
+   open dialog, it holds the page's scroll lock for the same moment, so the scrollbar does not flicker
+   back under the fade. */
+.ff-dialog[open][data-picture] {
+  z-index: var(--z-dialog);
+  pointer-events: none;
+  animation: ff-dialog-out var(--dur-fast) var(--ease-accelerate) both;
+}
+.ff-dialog[data-picture] *,
+.ff-dialog[data-picture] *::before,
+.ff-dialog[data-picture] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+.ff-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-dialog) - 1);
+  background: var(--bg-scrim);
+  pointer-events: none;
+  animation: ff-dialog-fade-out var(--dur-fast) var(--ease-accelerate) both;
+}
 
 /* The page behind does not scroll while a dialog is open. */
 html:has(dialog.ff-dialog[open]) {
@@ -90,7 +115,7 @@ html:has(dialog.ff-dialog[open]) {
 @keyframes ff-dialog-in {
   from {
     opacity: 0;
-    transform: translateY(0.5rem) scale(0.98);
+    transform: translateY(var(--move-sm)) scale(0.98);
   }
 }
 @keyframes ff-dialog-fade {
@@ -98,8 +123,24 @@ html:has(dialog.ff-dialog[open]) {
     opacity: 0;
   }
 }
+@keyframes ff-dialog-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+@keyframes ff-dialog-fade-out {
+  to {
+    opacity: 0;
+  }
+}
 @keyframes ff-sheet-in {
   from {
+    transform: translateY(100%);
+  }
+}
+@keyframes ff-sheet-out {
+  to {
     transform: translateY(100%);
   }
 }
@@ -130,6 +171,9 @@ html:has(dialog.ff-dialog[open]) {
   }
   .ff-dialog--sheet[open] {
     animation: ff-sheet-in var(--dur-gentle) var(--ease-decelerate);
+  }
+  .ff-dialog--sheet[open][data-picture] {
+    animation: ff-sheet-out var(--dur-normal) var(--ease-accelerate) both;
   }
 
   .ff-dialog--fullscreen {
