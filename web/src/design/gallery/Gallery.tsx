@@ -133,7 +133,7 @@ function MotionDemo() {
           Start call
         </Button>
         <Button appearance="secondary" icon="arrow-right" iconPosition="end" nudge>
-          View scenarios
+          Explore scenarios
         </Button>
         <span className="t-meta">
           Press: 1 to 2 px down. Hover or focus: the arrow leans forward.
@@ -645,13 +645,13 @@ export function Gallery() {
             options={[
               {
                 value: 'immersive',
-                label: 'Immersive',
-                description: 'Feels like a real call. No live hints.',
+                label: 'Assessment practice',
+                description: 'No tips or cues on screen. Feels like a real call.',
               },
               {
                 value: 'guided',
                 label: 'Guided practice',
-                description: 'Shows light cues: areas to explore and the customer mood.',
+                description: 'Shows short tips and light cues during the call.',
               },
             ]}
           />

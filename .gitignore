@@ -6,6 +6,7 @@ test-results/
 test-results-*/
 blob-report/
 .vite/
+.vitest/
 *.tsbuildinfo
 __pycache__/
 
