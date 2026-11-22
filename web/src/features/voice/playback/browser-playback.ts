@@ -227,7 +227,8 @@ export function createBrowserPlayback(): Playback {
     let level = 0;
     chain.meter = setInterval(() => {
       level = smoothLevel(level, shaped(Date.now() - chain.startedAt));
-      chain.handlers.onLevel(level);
+      // The page cannot hear a browser voice, so this level is shaped from the words and says so.
+      chain.handlers.onLevel(level, false);
     }, LEVEL_INTERVAL_MS);
   };
 

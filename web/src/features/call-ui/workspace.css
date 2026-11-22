@@ -225,7 +225,6 @@
   padding: var(--sp-2) var(--sp-3) calc(var(--sp-2) + env(safe-area-inset-bottom, 0px));
   border-block-start: var(--stroke-w) solid var(--stroke-2);
   background: var(--bg-canvas);
-  box-shadow: 0 -2px 8px color-mix(in srgb, var(--fg-1) 10%, transparent);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -234,6 +233,10 @@
   .cw-dock {
     max-block-size: none;
   }
+}
+/* The on-screen keyboard leaves no room for the tips strip: it steps aside while the keyboard is open. */
+.cw-root[data-keyboard='open'] .tp-strip {
+  display: none;
 }
 
 /* The case sheet (narrower than 80em): the same body, in a dialog. */

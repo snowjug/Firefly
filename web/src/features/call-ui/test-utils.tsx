@@ -40,19 +40,26 @@ export function fakeActions(overrides: Partial<CallActions> = {}): FakeActions {
 export const WIDTH = { narrow: 375, tablet: 768, medium: 1024, wide: 1440 } as const;
 
 /**
- * Makes `matchMedia` answer for a window of this width (in CSS pixels). Without it the test DOM has no
- * media queries and the screen shows its narrow layout. Reduced motion is on unless asked otherwise,
- * so the waveform stays still and tests do not update state behind their own back.
+ * Makes `matchMedia` answer for a window of this width (in CSS pixels), and height (tall unless said,
+ * so the short-screen rule does not apply). Without it the test DOM has no media queries and the
+ * screen shows its narrow layout. Reduced motion is on unless asked otherwise, so the waveform stays
+ * still and tests do not update state behind their own back.
  */
-export function mockViewport(width: number, options: { reducedMotion?: boolean } = {}): void {
+export function mockViewport(
+  width: number,
+  options: { reducedMotion?: boolean; height?: number } = {},
+): void {
   const em = width / 16;
+  const tall = (options.height ?? 900) / 16;
   const reducedMotion = options.reducedMotion ?? true;
   window.matchMedia = ((query: string): MediaQueryList => {
     const min = /\(min-width:\s*([\d.]+)em\)/.exec(query);
     const max = /\(max-width:\s*([\d.]+)em\)/.exec(query);
+    const maxHeight = /\(max-height:\s*([\d.]+)em\)/.exec(query);
     let matches = false;
     if (min) matches = em >= Number(min[1]);
     else if (max) matches = em <= Number(max[1]);
+    else if (maxHeight) matches = tall <= Number(maxHeight[1]);
     else if (/prefers-reduced-motion:\s*reduce/.test(query)) matches = reducedMotion;
     return {
       matches,
@@ -88,12 +95,16 @@ export function snapshotOf(source: Source): CallSnapshot {
 /** Renders the call screen for a fixture (or any snapshot) at a given window width. */
 export function renderCall(
   source: Source,
-  props: Partial<CallWorkspaceProps> & { width?: number; reducedMotion?: boolean } = {},
+  props: Partial<CallWorkspaceProps> & {
+    width?: number;
+    height?: number;
+    reducedMotion?: boolean;
+  } = {},
 ): RenderedCall {
-  const { width = WIDTH.wide, reducedMotion, ...rest } = props;
+  const { width = WIDTH.wide, height, reducedMotion, ...rest } = props;
   // jsdom has no modal dialogs: the design system's test shim gives it enough of them.
   installDialogShim();
-  mockViewport(width, { reducedMotion });
+  mockViewport(width, { reducedMotion, height });
   const actions = (rest.actions as FakeActions | undefined) ?? fakeActions();
   const view: CallFixture['view'] = typeof source === 'string' ? FIXTURES[source].view : undefined;
   const screen = (snapshot: CallSnapshot) => (
@@ -108,6 +119,7 @@ export function renderCall(
             preferText={view?.preferText}
             initialUi={view?.initialUi}
             showInputMode={view?.showInputMode}
+            loadClosingCheck={view?.loadClosingCheck}
             {...rest}
           />
         </main>

@@ -65,6 +65,13 @@ export interface CallStatus {
   label: string;
   /** What the pre-flight's microphone row says: the same state, in a word or two. */
   row: string;
+  /**
+   * What the voice strip's own signal is called to assistive technology, where the label does not
+   * already say it: the three points that show the customer is working out a reply say "Customer is
+   * responding". Null everywhere else, because the status label is the name and a second one would
+   * only make it be read twice.
+   */
+  signal: string | null;
   icon: IconName;
   wave: WaveMode;
   /** Whose turn it is, which decides the colour. `alert` is a state that needs the trainee's action. */
@@ -73,7 +80,10 @@ export interface CallStatus {
 
 const voice = (state: VoiceState): string => VOICE_STATE_TEXT[state].label;
 
-type StatusSpec = Pick<CallStatus, 'label' | 'icon' | 'wave' | 'who'> & { row?: string };
+type StatusSpec = Pick<CallStatus, 'label' | 'icon' | 'wave' | 'who'> & {
+  row?: string;
+  signal?: string;
+};
 
 const STATUS: Record<StatusId, StatusSpec> = {
   // Before the call, in the pre-flight's microphone row ("Microphone: Not requested").
@@ -121,6 +131,7 @@ const STATUS: Record<StatusId, StatusSpec> = {
   },
   'generating-reply': {
     label: voice('generating-customer-reply'),
+    signal: 'Customer is responding',
     icon: 'more',
     wave: 'thinking',
     who: 'customer',
@@ -176,8 +187,8 @@ const isMicrophoneProblem = (code: string) => code.startsWith('microphone-');
 export function describeStatus(input: StatusInput): CallStatus {
   const { stage, mode, phase, problem, online = true } = input;
   const make = (id: StatusId): CallStatus => {
-    const { row, ...spec } = STATUS[id];
-    return { id, stage, row: row ?? spec.label, ...spec };
+    const { row, signal, ...spec } = STATUS[id];
+    return { id, stage, row: row ?? spec.label, signal: signal ?? null, ...spec };
   };
   if (stage === 'completed') return make('completed');
   if (stage === 'evaluating') return make('evaluating');
@@ -331,6 +342,48 @@ export function stateChangeSentence(view: CustomerStateView): string {
     : `The customer now seems ${view.bandLabel.toLowerCase()}.`;
 }
 
+// ---- The state trace ------------------------------------------------------------------------------
+
+/** The most points the trace draws: a long call shows its latest stretch. */
+export const TRACE_POINTS = 24;
+
+export interface TracePoint {
+  x: number;
+  y: number;
+  band: TemperatureBandId;
+}
+
+/**
+ * Where the trace's points go in a box: the oldest at the left, the newest at the right, and the
+ * hotter the customer, the higher the point. Only the last `TRACE_POINTS` are drawn. It is a shape
+ * and never carries a number: the customer's state is a word, and so is this.
+ */
+export function traceShape(
+  history: readonly CallStatePoint[],
+  box: { width: number; height: number; pad: number },
+): TracePoint[] {
+  const recent = history.slice(-TRACE_POINTS);
+  const hottest = BAND_ORDER.length - 1;
+  const across = box.width - 2 * box.pad;
+  const up = box.height - 2 * box.pad;
+  return recent.map((point, index) => ({
+    band: point.band,
+    x: recent.length === 1 ? box.width - box.pad : box.pad + (index * across) / (recent.length - 1),
+    y: box.height - box.pad - (bandRank(point.band) / hottest) * up,
+  }));
+}
+
+/** The trace in words for a screen reader: each state the customer was in, oldest first, no numbers. */
+export function describeTrace(history: readonly CallStatePoint[]): string {
+  const names: string[] = [];
+  for (const point of history) {
+    const name = point.label.toLowerCase();
+    if (names.at(-1) !== name) names.push(name);
+  }
+  if (names.length === 0) return '';
+  return `Customer state so far: ${names.slice(-5).join(', then ')}.`;
+}
+
 // ---- Times, counts and labels ------------------------------------------------------------------
 
 /** m:ss for a number of seconds. */
@@ -374,6 +427,11 @@ export function timeMarks(turns: readonly CallTurn[], startedAt: string): Map<st
 /** How many of the trainee's turns the server holds (a message still being sent does not count). */
 export function traineeTurnCount(turns: readonly CallTurn[]): number {
   return turns.filter((turn) => turn.role === 'trainee' && turn.status === 'sent').length;
+}
+
+/** How many turns the customer has had. */
+export function customerTurnCount(turns: readonly CallTurn[]): number {
+  return turns.filter((turn) => turn.role === 'customer').length;
 }
 
 /** The trainee's words that were never saved: ending the call now would leave them out of the review. */

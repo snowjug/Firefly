@@ -3,7 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installDialogShim } from '../../design/dialog-shim.ts';
 import { AnnouncerProvider } from '../../design/index.ts';
-import type { CallSupport } from '../call/contract.ts';
+import type { PublicStateDTO } from '#shared/domain/api.ts';
+import { TEMPERATURE_BANDS, type TemperatureBandId } from '#shared/domain/vocab.ts';
+import type { CallStatePoint, CallSupport } from '../call/contract.ts';
 import { describeCustomerState, describeStatus, type WaveMode } from './call-model.ts';
 import { FIXTURES } from './call-fixtures.ts';
 import { CustomerStage, type CustomerStageProps } from './CustomerStage.tsx';
@@ -15,6 +17,8 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  // Back to jsdom's own property on the prototype, if a test pretended the tab was hidden.
+  Reflect.deleteProperty(document, 'visibilityState');
 });
 
 describe('the waveform', () => {
@@ -103,20 +107,31 @@ describe('the waveform', () => {
     expect(container.textContent).not.toMatch(/\d/);
   });
 
-  it('shows dots while the customer thinks, and keeps them still under reduced motion too', () => {
+  it('shows three points while the customer thinks, and keeps them still under reduced motion too', () => {
     const interval = vi.spyOn(window, 'setInterval');
     for (const reducedMotion of [false, true]) {
       const { container, unmount } = render(
         <Waveform mode="thinking" level={0} reducedMotion={reducedMotion} />,
       );
-      expect(container.querySelectorAll('circle.cw-wave__dot')).toHaveLength(7);
+      expect(container.querySelectorAll('.cw-think__dot')).toHaveLength(3);
+      expect(container.querySelector('[data-shape="points"]')).not.toBeNull();
       unmount();
     }
     expect(interval).not.toHaveBeenCalled();
   });
 
-  it('says nothing to assistive technology but the shimmer’s name: the status says the rest', () => {
-    for (const mode of ['idle', 'trainee', 'customer', 'thinking'] as const) {
+  it('gives the three points the accessible text they are given, once, and no other words', () => {
+    const { container } = render(
+      <Waveform mode="thinking" level={0} reducedMotion={false} label="Customer is responding" />,
+    );
+    expect(screen.getAllByText('Customer is responding')).toHaveLength(1);
+    expect(container.textContent).toBe('Customer is responding');
+    // The points themselves are decoration: the text is the name.
+    expect(container.querySelector('.cw-think__points')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('says nothing to assistive technology but the names of the shimmer and the points: the status says the rest', () => {
+    for (const mode of ['idle', 'trainee', 'customer'] as const) {
       const { container, unmount } = render(
         <Waveform mode={mode} level={0.5} reducedMotion={false} />,
       );
@@ -124,6 +139,93 @@ describe('the waveform', () => {
       expect(container.textContent).toBe('');
       unmount();
     }
+    // Three points with no name are plain decoration: the status label beside them is the name.
+    const { container } = render(<Waveform mode="thinking" level={0} reducedMotion={false} />);
+    expect(container.textContent).toBe('');
+  });
+
+  describe('when the customer’s level cannot be measured', () => {
+    it('draws a calm fixed pattern and runs no timer, whatever level it is given', () => {
+      const interval = vi.spyOn(window, 'setInterval');
+      const { container, rerender } = render(
+        <Waveform mode="customer" level={0.9} measured={false} reducedMotion={false} />,
+      );
+      expect(container.querySelector('svg')).toHaveAttribute('data-shape', 'pattern');
+      const before = bars(container);
+      rerender(<Waveform mode="customer" level={0.1} measured={false} reducedMotion={false} />);
+      tick(2000);
+      expect(bars(container)).toEqual(before);
+      expect(interval).not.toHaveBeenCalled();
+    });
+
+    it('is the same pattern under reduced motion, and never a meter that pretends to read the sound', () => {
+      const { container } = render(
+        <Waveform mode="customer" level={0.9} measured={false} reducedMotion />,
+      );
+      expect(container.querySelector('svg')).toHaveAttribute('data-shape', 'pattern');
+      expect(container.querySelector('.cw-wave__track')).toBeNull();
+    });
+
+    it('does not change the microphone’s strip: the trainee’s level is always measured', () => {
+      const { container } = render(
+        <Waveform mode="trainee" level={0.8} measured={false} reducedMotion={false} />,
+      );
+      expect(container.querySelector('svg')).toHaveAttribute('data-shape', 'bars');
+    });
+  });
+
+  it('settles onto the quiet line when a voice finishes, instead of cutting to it', () => {
+    const { container, rerender } = render(
+      <Waveform mode="customer" level={0.9} reducedMotion={false} />,
+    );
+    tick(66 * 10);
+    const loud = Math.max(...bars(container));
+    rerender(<Waveform mode="idle" level={0} reducedMotion={false} />);
+    // Still bars, and sinking.
+    expect(container.querySelector('svg')).toHaveAttribute('data-shape', 'bars');
+    expect(container.querySelector('.cw-wave--settling')).not.toBeNull();
+    tick(66 * 2);
+    expect(Math.max(...bars(container))).toBeLessThan(loud);
+    tick(66 * 12);
+    expect(container.querySelector('svg')).toHaveAttribute('data-shape', 'line');
+    expect(container.querySelector('.cw-wave--settling')).toBeNull();
+  });
+
+  it('does not settle under reduced motion: the meter simply goes quiet', () => {
+    const { container, rerender } = render(<Waveform mode="customer" level={0.9} reducedMotion />);
+    rerender(<Waveform mode="idle" level={0} reducedMotion />);
+    expect(container.querySelector('svg')).toHaveAttribute('data-shape', 'line');
+  });
+
+  it('drops what is left of a voice at once when the strip shows something else', () => {
+    const { container, rerender } = render(
+      <Waveform mode="trainee" level={0.9} reducedMotion={false} />,
+    );
+    tick(66 * 10);
+    rerender(<Waveform mode="transcribing" level={0} reducedMotion={false} />);
+    expect(container.querySelector('svg')).toBeNull();
+    rerender(<Waveform mode="trainee" level={0} reducedMotion={false} />);
+    // The next voice starts from nothing, not from the old bars.
+    expect(Math.max(...bars(container))).toBe(Math.min(...bars(container)));
+  });
+
+  it('stops sampling while the tab is hidden, and starts again when it is back', () => {
+    const interval = vi.spyOn(window, 'setInterval');
+    const clear = vi.spyOn(window, 'clearInterval');
+    const visibility = (state: DocumentVisibilityState) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+      act(() => void document.dispatchEvent(new Event('visibilitychange')));
+    };
+    render(<Waveform mode="trainee" level={0.8} reducedMotion={false} />);
+    expect(interval).toHaveBeenCalledTimes(1);
+    visibility('hidden');
+    expect(clear).toHaveBeenCalled();
+    const running = interval.mock.calls.length;
+    tick(2000);
+    // Whatever timer is left is the settle after a hidden tab, never a sampler of the voice.
+    expect(interval.mock.calls.length).toBe(running);
+    visibility('visible');
+    expect(interval.mock.calls.length).toBeGreaterThan(running);
   });
 });
 
@@ -324,6 +426,138 @@ describe('the customer on screen', () => {
   it('says nothing about a state before there is one', () => {
     const { container } = render(<CustomerStage {...baseProps()} state={null} />);
     expect(container.querySelector('.cw-mood')).toBeNull();
+  });
+
+  describe('when the customer’s state changes', () => {
+    const stateOf = (band: TemperatureBandId, trend: PublicStateDTO['trend'] = 'steady') =>
+      describeCustomerState(
+        {
+          band: { id: band, label: TEMPERATURE_BANDS.find((b) => b.id === band)!.label },
+          trend,
+          discoveredCount: 0,
+          silent: false,
+          shifts: 0,
+        },
+        [],
+      );
+
+    it('cross-fades the word and its colour: the old state fades under the new, out of a screen reader’s reach', () => {
+      const props = baseProps();
+      const { container, rerender } = render(<CustomerStage {...props} state={stateOf('calm')} />);
+      const mood = () => screen.getByRole('group', { name: 'Customer state' });
+      expect(container.querySelector('.cw-fade__out')).toBeNull();
+      rerender(<CustomerStage {...props} state={stateOf('angry', 'rising')} />);
+      const leaving = container.querySelector('.cw-fade__out') as HTMLElement;
+      expect(leaving).toHaveTextContent('Calm');
+      expect(leaving).toHaveAttribute('aria-hidden', 'true');
+      expect(container.querySelector('.cw-fade__in')).toHaveTextContent('Angry');
+      expect(mood()).toHaveAttribute('data-tone', 'angry');
+      // Nothing else on the screen is touched: the badge words are the only thing that blends.
+      expect(container.querySelector('.cw-status')).not.toBeNull();
+    });
+
+    it('does not fade for a change of trend alone: the word stays', () => {
+      const props = baseProps();
+      const { container, rerender } = render(
+        <CustomerStage {...props} state={stateOf('concerned')} />,
+      );
+      rerender(<CustomerStage {...props} state={stateOf('concerned', 'rising')} />);
+      expect(container.querySelector('.cw-fade__out')).toBeNull();
+      expect(screen.getByRole('group', { name: 'Customer state' })).toHaveTextContent('rising');
+    });
+  });
+
+  describe('the thin trace of how the customer has felt', () => {
+    const history: CallStatePoint[] = [
+      { turnIndex: 1, band: 'calm', label: 'Calm' },
+      { turnIndex: 2, band: 'concerned', label: 'Concerned' },
+    ];
+
+    it('is drawn only when it is given, as a picture with its words and no number', () => {
+      const { container, rerender } = render(<CustomerStage {...baseProps()} />);
+      expect(container.querySelector('.cw-trace')).toBeNull();
+      rerender(<CustomerStage {...baseProps()} trace={history} />);
+      const trace = screen.getByRole('img', {
+        name: 'Customer state so far: calm, then concerned.',
+      });
+      expect(trace.querySelector('polyline')).not.toBeNull();
+      expect(trace.textContent).toBe('');
+      expect(trace.getAttribute('aria-label')).not.toMatch(/\d/);
+    });
+
+    it('is left out on a narrow screen, where there is no room for it', () => {
+      const { container } = render(<CustomerStage {...baseProps()} trace={history} compact />);
+      expect(container.querySelector('.cw-trace')).toBeNull();
+    });
+
+    it('is hidden from a screen reader while it has nothing to say, and keeps its size', () => {
+      const { container } = render(<CustomerStage {...baseProps()} trace={[]} />);
+      const trace = container.querySelector('.cw-trace') as HTMLElement;
+      expect(trace).toHaveAttribute('aria-hidden', 'true');
+      expect(trace.querySelector('svg')).toHaveAttribute('viewBox', '0 0 120 24');
+    });
+  });
+
+  describe('the customer’s voice strip', () => {
+    const speaking = describeStatus({
+      stage: 'customer-speaking',
+      mode: 'voice',
+      phase: 'customer-speaking',
+      speechDetected: false,
+      microphone: 'granted',
+    });
+    const strip = (container: HTMLElement) => container.querySelector('svg.cw-wave');
+
+    it('is a calm fixed pattern unless the level was measured from the sound that plays', () => {
+      const props = { ...baseProps(), status: speaking, customerLevel: 0.7 };
+      const { container, rerender } = render(<CustomerStage {...props} />);
+      expect(strip(container)).toHaveAttribute('data-shape', 'pattern');
+      rerender(<CustomerStage {...props} customerLevelMeasured />);
+      expect(strip(container)).toHaveAttribute('data-shape', 'bars');
+    });
+
+    it('is never held to that for the trainee’s own microphone', () => {
+      const listening = describeStatus({
+        stage: 'listening',
+        mode: 'voice',
+        phase: 'listening',
+        speechDetected: true,
+        microphone: 'granted',
+        micOpen: true,
+      });
+      const { container } = render(
+        <CustomerStage {...baseProps()} status={listening} micLevel={0.6} />,
+      );
+      expect(strip(container)).toHaveAttribute('data-shape', 'bars');
+    });
+
+    it('thinks with three points that a screen reader hears as “Customer is responding”', () => {
+      const thinking = describeStatus({
+        stage: 'processing',
+        mode: 'voice',
+        phase: 'processing',
+        speechDetected: false,
+        microphone: 'granted',
+      });
+      const { container } = render(<CustomerStage {...baseProps()} status={thinking} />);
+      expect(container.querySelectorAll('.cw-think__dot')).toHaveLength(3);
+      expect(screen.getByText('Customer is responding')).toBeInTheDocument();
+      expect(container.querySelector('.cw-status__label')).toHaveTextContent(
+        'Customer is replying',
+      );
+    });
+
+    it('does not say “Customer is responding” while the trainee’s words are still being turned into text', () => {
+      const transcribing = describeStatus({
+        stage: 'transcribing',
+        mode: 'voice',
+        phase: 'transcribing',
+        speechDetected: false,
+        microphone: 'granted',
+      });
+      render(<CustomerStage {...baseProps()} status={transcribing} />);
+      expect(screen.queryByText('Customer is responding')).toBeNull();
+    });
   });
 
   it('becomes one row on a narrow screen', () => {

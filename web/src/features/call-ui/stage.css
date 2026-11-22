@@ -38,17 +38,31 @@
   gap: var(--sp-2);
 }
 
-/* How the customer feels: the label fades in place and the colour eases to the next state. */
+/* How the customer feels: the old state fades out as the new one fades in (colour, icon and word
+   together), so a change is seen without anything moving or flashing. */
 .cw-mood {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
 }
-.cw-mood .ff-badge {
-  transition:
-    color var(--dur-slow) var(--ease-easy),
-    background-color var(--dur-slow) var(--ease-easy),
-    border-color var(--dur-slow) var(--ease-easy);
+.cw-fade {
+  display: inline-grid;
+}
+.cw-fade > * {
+  grid-area: 1 / 1;
+  min-inline-size: 0;
+}
+.cw-fade__in--enter {
+  animation: ff-fade var(--dur-normal) var(--ease-decelerate) both;
+}
+.cw-fade__out {
+  animation: cw-fade-out var(--dur-normal) var(--ease-accelerate) both;
+  pointer-events: none;
+}
+@keyframes cw-fade-out {
+  to {
+    opacity: 0;
+  }
 }
 .cw-mood__trend {
   display: inline-flex;
@@ -57,6 +71,50 @@
   color: var(--fg-2);
   font-size: var(--fs-compact);
   line-height: var(--lh-compact);
+}
+
+/* The thin trace of how they have felt, in guided practice: a line and a dot, in the state's colour. It
+   has its size from the start, so the line arriving moves nothing. */
+.cw-trace {
+  display: block;
+  inline-size: 7.5rem;
+  block-size: 1.5rem;
+  color: var(--fg-3);
+  transition: color var(--dur-slow) var(--ease-easy);
+}
+.cw-trace > svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+.cw-trace__line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cw-trace__now {
+  fill: currentColor;
+}
+.cw-trace[data-tone='calm'] {
+  color: var(--state-calm-fg);
+}
+.cw-trace[data-tone='concerned'] {
+  color: var(--state-concerned-fg);
+}
+.cw-trace[data-tone='frustrated'] {
+  color: var(--state-frustrated-fg);
+}
+.cw-trace[data-tone='angry'] {
+  color: var(--state-angry-fg);
+}
+.cw-trace[data-tone='escalating'] {
+  color: var(--state-escalating-fg);
+}
+.cw-trace[data-tone='recovering'] {
+  color: var(--state-recovering-fg);
 }
 
 /* The status: one label that changes in place, with the waveform under it. */
@@ -141,9 +199,13 @@
   flex: none;
 }
 .cw-person--compact .cw-status .cw-wave,
-.cw-person--compact .cw-status .cw-wave-shimmer {
+.cw-person--compact .cw-status .cw-wave-shimmer,
+.cw-person--compact .cw-status .cw-think {
   flex: 1 1 0;
   min-inline-size: 3rem;
+}
+.cw-person--compact .cw-status .cw-think {
+  justify-content: flex-start;
 }
 
 @media (forced-colors: active) {
@@ -153,5 +215,11 @@
   }
   .cw-status__icon {
     color: CanvasText;
+  }
+  .cw-trace__line {
+    stroke: CanvasText;
+  }
+  .cw-trace__now {
+    fill: CanvasText;
   }
 }

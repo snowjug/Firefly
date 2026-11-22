@@ -1,20 +1,10 @@
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type UIEvent,
-} from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Button, cx, Icon, Skeleton, VisuallyHidden } from '../../design/index.ts';
 import type { CallTurn } from '../call/contract.ts';
 import { timeMarks } from './call-model.ts';
+import { useFollowLatest } from './follow-latest.ts';
 import './transcript.css';
 
-/** How near the end counts as "at the latest turn", in pixels. */
-const FOLLOW_SLACK_PX = 40;
 /** The newest turns are always laid out; older ones are skipped by the browser until scrolled to. */
 const RECENT_TURNS = 10;
 
@@ -93,7 +83,10 @@ const TurnItem = memo(function TurnItem({
           ) : null}
         </p>
         {transcribing && turn.text === '' ? (
-          <Skeleton className="cw-turn__skeleton" />
+          // Where the words will land: one line tall, like the shortest turn, so they arrive in place.
+          <div className="cw-turn__placeholder" aria-hidden="true">
+            <Skeleton className="cw-turn__skeleton" />
+          </div>
         ) : (
           <p className="cw-turn__text" dir="auto">
             {turn.text}
@@ -165,9 +158,10 @@ export interface TranscriptProps {
 
 /**
  * The transcript: a log that grows by whole turns, and is the only place transcript text is
- * announced. It follows the newest turn, gently, unless the person has scrolled up, and then offers
- * "Jump to latest". The live words of what the trainee is saying sit at the end of the log and are
- * hidden from assistive technology (the finished turn is announced instead).
+ * announced. It stays with the newest turn, which fades in a short way as it arrives, for as long as
+ * the person has not scrolled away by hand; then nothing scrolls under them and "Jump to latest" is
+ * offered. The live words of what the trainee is saying sit at the end of the log and are hidden from
+ * assistive technology (the finished turn is announced instead).
  */
 export function Transcript({
   turns,
@@ -179,59 +173,33 @@ export function Transcript({
   titleId,
   showInputMode = false,
 }: TranscriptProps) {
-  const scroller = useRef<HTMLDivElement>(null);
+  const { scroller, away, pin, jump, onScroll } = useFollowLatest();
   const content = useRef<HTMLDivElement>(null);
-  const follow = useRef(true);
-  const count = useRef(turns.length);
-  const [away, setAway] = useState(false);
   const [settled] = useState<ReadonlySet<string>>(() => new Set(turns.map((turn) => turn.key)));
   const currentKey = useMemo(
     () => (speaking ? (turns.findLast((turn) => turn.role === 'customer')?.key ?? null) : null),
     [speaking, turns],
   );
 
-  const toEnd = useCallback((behavior: ScrollBehavior) => {
-    const element = scroller.current;
-    if (!element) return;
-    if (typeof element.scrollTo === 'function') {
-      element.scrollTo({ top: element.scrollHeight, behavior });
-    } else {
-      element.scrollTop = element.scrollHeight;
-    }
-  }, []);
-
-  const onScroll = (event: UIEvent<HTMLDivElement>) => {
-    const element = event.currentTarget;
-    const near = element.scrollHeight - element.scrollTop - element.clientHeight <= FOLLOW_SLACK_PX;
-    follow.current = near;
-    setAway(!near);
-  };
-
   // A new turn, a turn that changed, or live words: stay with the newest unless the person left it.
-  // A new turn scrolls gently; anything else stays put with it at once.
+  // The turn arrives with its own short fade, so the log itself does not glide.
   useLayoutEffect(() => {
-    const grew = turns.length > count.current;
-    count.current = turns.length;
-    if (follow.current) toEnd(grew && !reducedMotion ? 'smooth' : 'auto');
-  }, [turns, interim, toEnd, reducedMotion]);
+    pin('auto');
+  }, [turns, interim, pin]);
 
   // The box or its content changing size (the composer opening, older turns being laid out).
   useEffect(() => {
     const outer = scroller.current;
     const inner = content.current;
     if (!outer || !inner || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => {
-      if (follow.current) toEnd('auto');
-    });
+    const observer = new ResizeObserver(() => pin('auto'));
     observer.observe(outer);
     observer.observe(inner);
     return () => observer.disconnect();
-  }, [toEnd]);
+  }, [pin, scroller]);
 
-  const jump = () => {
-    follow.current = true;
-    setAway(false);
-    toEnd(reducedMotion ? 'auto' : 'smooth');
+  const jumpToLatest = () => {
+    jump(reducedMotion ? 'auto' : 'smooth');
     // The button is about to leave: keep the keyboard where the transcript is.
     scroller.current?.focus({ preventScroll: true });
   };
@@ -278,7 +246,12 @@ export function Transcript({
         ) : null}
       </div>
       {away ? (
-        <Button icon="arrow-down" appearance="secondary" className="cw-log__jump" onClick={jump}>
+        <Button
+          icon="arrow-down"
+          appearance="secondary"
+          className="cw-log__jump"
+          onClick={jumpToLatest}
+        >
           Jump to latest
         </Button>
       ) : null}

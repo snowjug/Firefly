@@ -8,7 +8,10 @@ import {
   Tag,
   VisuallyHidden,
 } from '../../design/index.ts';
+import type { CallStatePoint } from '../call/contract.ts';
 import type { CallStatus, CustomerStateView } from './call-model.ts';
+import { Crossfade } from './Crossfade.tsx';
+import { StateTrace } from './StateTrace.tsx';
 import { Waveform } from './Waveform.tsx';
 import './stage.css';
 
@@ -24,15 +27,23 @@ export interface CustomerStageProps {
   statusId: string;
   micLevel: number;
   customerLevel: number;
+  /** The customer's level was measured from the sound that plays, not shaped from the words. */
+  customerLevelMeasured?: boolean;
   reducedMotion: boolean;
   /** One row for a narrow screen: the initials, the name and the state side by side. */
   compact: boolean;
+  /**
+   * The customer's state after each exchange, for the thin trace under their state. Left out
+   * (null) everywhere but guided practice; a narrow screen has no room for it.
+   */
+  trace?: readonly CallStatePoint[] | null;
 }
 
 /**
  * The customer and the call as it is now: synthetic initials (never a photograph), their name,
  * role and organisation, how they feel, the status in words and the waveform. The status label
- * changes in place and is not a live region: the call's announcer says each change once.
+ * changes in place and is not a live region: the call's announcer says each change once. How they
+ * feel crossfades when it changes, and shows no number.
  */
 export const CustomerStage = memo(function CustomerStage({
   name,
@@ -44,8 +55,10 @@ export const CustomerStage = memo(function CustomerStage({
   statusId,
   micLevel,
   customerLevel,
+  customerLevelMeasured = false,
   reducedMotion,
   compact,
+  trace = null,
 }: CustomerStageProps) {
   const level =
     status.wave === 'trainee' ? micLevel : status.wave === 'customer' ? customerLevel : 0;
@@ -70,11 +83,13 @@ export const CustomerStage = memo(function CustomerStage({
         <Tag size="small">Synthetic customer</Tag>
         {state ? (
           <span className="cw-mood" data-tone={state.tone} role="group" aria-label="Customer state">
-            <StatusBadge
-              label={state.label}
-              tone={state.tone}
-              icon={CUSTOMER_STATE_ICONS[state.tone]}
-            />
+            <Crossfade id={`${state.tone}:${state.label}`}>
+              <StatusBadge
+                label={state.label}
+                tone={state.tone}
+                icon={CUSTOMER_STATE_ICONS[state.tone]}
+              />
+            </Crossfade>
             <span className="cw-mood__trend">
               <Icon name={state.trendIcon} size={16} />
               <span>
@@ -85,6 +100,7 @@ export const CustomerStage = memo(function CustomerStage({
           </span>
         ) : null}
       </div>
+      {trace && !compact ? <StateTrace history={trace} tone={state?.tone ?? null} /> : null}
       <div className="cw-status" data-status={status.id} data-who={status.who}>
         <p className="cw-status__line" id={statusId}>
           <Icon name={status.icon} size={20} className="cw-status__icon" />
@@ -95,9 +111,10 @@ export const CustomerStage = memo(function CustomerStage({
         <Waveform
           mode={status.wave}
           level={level}
+          measured={status.wave === 'customer' ? customerLevelMeasured : true}
           reducedMotion={reducedMotion}
           size={compact ? 'thin' : 'regular'}
-          label={status.label}
+          label={status.wave === 'thinking' ? (status.signal ?? undefined) : status.label}
         />
       </div>
     </div>

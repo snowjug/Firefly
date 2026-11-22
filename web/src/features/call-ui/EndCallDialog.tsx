@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
+import type { ClosingCheckDTO } from '#shared/domain/api.ts';
 import { Button, Dialog, MessageBar, ProgressBar } from '../../design/index.ts';
 import type { CallProblem } from '../call/contract.ts';
 import { clock, isEndFailure, SHORT_CALL_TURNS } from './call-model.ts';
+import { ClosingCheck } from './ClosingCheck.tsx';
 import { Recovery } from './Recovery.tsx';
 import './dialogs.css';
 
@@ -28,6 +30,13 @@ export interface EndCallDialogProps {
   onDiscard?: () => void;
   /** Leaving is under way. */
   discarding?: boolean;
+  /**
+   * Guided practice: the question is "Ready to close?" and a neutral closing check sits with the
+   * usual actions. Assessment practice keeps "End the call?" with no check.
+   */
+  guided?: boolean;
+  /** Asks the server for the closing check. Left out, a guided call has the new title and no check. */
+  loadClosingCheck?: (signal: AbortSignal) => Promise<ClosingCheckDTO>;
   onContinue(): void;
   onConfirm(): void;
 }
@@ -38,7 +47,9 @@ export interface EndCallDialogProps {
  * nothing, and ending keeps the dialog open with a loading button. Once the call is closing the same
  * dialog becomes "Ending and preparing your review", with progress that has no percentage because
  * none is known, and its heading focused. A failure is explained inside it, with Retry. A call with
- * no message in it has no report: the way out is to carry on or to leave without one.
+ * no message in it has no report: the way out is to carry on or to leave without one. In guided
+ * practice the dialog is "Ready to close?" and shows what the call has covered; that look never
+ * waits for anything, never disables a button and never blocks ending.
  */
 export function EndCallDialog({
   open,
@@ -52,6 +63,8 @@ export function EndCallDialog({
   problem,
   onDiscard,
   discarding = false,
+  guided = false,
+  loadClosingCheck,
   onContinue,
   onConfirm,
 }: EndCallDialogProps) {
@@ -102,7 +115,7 @@ export function EndCallDialog({
       open={open}
       onClose={busy ? () => undefined : onContinue}
       dismissible={!busy && !discarding}
-      title="End the call?"
+      title={guided ? 'Ready to close?' : 'End the call?'}
       size="sm"
       className="cw-end"
       actions={
@@ -145,6 +158,7 @@ export function EndCallDialog({
       }
     >
       <div className="cw-end__body">
+        {guided && !nothingToReview ? <ClosingCheck load={loadClosingCheck} /> : null}
         <dl className="cw-end__facts">
           <div className="cw-end__fact">
             <dt>Call length</dt>

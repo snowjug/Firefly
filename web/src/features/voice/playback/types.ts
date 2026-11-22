@@ -60,8 +60,12 @@ export interface PlaybackHandlers {
   onBlocked(): void;
   /** `generation`: the voice could not be made. `playback`: it was made but could not be played. */
   onFailure(kind: 'generation' | 'playback'): void;
-  /** The customer's voice level, 0 to 1, about 15 times a second while it plays. */
-  onLevel(level: number): void;
+  /**
+   * The customer's voice level, 0 to 1, about 15 times a second while it plays. `measured` is true
+   * when the level was read from the sound that is playing, and false (or left out) when it was
+   * shaped from the words because the page cannot measure that voice, as with a browser voice.
+   */
+  onLevel(level: number, measured?: boolean): void;
   onDetails(details: VoiceDetails): void;
 }
 

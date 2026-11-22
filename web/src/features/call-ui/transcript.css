@@ -26,6 +26,8 @@
 }
 
 .cw-turn {
+  --_rule: var(--stroke-1);
+  position: relative;
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr);
   gap: var(--sp-3);
@@ -34,18 +36,43 @@
   border-radius: var(--r-lg);
   transition: background-color var(--dur-normal) var(--ease-easy);
 }
+/* The rule down the left edge of a turn: the customer's is neutral, the trainee's is blue, and the one
+   being spoken is the voice colour and a little heavier. It is a second cue; the name is the first. */
+.cw-turn::before {
+  content: '';
+  position: absolute;
+  inset-block: var(--sp-1);
+  inset-inline-start: 0;
+  inline-size: 2px;
+  border-radius: var(--r-pill);
+  background: var(--_rule);
+  transition: background-color var(--dur-normal) var(--ease-easy);
+}
+.cw-turn--you {
+  --_rule: var(--brand-stroke-2);
+}
 /* The newest turns are always laid out; older ones are skipped until they are scrolled to. */
 .cw-turn--old {
   content-visibility: auto;
   contain-intrinsic-size: auto 4.5rem;
 }
+/* A turn that arrives fades in and rises a short way. Easing, not spring: nothing here bounces. */
 .cw-turn--enter {
-  animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+  animation: cw-turn-in var(--motion-component) var(--ease-decelerate) both;
 }
-/* The customer's turn being spoken: a tint and an edge, so it never depends on colour alone. */
+@keyframes cw-turn-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--move-sm));
+  }
+}
+/* The customer's turn being spoken: a tint and a heavier rule, so it never depends on colour alone. */
 .cw-turn--current {
+  --_rule: var(--voice-customer);
   background: color-mix(in srgb, var(--voice-customer) 8%, var(--bg-canvas));
-  box-shadow: inset 3px 0 0 var(--voice-customer);
+}
+.cw-turn--current::before {
+  inline-size: 3px;
 }
 
 .cw-turn__you {
@@ -98,9 +125,15 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* Where the words of a spoken turn will land while they are turned into text: a line the height of the
+   shortest turn with a soft linear shimmer on it, so the words arrive in place. */
+.cw-turn__placeholder {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--lh-reading);
+}
 .cw-turn__skeleton {
-  inline-size: min(12rem, 60%);
-  margin-block-start: var(--sp-1);
+  inline-size: min(14rem, 70%);
 }
 .cw-turn--sending .cw-turn__text,
 .cw-turn--transcribing .cw-turn__text {
@@ -146,9 +179,12 @@
 }
 
 @media (forced-colors: active) {
-  .cw-turn--current {
-    box-shadow: none;
-    border-inline-start: 3px solid Highlight;
+  .cw-turn::before {
+    forced-color-adjust: none;
+    background: GrayText;
+  }
+  .cw-turn--current::before {
+    background: Highlight;
   }
   .cw-turn__you {
     border: 1px solid ButtonText;

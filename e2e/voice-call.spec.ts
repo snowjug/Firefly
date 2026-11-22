@@ -189,6 +189,123 @@ test.describe('a spoken call', () => {
     });
   });
 
+  test('each stage of a spoken turn looks like itself: bars that follow the microphone, a place in the transcript for the words before they arrive, three points while the customer works out a reply, and a strip that settles', async ({
+    page,
+  }) => {
+    const { delays } = await startControlledCall(page);
+    const screen = callScreen(page);
+    const wave = page.locator('svg.cw-wave');
+    const heights = () =>
+      wave.evaluate((svg) =>
+        [...svg.querySelectorAll('rect.cw-wave__bar')].map((bar) =>
+          Number(bar.getAttribute('height')),
+        ),
+      );
+
+    await test.step('the customer’s voice is drawn from the sound that plays, or as a calm fixed pattern, never as a meter that is only guessed', async () => {
+      await expect(screen.stopAudio).toBeVisible();
+      await expect(wave).toHaveAttribute('data-mode', 'customer');
+      await expect(wave).toHaveAttribute('data-shape', /^(?:bars|pattern)$/);
+      test.info().annotations.push({
+        type: 'the customer’s strip',
+        description: (await wave.getAttribute('data-shape')) ?? 'none',
+      });
+    });
+
+    await test.step('listening, then hearing: the bars rise with the microphone, the newest at the right', async () => {
+      await screen.stopAudio.click();
+      await expectStatus(page, 'listening');
+      await expect(wave).toHaveAttribute('data-mode', 'trainee');
+      await speak(page, true);
+      await expectStatus(page, 'speech-detected');
+      await expect(wave).toHaveAttribute('data-shape', 'bars');
+      await expect
+        .poll(async () => {
+          const bars = await heights();
+          return (bars.at(-1) ?? 0) - (bars[0] ?? 0);
+        })
+        .toBeGreaterThan(2);
+      await holdTone(page);
+    });
+
+    await test.step('processing: the words have a place in the transcript, with a shimmer there and on the strip, and no percentage', async () => {
+      delays.transcribe = 2_000;
+      delays.reply = 2_000;
+      await speak(page, false);
+      await expectStatus(page, 'processing-speech', 30_000);
+      const row = screen.turns.last();
+      await expect(row.locator('.cw-turn__placeholder')).toBeVisible();
+      await expect(row.locator('.cw-turn__tag')).toHaveText('Transcribing');
+      await expect(row.locator('.cw-turn__text')).toHaveCount(0);
+      await expect(
+        screen.customer.getByRole('progressbar', { name: 'Processing speech' }),
+      ).toBeVisible();
+      expect(await page.locator('body').innerText()).not.toMatch(/\d\s?%/);
+    });
+
+    await test.step('replying: the words are in the place that was kept for them, and three points show the customer working', async () => {
+      await expectStatus(page, 'generating-reply', 30_000);
+      await expect(screen.turns).toHaveCount(2);
+      await expect(screen.turns.last().locator('.cw-turn__placeholder')).toHaveCount(0);
+      await expect(screen.turns.last().locator('.cw-turn__text')).not.toHaveText('');
+      await expect(page.locator('.cw-think__dot')).toHaveCount(3);
+      // A screen reader hears what the three points mean, once.
+      await expect(screen.customer.getByText('Customer is responding')).toHaveCount(1);
+      const running = await page
+        .locator('.cw-think__dot')
+        .first()
+        .evaluate((dot) => getComputedStyle(dot).animationName);
+      expect(running).not.toBe('none');
+    });
+
+    await test.step('speaking: the reply is in the transcript, the ring is on, and the strip is the customer’s', async () => {
+      await expectStatus(page, 'customer-speaking', 30_000);
+      await expect(screen.turns).toHaveCount(3);
+      await expect(wave).toHaveAttribute('data-mode', 'customer');
+      await expect(page.locator('.cw-think__dot')).toHaveCount(0);
+      await expect(screen.turns.last()).toHaveAttribute('aria-current', 'true');
+    });
+
+    await test.step('finished: stopping the voice gives the turn back, and a pause settles the strip onto its quiet line', async () => {
+      delays.transcribe = 0;
+      delays.reply = 0;
+      await screen.stopAudio.click();
+      await expectStatus(page, 'listening');
+      await expect(screen.turns.last()).not.toHaveAttribute('aria-current', 'true');
+      await screen.pause.click();
+      await expectStatus(page, 'paused');
+      await expect(wave).toHaveAttribute('data-mode', 'idle');
+      await expect(wave).toHaveAttribute('data-shape', 'line', { timeout: 3_000 });
+    });
+  });
+
+  test.describe('with reduced motion', () => {
+    test.use({ reducedMotion: 'reduce' });
+
+    test('the strip is a still level meter, and the three points are still, with the same words', async ({
+      page,
+    }) => {
+      const { delays } = await startControlledCall(page);
+      const screen = callScreen(page);
+      const wave = page.locator('svg.cw-wave');
+      await screen.stopAudio.click();
+      await expectStatus(page, 'listening');
+      await speak(page, true);
+      await expectStatus(page, 'speech-detected');
+      await expect(wave).toHaveAttribute('data-shape', 'meter');
+      await holdTone(page);
+      delays.reply = 2_000;
+      await speak(page, false);
+      await expectStatus(page, 'generating-reply', 30_000);
+      await expect(page.locator('.cw-think__dot')).toHaveCount(3);
+      await expect(screen.customer.getByText('Customer is responding')).toHaveCount(1);
+      const animations = await page
+        .locator('.cw-think__dot')
+        .evaluateAll((dots) => dots.map((dot) => getComputedStyle(dot).animationName));
+      expect(animations).toEqual(['none', 'none', 'none']);
+    });
+  });
+
   test('speaking over the customer interrupts nothing: the microphone stays closed until the customer has finished or been stopped', async ({
     page,
   }) => {

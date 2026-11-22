@@ -100,6 +100,7 @@ function CallSession({ sessionId, config }: { sessionId: string; config: AppConf
       showInputMode={config.features.devDiagnostics}
       onEnded={(endedId) => navigate(reportPath(endedId), { replace: true })}
       onDiscard={discard}
+      loadClosingCheck={(signal) => api.closingCheck(sessionId, signal)}
     />
   );
 }

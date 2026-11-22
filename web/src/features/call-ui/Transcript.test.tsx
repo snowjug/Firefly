@@ -277,22 +277,31 @@ describe('drawing the rows', () => {
 });
 
 describe('following the conversation', () => {
-  it('goes to the newest turn as it arrives, gently', () => {
+  it('stays with the newest turn as it arrives, at once: the turn fades in, the log does not glide', () => {
     const turns = turnsOf('long-transcript');
     const { update } = view({ turns: turns.slice(0, 30) });
     measure(scroller(), 3000, 500, 2500);
     scrollTo.mockClear();
     update({ turns: turns.slice(0, 31) });
-    expect(scrollTo).toHaveBeenCalledWith({ top: 3000, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 3000, behavior: 'auto' });
+    expect(scrollTo).not.toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+    expect(log().querySelectorAll('.cw-turn--enter')).toHaveLength(1);
   });
 
-  it('does not animate for someone who asked for less motion', () => {
+  it('glides back to the newest turn on request, and not at all for someone who asked for less motion', () => {
     const turns = turnsOf('long-transcript');
-    const { update } = view({ turns: turns.slice(0, 30), reducedMotion: true });
-    scrollTo.mockClear();
-    update({ turns: turns.slice(0, 31) });
-    expect(scrollTo).toHaveBeenCalledTimes(1);
-    expect(scrollTo.mock.calls[0]?.[0]).toMatchObject({ behavior: 'auto' });
+    const first = view({ turns: turns.slice(0, 30) });
+    measure(scroller(), 3000, 500, 400);
+    fireEvent.scroll(scroller());
+    fireEvent.click(screen.getByRole('button', { name: 'Jump to latest' }));
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 3000, behavior: 'smooth' });
+    first.unmount();
+
+    view({ turns: turns.slice(0, 30), reducedMotion: true });
+    measure(scroller(), 3000, 500, 400);
+    fireEvent.scroll(scroller());
+    fireEvent.click(screen.getByRole('button', { name: 'Jump to latest' }));
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 3000, behavior: 'auto' });
   });
 
   it('stays where the person scrolled to, and offers a way back to the newest turn', () => {
@@ -300,11 +309,54 @@ describe('following the conversation', () => {
     const { update } = view({ turns: turns.slice(0, 30) });
     expect(screen.queryByRole('button', { name: 'Jump to latest' })).toBeNull();
     measure(scroller(), 3000, 500, 400);
+    fireEvent.wheel(scroller(), { deltaY: -120 });
     fireEvent.scroll(scroller());
     expect(screen.getByRole('button', { name: 'Jump to latest' })).toBeInTheDocument();
     scrollTo.mockClear();
+    // However many turns arrive while they read, nothing scrolls under them.
     update({ turns: turns.slice(0, 31) });
+    update({ turns: turns.slice(0, 32) });
+    update({ turns: turns.slice(0, 32), interim: 'Can I check which headset' });
     expect(scrollTo).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Jump to latest' })).toBeInTheDocument();
+  });
+
+  it('does not take its own scroll to a new turn for the person leaving it, so the button never flickers', () => {
+    const turns = turnsOf('long-transcript');
+    const { update } = view({ turns: turns.slice(0, 30) });
+    measure(scroller(), 3000, 500, 2500);
+    // The new turn makes the log taller, and the log is sent to its end.
+    measure(scroller(), 3100, 500, 2500);
+    update({ turns: turns.slice(0, 31) });
+    // On the way the browser reports places that are not the end.
+    measure(scroller(), 3100, 500, 2540);
+    fireEvent.scroll(scroller());
+    expect(screen.queryByRole('button', { name: 'Jump to latest' })).toBeNull();
+    // And it is still following when it arrives, and when the next turn comes.
+    measure(scroller(), 3100, 500, 2600);
+    fireEvent.scroll(scroller());
+    scrollTo.mockClear();
+    update({ turns: turns.slice(0, 32) });
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a hand end the page’s own scroll: scrolling away after a new turn is the person’s', () => {
+    const turns = turnsOf('long-transcript');
+    const { update } = view({ turns: turns.slice(0, 30) });
+    measure(scroller(), 3000, 500, 2500);
+    measure(scroller(), 3100, 500, 2500);
+    update({ turns: turns.slice(0, 31) });
+    fireEvent.touchStart(scroller());
+    measure(scroller(), 3100, 500, 900);
+    fireEvent.scroll(scroller());
+    expect(screen.getByRole('button', { name: 'Jump to latest' })).toBeInTheDocument();
+  });
+
+  it('treats a scroll away from the end that nobody on the page asked for as the person’s', () => {
+    // Find in page, for example, moves the log without a wheel, a key or a touch.
+    view({ turns: turnsOf('long-transcript') });
+    measure(scroller(), 3000, 500, 400);
+    fireEvent.scroll(scroller());
     expect(screen.getByRole('button', { name: 'Jump to latest' })).toBeInTheDocument();
   });
 
@@ -317,6 +369,10 @@ describe('following the conversation', () => {
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 3000, behavior: 'smooth' });
     expect(screen.queryByRole('button', { name: 'Jump to latest' })).toBeNull();
     expect(scroller()).toHaveFocus();
+    // The glide passes places that are not the end; the button does not come back for them.
+    measure(scroller(), 3000, 500, 1200);
+    fireEvent.scroll(scroller());
+    expect(screen.queryByRole('button', { name: 'Jump to latest' })).toBeNull();
     scrollTo.mockClear();
     update({ turns: turns.slice(0, 31) });
     expect(scrollTo).toHaveBeenCalledTimes(1);

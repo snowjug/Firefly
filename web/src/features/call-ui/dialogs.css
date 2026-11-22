@@ -33,6 +33,47 @@
   box-shadow: none;
 }
 
+/* The closing check of a guided call: four rows, each a word and an icon, never red and never a score.
+   The skeleton has the same rows, so the check arriving moves nothing. */
+.cw-close {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  list-style: none;
+}
+.cw-close__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: 2.5rem;
+  padding: var(--sp-2) var(--sp-3);
+}
+.cw-close__row + .cw-close__row {
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
+}
+.cw-close__icon {
+  color: var(--fg-3);
+}
+.cw-close__row--done .cw-close__icon {
+  color: var(--status-success-fg);
+}
+.cw-close__state {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  font-weight: var(--fw-semibold);
+}
+.cw-close__row--done .cw-close__state {
+  color: var(--status-success-fg);
+}
+.cw-close__skeleton {
+  grid-column: 1 / -1;
+  inline-size: 60%;
+}
+
 .cw-settings {
   display: flex;
   flex-direction: column;

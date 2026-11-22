@@ -13,6 +13,20 @@
   inline-size: 100%;
 }
 
+/* Press: every control compresses a shallow step and comes back on a spring. This is one of the four
+   places the spring is allowed. The distance and the time are zero under reduced motion, so the press
+   is then only the colour change. */
+.cw-ctl .ff-button {
+  transition:
+    background-color var(--dur-faster) var(--ease-easy),
+    border-color var(--dur-faster) var(--ease-easy),
+    color var(--dur-faster) var(--ease-easy),
+    transform var(--dur-spring) var(--ease-spring);
+}
+.cw-ctl .ff-button:active:not(:disabled, [aria-disabled='true']) {
+  transform: scale(calc(1 - var(--press-grow)));
+}
+
 /* Microphone: ready is a stable outline, listening is a soft pulse that grows and fades. */
 .ff-button.cw-talk::after {
   content: '';
@@ -27,7 +41,7 @@
   opacity: 1;
 }
 .ff-button.cw-talk[data-kind='done']::after {
-  border-color: var(--brand);
+  border-color: var(--brand-stroke);
   animation: cw-ring var(--dur-pulse) var(--ease-decelerate) infinite;
 }
 /* Returning to voice from text is the one thing the panel offers: it takes the whole row. */

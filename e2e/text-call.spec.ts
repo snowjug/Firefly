@@ -362,7 +362,153 @@ test.describe('ending the call', () => {
     // The summary says so before the scores that rest on it, and withholds the overall score.
     const summary = page.getByRole('region', { name: 'Summary', exact: true });
     await expect(summary.getByText(report.completion.note ?? /limited evidence/i)).toBeVisible();
-    await expect(summary.getByText('Not enough evidence for an overall score')).toBeVisible();
+    await expect(
+      summary.getByText('No overall practice signal: not enough evidence.'),
+    ).toBeVisible();
+  });
+});
+
+test.describe('Ready to close? in Guided practice', () => {
+  const GUIDED_CLOSE = [
+    'Hello, thanks for calling Microsoft support. My name is Sam.',
+    'Did anything change while you were away, for example who has access to the shared mailbox?',
+    "I'll own this and update you by 3 PM.",
+  ];
+
+  test('shows four neutral rows from what was said, in words, and the usual actions are all there at once', async ({
+    page,
+    api,
+  }) => {
+    const { screen } = await startTypedCall(page, api, { scenarioId: MARCUS, mode: 'guided' });
+    await converse(screen, GUIDED_CLOSE);
+    await screen.endCall.click();
+    await expect(page.getByRole('dialog', { name: 'Ready to close?' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'End the call?' })).toHaveCount(0);
+
+    await test.step('the four rows, each an icon and the words Done or Not yet', async () => {
+      await expect(screen.closing.rows).toHaveCount(4);
+      await expect(screen.closing.rows.nth(0)).toHaveText(/^Plan stated\s*(?:Done|Not yet)$/);
+      await expect(screen.closing.rows.nth(1)).toHaveText(/^Owner stated\s*(?:Done|Not yet)$/);
+      await expect(screen.closing.rows.nth(2)).toHaveText(
+        /^Update time stated\s*(?:Done|Not yet)$/,
+      );
+      await expect(screen.closing.rows.nth(3)).toHaveText(
+        /^Customer agreement confirmed\s*(?:Done|Not yet)$/,
+      );
+      for (const row of await screen.closing.rows.all()) {
+        await expect(row.locator('svg')).toHaveCount(1);
+      }
+    });
+
+    await test.step('what was said is what is read: an owner and a time were stated', async () => {
+      await expect(screen.closing.rows.nth(1)).toContainText('Done');
+      await expect(screen.closing.rows.nth(2)).toContainText('Done');
+    });
+
+    await test.step('it is neutral: nothing red, no score, nothing about what to say', async () => {
+      const text = await screen.endDialog.innerText();
+      expect(text).not.toMatch(/\bscore\b|\d\s?%|should|try saying|you could say|\bmust\b/i);
+      const notYet = screen.closing.rows.locator('.cw-close__state', { hasText: 'Not yet' });
+      for (const state of await notYet.all()) {
+        const [red, green, blue] = (
+          await state.evaluate((element) => getComputedStyle(element).color.match(/\d+/g) ?? [])
+        ).map(Number) as [number, number, number];
+        expect(red > 150 && green < 110 && blue < 110, 'a Not yet that is red').toBe(false);
+      }
+    });
+
+    await test.step('Continue call and End and review are there, at once, and not dimmed', async () => {
+      await expect(screen.endDialog.getByRole('button', { name: 'Continue call' })).toBeFocused();
+      const end = screen.endDialog.getByRole('button', { name: 'End and review' });
+      await expect(end).toBeEnabled();
+      await expect(end).not.toHaveAttribute('aria-disabled', 'true');
+    });
+  });
+
+  test('a check that is slow is left out after a second, without a word, and one press on End and review still ends the call', async ({
+    page,
+    api,
+  }) => {
+    await page.route('**/api/sessions/*/closing-check', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 6_000));
+      await route.continue().catch(() => undefined);
+    });
+    const { call, screen } = await startTypedCall(page, api, {
+      scenarioId: MARCUS,
+      mode: 'guided',
+    });
+    await converse(screen, GUIDED_CLOSE.slice(0, 1));
+    await screen.endCall.click();
+    const dialog = page.getByRole('dialog', { name: 'Ready to close?' });
+    await expect(dialog).toBeVisible();
+
+    await test.step('while it waits there is a short skeleton, nothing to read, and ending is not held up', async () => {
+      await expect(dialog.locator('.cw-close--loading')).toBeVisible();
+      await expect(dialog.locator('.cw-close--loading')).toHaveAttribute('aria-hidden', 'true');
+      const end = dialog.getByRole('button', { name: 'End and review' });
+      await expect(end).toBeEnabled();
+      await expect(end).not.toHaveAttribute('aria-disabled', 'true');
+    });
+
+    await test.step('after a second it is gone, with nothing in its place and no message about it', async () => {
+      await expect(dialog.locator('.cw-close--loading')).toHaveCount(0, { timeout: 3_000 });
+      await expect(screen.closing.list).toHaveCount(0);
+      await expect(dialog).not.toContainText(/could not|failed|error|try again|slow/i);
+    });
+
+    await test.step('one press ends the call and opens the report', async () => {
+      await dialog.getByRole('button', { name: 'End and review' }).click();
+      await expect(page).toHaveURL(new RegExp(`/sessions/${call.id}/report$`), { timeout: 30_000 });
+    });
+  });
+
+  test('a check that fails shows nothing and says nothing, and the call can still be ended', async ({
+    page,
+    api,
+    problems,
+  }) => {
+    problems.allow({ url: '/closing-check' });
+    await page.route('**/api/sessions/*/closing-check', (route) =>
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'internal_error', message: 'The check failed.' } }),
+      }),
+    );
+    const { call, screen } = await startTypedCall(page, api, {
+      scenarioId: MARCUS,
+      mode: 'guided',
+    });
+    await converse(screen, GUIDED_CLOSE.slice(0, 1));
+    await screen.endCall.click();
+    const dialog = page.getByRole('dialog', { name: 'Ready to close?' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.cw-close--loading')).toHaveCount(0);
+    await expect(screen.closing.list).toHaveCount(0);
+    await expect(dialog.getByRole('alert')).toHaveCount(0);
+    await expect(dialog).not.toContainText(/could not|failed|error|try again/i);
+    await expectNoRawFailureText(page);
+    await dialog.getByRole('button', { name: 'End and review' }).click();
+    await expect(page).toHaveURL(new RegExp(`/sessions/${call.id}/report$`), { timeout: 30_000 });
+  });
+
+  test('Assessment practice keeps "End the call?" and never asks for the check', async ({
+    page,
+    api,
+  }) => {
+    const asked: string[] = [];
+    page.on('request', (request) => {
+      if (/closing-check/.test(request.url())) asked.push(request.url());
+    });
+    const { screen } = await startTypedCall(page, api, { scenarioId: MARCUS, mode: 'immersive' });
+    await converse(screen, GUIDED_CLOSE.slice(0, 1));
+    await screen.endCall.click();
+    await expect(page.getByRole('dialog', { name: 'End the call?' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Ready to close?' })).toHaveCount(0);
+    await page.waitForTimeout(1_500);
+    await expect(screen.closing.list).toHaveCount(0);
+    await expect(page.locator('.cw-close')).toHaveCount(0);
+    expect(asked).toEqual([]);
   });
 });
 

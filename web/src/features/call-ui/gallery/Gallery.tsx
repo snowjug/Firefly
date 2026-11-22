@@ -183,6 +183,7 @@ function FixtureView({
           briefTo="/scenarios"
           initialUi={fixture.view?.initialUi}
           showInputMode={fixture.view?.showInputMode}
+          loadClosingCheck={fixture.view?.loadClosingCheck}
           onDiscard={() => undefined}
         />
       </main>

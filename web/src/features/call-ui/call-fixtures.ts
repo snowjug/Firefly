@@ -1,4 +1,5 @@
 import type {
+  ClosingCheckDTO,
   PublicStateDTO,
   SessionDTO,
   SessionScenarioView,
@@ -385,6 +386,7 @@ function snapshotOf(
     micOpen: false,
     micLevel: 0,
     customerLevel: 0,
+    customerLevelMeasured: false,
     interim: '',
     customerState,
     stateHistory: history('calm', 'concerned', 'concerned', 'concerned'),
@@ -420,6 +422,40 @@ export interface CallFixture {
     initialUi?: InitialUi;
     provider?: { demo: boolean; label: string };
     showInputMode?: boolean;
+    /** How the server answers the closing check of a guided call, when the end dialog asks. */
+    loadClosingCheck?: (signal: AbortSignal) => Promise<ClosingCheckDTO>;
+  };
+}
+
+// ---- The closing check ----------------------------------------------------------------------------
+
+export type ClosingCheckKind = 'mixed' | 'complete' | 'none' | 'loading' | 'failed';
+
+const CLOSING_CHECKS: Record<'mixed' | 'complete' | 'none', ClosingCheckDTO['checks']> = {
+  mixed: { plan: true, owner: true, updateTime: false, agreement: false },
+  complete: { plan: true, owner: true, updateTime: true, agreement: true },
+  none: { plan: false, owner: false, updateTime: false, agreement: false },
+};
+
+/**
+ * The closing check as a server might answer it: at once, never (until it is told to stop), or with
+ * a failure. The numbers are made up, and say nothing about the words of a call.
+ */
+export function closingCheckLoader(
+  kind: ClosingCheckKind,
+): (signal: AbortSignal) => Promise<ClosingCheckDTO> {
+  return (signal) => {
+    if (kind === 'failed') return Promise.reject(new Error('The check failed.'));
+    if (kind === 'loading') {
+      return new Promise<ClosingCheckDTO>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('Stopped.', 'AbortError')));
+      });
+    }
+    return Promise.resolve({
+      sessionId: 'ses_fixture_priya',
+      traineeTurns: 6,
+      checks: CLOSING_CHECKS[kind],
+    });
   };
 }
 
@@ -443,6 +479,7 @@ const speaking = snapshotOf({
   phase: 'customer-speaking',
   stage: 'customer-speaking',
   customerLevel: 0.55,
+  customerLevelMeasured: true,
   customerState: state('concerned', 'rising'),
   announcement: said('The customer is speaking. You can stop the customer audio at any time.'),
 });
@@ -723,6 +760,13 @@ const DEFINITIONS = {
       'The customer\u2019s voice plays: Stop customer audio is the way to take the turn.',
     snapshot: speaking,
   },
+  'customer-speaking-browser-voice': {
+    title: 'Customer speaking (a voice the page cannot measure)',
+    group: 'Stages of a turn',
+    description:
+      'A browser voice: the strip draws a calm fixed pattern, not a level it cannot know.',
+    snapshot: { ...speaking, customerLevelMeasured: false },
+  },
   paused: {
     title: 'Paused',
     group: 'Stages of a turn',
@@ -923,10 +967,55 @@ const DEFINITIONS = {
   'guided-hints': {
     title: 'Guided practice',
     group: 'Modes',
-    description: 'Guided practice adds the areas worth exploring to the case.',
+    description:
+      'Guided practice adds the areas worth exploring to the case, a thin trace of how the customer has felt, and the tips strip.',
     snapshot: snapshotOf(
       { turns: MIDDLE, customerState: state('concerned', 'steady', 3) },
       { config: { mode: 'guided' } },
+    ),
+  },
+  'guided-tips-hidden': {
+    title: 'Guided practice, tips put away',
+    group: 'Modes',
+    description: 'Hide tips was pressed: one quiet "Show tips" button is left.',
+    snapshot: snapshotOf(
+      { turns: MIDDLE, customerState: state('concerned', 'steady', 3) },
+      { config: { mode: 'guided' } },
+    ),
+    view: { initialUi: { tipsHidden: true } },
+  },
+  'guided-customer-speaking': {
+    title: 'Guided practice, customer speaking',
+    group: 'Modes',
+    description: 'While the customer speaks no tip moves; the strip is as it was.',
+    snapshot: snapshotOf(
+      {
+        turns: speakingTurns,
+        phase: 'customer-speaking',
+        stage: 'customer-speaking',
+        customerLevel: 0.55,
+        customerLevelMeasured: true,
+        customerState: state('concerned', 'rising'),
+      },
+      { config: { mode: 'guided' } },
+    ),
+  },
+  'guided-challenge': {
+    title: 'Challenge call, Guided practice chosen',
+    group: 'Modes',
+    description: 'A challenge call shows tips only because Guided practice was chosen.',
+    snapshot: snapshotOf(
+      { turns: MIDDLE, customerState: state('concerned', 'steady', 3) },
+      { config: { mode: 'guided', difficulty: 'challenge' } },
+    ),
+  },
+  'challenge-assessment': {
+    title: 'Challenge call, Assessment practice',
+    group: 'Modes',
+    description: 'A challenge call by default: no tips, no cues.',
+    snapshot: snapshotOf(
+      { turns: MIDDLE },
+      { config: { mode: 'immersive', difficulty: 'challenge' } },
     ),
   },
   'live-model': {
@@ -1110,6 +1199,35 @@ const DEFINITIONS = {
     description: 'The question: the accurate length, messages and state; Continue call has focus.',
     snapshot: snapshotOf({ turns: LONGER }),
     view: { initialUi: { endOpen: true } },
+  },
+  'end-ready-to-close': {
+    title: 'Ready to close? (some done)',
+    group: 'Dialogs',
+    description:
+      'Guided practice: the same question as a neutral check of four things, two of them done.',
+    snapshot: snapshotOf({ turns: LONGER }, { config: { mode: 'guided' } }),
+    view: { initialUi: { endOpen: true }, loadClosingCheck: closingCheckLoader('mixed') },
+  },
+  'end-ready-to-close-complete': {
+    title: 'Ready to close? (all done)',
+    group: 'Dialogs',
+    description: 'All four are done: the words are the same, and nothing is awarded.',
+    snapshot: snapshotOf({ turns: LONGER }, { config: { mode: 'guided' } }),
+    view: { initialUi: { endOpen: true }, loadClosingCheck: closingCheckLoader('complete') },
+  },
+  'end-ready-to-close-loading': {
+    title: 'Ready to close? (waiting for the check)',
+    group: 'Dialogs',
+    description: 'A short skeleton while the check loads. End and review is available at once.',
+    snapshot: snapshotOf({ turns: LONGER }, { config: { mode: 'guided' } }),
+    view: { initialUi: { endOpen: true }, loadClosingCheck: closingCheckLoader('loading') },
+  },
+  'end-ready-to-close-failed': {
+    title: 'Ready to close? (the check failed)',
+    group: 'Dialogs',
+    description: 'The check left out, with no message about it. The question and the buttons stay.',
+    snapshot: snapshotOf({ turns: LONGER }, { config: { mode: 'guided' } }),
+    view: { initialUi: { endOpen: true }, loadClosingCheck: closingCheckLoader('failed') },
   },
   'end-confirm-short': {
     title: 'End the call? (short call)',
