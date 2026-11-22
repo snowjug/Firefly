@@ -114,7 +114,7 @@ a {
   text-underline-offset: 0.2em;
 }
 a:hover {
-  color: var(--brand-pressed);
+  color: var(--brand-fg-hover);
   text-decoration-thickness: 2px;
 }
 

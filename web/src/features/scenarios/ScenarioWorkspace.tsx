@@ -34,7 +34,8 @@ import './workspace.css';
  * it leaves, and the details of the chosen one with the way on. One scenario is always chosen (the
  * one the address names, else the first shown). What is chosen lives in the address (the filters, the
  * scenario and every setting), so a view can be shared and survives a refresh; the address is only
- * ever replaced, never added to. Everything stacks into one page below 64em.
+ * ever replaced, never added to. The areas are stacked in one page at every width; from 64em the
+ * details are two columns (what it is, and how to run it with the way on).
  */
 export function ScenarioWorkspace() {
   useDocumentTitle('Scenarios');

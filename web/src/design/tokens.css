@@ -89,6 +89,7 @@
   --brand-tint-pressed: #96c6fa;
   --brand-fg: #0f6cbd;
   --brand-fg-2: #115ea3; /* links */
+  --brand-fg-hover: #0c3b5e; /* a link under the pointer: text, never a fill */
   --brand-stroke: #0f6cbd;
   --brand-stroke-2: #b4d6fa;
 
@@ -400,6 +401,7 @@
     --brand-tint-pressed: #24456a;
     --brand-fg: #62abf5;
     --brand-fg-2: #7bb9f7;
+    --brand-fg-hover: #a6d0fa;
     --brand-stroke: #62abf5;
     --brand-stroke-2: #2a4a70;
 

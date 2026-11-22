@@ -104,6 +104,12 @@ const textPairs: [string, string][] = [
   ['brand-fg-2', 'bg-raised'],
   ['brand-fg-2', 'brand-tint'],
   ['brand-fg-2', 'brand-tint-hover'],
+  // A link under the pointer (`a:hover`, "Show more"): text on the same surfaces as the link itself.
+  ['brand-fg-hover', 'bg-canvas'],
+  ['brand-fg-hover', 'bg-quiet'],
+  ['brand-fg-hover', 'bg-raised'],
+  ['brand-fg-hover', 'brand-tint'],
+  ['brand-fg-hover', 'brand-tint-hover'],
   ['fg-1', 'brand-tint'],
   ['fg-2', 'brand-tint'],
   // Destructive actions.

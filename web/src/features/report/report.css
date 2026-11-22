@@ -262,7 +262,7 @@
   text-underline-offset: 0.2em;
 }
 .rp-more:hover {
-  color: var(--brand-pressed);
+  color: var(--brand-fg-hover);
 }
 
 /* ---- Quotes: the trainee's words, set apart as evidence ----------------------------------- */
