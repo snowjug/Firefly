@@ -5,7 +5,7 @@
   "license": "MIT (see .github/ecc/LICENSE)",
   "method": "Selected skill directories copied unmodified from the pinned commit into .github/skills/ (the location GitHub Copilot CLI discovers). The managed installer was dry-run first and rejected: its plan for --skills pulled in 474 operations (rules for every language, agents, commands, platform configs).",
   "hooks": "Not installed. ECC hooks are not adapted for Copilot CLI.",
-  "skillCount": 29,
+  "skillCount": 30,
   "skills": [
     {
       "name": "accessibility",
@@ -239,6 +239,15 @@
         {
           "path": ".github/skills/make-interfaces-feel-better/SKILL.md",
           "sha256": "aff91aef917cba9c65681ae77197cee93ce9b697ee8916ea684ef8537c99fb52"
+        }
+      ]
+    },
+    {
+      "name": "motion-advanced",
+      "files": [
+        {
+          "path": ".github/skills/motion-advanced/SKILL.md",
+          "sha256": "1ee09b942bf328ffa97148bed838ecc8789c1891ca441abccdca52b4c47a9742"
         }
       ]
     },
