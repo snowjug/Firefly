@@ -36,7 +36,7 @@
   display: block;
   inline-size: 100%;
   block-size: 100%;
-  background: var(--brand);
+  background: var(--brand-stroke);
 }
 
 /* Filling once from empty, one segment after another. Only when motion is allowed. */
@@ -71,6 +71,21 @@
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   font-variant-numeric: tabular-nums;
+}
+/* The text stays in the document, for assistive technology and for anything that reads the page as
+   text; only its drawing is dropped, so the bar is never the only carrier. */
+.ff-scorebar--text-hidden {
+  position: relative;
+}
+.ff-scorebar--text-hidden .ff-scorebar__text {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .ff-scorebar__number {
   color: var(--fg-1);

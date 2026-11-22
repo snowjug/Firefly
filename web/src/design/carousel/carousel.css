@@ -1,0 +1,227 @@
+/* The carousel: a horizontal product gallery. A scroll container (the viewport) holds one flex row
+   (the track); the track is what stretches at either end of a mouse drag and then settles back.
+   Touch scrolls and snaps natively. Only transform and opacity ever move. Nothing here animates by
+   itself: there is no auto-play, and under reduced motion every transition is instant. */
+
+.ff-carousel {
+  /* How far the first item sits in from the viewport's edge. The viewport is wider than the page
+     column by this much on each side, so the items line up with the column while the row runs out
+     into the page's side padding (to the edge of the window on a phone): what an item draws outside
+     itself (a shadow, the focus ring) is not clipped, and the fades at either end sit where no
+     snapped item is. A gallery inside something with side padding of its own gives that padding here. */
+  --ff-carousel-inset: var(--gutter);
+  /* How far the end that has more beyond it fades out, and, on a phone, how much of the next item shows. */
+  --ff-carousel-fade: 2rem;
+  --ff-carousel-peek: 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+
+.ff-carousel__viewport {
+  container-type: inline-size;
+  margin-inline: calc(var(--ff-carousel-inset) * -1);
+  margin-block: calc(var(--sp-3) * -1);
+  padding-block: var(--sp-3);
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* The edge of the gallery is not the edge of the page: no back-swipe, no scroll chaining sideways. */
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--ff-carousel-inset);
+  scrollbar-width: none;
+  /* Both pans stay with the browser, so the wheel and a vertical swipe still scroll the page. */
+  touch-action: pan-x pan-y pinch-zoom;
+}
+.ff-carousel__viewport::-webkit-scrollbar {
+  display: none;
+}
+.ff-carousel__viewport[data-dragging='true'] {
+  cursor: grabbing;
+}
+/* After a mouse drag the carousel glides to where it comes to rest; snapping waits until it has
+   arrived (the browser would otherwise snap at once, with no glide). */
+.ff-carousel__viewport[data-settling='true'] {
+  scroll-snap-type: none;
+}
+
+/* An edge that has more beyond it fades out, as the product rail's does, so an item that is cut by
+   the edge is not cut mid-word at full strength. The start edge fades over the inset only, which is
+   empty when an item has snapped, so a chosen item is never dimmed. The fade is a mask: only its
+   opacity matters, so it takes no colour of its own. */
+.ff-carousel__viewport[data-more='end'] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    currentColor calc(100% - var(--ff-carousel-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    currentColor calc(100% - var(--ff-carousel-fade)),
+    transparent
+  );
+}
+.ff-carousel__viewport[data-more='start'] {
+  -webkit-mask-image: linear-gradient(
+    to left,
+    currentColor calc(100% - var(--ff-carousel-inset)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to left,
+    currentColor calc(100% - var(--ff-carousel-inset)),
+    transparent
+  );
+}
+.ff-carousel__viewport[data-more='start end'] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    currentColor var(--ff-carousel-inset),
+    currentColor calc(100% - var(--ff-carousel-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    currentColor var(--ff-carousel-inset),
+    currentColor calc(100% - var(--ff-carousel-fade)),
+    transparent
+  );
+}
+
+.ff-carousel__track {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-4);
+  inline-size: max-content;
+  min-inline-size: 100%;
+  margin: 0;
+  padding: 0 var(--ff-carousel-inset);
+  /* Past either end a drag stretches the track by a third of the drag, at most 48 px, and the spring
+     settles it on release. The hook only sets --drag-overscroll for a mouse that allows motion. */
+  transform: translateX(calc(var(--drag-overscroll, 0px) * -1));
+  transition: transform var(--dur-spring) var(--ease-spring);
+}
+.ff-carousel__viewport[data-dragging='true'] .ff-carousel__track {
+  transition: none;
+}
+.ff-carousel__viewport[data-dragging='true'] .ff-carousel__item {
+  pointer-events: none;
+}
+
+.ff-carousel__item {
+  display: flex;
+  flex: 0 0 var(--ff-carousel-item, 17.5rem);
+  min-inline-size: 0;
+  scroll-snap-align: start;
+  transition: opacity var(--motion-component) var(--ease-easy);
+}
+.ff-carousel__item > * {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+/* On a phone one item leads and a slice of the next shows beside it, so the row plainly scrolls. The
+   item is what is left of the row after the inset, the gap and the slice, up to a comfortable width. */
+@media (max-width: 47.99em) {
+  .ff-carousel__item {
+    flex-basis: min(
+      calc(100cqw - var(--ff-carousel-inset) - var(--sp-4) - var(--ff-carousel-peek)),
+      22rem
+    );
+  }
+}
+
+/* The other items step back very slightly while one is pointed at or has keyboard focus. */
+@media (hover: hover) and (pointer: fine) {
+  .ff-carousel__track:has(.ff-carousel__item > [data-fx='on']:hover)
+    .ff-carousel__item:not(:hover) {
+    opacity: 0.92;
+  }
+}
+.ff-carousel__track:has(.ff-carousel__item :focus-visible)
+  .ff-carousel__item:not(:has(:focus-visible)) {
+  opacity: 0.92;
+}
+
+/* ---- The count, the position bar and the two buttons ------------------------------------------ */
+.ff-carousel__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--target);
+}
+.ff-carousel__count {
+  flex: none;
+  min-inline-size: 4.5rem;
+  color: var(--fg-3);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-variant-numeric: tabular-nums;
+}
+/* "Selected 10 of 16" is longer than "1–4 of 12"; the room is kept so the bar beside it does not shift
+   as the number grows. */
+.ff-carousel__count[data-kind='selected'] {
+  min-inline-size: 7.5rem;
+}
+.ff-carousel__bar {
+  position: relative;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  block-size: 3px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--stroke-2);
+}
+.ff-carousel__thumb {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: var(--ff-thumb-w, 100%);
+  border-radius: inherit;
+  background: var(--brand-stroke);
+  transform: translateX(var(--ff-thumb-x, 0px));
+}
+.ff-carousel__nav {
+  display: flex;
+  flex: none;
+  gap: var(--sp-1h);
+}
+
+/* The arrow leans a few pixels the way it points, on focus and where there is a pointer to hover. */
+.ff-carousel__arrow .ff-icon {
+  transition: transform var(--motion-control) var(--ease-decelerate);
+}
+.ff-carousel__arrow[data-direction='previous']:focus-visible .ff-icon {
+  transform: translateX(calc(var(--move-xs) * -0.75));
+}
+.ff-carousel__arrow[data-direction='next']:focus-visible .ff-icon {
+  transform: translateX(calc(var(--move-xs) * 0.75));
+}
+@media (hover: hover) and (pointer: fine) {
+  .ff-carousel__arrow[data-direction='previous']:hover:not([aria-disabled='true']) .ff-icon {
+    transform: translateX(calc(var(--move-xs) * -0.75));
+  }
+  .ff-carousel__arrow[data-direction='next']:hover:not([aria-disabled='true']) .ff-icon {
+    transform: translateX(calc(var(--move-xs) * 0.75));
+  }
+}
+
+@media print {
+  .ff-carousel__controls {
+    display: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ff-carousel__bar {
+    forced-color-adjust: none;
+    background: GrayText;
+  }
+  .ff-carousel__thumb {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}

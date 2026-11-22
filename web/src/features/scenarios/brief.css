@@ -13,7 +13,38 @@
 .brf-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+}
+/* The same product tile as the scenario's details: the view transition carries one onto the other. */
+.brf-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border: var(--stroke-w) solid var(--accent-border);
+  border-radius: var(--r-xl);
+  background: var(--accent-bg);
+  color: var(--accent-fg);
+}
+.brf-head__text {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+}
+.brf-product {
+  color: var(--fg-3);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+/* The title and the note that the scenario is made up stand together, so the note is read with it. */
+.brf-titlerow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--sp-1) var(--sp-3);
 }
 .brf-title {
@@ -23,14 +54,29 @@
   font-weight: var(--fw-semibold);
 }
 .brf-subtitle {
-  flex: 1 1 14rem;
   min-inline-size: 0;
   color: var(--fg-2);
   font-size: var(--fs-subtitle2);
   line-height: var(--lh-subtitle2);
 }
+.brf-mode {
+  margin-block-start: var(--sp-1);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.brf-mode strong {
+  color: var(--fg-1);
+}
 .brf-layout {
   display: grid;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+/* What the case is, and under it what is said about privacy: the left column. */
+.brf-main {
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-4);
   min-inline-size: 0;
 }
@@ -67,19 +113,19 @@
   animation: brf-in var(--dur-normal) var(--ease-decelerate) both;
 }
 .brf-row:nth-child(2) {
-  animation-delay: 40ms;
+  animation-delay: var(--dur-stagger);
 }
 .brf-row:nth-child(3) {
-  animation-delay: 80ms;
+  animation-delay: calc(var(--dur-stagger) * 2);
 }
 .brf-row:nth-child(4) {
-  animation-delay: 120ms;
+  animation-delay: calc(var(--dur-stagger) * 3);
 }
 .brf-row:nth-child(5) {
-  animation-delay: 160ms;
+  animation-delay: calc(var(--dur-stagger) * 4);
 }
 .brf-row:nth-child(6) {
-  animation-delay: 200ms;
+  animation-delay: calc(var(--dur-stagger) * 5);
   border-block-end: 0;
 }
 @keyframes brf-in {
@@ -122,8 +168,17 @@
   gap: var(--sp-1) var(--sp-2);
 }
 .brf-more {
-  padding: var(--sp-1) var(--sp-4);
+  padding-block: var(--sp-1);
   border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+/* The rules under the rows run from edge to edge of the card; what is written on them lines up with
+   the terms of the six rows above (20 px in), and the button's own highlight and focus ring stay inside. */
+.brf-more .ff-disclosure__button {
+  inline-size: calc(100% - var(--sp-6));
+  margin-inline: var(--sp-3);
+}
+.brf-more .ff-disclosure__panel {
+  padding-inline: var(--sp-5);
 }
 .brf-more .ff-disclosure:last-child {
   border-block-end: 0;
@@ -225,19 +280,19 @@
   opacity: 1;
 }
 .brf-wave[data-active] > span {
-  animation: brf-wave 900ms var(--ease-easy) infinite;
+  animation: brf-wave var(--dur-wave) var(--ease-easy) infinite;
 }
 .brf-wave[data-active] > span:nth-child(2) {
-  animation-delay: -300ms;
+  animation-delay: calc(var(--dur-wave) * -0.33);
 }
 .brf-wave[data-active] > span:nth-child(3) {
-  animation-delay: -600ms;
+  animation-delay: calc(var(--dur-wave) * -0.66);
 }
 .brf-wave[data-active] > span:nth-child(4) {
-  animation-delay: -150ms;
+  animation-delay: calc(var(--dur-wave) * -0.16);
 }
 .brf-wave[data-active] > span:nth-child(5) {
-  animation-delay: -450ms;
+  animation-delay: calc(var(--dur-wave) * -0.5);
 }
 @keyframes brf-wave {
   0%,
@@ -275,8 +330,26 @@
   grid-column: 2;
   justify-self: start;
 }
+/* Wide enough, the way to say it has been read goes beside the words rather than under them. */
+@media (min-width: 36em) {
+  .brf-notice {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .brf-notice__icon {
+    align-self: start;
+  }
+  .brf-notice > .ff-button {
+    grid-column: 3;
+    justify-self: end;
+  }
+}
+/* Once the notice has been read, the details are a closed row of their own, in a card like the case's. */
 .brf-privacy {
-  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  padding-inline: var(--sp-2);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-canvas);
 }
 ul.brf-details {
   display: flex;
@@ -342,6 +415,14 @@ ul.brf-details {
   flex: none;
   white-space: nowrap;
 }
+/* From a tablet down the small buttons and the toggle in these two blocks are as tall as a thumb needs. */
+@media (max-width: 48em) {
+  .brf-notice > .ff-button,
+  .brf-ready__check .ff-button,
+  .brf-notice .ff-disclosure--inline .ff-disclosure__button {
+    min-block-size: var(--target);
+  }
+}
 /* The level while the microphone is being checked: a bar that grows from its left end. It sits
    after the button, so while it is hidden it leaves nothing to push the button sideways. */
 .brf-meter {
@@ -365,7 +446,7 @@ ul.brf-details {
   background: var(--voice-trainee);
   transform: scaleX(var(--level, 0));
   transform-origin: left center;
-  transition: transform 60ms linear;
+  transition: transform var(--dur-instant) linear;
 }
 /* Pointing at (or tabbing to) the Start button lights up what it will use. */
 .brf-side:has(.brf-start:is(:hover, :focus-visible)) .brf-ready {
@@ -378,6 +459,20 @@ ul.brf-details {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+}
+/* The two ways to start are one block: the main one, and the typed one quietly under it. */
+.brf-actions__start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.brf-actions .brf-actions__text {
+  color: var(--brand-fg-2);
+}
+/* The way back is apart from both, under a rule. */
+.brf-actions__edit {
+  padding-block-start: var(--sp-2);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
 }
 
 /* ---- Loading and unavailable ------------------------------------------------------------ */
@@ -418,6 +513,7 @@ ul.brf-details {
   .brf-side,
   .brf-ready,
   .brf-notice,
+  .brf-privacy,
   .brf-unavailable {
     border-color: ButtonText;
     box-shadow: none;

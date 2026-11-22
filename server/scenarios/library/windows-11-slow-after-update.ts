@@ -2,10 +2,11 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 
 // Starter scenario. Everything here is fictional: people, organisation and case number.
 //
-// Root cause (hidden from the trainee; plausible, and never confirmed on the call): several small
-// things rather than one fault. Arjun never shuts the laptop down and keeps postponing the restart
-// the update is asking for, he installed a free itinerary planner on the day of the update that
-// starts with the laptop, and the main drive is nearly full. He half suspects the update itself.
+// Possible contributors on Arjun's laptop (hidden from the trainee; plausible, never confirmed on
+// the call, and the other laptops may have a different cause): several small things rather than
+// one fault. Arjun never shuts the laptop down and keeps postponing the restart the update is
+// asking for, he installed a free itinerary planner on the day of the update that starts with the
+// laptop, and the main drive is nearly full. He half suspects the update itself.
 // A strong call is friendly and structured: it turns "slow" into specifics, finds what else
 // changed, does not blame the update early, keeps the chat on track kindly, explains one simple
 // next step in plain words and agrees a follow-up time.
@@ -14,6 +15,7 @@ const scenario = {
   id: 'windows-11-slow-after-update',
   version: 1,
   title: 'Laptop has felt slow since an update',
+  shortTitle: 'Laptop slow since update',
   listSummary: 'A travel consultant says his laptop has felt slow since an update a few days ago.',
   summary:
     'A travel consultant says his work laptop has felt slow since an update a few days ago. He is friendly and chatty, which gives the call plenty of detail to sort through. Practise scoping a vague symptom, asking about what changed, and agreeing clear next steps.',
@@ -22,6 +24,19 @@ const scenario = {
 
   product: { id: 'windows-11', area: 'Performance' },
   caseReference: 'SIM-430004',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
+    productFamily: 'windows',
+    sourceCategories: ['microsoft-support', 'microsoft-learn'],
+    behaviourCheck: 'checked-partly',
+    checkedOn: '2026-11-22',
+    syntheticConfirmed: true,
+    review: 'assistant-reviewed',
+    notes:
+      "Reviewed on 22 Nov 2026 against current public pages on improving PC performance, restarts after updates and the Windows Update FAQ. Contributors stay unconfirmed; the update date and 'nothing is broken' wording hedged. AI-assisted review, not a mentor's.",
+  },
 
   issueType: 'slow-performance',
   impact: 'low',
@@ -93,10 +108,10 @@ const scenario = {
   },
   brief: {
     situation:
-      'A travel consultant is calling because his work laptop has felt slow since an update a few days ago. Nothing is broken, and he is friendly and chatty. He gives lots of detail, not all of it useful.',
+      'A travel consultant is calling because his work laptop has felt slow since an update a few days ago. He says everything still works, and he is friendly and chatty. He gives lots of detail, not all of it useful.',
     goal: 'Find out what exactly is slow and what changed, keep the call on track kindly, and agree clear next steps and a follow-up.',
     groundRules: [
-      'The customer and organisation are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       'You cannot see his laptop in this practice call, so rely on what Arjun tells you.',
     ],
@@ -203,7 +218,7 @@ const scenario = {
       intents: ['timing_onset'],
       text: "I think the update went on at the end of last week, maybe Thursday? I'd have to look at my calendar.",
       confirmedText:
-        'My calendar says I had a client call on Friday and it was slow then, so the update must have been Thursday.',
+        'My calendar says it was slow on Friday. I think the update was Thursday, but I cannot be sure.',
     },
     {
       id: 'vf-how-much-slower',
@@ -299,7 +314,7 @@ const scenario = {
       statementSimple:
         'I do not shut the laptop down. I close the lid. A message kept asking me to restart to finish the update. I kept choosing later.',
       missedConsequence:
-        'The most likely contributor goes unnoticed, so the call ends with vague advice and Arjun still has a pending restart he does not know matters.',
+        'A pending restart goes unnoticed, so the call ends without checking whether it might help the slowness.',
       betterQuestion:
         'When did you last restart or shut the laptop down, and is it showing any message about the update?',
     },
@@ -543,7 +558,7 @@ const scenario = {
   expectedOutcome:
     'Arjun leaves with a clear picture of what feels slow, what might have changed around the update, and a simple first step explained in plain words. The engineer agrees a time to check in, and he knows what happens if it does not improve.',
   evaluatorNotes:
-    "Root cause (plausible, not confirmed on the call): several small things rather than one fault. Arjun never shuts the laptop down and keeps postponing a restart that the update is asking for, installed a free itinerary planner on the day of the update that starts with the laptop, and has a nearly full main drive. A strong call is friendly and structured: it turns 'slow' into specifics, finds what else changed, does not blame the update early, keeps the chat on track kindly, explains one simple next step in plain words and agrees a follow-up time.",
+    "Possible contributors on Arjun's laptop are unconfirmed; the other laptops may have a different cause. Arjun never shuts the laptop down and keeps postponing a restart that the update is asking for, installed a free itinerary planner on the day of the update that starts with the laptop, and has a nearly full main drive. A strong call is friendly and structured: it turns 'slow' into specifics, finds what else changed, does not blame the update early, keeps the chat on track kindly, explains one simple next step in plain words and agrees a follow-up time.",
 } satisfies ScenarioInput;
 
 export default scenario;

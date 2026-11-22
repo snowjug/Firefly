@@ -19,6 +19,7 @@ const scenario = {
   id: 'outlook-shared-mailbox-missing',
   version: 1,
   title: 'Shared team mailbox missing from Outlook',
+  shortTitle: 'Shared mailbox missing',
   listSummary:
     "An office coordinator cannot see his team's shared mailbox in Outlook and wants it back.",
   summary:
@@ -28,6 +29,19 @@ const scenario = {
 
   product: { id: 'outlook', area: 'Shared mailbox' },
   caseReference: 'SIM-410002',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['microsoft-learn', 'microsoft-support'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
+    syntheticConfirmed: true,
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public pages on creating a shared mailbox, removing automapping and shared mailbox settings in new Outlook. Terms and story are plausible; one coaching line corrected. AI-assisted review, not a mentor's.",
+  },
   issueType: 'permissions',
   impact: 'low',
   startingTemperature: 'calm',
@@ -97,7 +111,7 @@ const scenario = {
       'An office coordinator is calling because a shared team mailbox is no longer listed in his Outlook. He uses Outlook every day but does not manage how it is set up.',
     goal: 'Understand what he sees, explain things in everyday words, and agree what happens next and when he will hear from you.',
     groundRules: [
-      'The customer, organisation and product are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; he answers briefly and will not volunteer much.',
       'You cannot see his mailbox in this practice call, so rely on what he tells you.',
     ],
@@ -290,7 +304,7 @@ const scenario = {
         },
       },
       missedConsequence:
-        'The engineer never learns that this is specific to him, so it sounds like a general Outlook fault and the team enquiries keep depending on Jen.',
+        'The engineer never learns that some colleagues can still see it, so it sounds like a general Outlook fault and enquiries keep depending on a few people.',
       betterQuestion:
         'Can anyone else on the team still see the mailbox, and how are the enquiries being handled for now?',
     },
@@ -301,7 +315,7 @@ const scenario = {
       statement:
         "Our office manager mentioned she'd been tidying up who has access to the shared mailboxes while I was off.",
       revealWhen:
-        'Asks whether anything changed while he was away, or who looks after who can open the shared mailboxes.',
+        'Asks whether anything changed while he was away, or who looks after access to the shared mailboxes.',
       intents: ['recent_changes'],
       cues: [
         'changed',

@@ -4,6 +4,7 @@ import {
   CALL_STAGES,
   DIFFICULTY_RANK,
   DISCOVERY_INTENTS,
+  PRODUCT_INFO,
   type Difficulty,
 } from '#shared/domain/vocab.ts';
 import azureDeploymentFails from './library/azure-deployment-fails-permissions.ts';
@@ -57,6 +58,7 @@ export function loadScenarios(input: unknown[] = LIBRARY_INPUT): LoadedScenarios
   const errors: string[] = [];
   const seen = new Set<string>();
   const personas = new Map<string, string>();
+  const shortTitles = new Map<string, string>();
   for (const raw of input) {
     const parsed = ScenarioDefinitionSchema.safeParse(raw);
     if (!parsed.success) {
@@ -81,6 +83,16 @@ export function loadScenarios(input: unknown[] = LIBRARY_INPUT): LoadedScenarios
       );
     } else {
       personas.set(personaKey, parsed.data.id);
+    }
+    // Two cards with the same short title could not be told apart.
+    const shortKey = parsed.data.shortTitle.trim().toLowerCase();
+    const sameShort = shortTitles.get(shortKey);
+    if (sameShort) {
+      errors.push(
+        `${parsed.data.id}: shortTitle "${parsed.data.shortTitle}" is already used by ${sameShort}`,
+      );
+    } else {
+      shortTitles.set(shortKey, parsed.data.id);
     }
     errors.push(...semanticIssues(parsed.data));
     scenarios.push(parsed.data);
@@ -166,8 +178,66 @@ export function sharedPhrase(source: string, other: string): string | null {
   return null;
 }
 
-export function semanticIssues(s: ScenarioDefinition): string[] {
+// Words that carry no meaning of their own in a title.
+const TITLE_FUNCTION_WORDS = new Set(
+  'from since after before above below over under into onto near far now again during until'.split(
+    ' ',
+  ),
+);
+
+/** A word cut back to a rough root, so that "approvals" and "approval", or "running" and "run", match. */
+function stem(word: string): string {
+  let w = word.replace(/'s$/, '');
+  if (w === "can't") return 'cannot';
+  if (w.length > 4 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
+  if (w.length > 5 && w.endsWith('ing')) w = w.slice(0, -3);
+  else if (w.length > 4 && w.endsWith('ed')) w = w.slice(0, -2);
+  else if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) w = w.slice(0, -1);
+  if (w.length > 3 && /([^aeiou])\1$/.test(w)) w = w.slice(0, -1);
+  if (w.length > 3 && w.endsWith('e')) w = w.slice(0, -1);
+  return w;
+}
+
+/** The meaningful words of a title, each with its root. */
+const contentRoots = (text: string): { word: string; root: string }[] =>
+  wordsOf(text)
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w) && !TITLE_FUNCTION_WORDS.has(w))
+    .map((word) => ({ word, root: stem(word) }));
+
+/**
+ * The short title is the title on a scenario card. It is a shorter way to say what the title and
+ * the public brief already say, so it is no longer than the title, shares a content word with it
+ * and uses no content word that neither the title nor `publicBrief.issue` holds: it can add nothing
+ * to what a trainee may read, so it cannot hint at a hidden fact.
+ */
+function shortTitleIssues(s: ScenarioDefinition): string[] {
   const issues: string[] = [];
+  if (s.shortTitle.length > s.title.length) {
+    issues.push(`${s.id}: shortTitle is longer than the title`);
+  }
+  const fromTitle = new Set(contentRoots(s.title).map((w) => w.root));
+  const own = contentRoots(s.shortTitle);
+  if (!own.some((w) => fromTitle.has(w.root))) {
+    issues.push(`${s.id}: shortTitle shares no content word with the title`);
+  }
+  const known = new Set([...fromTitle, ...contentRoots(s.publicBrief.issue).map((w) => w.root)]);
+  const added = own.filter((w) => !known.has(w.root)).map((w) => w.word);
+  if (added.length > 0) {
+    issues.push(
+      `${s.id}: shortTitle adds "${added.join('", "')}", which neither the title nor publicBrief.issue says`,
+    );
+  }
+  return issues;
+}
+
+export function semanticIssues(s: ScenarioDefinition): string[] {
+  const issues: string[] = [...shortTitleIssues(s)];
+  const family = PRODUCT_INFO[s.product.id].family;
+  if (s.grounding.productFamily !== family) {
+    issues.push(
+      `${s.id}: grounding.productFamily "${s.grounding.productFamily}" is not the family of ${s.product.id} ("${family}")`,
+    );
+  }
   // The public brief is the same at every call stage, so a scenario written for a first contact has
   // no earlier contact to state: it would be shown, and be wrong, if the call were set to a call-back.
   if (s.callStage === 'first-contact' && s.publicBrief.previousContact) {
@@ -179,6 +249,7 @@ export function semanticIssues(s: ScenarioDefinition): string[] {
   // fact has to come out through discovery, so none of its distinctive tokens may appear here.
   const earlyText: [string, string][] = [
     ['title', s.title],
+    ['shortTitle', s.shortTitle],
     ['listSummary', s.listSummary],
     ['summary', s.summary],
     ['openingCore', s.openingCore],

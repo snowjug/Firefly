@@ -1,0 +1,186 @@
+/* The top of the report in one block: the Microsoft product on its accent tile, the scenario, the
+   facts of the call, the coaching summary, one modest line for the practice signal and the first
+   actions. The accent (the hue of the product) is a small mark: the tile and a thin edge, never a
+   fill. Tokens only. */
+
+.rp-exec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-inline-start: var(--stroke-w-thick) solid var(--accent-fg, var(--brand-stroke));
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+  min-inline-size: 0;
+}
+@media (min-width: 64em) {
+  .rp-exec {
+    grid-area: head;
+    padding: var(--sp-6);
+  }
+}
+
+.rp-exec__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+}
+.rp-exec__product {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+}
+.rp-exec__tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border: var(--stroke-w) solid var(--accent-border, var(--stroke-2));
+  border-radius: var(--r-lg);
+  background: var(--accent-bg, var(--bg-subtle));
+  color: var(--accent-fg, var(--fg-1));
+}
+.rp-exec__names {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.rp-exec__name {
+  font-weight: var(--fw-semibold);
+}
+.rp-exec__area {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-exec__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.rp-exec__titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.rp-exec__title {
+  overflow-wrap: anywhere;
+}
+.rp-exec__scenario {
+  color: var(--fg-2);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  text-wrap: balance;
+}
+
+.rp-exec__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-10);
+  margin: 0;
+  padding-block: var(--sp-3);
+  border-block: var(--stroke-w) solid var(--stroke-3);
+}
+.rp-exec__fact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.rp-exec__label {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.rp-exec__states {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1h);
+}
+.rp-exec__arrow {
+  color: var(--fg-3);
+}
+
+.rp-exec__summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+.rp-exec__text {
+  max-inline-size: 70ch;
+  text-wrap: pretty;
+}
+/* One modest line, as small as the notes around it: the signal is the average of six skills. */
+.rp-exec__signal {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-exec__number {
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.rp-exec__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-exec__note .ff-icon {
+  flex: none;
+  margin-block-start: 1px;
+}
+.rp-exec__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+}
+/* Narrow: one button to a line, so the stack is even and every target is the full width. */
+@media (max-width: 29.99em) {
+  .rp-exec__actions > * {
+    flex: 1 1 100%;
+  }
+}
+
+@media (forced-colors: active) {
+  .rp-exec {
+    border-color: CanvasText;
+    border-inline-start-color: Highlight;
+  }
+  .rp-exec__tile {
+    border-color: CanvasText;
+    color: CanvasText;
+  }
+}
+
+@media print {
+  .rp-exec {
+    border-color: CanvasText;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+  .rp-exec__tile {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .rp-exec__actions {
+    display: none !important;
+  }
+}

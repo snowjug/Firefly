@@ -15,6 +15,7 @@ export const FIXTURE_SCENARIO = {
   id: FIXTURE_ID,
   version: 1,
   title: 'Locked out after a password change',
+  shortTitle: 'Locked out after password change',
   listSummary:
     'A front-desk coordinator cannot sign in to her work account after changing her password.',
   summary:
@@ -24,6 +25,14 @@ export const FIXTURE_SCENARIO = {
 
   product: { id: 'entra-id', area: 'Sign-in' },
   caseReference: 'SIM-482913',
+  grounding: {
+    authoredOn: '2026-11-21',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['author-experience'],
+    behaviourCheck: 'not-checked',
+    syntheticConfirmed: true,
+    review: 'unreviewed',
+  },
 
   issueType: 'sign-in-access',
   impact: 'low',

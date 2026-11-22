@@ -1,16 +1,21 @@
-/* The voice strip: a level, a quiet line, dots while the customer thinks, a shimmer while speech is
-   turned into text. Colour is never the only cue (the status label says it in words). */
+/* The voice strip: bars that follow a voice, a calm fixed pattern for a voice that cannot be measured,
+   three points while the customer works out a reply, a shimmer while speech is turned into text, and
+   a quiet line. Colour is never the only cue (the status label says it in words). */
 
 .cw-wave,
-.cw-wave-shimmer {
+.cw-wave-shimmer,
+.cw-think {
   display: block;
   inline-size: 100%;
-  block-size: 2.5rem;
+  /* No wider than the drawing is: its bars keep their height, and a box any wider would crop them. */
+  max-inline-size: 17.5rem;
+  block-size: 2rem;
 }
 .cw-wave--thin {
-  block-size: 1.25rem;
+  block-size: 1.5rem;
 }
-.cw-wave-shimmer {
+.cw-wave-shimmer,
+.cw-think {
   display: flex;
   align-items: center;
 }
@@ -33,48 +38,77 @@
 .cw-wave__base {
   fill: var(--stroke-1);
 }
-.cw-wave__dot {
-  fill: var(--fg-3);
-  opacity: 0.3;
-  animation: cw-dot var(--dur-wave) var(--ease-easy) infinite;
-}
-.cw-wave__dot:nth-child(2) {
-  animation-delay: 120ms;
-}
-.cw-wave__dot:nth-child(3) {
-  animation-delay: 240ms;
-}
-.cw-wave__dot:nth-child(4) {
-  animation-delay: 360ms;
-}
-.cw-wave__dot:nth-child(5) {
-  animation-delay: 480ms;
-}
-.cw-wave__dot:nth-child(6) {
-  animation-delay: 600ms;
-}
-.cw-wave__dot:nth-child(7) {
-  animation-delay: 720ms;
-}
 
-@keyframes cw-dot {
-  50% {
-    opacity: 1;
+/* A customer voice the page cannot measure: the same bars every time, breathing slowly. It is a
+   pattern and not data, so it never moves with the sound. */
+.cw-wave--calm .cw-wave__bar {
+  animation: cw-breathe var(--dur-pulse) var(--ease-easy) infinite alternate;
+}
+@keyframes cw-breathe {
+  from {
+    opacity: 0.5;
   }
 }
 
-/* Still dots, clearly visible, when motion is reduced. */
+/* The customer is working out a reply: three points brighten one after another. */
+.cw-think {
+  justify-content: center;
+}
+.cw-think__points {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.cw-think__dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--r-pill);
+  background: var(--fg-3);
+  animation: cw-think var(--dur-wave) var(--ease-easy) infinite;
+}
+.cw-think.cw-wave--thin .cw-think__dot {
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
+}
+.cw-think__dot:nth-child(2) {
+  animation-delay: calc(var(--dur-stagger) * 4);
+}
+.cw-think__dot:nth-child(3) {
+  animation-delay: calc(var(--dur-stagger) * 8);
+}
+@keyframes cw-think {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Still, and clearly there, when motion is reduced. */
 @media (prefers-reduced-motion: reduce) {
-  .cw-wave__dot {
+  .cw-think__dot {
     animation: none;
     opacity: 0.65;
+    transform: none;
+  }
+  .cw-wave--calm .cw-wave__bar {
+    animation: none;
+    opacity: 0.8;
   }
 }
 
 @media (forced-colors: active) {
-  .cw-wave__bar,
-  .cw-wave__dot {
+  .cw-wave__bar {
     fill: CanvasText;
+  }
+  .cw-think__dot {
+    forced-color-adjust: none;
+    background: CanvasText;
   }
   .cw-wave__track,
   .cw-wave__base {

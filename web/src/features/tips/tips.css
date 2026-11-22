@@ -1,0 +1,403 @@
+/* "During the call": the tips strip of Guided practice. It sits at the foot of the transcript, above the
+   composer and the dock and never over the controls, and it is the same size whichever tip shows: the
+   cards slide on a track inside a window whose height every card fits in. One prominent card and a
+   peek of the next (one card on a phone). Only transform, opacity and colours move; the spring is for a
+   card released after a drag. */
+
+.tp-strip {
+  --_gap: var(--sp-3);
+  --_peek: 4.5rem;
+  --_deck-h: 5.5rem;
+  position: relative;
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--target);
+  grid-template-areas:
+    'title hide'
+    'deck nav';
+  column-gap: var(--sp-2);
+  row-gap: var(--sp-1);
+  align-items: center;
+  box-sizing: border-box;
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-quiet);
+}
+/* The strip put away: one quiet button, on the right. */
+.tp-strip--quiet {
+  display: flex;
+  justify-content: flex-end;
+  padding-block: var(--sp-1);
+}
+.tp-strip__title {
+  grid-area: title;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+}
+.ff-button.tp-strip__hide {
+  grid-area: hide;
+  justify-self: end;
+  /* Wider than the column of the buttons below it: it reaches back toward the title. */
+  white-space: nowrap;
+}
+
+/* The window the cards slide in. Its height has a floor that every tip fits in, and is the same for
+   every tip (all the cards are in the track, so the tallest sets it), with a little room above and
+   below so a raised card's shadow is not cut off. Its width is what the cards are sized from. */
+.tp-deck {
+  grid-area: deck;
+  display: flex;
+  container-type: inline-size;
+  box-sizing: content-box;
+  min-inline-size: 0;
+  min-block-size: var(--_deck-h);
+  padding-block: var(--sp-2);
+  margin-block: calc(var(--sp-2) * -1);
+  overflow: hidden;
+  /* Sideways gestures are the deck's; the page still scrolls up and down under a finger. */
+  touch-action: pan-y;
+}
+.tp-deck[data-dragging='true'] {
+  user-select: none;
+}
+/* Where a card is cut by the edge of the window it fades out, not in the middle of a letter: the peek of
+   the next card at rest (a phone has none), and either edge while a card is dragged, by as much as it
+   has moved (up to a card's margin). It is a mask, so only its opacity matters and it takes no colour
+   of its own. */
+.tp-deck {
+  --_cut: min(1.5rem, abs(var(--tp-drag, 0px)));
+  --_fade-start: var(--_cut);
+  --_fade-end: var(--_cut);
+  --_fade: linear-gradient(
+    to right,
+    transparent,
+    currentColor var(--_fade-start),
+    currentColor calc(100% - var(--_fade-end)),
+    transparent
+  );
+}
+.tp-deck[data-dragging='true'] {
+  -webkit-mask-image: var(--_fade);
+  mask-image: var(--_fade);
+}
+@media (min-width: 40em) {
+  .tp-deck {
+    --_fade-end: 2.5rem;
+    -webkit-mask-image: var(--_fade);
+    mask-image: var(--_fade);
+  }
+}
+
+.tp-nav {
+  grid-area: nav;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The track: every card in a row, moved by a whole step for each tip and by the drag on top. */
+.tp-track {
+  --_card: calc(100cqw - var(--_peek));
+  --_step: calc(var(--_card) + var(--_gap));
+  display: flex;
+  flex: none;
+  gap: var(--_gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transform: translateX(calc(var(--tp-index, 0) * var(--_step) * -1 + var(--tp-drag, 0px)));
+  transition: transform var(--motion-panel) var(--ease-decelerate);
+}
+/* While a card is dragged it follows the pointer at once. */
+.tp-deck[data-dragging='true'] .tp-track {
+  transition: none;
+}
+/* Released after a drag: the card settles. A plain ease on a touch screen, a spring under a mouse. */
+.tp-track[data-motion='spring'] {
+  transition: transform var(--motion-component) var(--ease-decelerate);
+}
+@media (hover: hover) and (pointer: fine) {
+  .tp-track[data-motion='spring'] {
+    transition: transform var(--dur-spring) var(--ease-spring);
+  }
+}
+
+.tp-card {
+  display: flex;
+  flex: 0 0 var(--_card);
+  min-inline-size: 0;
+  /* The card that is not the one in hand sits back a little. */
+  opacity: 0.65;
+  transition: opacity var(--motion-component) var(--ease-easy);
+}
+.tp-card[data-current] {
+  opacity: 1;
+}
+
+.tp-card__face {
+  --_lift: 0px;
+  --_press: 1;
+  --_tilt: 1;
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  box-sizing: border-box;
+  min-inline-size: 0;
+  padding: var(--sp-2h) var(--sp-3);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+  transform: translateY(var(--_lift)) perspective(40rem)
+    rotateX(calc(var(--tilt-x, 0deg) * var(--_tilt)))
+    rotateY(calc(var(--tilt-y, 0deg) * var(--_tilt))) scale(var(--_press));
+  transition:
+    transform var(--motion-control) var(--ease-decelerate),
+    box-shadow var(--motion-control) var(--ease-decelerate),
+    border-color var(--motion-control) var(--ease-decelerate);
+}
+/* The one in hand has a thin edge in the brand colour: a mark, not a fill. */
+.tp-card[data-current] .tp-card__face {
+  border-inline-start: var(--stroke-w-thick) solid var(--brand-stroke);
+}
+/* A dragged card does not tilt as well. */
+.tp-deck[data-dragging='true'] .tp-card__face {
+  --_tilt: 0;
+}
+
+/* The soft light on the card's edge, which follows the pointer. */
+.tp-card__face::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    12rem circle at var(--glow-x, 50%) var(--glow-y, 50%),
+    var(--edge-light-soft),
+    transparent 70%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-control) var(--ease-decelerate);
+}
+
+/* Under a mouse: the card in hand rises a little, tilts toward the pointer (the hook writes the angles
+   on the card and sets data-fx there), is lit where it is pointed at and compresses when it is
+   pressed. All of it is keyed on the card, which keeps still, and drawn on the face inside it, which
+   moves: if the face itself were the target, a pointer at its very edge would be left outside it by
+   the lift or the tilt, and the card would shiver. The card that only peeks does none of it: it is a
+   hint, not something to press. Never on a touch screen, never under reduced motion. */
+@media (hover: hover) and (pointer: fine) {
+  .tp-card[data-current][data-fx='on']:hover .tp-card__face {
+    --_lift: calc(var(--move-lift) * -1);
+    border-color: var(--edge-light);
+    box-shadow: var(--shadow-8);
+  }
+  .tp-card[data-current][data-fx='on']:hover .tp-card__face::before {
+    opacity: 1;
+  }
+  .tp-card[data-current][data-fx='on']:active .tp-card__face {
+    --_press: calc(1 - var(--press-grow));
+  }
+  /* While its reason is open the card keeps still: no lift, no light following the pointer (it would
+     smear across the words and the button) and no press. The thick edge of the card in hand stays. */
+  .tp-card[data-current][data-fx='on'][data-why='open']:hover .tp-card__face {
+    --_lift: 0px;
+    border-color: var(--stroke-2);
+    border-inline-start-color: var(--brand-stroke);
+    box-shadow: var(--shadow-2);
+  }
+  .tp-card[data-current][data-fx='on'][data-why='open']:hover .tp-card__face::before {
+    opacity: 0;
+  }
+  .tp-card[data-current][data-fx='on'][data-why='open']:active .tp-card__face {
+    --_press: 1;
+  }
+}
+/* The keyboard gets the same prominence, without the tilt (and, while the reason is open, without the light). */
+.tp-card__face:has(:focus-visible) {
+  --_lift: calc(var(--move-lift) * -1);
+  border-color: var(--edge-light);
+  box-shadow: var(--shadow-8);
+}
+.tp-card__face:has(:focus-visible)::before {
+  opacity: 1;
+}
+.tp-card[data-current] .tp-card__face:has(:focus-visible) {
+  border-inline-start-color: var(--brand-stroke);
+}
+.tp-card[data-why='open'] .tp-card__face:has(:focus-visible)::before {
+  opacity: 0;
+}
+
+.tp-card__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-radius: var(--r-lg);
+  background: var(--brand-tint);
+  color: var(--brand-fg-2);
+}
+.tp-card__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.tp-card__text {
+  color: var(--fg-1);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.tp-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  min-block-size: var(--ctl-sm);
+}
+.ff-button.tp-card__why {
+  margin-inline-start: calc(var(--sp-2) * -1);
+}
+/* The arrow turns over while the reason is open. */
+.ff-button.tp-card__why .ff-icon {
+  transition: transform var(--dur-fast) var(--ease-easy);
+}
+.ff-button.tp-card__why[aria-expanded='true'] .ff-icon {
+  transform: rotate(180deg);
+}
+
+/* "Learn why": the reason opens in place, under the card it belongs to and as wide as that card, as one
+   more row of the strip. The strip grows by a few lines and the transcript above gives way; nothing is
+   laid over the conversation. It fades in a short way. */
+.tp-why {
+  grid-column: 1;
+  box-sizing: border-box;
+  inline-size: calc(100% - var(--_peek));
+  margin-block-start: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border-inline-start: var(--stroke-w-thick) solid var(--brand-stroke-2);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+  color: var(--fg-1);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  animation: ff-enter var(--motion-component) var(--ease-decelerate) both;
+}
+
+/* A phone has no room for a title row: the heading is kept for a screen reader, the card has the width
+   to itself with its buttons in a column beside it (the two arrows above "Hide tips"), and there is no
+   peek of the next card. */
+@media (max-width: 39.99em) {
+  .tp-strip {
+    --_peek: 0rem;
+    --_deck-h: 5rem;
+    grid-template-columns: minmax(0, 1fr) calc(var(--target) * 2);
+    grid-template-areas:
+      'deck nav'
+      'deck hide';
+    row-gap: 0;
+    padding: var(--sp-2) var(--sp-3);
+  }
+  .tp-strip--quiet {
+    padding-block: var(--sp-1);
+  }
+  .tp-strip__title {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ff-button.tp-strip__hide {
+    justify-self: stretch;
+  }
+  /* The buttons that put the tips away and bring them back are 44 px high on a phone, where a finger
+     is the pointer whatever the browser says. */
+  .ff-button.tp-strip__hide,
+  .tp-strip--quiet .ff-button {
+    min-block-size: var(--target);
+  }
+  /* The reason has the whole width of the strip, under the card and its buttons. */
+  .tp-why {
+    grid-column: 1 / -1;
+    inline-size: auto;
+  }
+  .tp-nav {
+    flex-direction: row;
+  }
+  .tp-card__face {
+    gap: var(--sp-2);
+    padding: var(--sp-2);
+  }
+  .tp-card__icon {
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+  }
+  .tp-card__text {
+    font-size: var(--fs-compact);
+    line-height: var(--lh-compact);
+  }
+  .tp-card__meta {
+    min-block-size: var(--target-min);
+  }
+  /* The CARE label is for a screen reader on a phone: the card has the room for the tip and Learn why. */
+  .tp-card__care {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ff-button.tp-card__why {
+    min-block-size: var(--target-min);
+    margin-inline-start: calc(var(--sp-3) * -1);
+    padding-block: 0;
+  }
+}
+
+/* Under a finger the quieter buttons have a full target too: "Hide tips", "Show tips" and "Learn why"
+   keep their compact look under a mouse, and are 44 px high on a touch screen. */
+@media (pointer: coarse) {
+  .ff-button.tp-strip__hide,
+  .tp-strip--quiet .ff-button,
+  .ff-button.tp-card__why {
+    min-block-size: var(--target);
+  }
+}
+
+@media (forced-colors: active) {
+  .tp-card__face,
+  .tp-strip,
+  .tp-why {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .tp-card__face::before {
+    display: none;
+  }
+  .tp-card__icon {
+    border: 1px solid ButtonText;
+    background: Canvas;
+    color: CanvasText;
+  }
+}

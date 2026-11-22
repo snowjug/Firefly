@@ -1,0 +1,398 @@
+/* The scenario card: the product, the issue in a few words, how it starts, how long it takes, how hard
+   it is and the way on. Card language: an 8 px radius, a 1 px edge, a soft shadow at rest and a
+   raised one when pointed at. The product's accent is a small mark (the icon tile, a 2 px edge),
+   never a fill. Pointer effects (rise, tilt, the light on the edge, the other cards stepping back)
+   need a fine hovering pointer AND data-fx="on" from useTilt, which is off for touch, a coarse
+   pointer and reduced motion. Keyboard focus gets the same prominence without the tilt. */
+
+.scn-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  /* An inset edge (empty at rest) and the elevation: every state has the same shadow list, so a
+     change from one to another is a smooth transition. */
+  box-shadow:
+    inset 0 0 0 0 transparent,
+    var(--shadow-2);
+  transition:
+    transform var(--motion-component) var(--ease-decelerate),
+    box-shadow var(--motion-component) var(--ease-easy),
+    border-color var(--motion-control) var(--ease-easy),
+    background-color var(--motion-control) var(--ease-easy);
+}
+
+/* The native radio (or the stretched link) covers the card, so the whole card is the target. */
+.scn-card__input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.scn-card__input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.scn-card__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: var(--r-xl);
+}
+.scn-card__link:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* The soft light on the edge: a ring one pixel wide, drawn over the card's own border, brightest
+   where the pointer is (--glow-x and --glow-y come from useTilt; a focused card has it at the top). */
+.scn-card__edge {
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    16rem circle at var(--glow-x, 50%) var(--glow-y, 0%),
+    var(--edge-light),
+    var(--edge-light-soft) 55%,
+    transparent
+  );
+  -webkit-mask:
+    linear-gradient(currentColor 0 0) content-box,
+    linear-gradient(currentColor 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(currentColor 0 0) content-box,
+    linear-gradient(currentColor 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-component) var(--ease-easy);
+}
+.scn-card__accent {
+  position: absolute;
+  inset-block: var(--sp-4);
+  inset-inline-start: -1px;
+  inline-size: 2px;
+  border-radius: var(--r-pill);
+  background: var(--accent-fg);
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity var(--motion-component) var(--ease-easy);
+}
+
+.scn-card__face {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+  padding: var(--sp-4);
+}
+
+.scn-card__top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+.scn-card__tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border: var(--stroke-w) solid var(--accent-border);
+  border-radius: var(--r-lg);
+  background: var(--accent-bg);
+  color: var(--accent-fg);
+  transition: border-color var(--motion-control) var(--ease-easy);
+}
+.scn-card__product {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The preview waveform: five bars at rest, and a gentle swing while the card is pointed at or focused. */
+.scn-card__wave {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: auto;
+  block-size: 1rem;
+  color: var(--accent-fg);
+  opacity: 0.5;
+  transition: opacity var(--motion-component) var(--ease-easy);
+}
+.scn-card__wave > span {
+  inline-size: 2px;
+  block-size: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform: scaleY(var(--rest, 0.5));
+}
+.scn-card__wave > span:nth-child(1) {
+  --rest: 0.35;
+}
+.scn-card__wave > span:nth-child(2) {
+  --rest: 0.7;
+}
+.scn-card__wave > span:nth-child(3) {
+  --rest: 1;
+}
+.scn-card__wave > span:nth-child(4) {
+  --rest: 0.6;
+}
+.scn-card__wave > span:nth-child(5) {
+  --rest: 0.4;
+}
+@keyframes scn-card-wave {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.scn-card__title {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  /* Two lines are always reserved, so cards in a row are the same height whatever the title. A title
+     of one line sits at the bottom of them, next to the line that describes it, so the space between
+     the two is the same on every card. */
+  min-block-size: calc(var(--lh-subtitle2) * 2);
+  margin-block-start: var(--sp-1);
+  color: var(--fg-1);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.scn-card__title > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.scn-card__meta {
+  color: var(--fg-3);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  transition: color var(--motion-control) var(--ease-easy);
+}
+.scn-card__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-3);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-card__time {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.scn-card__go {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  gap: var(--sp-1h);
+  margin-block-start: auto;
+  padding-block-start: var(--sp-3);
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-semibold);
+  transition: color var(--motion-control) var(--ease-easy);
+}
+/* Brand blue says which card is chosen, and that the card on the landing page is a link (and
+   underlined, as every link is). The other cards of the gallery keep their action quiet, so four or
+   five of them do not compete with the one primary action below. */
+.scn-card[data-selected] .scn-card__go,
+.scn-card__link {
+  color: var(--brand-fg-2);
+}
+.scn-card__link:hover {
+  color: var(--brand-fg-2);
+}
+.scn-card__go .ff-icon {
+  transition: transform var(--motion-control) var(--ease-decelerate);
+}
+
+/* ---- Chosen: a tint, a heavier edge, a check and the word "Selected" (never colour alone) ------- */
+.scn-card[data-selected] {
+  border-color: var(--brand-stroke);
+  background: var(--brand-tint);
+  box-shadow:
+    inset 0 0 0 1px var(--brand-stroke),
+    var(--shadow-2);
+}
+
+/* ---- Focus: the same prominence as a pointer, with no tilt. The ring is drawn round the whole card. */
+.scn-card:has(:focus-visible) {
+  outline: var(--stroke-w-thick) solid var(--focus-outer);
+  outline-offset: 2px;
+  transform: translateY(calc(var(--move-lift) * -1));
+  box-shadow:
+    0 0 0 2px var(--focus-inner),
+    var(--shadow-8);
+}
+.scn-card[data-selected]:has(:focus-visible) {
+  box-shadow:
+    0 0 0 2px var(--focus-inner),
+    inset 0 0 0 1px var(--brand-stroke),
+    var(--shadow-8);
+}
+.scn-card:has(:focus-visible) .scn-card__edge,
+.scn-card:has(:focus-visible) .scn-card__accent {
+  opacity: 1;
+}
+.scn-card:has(:focus-visible) .scn-card__tile {
+  border-color: var(--accent-fg);
+}
+.scn-card:has(:focus-visible) .scn-card__meta {
+  color: var(--fg-2);
+}
+.scn-card[data-mode='select']:not([data-selected]):has(:focus-visible) .scn-card__go {
+  color: var(--fg-1);
+}
+.scn-card:has(:focus-visible) .scn-card__go .ff-icon {
+  transform: translateX(var(--move-xs));
+}
+.scn-card:has(:focus-visible) .scn-card__wave {
+  opacity: 1;
+}
+.scn-card:has(:focus-visible) .scn-card__wave > span {
+  animation: scn-card-wave var(--dur-wave) var(--ease-easy) infinite;
+}
+.scn-card:has(:focus-visible) .scn-card__wave > span:nth-child(2) {
+  animation-delay: calc(var(--dur-wave) * -0.33);
+}
+.scn-card:has(:focus-visible) .scn-card__wave > span:nth-child(3) {
+  animation-delay: calc(var(--dur-wave) * -0.66);
+}
+.scn-card:has(:focus-visible) .scn-card__wave > span:nth-child(4) {
+  animation-delay: calc(var(--dur-wave) * -0.16);
+}
+.scn-card:has(:focus-visible) .scn-card__wave > span:nth-child(5) {
+  animation-delay: calc(var(--dur-wave) * -0.5);
+}
+
+/* ---- A pointer: it rises, turns a degree or so, and its edge catches the light ------------------ */
+@media (hover: hover) and (pointer: fine) {
+  .scn-card[data-fx='on']:hover {
+    transform: perspective(60rem) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg))
+      translateY(calc(var(--move-lift) * -1));
+    box-shadow:
+      inset 0 0 0 0 transparent,
+      var(--shadow-8);
+  }
+  .scn-card[data-fx='on'][data-selected]:hover {
+    box-shadow:
+      inset 0 0 0 1px var(--brand-stroke),
+      var(--shadow-8);
+  }
+  .scn-card[data-fx='on']:hover .scn-card__edge,
+  .scn-card[data-fx='on']:hover .scn-card__accent {
+    opacity: 1;
+  }
+  .scn-card[data-fx='on']:hover .scn-card__tile {
+    border-color: var(--accent-fg);
+  }
+  .scn-card[data-fx='on']:hover .scn-card__meta {
+    color: var(--fg-2);
+  }
+  .scn-card[data-fx='on'][data-mode='select']:not([data-selected]):hover .scn-card__go {
+    color: var(--fg-1);
+  }
+  .scn-card[data-fx='on']:hover .scn-card__go .ff-icon {
+    transform: translateX(var(--move-xs));
+  }
+  .scn-card[data-fx='on']:hover .scn-card__wave {
+    opacity: 1;
+  }
+  .scn-card[data-fx='on']:hover .scn-card__wave > span {
+    animation: scn-card-wave var(--dur-wave) var(--ease-easy) infinite;
+  }
+  .scn-card[data-fx='on']:hover .scn-card__wave > span:nth-child(2) {
+    animation-delay: calc(var(--dur-wave) * -0.33);
+  }
+  .scn-card[data-fx='on']:hover .scn-card__wave > span:nth-child(3) {
+    animation-delay: calc(var(--dur-wave) * -0.66);
+  }
+  .scn-card[data-fx='on']:hover .scn-card__wave > span:nth-child(4) {
+    animation-delay: calc(var(--dur-wave) * -0.16);
+  }
+  .scn-card[data-fx='on']:hover .scn-card__wave > span:nth-child(5) {
+    animation-delay: calc(var(--dur-wave) * -0.5);
+  }
+  /* A press while the pointer is over the card compresses it instead of tilting it. */
+  .scn-card[data-fx='on']:hover:active {
+    transform: scale(calc(1 - var(--press-grow)));
+  }
+}
+
+/* ---- A press compresses the card a little (nothing at all when motion is reduced) --------------- */
+.scn-card:active {
+  transform: scale(calc(1 - var(--press-grow)));
+}
+
+/* ---- Loading ---------------------------------------------------------------------------------- */
+.scn-card--skeleton {
+  pointer-events: none;
+}
+.scn-card--skeleton .scn-card__face {
+  gap: var(--sp-3);
+  min-block-size: 10rem;
+}
+
+@media (forced-colors: active) {
+  .scn-card {
+    border-color: ButtonText;
+    box-shadow: none;
+  }
+  .scn-card[data-selected] {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .scn-card__edge {
+    display: none;
+  }
+  .scn-card__accent,
+  .scn-card__wave > span {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  .scn-card__tile {
+    border-color: ButtonText;
+  }
+}

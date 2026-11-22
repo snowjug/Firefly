@@ -206,8 +206,15 @@ export interface CallSnapshot {
   micOpen: boolean;
   /** Microphone level, 0 to 1, at most about 15 updates a second; 0 whenever the microphone is closed. */
   micLevel: number;
-  /** The customer's voice level, 0 to 1, while it plays. Shaped from the text when the engine cannot measure it. */
+  /** The customer's voice level, 0 to 1, while it plays. Shaped from the words when the page cannot measure the voice. */
   customerLevel: number;
+  /**
+   * The customer's level was read from the sound that is playing (server speech, through the audio
+   * analyser). False when it is shaped from the words (a browser voice, whose sound the page cannot
+   * measure, or audio that could not be analysed): the screen then draws a calm fixed pattern and
+   * never presents the shaped level as a measurement.
+   */
+  customerLevelMeasured: boolean;
   /** The trainee's words so far, while they are still speaking. Empty where the engine has none. */
   interim: string;
 

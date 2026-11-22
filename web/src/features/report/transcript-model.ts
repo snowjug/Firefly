@@ -71,8 +71,18 @@ function markerView(marker: TurnMarker): MarkerView {
   return { kind, tag, text: plainUnexpectedTurn(marker.label) };
 }
 
-/** Which skills cite which turns: the evidence quotes, the strengths and the opportunities. */
-export function citedTurns(report: CoachingReport | null): Map<number, DimensionId[]> {
+/** Says whether the trainee really said `quote` in turn `turnIndex`: the only quote that counts as evidence. */
+export type QuoteCheck = (turnIndex: number, quote: string) => boolean;
+
+/**
+ * Which skills cite which turns: the evidence quotes, the strengths and the opportunities. A
+ * quote the turn does not say does not make the turn cited, the same rule as on the report itself.
+ * An opportunity that points at a turn without quoting it still cites the turn.
+ */
+export function citedTurns(
+  report: CoachingReport | null,
+  verify: QuoteCheck,
+): Map<number, DimensionId[]> {
   const found = new Map<number, Set<DimensionId>>();
   const add = (turnIndex: number | null, dimension: DimensionId) => {
     if (turnIndex === null) return;
@@ -81,23 +91,34 @@ export function citedTurns(report: CoachingReport | null): Map<number, Dimension
     found.set(turnIndex, set);
   };
   if (report) {
-    for (const d of report.dimensions) for (const e of d.evidence) add(e.turnIndex, d.id);
-    for (const s of report.strengths) add(s.turnIndex, s.dimension);
-    for (const i of report.improvements) add(i.turnIndex, i.dimension);
+    for (const d of report.dimensions) {
+      for (const e of d.evidence) if (verify(e.turnIndex, e.quote)) add(e.turnIndex, d.id);
+    }
+    for (const s of report.strengths)
+      if (verify(s.turnIndex, s.quote)) add(s.turnIndex, s.dimension);
+    for (const i of report.improvements) {
+      if (i.turnIndex !== null && (!i.quote || verify(i.turnIndex, i.quote))) {
+        add(i.turnIndex, i.dimension);
+      }
+    }
   }
   return new Map(
     [...found].map(([turnIndex, set]) => [turnIndex, DIMENSION_IDS.filter((id) => set.has(id))]),
   );
 }
 
-function clockFor(startedAt: string, createdAt: string): string {
+export function clockFor(startedAt: string, createdAt: string): string {
   const seconds = (Date.parse(createdAt) - Date.parse(startedAt)) / 1000;
   return formatClock(Number.isFinite(seconds) ? seconds : 0);
 }
 
 /** One entry per turn, in order, nothing added to or removed from what was said. */
-export function buildTranscript(session: SessionDTO, report: CoachingReport | null): TurnView[] {
-  const cited = citedTurns(report);
+export function buildTranscript(
+  session: SessionDTO,
+  report: CoachingReport | null,
+  verify: QuoteCheck,
+): TurnView[] {
+  const cited = citedTurns(report, verify);
   return session.turns.map((turn) => ({
     index: turn.index,
     role: turn.role,

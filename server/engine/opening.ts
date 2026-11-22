@@ -12,7 +12,7 @@ import { expandContractions, joinSentences } from './textutil.ts';
 //                   say in one line what is at stake.
 //   other stages    a call back opens with its purpose ("Hi. I'm following up on a case I raised
 //                   yesterday..."), taken from the scenario's stage frame, in one to three
-//                   sentences, and still gives no detail beyond that.
+//                   sentences. It says only what the frame says, which never includes a hidden fact.
 //
 // The text is composed deterministically (the same in demo and live mode), so a call can always
 // start, and the opening can never leak a hidden fact.

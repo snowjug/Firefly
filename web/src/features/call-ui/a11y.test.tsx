@@ -46,6 +46,11 @@ const NARROW: FixtureName[] = [
   'ending',
   'case-sheet',
   'voice-settings',
+  'guided-hints',
+  'guided-tips-hidden',
+  'guided-customer-speaking',
+  'end-ready-to-close',
+  'end-ready-to-close-loading',
 ];
 
 describe('axe, at the narrow layout (one column, controls in a dock, the case in a sheet)', () => {
@@ -53,10 +58,15 @@ describe('axe, at the narrow layout (one column, controls in a dock, the case in
     renderCall(name, { width: WIDTH.narrow });
     expect(await axeViolations()).toEqual([]);
   });
+
+  it('has none on a small phone either, where the strip is left out', async () => {
+    renderCall('guided-hints', { width: WIDTH.narrow, height: 568 });
+    expect(await axeViolations()).toEqual([]);
+  });
 });
 
 describe('axe, at the medium layout (the case behind a button)', () => {
-  it.each(['mic-ready', 'text-fallback', 'case-sheet'] as const)(
+  it.each(['mic-ready', 'text-fallback', 'case-sheet', 'guided-hints'] as const)(
     '%s has no violations',
     async (name) => {
       renderCall(name, { width: WIDTH.medium });

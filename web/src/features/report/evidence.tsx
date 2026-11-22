@@ -12,12 +12,19 @@ import {
 } from 'react';
 import { isPlainClick, jumpToSection, originOf, scrollToElement, type Focusable } from './dom.ts';
 import { seeTurnText, turnName } from './copy.ts';
+import {
+  isVerifiedQuote,
+  turnLookup,
+  type EvidenceTurn,
+  type TurnLookup,
+} from './evidence-model.ts';
 import { turnId } from './transcript-model.ts';
 
 // Evidence navigation. Every quote in the report points at a turn in the transcript. A link to a
 // turn scrolls there, moves focus to the turn, marks it (and the quoted words in it) for a few
 // seconds and remembers where the person came from, so "Back to ..." can return them to the same
-// place.
+// place. The provider also holds the transcript itself, so that a quote is only ever shown as
+// evidence when the turn it names really says it.
 
 /** How long the turn a link led to stays marked. The "Back to" control stays until it is used. */
 export const HIGHLIGHT_MS = 4000;
@@ -42,7 +49,11 @@ interface EvidenceValue {
   /** The same turn, only while it is still marked. */
   highlight: EvidenceTarget | null;
   origin: EvidenceOrigin | null;
+  /** The transcript, by turn number. */
+  turns: TurnLookup;
   hasTurn(index: number): boolean;
+  /** True when the trainee said `quote` in turn `turnIndex`: the only quote that may be shown as evidence. */
+  verify(turnIndex: number | null, quote: string | null | undefined): boolean;
   goToTurn(index: number, quote: string | null, from: Focusable): void;
   backToOrigin(): void;
 }
@@ -50,20 +61,25 @@ interface EvidenceValue {
 const EvidenceContext = createContext<EvidenceValue | null>(null);
 
 export function EvidenceProvider({
-  turnIndexes,
+  turns,
   children,
 }: {
   /** The turns the transcript has: a link to any other turn is shown as plain text. */
-  turnIndexes: readonly number[];
+  turns: readonly EvidenceTurn[];
   children: ReactNode;
 }) {
   const [target, setTarget] = useState<EvidenceTarget | null>(null);
   const [origin, setOrigin] = useState<EvidenceOrigin | null>(null);
   const [expired, setExpired] = useState(0);
   const jumps = useRef(0);
-  const known = useMemo(() => new Set(turnIndexes), [turnIndexes]);
+  const lookup = useMemo(() => turnLookup(turns), [turns]);
 
-  const hasTurn = useCallback((index: number) => known.has(index), [known]);
+  const hasTurn = useCallback((index: number) => lookup.has(index), [lookup]);
+  const verify = useCallback(
+    (turnIndex: number | null, quote: string | null | undefined) =>
+      isVerifiedQuote(lookup, turnIndex, quote),
+    [lookup],
+  );
 
   const goToTurn = useCallback((index: number, quote: string | null, from: Focusable) => {
     jumps.current += 1;
@@ -90,8 +106,17 @@ export function EvidenceProvider({
   const highlight = target && expired !== target.nonce ? target : null;
 
   const value = useMemo(
-    () => ({ target, highlight, origin, hasTurn, goToTurn, backToOrigin }),
-    [target, highlight, origin, hasTurn, goToTurn, backToOrigin],
+    () => ({
+      target,
+      highlight,
+      origin,
+      turns: lookup,
+      hasTurn,
+      verify,
+      goToTurn,
+      backToOrigin,
+    }),
+    [target, highlight, origin, lookup, hasTurn, verify, goToTurn, backToOrigin],
   );
   return <EvidenceContext.Provider value={value}>{children}</EvidenceContext.Provider>;
 }

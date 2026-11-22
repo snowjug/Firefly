@@ -1,6 +1,10 @@
 import { cleanup, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { wordCount } from '#shared/domain/scenario.ts';
+import type { CallSnapshot, CallTurn } from '../call/contract.ts';
 import {
   describeStatus,
   STATUS_IDS,
@@ -67,9 +71,14 @@ describe('every fixture', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     const ids = [...container.querySelectorAll('[id]')].map((element) => element.id);
     expect(new Set(ids).size, `duplicate ids in ${name}`).toBe(ids.length);
-    // CSP: styles come from stylesheets, never from attributes (a loading bar's transform excepted).
+    // CSP: styles come from stylesheets, never from attributes. Two exceptions, both set from script
+    // and never written in markup: a loading bar's transform, and the tips deck's own custom
+    // properties (`--tp-index`, `--tp-drag`), which say where its track is.
+    const scriptOnly = /^\s*(--tp-[\w-]+\s*:[^;]+;?\s*)+$/;
     const styled = [...container.querySelectorAll('[style]')].filter(
-      (element) => !element.classList.contains('ff-progress__fill'),
+      (element) =>
+        !element.classList.contains('ff-progress__fill') &&
+        !scriptOnly.test(element.getAttribute('style') ?? ''),
     );
     expect(styled, name).toHaveLength(0);
   });
@@ -177,6 +186,41 @@ describe('the states of the call', () => {
     renderCall('listening');
     expect(document.querySelectorAll('.cw-interim')).toHaveLength(1);
   });
+
+  it('replaces the words as they are said with the finished turn: every moment shows them once', () => {
+    const { container, update } = renderCall('speech-detected');
+    const words = FIXTURES['speech-detected'].snapshot.interim;
+    const rowsOfYou = () => container.querySelectorAll('.cw-turn--you').length;
+    expect(words).not.toBe('');
+    expect(screen.getAllByText(words)).toHaveLength(1);
+    const before = rowsOfYou();
+
+    // Heard in full: a place for the words in the transcript, and the live words are gone.
+    update(FIXTURES['processing-speech'].snapshot);
+    expect(container.querySelector('.cw-interim')).toBeNull();
+    expect(container.querySelector('.cw-turn__placeholder')).not.toBeNull();
+    expect(screen.queryByText(words)).toBeNull();
+    expect(rowsOfYou()).toBe(before + 1);
+
+    // The words arrive in that place: not a second row, and not a second copy.
+    const available = FIXTURES['transcript-available'].snapshot;
+    const final = available.turns.at(-1) as CallTurn;
+    update(available);
+    expect(screen.getAllByText(final.text)).toHaveLength(1);
+    expect(container.querySelector('.cw-turn__placeholder')).toBeNull();
+    expect(rowsOfYou()).toBe(before + 1);
+
+    // The server has them: the same row, no longer waiting.
+    update({
+      ...available,
+      turns: available.turns.map((turn) =>
+        turn.key === final.key ? { ...turn, status: 'sent' } : turn,
+      ),
+    });
+    expect(screen.getAllByText(final.text)).toHaveLength(1);
+    expect(screen.queryByText('Sending')).toBeNull();
+    expect(rowsOfYou()).toBe(before + 1);
+  });
 });
 
 describe('the layouts', () => {
@@ -255,6 +299,22 @@ describe('the top bar', () => {
     expect(within(bar()).getByText('Reconnecting')).toBeInTheDocument();
   });
 
+  it('keeps the demo label on the bar down to 360 px: the stylesheet hides it below that width and nowhere else', () => {
+    const css = readFileSync(resolve('web/src/features/call-ui/workspace.css'), 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    const blocks = [...css.matchAll(/@media\s*([^{]+)\{((?:[^{}]|\{[^{}]*\})*)\}/g)];
+    const hiding = blocks
+      .filter((block) => /cw-bar__provider\s*\{[^}]*display:\s*none/.test(block[2] ?? ''))
+      .map((block) => (block[1] ?? '').trim());
+    expect(hiding).toEqual(['(max-width: 22.49em)']);
+    // Outside a media query nothing styles it, so it is there at every other width.
+    expect(css.replace(/@media[^{]+\{(?:[^{}]|\{[^{}]*\})*\}/g, '')).not.toMatch(
+      /cw-bar__provider/,
+    );
+  });
+
   it('shows no product for a call saved before scenarios named one, and guesses nothing', () => {
     renderCall('legacy-call');
     const bar = document.querySelector('header') as HTMLElement;
@@ -288,11 +348,18 @@ describe('the case', () => {
     expect(within(caseColumn()).getByText(/shared Windows desktop PCs/)).not.toBeVisible();
   });
 
-  it('shows a count of what was found, never a total and never what it is', () => {
-    renderCall('mic-ready');
+  it('shows a count of what was found in guided practice, never a total and never what it is', () => {
+    renderCall('guided-hints');
     const found = within(caseColumn()).getByText('Context found').nextElementSibling;
-    expect(found).toHaveTextContent(/^0$/);
+    expect(found).toHaveTextContent(/^3$/);
     expect(caseColumn().textContent).not.toMatch(/of \d+|\/ ?\d+/);
+  });
+
+  it('shows no count of what was found in a standard call, where a count that ticks up is a cue', () => {
+    renderCall('mic-ready');
+    expect(within(caseColumn()).queryByText('Context found')).toBeNull();
+    // The objective is on the brief page already, so it is not a leak.
+    expect(within(caseColumn()).getByText('Objective')).toBeInTheDocument();
   });
 
   it('adds the areas worth exploring only in guided practice', () => {
@@ -328,6 +395,147 @@ describe('the case', () => {
   it('shows no score, no hint about what to say and no hidden fact', () => {
     const { container } = renderCall('guided-hints');
     expect(container.textContent).not.toMatch(/\bscore\b|CARE|suggest|you should say|hidden/i);
+  });
+});
+
+describe('the tips strip', () => {
+  const stripOf = () => screen.queryByRole('region', { name: 'Tips for this call' });
+  const GUIDED: readonly FixtureName[] = ['guided-hints', 'guided-customer-speaking'];
+
+  it('is there for every workspace fixture in Guided practice and for none that is not', () => {
+    for (const name of WORKSPACE) {
+      const { unmount } = renderCall(name);
+      const guided = FIXTURES[name].snapshot.session?.scenario.config.mode === 'guided';
+      expect(
+        Boolean(screen.queryByRole('region', { name: 'Tips for this call', hidden: true })),
+        name,
+      ).toBe(guided);
+      unmount();
+    }
+  });
+
+  it('is never in Assessment practice, on a Challenge call or any other', () => {
+    for (const name of ['mic-ready', 'challenge-assessment', 'listening'] as const) {
+      const { unmount } = renderCall(name);
+      expect(stripOf(), name).toBeNull();
+      expect(screen.queryByText('During the call'), name).toBeNull();
+      unmount();
+    }
+  });
+
+  it('is there on a Challenge call only because Guided practice was chosen', () => {
+    renderCall('guided-challenge');
+    expect(stripOf()).not.toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'During the call' })).toBeInTheDocument();
+  });
+
+  it.each(GUIDED)('%s: it sits outside the call controls and the dock, at every width', (name) => {
+    for (const width of [WIDTH.narrow, WIDTH.medium, WIDTH.wide]) {
+      const { unmount } = renderCall(name, { width });
+      const strip = stripOf() as HTMLElement;
+      const controls = screen.getByRole('group', { name: 'Call controls' });
+      expect(strip.contains(controls), `${name} at ${width}`).toBe(false);
+      expect(controls.contains(strip), `${name} at ${width}`).toBe(false);
+      expect(strip.closest('.cw-dock'), `${name} at ${width}`).toBeNull();
+      unmount();
+    }
+  });
+
+  it('keeps the heading levels in order with the strip on the screen', () => {
+    renderCall('guided-hints');
+    const levels = screen.getAllByRole('heading').map((heading) => Number(heading.tagName[1]));
+    expect(levels[0]).toBe(1);
+    levels
+      .slice(1)
+      .forEach((level, index) => expect(level - (levels[index] as number)).toBeLessThanOrEqual(1));
+  });
+
+  it('can start put away, leaving one quiet button', () => {
+    renderCall('guided-tips-hidden');
+    expect(screen.getByRole('button', { name: 'Show tips' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Next tip' })).toBeNull();
+    expect(screen.queryByText('During the call')).toBeNull();
+  });
+
+  it('is left out of a small phone, where it would squeeze the transcript away, and kept wherever there is room', () => {
+    // Narrow and short: no strip at all, and no button to ask for one.
+    renderCall('guided-hints', { width: WIDTH.narrow, height: 568 });
+    expect(stripOf()).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show tips' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Next tip' })).toBeNull();
+    cleanup();
+    renderCall('guided-hints', { width: WIDTH.narrow, height: 704 });
+    expect(stripOf()).toBeNull();
+    cleanup();
+    // Tall enough, or wide enough, it has room.
+    renderCall('guided-hints', { width: WIDTH.narrow, height: 800 });
+    expect(screen.getByRole('button', { name: 'Next tip' })).toBeInTheDocument();
+    cleanup();
+    renderCall('guided-hints', { width: WIDTH.wide, height: 500 });
+    expect(screen.getByRole('button', { name: 'Next tip' })).toBeInTheDocument();
+  });
+
+  it('is put away for the call with Hide tips, and brought back with Show tips', async () => {
+    const user = userEvent.setup();
+    renderCall('guided-hints');
+    await user.click(screen.getByRole('button', { name: 'Hide tips' }));
+    expect(screen.queryByRole('button', { name: 'Next tip' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Show tips' }));
+    expect(screen.getByRole('button', { name: 'Next tip' })).toBeInTheDocument();
+  });
+
+  it('brings up a new tip once, and only after the customer has finished speaking', () => {
+    const speaking = FIXTURES['guided-customer-speaking'].snapshot;
+    // The same call before the customer's last turn, and then with it: the turn is the new one.
+    const ready = (turns: CallSnapshot['turns']): CallSnapshot => ({
+      ...speaking,
+      turns,
+      phase: 'ready-for-next-turn',
+      stage: 'ready',
+      customerLevel: 0,
+    });
+    const showing = () => document.querySelector('.tp-card[data-current="true"] .tp-card__text');
+    const { update } = renderCall(ready(speaking.turns.slice(0, -1)));
+    const before = showing()?.textContent;
+    expect(before).toBeTruthy();
+
+    update(speaking);
+    expect(showing()?.textContent).toBe(before);
+    update({ ...speaking, customerLevel: 0.2 });
+    expect(showing()?.textContent).toBe(before);
+
+    update(ready(speaking.turns));
+    const after = showing()?.textContent;
+    expect(after).toBeTruthy();
+    expect(after).not.toBe(before);
+    // And it stays there: nothing else brings another.
+    update(ready(speaking.turns));
+    expect(showing()?.textContent).toBe(after);
+  });
+
+  it('draws the thin state trace in Guided practice on a wide screen only', () => {
+    renderCall('guided-hints', { width: WIDTH.wide });
+    expect(document.querySelector('.cw-trace')).not.toBeNull();
+    cleanup();
+    renderCall('guided-hints', { width: WIDTH.narrow });
+    expect(document.querySelector('.cw-trace')).toBeNull();
+    cleanup();
+    renderCall('mic-ready', { width: WIDTH.wide });
+    expect(document.querySelector('.cw-trace')).toBeNull();
+  });
+});
+
+describe('what is never on the call screen', () => {
+  it.each(WORKSPACE)('%s shows no score, rating, percentage or "out of" figure', (name) => {
+    const { container } = renderCall(name);
+    // The words of the call and of its case are the scenario's own; the rest is the screen's.
+    const screenOnly = container.cloneNode(true) as HTMLElement;
+    for (const part of screenOnly.querySelectorAll('.cw-log, .cw-case')) part.remove();
+    const text = screenOnly.textContent ?? '';
+    expect(text).not.toMatch(/\bscore\b|\brating\b|\bgrade\b|\bpoints?\b/i);
+    expect(text).not.toMatch(/\d\s?%/);
+    expect(text).not.toMatch(/\b\d+\s*(?:\/|out of)\s*\d+\b/i);
+    expect(container.querySelector('[role="meter"], meter')).toBeNull();
   });
 });
 
@@ -438,7 +646,9 @@ describe('what a screen reader hears', () => {
 
   it('keeps the status line plain text, not a live region, so nothing is read twice', () => {
     renderCall('listening');
-    const label = within(screen.getByRole('region', { name: 'Customer' })).getByText('Listening');
+    const label = within(screen.getByRole('region', { name: 'Customer' })).getByText(
+      'Listening to you',
+    );
     expect(label.closest('[aria-live]')).toBeNull();
     expect(label.closest('[role="status"]')).toBeNull();
   });
@@ -510,10 +720,13 @@ describe('copy budgets: no instructional text during a call', () => {
   });
 
   it('has no explanation of how the screen works anywhere in the workspace', () => {
-    const { container } = renderCall('mic-ready');
-    expect(container.textContent).not.toMatch(
-      /press|click|you can|will appear|how it works|everything the customer says/i,
-    );
+    for (const name of ['mic-ready', 'guided-hints'] as const) {
+      const { container, unmount } = renderCall(name);
+      expect(container.textContent, name).not.toMatch(
+        /press|click|you can|will appear|how it works|everything the customer says/i,
+      );
+      unmount();
+    }
   });
 });
 

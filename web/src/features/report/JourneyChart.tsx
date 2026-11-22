@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import { CUSTOMER_STATE_ICONS, Icon, cx } from '../../design/index.ts';
-import { bandIdFor, plainUnexpectedTurn } from './copy.ts';
+import { bandIdFor, CHART_FOOTNOTE, plainUnexpectedTurn } from './copy.ts';
 import { useEvidence } from './evidence.tsx';
 import {
   POINT_KIND_LABELS,
@@ -26,8 +26,8 @@ import './journey-chart.css';
 // left and a marker for the start, each turning point, the unexpected turn and the end. It is the
 // only part of the report that is drawn, so it loads on its own. Its points are controls: one tab
 // stop for the whole chart, the arrow keys move between points, and Enter (or a click or a tap)
-// shows the matching turn in the transcript. The list and the table under it carry the same
-// information in words, with a link on every row, so nothing depends on the chart.
+// shows that moment: the exact turn, in the panel under the chart. The list and the table under it
+// carry the same information in words, with a link on every row, so nothing depends on the chart.
 
 type Journey = CoachingReport['journey'];
 
@@ -50,7 +50,17 @@ function useWidth(ref: RefObject<HTMLElement | null>): number {
   return width;
 }
 
-export default function JourneyChart({ journey }: { journey: Journey }) {
+export default function JourneyChart({
+  journey,
+  chosenTurn,
+  onChoose,
+}: {
+  journey: Journey;
+  /** The turn whose moment is open under the chart, or null. */
+  chosenTurn: number | null;
+  /** A point was chosen (click, tap, Enter or Space). `from` is the point, for focus to come back to. */
+  onChoose(point: ChartPoint, from: SVGGElement): void;
+}) {
   const box = useRef<HTMLDivElement>(null);
   const nodes = useRef(new Map<number, SVGGElement>());
   const width = useWidth(box);
@@ -61,7 +71,7 @@ export default function JourneyChart({ journey }: { journey: Journey }) {
     [journey.points, width, height, narrow],
   );
   const { plot } = geometry;
-  const { hasTurn, goToTurn } = useEvidence();
+  const { hasTurn } = useEvidence();
 
   // Only a point that is a turn of the transcript can be used; the start of the call is not one.
   const stops = useMemo(
@@ -92,8 +102,7 @@ export default function JourneyChart({ journey }: { journey: Journey }) {
     return reason ? `${summaryOf(shown)}. ${plainUnexpectedTurn(reason)}` : summaryOf(shown);
   })();
 
-  const reveal = (point: ChartPoint, from: SVGGElement) =>
-    goToTurn(point.turnIndex, journey.points[point.index]?.quote ?? null, from);
+  const reveal = (point: ChartPoint, from: SVGGElement) => onChoose(point, from);
 
   const onKeyDown = (event: KeyboardEvent<SVGGElement>, point: ChartPoint) => {
     const at = stops.findIndex((p) => p.index === point.index);
@@ -199,6 +208,15 @@ export default function JourneyChart({ journey }: { journey: Journey }) {
         >
           Turn in the conversation
         </text>
+        {/* The direction of the heights, where the eye looks for it: lower is calmer. */}
+        <g className="rp-chart__cue" aria-hidden="true">
+          <g transform={`translate(4 ${height - 19})`}>
+            <Icon name="arrow-down" size={12} />
+          </g>
+          <text x={20} y={height - 7}>
+            Calmer
+          </text>
+        </g>
 
         <path className="rp-chart__line" d={geometry.path} />
         {geometry.points.map((point) => {
@@ -228,11 +246,16 @@ export default function JourneyChart({ journey }: { journey: Journey }) {
                 if (node) nodes.current.set(point.index, node);
                 else nodes.current.delete(point.index);
               }}
-              className={cx('rp-chart__point', shown === point.index && 'rp-chart__point--on')}
+              className={cx(
+                'rp-chart__point',
+                shown === point.index && 'rp-chart__point--on',
+                chosenTurn === point.turnIndex && 'rp-chart__point--chosen',
+              )}
               transform={place}
               role="button"
               tabIndex={point.index === tabStop ? 0 : -1}
-              aria-label={`${summaryOf(point.index)}. See turn ${point.turnIndex} in the transcript`}
+              aria-pressed={chosenTurn === point.turnIndex}
+              aria-label={`${summaryOf(point.index)}. Show the exact turn`}
               onKeyDown={(event) => onKeyDown(event, point)}
               onClick={(event) => reveal(point, event.currentTarget)}
               onFocus={() => {
@@ -270,6 +293,7 @@ export default function JourneyChart({ journey }: { journey: Journey }) {
           </li>
         ))}
       </ul>
+      <p className="rp-chart__footnote">{CHART_FOOTNOTE}</p>
     </div>
   );
 }

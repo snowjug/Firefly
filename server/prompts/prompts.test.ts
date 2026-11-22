@@ -5,6 +5,7 @@ import { EvaluationDraftSchema } from '#shared/domain/report.ts';
 import { DIMENSION_IDS, DISCOVERY_INTENTS, SCORE_LABELS } from '#shared/domain/vocab.ts';
 import type { CustomerGenerationContext } from '../engine/pipeline.ts';
 import { createInitialRuntime, openingMessage } from '../engine/session.ts';
+import { planReply } from '../engine/plan.ts';
 import { simulate } from '../engine/simulate.ts';
 import { makeScenario } from '../engine/testing.ts';
 import type { EvaluationInput } from '../engine/types.ts';
@@ -388,6 +389,143 @@ describe('the customer prompt: reacting to what the engineer did', () => {
     const reactions = replySection(systemOf(everything)).split('How you react')[1] ?? '';
     const bullets = reactions.split('\n\n')[0]?.split('\n- ').length ?? 0;
     expect(bullets - 1).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('the customer prompt: taking a plan in, and closing the call', () => {
+  const OWNER = "I'll take ownership of this and I'll call you back by 10am with an update.";
+  const terseCalm = makeScenario({ startingTemperature: 'calm', style: 'terse' });
+  const demanding = makeScenario({ startingTemperature: 'frustrated', style: 'demanding' });
+  const section = async (lines: string[], using: EffectiveScenario) =>
+    replySection(systemOf(await lastContext(lines, using)));
+
+  it('takes a clear owner and time in briefly, naming the time, or says it back as a question, by who the customer is', async () => {
+    const briefly = await section(['What laptop are you using?', OWNER], terseCalm);
+    expect(briefly).toMatch(/Take it in briefly/);
+    expect(briefly).toMatch(/Okay, (?:by )?10am then\./);
+    expect(briefly).toMatch(/Do not say it back as a question/);
+    expect(briefly).not.toMatch(/Say it back as a short question/);
+
+    const back = await section(['What laptop are you using?', OWNER], demanding);
+    expect(back).toMatch(/Say it back as a short question to check you have it right/);
+    expect(back).toMatch(/So you'll [^"]*10am[^"]*\?/);
+    expect(back).not.toMatch(/Take it in briefly/);
+  });
+
+  it('asks once, and only once, whether the engineer needs anything from the customer after a plan is taken in', async () => {
+    const cooperative = (seed: number) =>
+      makeScenario({ startingTemperature: 'calm', style: 'vague', proficiency: 'expert' }, seed);
+    const ASKS = /ask just once whether the engineer needs anything from your side/;
+    let asked = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const first = await lastContext(['What laptop are you using?', OWNER], cooperative(seed));
+      expect(replySection(systemOf(first)).search(ASKS) >= 0, `seed ${seed}`).toBe(
+        planReply(first).asksOffer,
+      );
+      if (!planReply(first).asksOffer) continue;
+      asked += 1;
+      // Once it has been asked it is not asked again.
+      const later = await lastContext(
+        ['What laptop are you using?', OWNER, 'Thanks.', 'Is it okay if I call you then?'],
+        cooperative(seed),
+      );
+      expect(planReply(later).asksOffer, `seed ${seed}`).toBe(false);
+      expect(replySection(systemOf(later))).not.toMatch(ASKS);
+    }
+    expect(asked).toBeGreaterThan(0);
+    // A terse or a demanding customer does not offer at all.
+    for (const using of [terseCalm, demanding]) {
+      const ctx = await lastContext(['What laptop are you using?', OWNER], using);
+      expect(planReply(ctx).asksOffer).toBe(false);
+    }
+  });
+
+  it('answers "anything else?" in a few words, and a goodbye with a goodbye, and never opens the case again', async () => {
+    const lines = ['What laptop are you using?', OWNER];
+    const asked = await section(
+      [...lines, 'So I will call you back by 10am. Is there anything else I can help with?'],
+      terseCalm,
+    );
+    expect(asked).toMatch(/wrapping up the call and asking whether there is anything else/);
+    expect(asked).toMatch(/No, I think that's everything\./);
+    expect(asked).not.toMatch(/saying goodbye/);
+
+    const parted = await section([...lines, 'Thank you for your time. Goodbye.'], terseCalm);
+    expect(parted).toMatch(/wrapping up the call and saying goodbye/);
+    expect(parted).toMatch(/Thanks, bye\./);
+
+    for (const text of [asked, parted]) {
+      expect(text).toMatch(/Do not raise new problems, recap the case or ask for anything/);
+      expect(text).not.toMatch(/You may say: |What you may say this turn: [^n]/);
+    }
+  });
+
+  it('is not told to raise a curveball on the turn the engineer ends the call, nor after it, though one is due', async () => {
+    const due = makeScenario({
+      difficulty: 'challenge',
+      startingTemperature: 'calm',
+      curveballs: ['deadline'],
+    });
+    due.curveballs = due.curveballs.map((c) => ({
+      ...c,
+      trigger: { earliestTurn: 4, latestTurn: 4 },
+    }));
+    const statement = due.curveballs[0]?.statement as string;
+    const before = [
+      'Good morning, this is Alex from Microsoft support. How can I help?',
+      'What laptop are you using?',
+      'When did it start?',
+      OWNER,
+    ];
+
+    // The same call going on is told to raise it, so it was due.
+    const going = await lastContext([...before, 'What browser are you using?'], due);
+    expect(going.curveball.fired).not.toBeNull();
+    expect(replySection(systemOf(going))).toContain(statement);
+    expect(replySection(systemOf(going))).toMatch(/A new development in this reply/);
+
+    for (const ending of [
+      "Thank you. I'll call you at 3 PM. Have a good day.",
+      'Is there anything else I can help with?',
+    ]) {
+      const [closing, later] = (
+        await contextsFor([...before, ending, 'What browser are you using?'], due)
+      ).slice(-2) as [CustomerGenerationContext, CustomerGenerationContext];
+      for (const ctx of [closing, later]) {
+        expect(ctx.curveball.fired, ending).toBeNull();
+        expect(systemOf(ctx), ending).not.toContain(statement);
+        expect(replySection(systemOf(ctx)), ending).not.toMatch(/A new development in this reply/);
+      }
+      expect(planReply(closing).close, ending).not.toBeNull();
+    }
+  });
+
+  it('is not told to challenge a vague promise twice, nor to say it at length when terse', async () => {
+    const angry = makeScenario({ startingTemperature: 'angry', style: 'demanding' });
+    const pressed = await section(["We'll look into it."], angry);
+    expect(pressed).toMatch(/commitment was vague/);
+    expect(pressed).not.toMatch(/Do not accept a vague answer/);
+
+    const terse = await section(["We'll look into it."], terseCalm);
+    expect(terse).toMatch(/commitment was vague[^]*Put it in a few words\./);
+    const talkative = await section(["We'll look into it."], angry);
+    expect(talkative).not.toMatch(/Put it in a few words\./);
+  });
+
+  it('tells the model the customer does not talk like an assistant, in the rules and in the reminder for a retry', async () => {
+    const ctx = await lastContext(['What laptop are you using?']);
+    const system = systemOf(ctx);
+    expect(system).toMatch(/Never use stock assistant phrases[^.]*Certainly/);
+    expect(system).toMatch(
+      /do not answer .{0,3}Understood\.?.{0,3} or .{0,3}Okay\.?.{0,3} and nothing else in two replies running/,
+    );
+    expect(system).toMatch(/engineer's name more than once in any five of your replies/);
+    expect(system).toMatch(/do not recap the whole case again/);
+    expect(systemOf(ctx, { reminder: CUSTOMER_REMINDERS.style })).toContain(
+      CUSTOMER_REMINDERS.style,
+    );
+    expect(CUSTOMER_REMINDERS.style).toMatch(/no stock assistant phrases/);
+    expect(CUSTOMER_REMINDERS.style).toMatch(/Do not use the engineer's name/);
   });
 });
 

@@ -27,6 +27,7 @@ export function mockGenerate(ctx: CustomerGenerationContext): Promise<CustomerGe
       pushed: reply.pushed,
       flavoured: reply.flavoured,
       echoed: reply.echoed,
+      accepted: reply.accepted,
       customerChecks: reply.customerChecks,
       confusedBy: reply.confusedBy,
       limit: reply.limit,

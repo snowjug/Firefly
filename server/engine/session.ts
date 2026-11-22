@@ -35,6 +35,7 @@ export function createInitialRuntime(scenario: EffectiveScenario): EngineRuntime
     firedCurveballs: [],
     lastCurveballTurn: 0,
     curveballFollowUpGiven: false,
+    closingAtTurn: 0,
     behaviourStreak: {},
     turnsWithoutEmpathy: 0,
     lastTemperatureDelta: 0,

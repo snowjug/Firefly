@@ -1,6 +1,7 @@
 import type {
   AppConfigDTO,
   ApiErrorBody,
+  ClosingCheckDTO,
   CreateSessionRequest,
   PublicScenarioDTO,
   SendMessageRequest,
@@ -162,6 +163,13 @@ export const api = {
       undefined,
       signal,
     ).then((r) => r.transcript),
+  /**
+   * A neutral look at an active call for the moment the trainee presses End call: yes or no for a
+   * plan, an owner, an update time and the customer's agreement. It never blocks ending, so callers
+   * give it a short deadline (the signal) and leave it out when it does not come.
+   */
+  closingCheck: (id: string, signal?: AbortSignal) =>
+    request<ClosingCheckDTO>('GET', `/sessions/${enc(id)}/closing-check`, undefined, signal),
   sendMessage: (id: string, req: SendMessageRequest, signal?: AbortSignal) =>
     request<SendMessageResponse>('POST', `/sessions/${enc(id)}/messages`, req, signal),
   endSession: (id: string) =>

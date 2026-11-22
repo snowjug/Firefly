@@ -17,7 +17,10 @@ export interface CaseBodyProps {
   session: SessionDTO;
   /** How many things the trainee has found out so far. A count, never a total, and never what they are. */
   found: number;
-  /** Guided practice shows the areas worth exploring; a standard call does not. */
+  /**
+   * Guided practice shows the areas worth exploring and the count found; a standard call shows
+   * neither, because a count that ticks up while the trainee asks is a cue about what is hidden.
+   */
   guided: boolean;
   notes: string;
   onNotes(text: string): void;
@@ -64,9 +67,11 @@ export const CaseBody = memo(function CaseBody({
         </Item>
         <Item label="Call stage">{facts.callStage}</Item>
         <Item label="Objective">{facts.objective}</Item>
-        <Item label="Context found">
-          <span className="cw-case__count">{found}</span>
-        </Item>
+        {guided ? (
+          <Item label="Context found">
+            <span className="cw-case__count">{found}</span>
+          </Item>
+        ) : null}
         {guided && scenario.expectedDiscoveryAreas.length > 0 ? (
           <Item label="Areas to explore">
             <ul className="cw-case__areas">

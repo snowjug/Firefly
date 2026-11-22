@@ -1,0 +1,314 @@
+/* Strengths, improvement opportunities and the discovery review: short items with an edge that says
+   which kind they are (as well as the icon and the words), the facts that were found and missed,
+   and the one question to take into the next call. Tokens only. */
+
+/* ---- Strengths and improvement opportunities ---------------------------------------------- */
+.rp-items {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.rp-item + .rp-item {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+.rp-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+  padding: var(--sp-4) var(--sp-5);
+  border-inline-start: 3px solid transparent;
+}
+.rp-item--strength {
+  border-inline-start-color: var(--status-success-fg);
+}
+.rp-item--improvement {
+  border-inline-start-color: var(--status-warning-fg);
+}
+.rp-item--strength .rp-skilltag .ff-icon {
+  color: var(--status-success-fg);
+}
+.rp-item--improvement .rp-skilltag .ff-icon {
+  color: var(--status-warning-fg);
+}
+.rp-item__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  max-inline-size: var(--read-max);
+}
+.rp-item__title {
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-item__text {
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+/* What the customer said next, in a line under the evidence: their words, and the turn they are in. */
+.rp-item__reaction {
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-item__who {
+  color: var(--fg-1);
+  font-weight: var(--fw-semibold);
+}
+.rp-item > .rp-quote,
+.rp-item > .rp-gap,
+.rp-item > .rp-bw,
+.rp-item > .rp-noevidence {
+  align-self: stretch;
+  max-inline-size: var(--read-max);
+}
+.rp-gap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.rp-gap__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--stroke-w) dashed var(--stroke-accessible);
+  border-radius: var(--r-md);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Discovery ---------------------------------------------------------------------------- */
+.rp-discovery__total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+.rp-discovery__number {
+  font-size: var(--fs-title2);
+  line-height: var(--lh-title2);
+  font-variant-numeric: tabular-nums;
+}
+.rp-discovery__split {
+  flex-basis: 100%;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-regular);
+}
+/* How many were found: a segment for each fact. Found is solid, partly found is light, missed is an
+   empty outline; the words are written under it. */
+.rp-ratio {
+  display: inline-flex;
+  align-self: center;
+  gap: 3px;
+  margin-inline-start: var(--sp-2);
+}
+.rp-ratio__seg {
+  inline-size: 1.25rem;
+  block-size: 0.5rem;
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 0 0 1px var(--stroke-accessible);
+}
+.rp-ratio__seg--discovered {
+  background: var(--status-success-fg);
+  box-shadow: inset 0 0 0 1px var(--status-success-fg);
+}
+.rp-ratio__seg--partial {
+  background: var(--status-success-border);
+  box-shadow: inset 0 0 0 1px var(--status-success-fg);
+}
+.rp-ratio__seg--missed {
+  background: transparent;
+}
+.rp-discovery__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-5) var(--sp-6);
+  align-items: start;
+}
+/* Found and missed sit side by side only when both exist and there is room: with one of them empty
+   the other takes the whole width instead of leaving half of it blank. */
+@container (min-width: 48rem) {
+  .rp-discovery__columns--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.rp-discovery__column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-inline-size: 0;
+}
+.rp-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.rp-facts-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.rp-fact {
+  min-inline-size: 0;
+}
+.rp-fact + .rp-fact {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+/* A fact that was found is one line (the fact, how much it mattered, the turn) that opens in place.
+   The list draws the rules between rows, so the disclosure's own rule is left off. */
+.rp-fact .ff-disclosure--row {
+  border-block-end: 0;
+}
+.rp-fact .ff-disclosure__button {
+  min-block-size: var(--target);
+  padding-inline: var(--sp-4);
+  border-radius: 0;
+}
+.rp-fact .ff-disclosure__panel {
+  padding-inline: var(--sp-4);
+}
+.rp-fact__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+}
+.rp-fact__title {
+  min-inline-size: 0;
+  font-weight: var(--fw-semibold);
+}
+.rp-fact__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+}
+/* A fact that was missed keeps its card: it is the part a trainee comes here to read. */
+.rp-fact--missed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+}
+.rp-fact__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+}
+.rp-fact__toggle {
+  min-inline-size: 0;
+}
+.rp-fact__hidden {
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-quiet);
+  overflow-wrap: anywhere;
+}
+/* The one callout: a question worth asking, in the report's own accent, for a fact not found in full. */
+.rp-ask {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--stroke-w) solid var(--status-info-border);
+  border-radius: var(--r-lg);
+  background: var(--brand-tint);
+  overflow-wrap: anywhere;
+}
+.rp-ask__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.rp-ask__label .ff-icon {
+  color: var(--brand-fg);
+}
+.rp-ask__text {
+  max-inline-size: var(--read-max);
+  text-wrap: pretty;
+}
+
+@media (forced-colors: active) {
+  .rp-items,
+  .rp-facts-list,
+  .rp-fact__hidden,
+  .rp-ask {
+    border-color: CanvasText;
+  }
+  .rp-item + .rp-item,
+  .rp-fact + .rp-fact {
+    border-color: CanvasText;
+  }
+  .rp-item--strength,
+  .rp-item--improvement {
+    border-inline-start-color: Highlight;
+  }
+  .rp-ratio__seg {
+    forced-color-adjust: none;
+    box-shadow: inset 0 0 0 1px CanvasText;
+  }
+  .rp-ratio__seg--discovered {
+    background: CanvasText;
+  }
+  .rp-ratio__seg--partial {
+    background: GrayText;
+  }
+}
+
+@media print {
+  .rp-items,
+  .rp-facts-list {
+    overflow: visible;
+  }
+  /* A strength or improvement may run over a page: what is inside it (the quote, the wording) is kept
+     whole, and its title is kept with what follows. */
+  .rp-fact,
+  .rp-ask {
+    break-inside: avoid;
+  }
+  .rp-item__title,
+  .rp-fact__title {
+    break-after: avoid;
+  }
+  /* Found and missed side by side on paper too, as they are on a wide screen. */
+  .rp-discovery__columns--two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rp-fact__toggle .ff-disclosure__button {
+    display: none;
+  }
+  .rp-fact .ff-disclosure__button {
+    padding-block: var(--sp-2) 0;
+    min-block-size: 0;
+  }
+  .rp-ratio__seg {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}

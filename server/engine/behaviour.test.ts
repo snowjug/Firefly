@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { applyConfig } from '#shared/domain/config.ts';
+import type { ScenarioDefinition, ScenarioOverrides } from '#shared/domain/scenario.ts';
+import { factPolicy } from '../prompts/facts.ts';
+import { getScenarioLibrary } from '../scenarios/index.ts';
 import { processTraineeTurn } from './pipeline.ts';
 import { recordCommitment } from './memory.ts';
 import { mockClassifier, mockGenerate } from './mock/index.ts';
+import { composeCustomerReply } from './mock/customer.ts';
 import { planReply, type Flavour } from './plan.ts';
 import { createInitialRuntime, openingMessage } from './session.ts';
 import { simulate, type Simulation } from './simulate.ts';
@@ -924,5 +928,643 @@ describe('a fact counts as discovered only if its words are in the reply', () =>
       const fresh = discovery.tell.filter((item) => !item.repeat).length + discovery.reveal.length;
       expect(fresh, style).toBe(most);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// Ownership, a vague commitment, and the end of the call, on the real scenarios
+
+const library = getScenarioLibrary();
+const onTheLibrary = (id: string, overrides: ScenarioOverrides = {}, seed = 7) =>
+  applyConfig(
+    library.find((s) => s.id === id) as ScenarioDefinition,
+    { difficulty: 'standard', curveballs: [], callStage: 'first-contact', ...overrides },
+    { seed, timeOfDay: 'morning' },
+  );
+
+const SCOPING = 'What exactly is happening, and when did it start?';
+const OWN = "I'll take ownership of this and update you by 3pm today.";
+const THREE = /3 ?pm/i;
+const NO_MORE =
+  /that(?:'s| is) (?:everything|all)|nothing (?:else|more)|no, (?:that(?:'s| is)|i think)|(?:we're|we are) covered/i;
+
+describe('a clear owner and time', () => {
+  // How the customer takes it depends on who they are: one who wants to be sure says it back in
+  // their own words, one who has it says so.
+  const SAYS_IT_BACK: [string, ScenarioOverrides][] = [
+    ['teams-cannot-join-external-meetings', { style: 'demanding', startingTemperature: 'anxious' }],
+    ['windows-11-slow-after-update', { style: 'talkative', startingTemperature: 'calm' }],
+    ['sharepoint-site-access-escalated', { style: 'demanding', startingTemperature: 'angry' }],
+    ['m365-apps-excel-crashes-after-update', { style: 'non-native', startingTemperature: 'calm' }],
+    [
+      'power-automate-approvals-stopped',
+      { style: 'vague', startingTemperature: 'calm', proficiency: 'novice' },
+    ],
+  ];
+  const TAKES_IT_IN: [string, ScenarioOverrides][] = [
+    ['outlook-shared-mailbox-missing', { style: 'terse', startingTemperature: 'calm' }],
+    [
+      'azure-deployment-fails-permissions',
+      { style: 'terse', startingTemperature: 'calm', proficiency: 'expert' },
+    ],
+    [
+      'intune-devices-not-compliant-closure',
+      {
+        style: 'vague',
+        startingTemperature: 'calm',
+        proficiency: 'intermediate',
+        callStage: 'follow-up',
+      },
+    ],
+    ['entra-new-hires-blocked-sign-in', { style: 'terse', startingTemperature: 'frustrated' }],
+  ];
+
+  it('is said back as a question, in the customer’s own words, by one who wants to be sure', async () => {
+    for (const [id, overrides] of SAYS_IT_BACK) {
+      for (const seed of [1, 2, 3]) {
+        const sim = await simulate(onTheLibrary(id, overrides, seed), [GREET, SCOPING, OWN]);
+        const where = `${id}/${seed}: ${reply(sim, 2)}`;
+        expect(reply(sim, 2), where).toMatch(/so you(?:'ll| will)\b.*3 ?pm/i);
+        expect(reply(sim, 2), where).toContain('?');
+        expect(sim.turns[2]?.runtime.awaitingConfirmation, where).toBe(true);
+      }
+    }
+  });
+
+  it('is taken in briefly, naming the time and not as a bare "Okay.", by one who has it', async () => {
+    const said = new Set<string>();
+    for (const [id, overrides] of TAKES_IT_IN) {
+      for (const seed of [1, 2, 3, 4]) {
+        const sim = await simulate(onTheLibrary(id, overrides, seed), [GREET, SCOPING, OWN]);
+        const where = `${id}/${seed}: ${reply(sim, 2)}`;
+        expect(reply(sim, 2), where).toMatch(THREE);
+        // Taken in, not said back: the sentence that names the time is not a question. (A customer
+        // who is being cooperative may then ask what the engineer needs from them.)
+        const named = reply(sim, 2)
+          .split(/(?<=[.!?])\s+/)
+          .find((s) => THREE.test(s));
+        expect(named, where).toBeDefined();
+        expect(named, where).not.toContain('?');
+        expect(reply(sim, 2), where).not.toMatch(/so you(?:'ll| will)/i);
+        if (overrides.style === 'terse') expect(reply(sim, 2), where).not.toContain('?');
+        expect(reply(sim, 2), where).not.toMatch(/^(?:okay|ok|sure|right|good)\W*$/i);
+        expect(sentenceCount(reply(sim, 2)), where).toBeLessThanOrEqual(3);
+        // Taken in, it is not then said back as a question.
+        expect(sim.turns[2]?.runtime.awaitingConfirmation, where).toBe(false);
+        said.add(reply(sim, 2));
+      }
+    }
+    // And it is not the same line every time.
+    expect(said.size).toBeGreaterThanOrEqual(6);
+  });
+
+  it('is taken in with the time when the engineer recaps it and asks if that works', async () => {
+    for (const [id, overrides] of [...SAYS_IT_BACK, ...TAKES_IT_IN]) {
+      const sim = await simulate(onTheLibrary(id, overrides), [
+        GREET,
+        SCOPING,
+        `So, to summarise, ${OWN.toLowerCase()} Does that work?`,
+      ]);
+      expect(reply(sim, 2), id).toMatch(THREE);
+      expect(reply(sim, 2), id).not.toMatch(/\?/);
+    }
+  });
+
+  it('is accepted when the engineer confirms what the customer said back, and asked about once', async () => {
+    let asked = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const sim = await simulate(
+        onTheLibrary(
+          'windows-11-slow-after-update',
+          { style: 'talkative', startingTemperature: 'calm' },
+          seed,
+        ),
+        [
+          GREET,
+          SCOPING,
+          OWN,
+          'Yes, that is right.',
+          "I'll also email you the summary by 5pm.",
+          'Yes, that is right.',
+        ],
+      );
+      expect(reply(sim, 3), `seed ${seed}`).toMatch(/works|fine/i);
+      expect(sim.turns[3]?.runtime.awaitingConfirmation, `seed ${seed}`).toBe(false);
+      // A cooperative customer may ask what the engineer needs from their side, but only once.
+      const questions = sim.turns.filter((t) =>
+        /anything you need from (?:our side|us)|need anything from (?:us|our side)/i.test(
+          t.customer,
+        ),
+      ).length;
+      expect(questions, `seed ${seed}`).toBeLessThanOrEqual(1);
+      asked += questions;
+    }
+    expect(asked).toBeGreaterThan(0);
+  });
+
+  it('is never followed by that question from a terse, demanding or upset customer', async () => {
+    for (const overrides of [
+      { style: 'terse', startingTemperature: 'calm' },
+      { style: 'demanding', startingTemperature: 'calm' },
+      { style: 'talkative', startingTemperature: 'angry' },
+    ] as const) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const sim = await simulate(
+          onTheLibrary('teams-cannot-join-external-meetings', overrides, seed),
+          [GREET, SCOPING, OWN, 'Yes, that is right.', 'What else can I tell you?'],
+        );
+        for (const t of sim.turns) {
+          expect(t.customer, `${overrides.style}/${seed}`).not.toMatch(/anything you need from/i);
+        }
+      }
+    }
+  });
+
+  it('calms the customer, and calms them no further each time it is said again', async () => {
+    const sim = await talk({ startingTemperature: 'frustrated' }, [
+      GREET,
+      OWN,
+      'I will ring you at 3pm with an update, as I said.',
+      OWN,
+    ]);
+    expect(warmth(sim, 1)).toBeLessThanOrEqual(-8);
+    expect(sim.turns[1]?.runtime.customer.trust).toBeGreaterThan(
+      sim.turns[0]?.runtime.customer.trust ?? 100,
+    );
+    // The time was given once. Saying it again is no new reason to calm down.
+    for (const turn of [2, 3]) {
+      expect(warmth(sim, turn), `turn ${turn}`).toBeGreaterThanOrEqual(-3);
+      expect(reasons(sim, turn).join(' '), `turn ${turn}`).not.toMatch(
+        /Took clear ownership|Gave specific next steps/,
+      );
+    }
+  });
+
+  it('is not a reason to calm down when the time given contradicts the one before', async () => {
+    const sim = await talk({ startingTemperature: 'frustrated' }, [
+      GREET,
+      "I'll call you back by 3pm with an update.",
+      "I'll call you back by 5pm with an update.",
+    ]);
+    expect(reasons(sim, 2)).toContain('The time given changed from what was promised earlier');
+    expect(reasons(sim, 2)).not.toContain('Gave specific next steps with a time');
+    expect(warmth(sim, 2)).toBeGreaterThan(0);
+  });
+
+  it('does not make a goodbye, or a yes to the customer’s question, a wasted turn', async () => {
+    const sim = await talk({ startingTemperature: 'calm', style: 'demanding' }, [
+      GREET,
+      OWN,
+      'Yes, that is right.',
+      'Thank you. Goodbye.',
+    ]);
+    expect(categories(sim, 2)).not.toContain('delay');
+    expect(categories(sim, 3)).not.toContain('delay');
+  });
+});
+
+describe('a vague commitment', () => {
+  const calm = { startingTemperature: 'calm', style: 'terse' } as const;
+  const presses = async (overrides: Overrides, lines: string[], seed = 7) => {
+    const contexts = await captureContexts(makeScenario(overrides, seed), lines);
+    return contexts.map((ctx) => planReply(ctx).presses);
+  };
+
+  it('is pressed for a time once, in a few words by a terse customer, and not in the next reply', async () => {
+    const lines = [GREET, SCOPING, "I'll look into it.", "We'll get back to you soon."];
+    const sim = await simulate(
+      onTheLibrary('outlook-shared-mailbox-missing', {
+        style: 'terse',
+        startingTemperature: 'calm',
+      }),
+      lines,
+    );
+    expect(reply(sim, 2)).toMatch(/\b(?:when|hear)\b/i);
+    expect(reply(sim, 2)).toMatch(/\?$/);
+    expect(reply(sim, 2).split(/\s+/).length).toBeLessThanOrEqual(8);
+    // Remembered as an ask, so that nothing else is asked for soon after...
+    expect(sim.turns[2]?.runtime.pushes.timeline).toBe(3);
+    // ...and a second vague promise straight after is not pressed again.
+    expect(reply(sim, 3)).not.toContain('?');
+    expect(await presses(calm, lines)).toEqual([false, false, true, false]);
+  });
+
+  it('is not pressed once a time has been given, whatever vague thing is said after', async () => {
+    for (const overrides of [
+      { startingTemperature: 'calm', style: 'talkative' },
+      { startingTemperature: 'anxious', style: 'talkative' },
+      { startingTemperature: 'frustrated', style: 'vague' },
+    ] as const) {
+      const flags = await presses(overrides, [
+        GREET,
+        'What laptop are you using?',
+        "I'll look into it.",
+        "I'll update you by 3pm.",
+        "We'll be in touch soon.",
+        'I will let you know shortly.',
+      ]);
+      expect(flags.slice(2), JSON.stringify(overrides)).toEqual([true, false, false, false]);
+    }
+  });
+
+  it('is pressed by a customer who will not take a vague answer every time, as before', async () => {
+    for (const overrides of [
+      { startingTemperature: 'angry', style: 'talkative' },
+      { startingTemperature: 'calm', style: 'demanding' },
+    ] as const) {
+      const flags = await presses(overrides, [
+        GREET,
+        "I'll look into it.",
+        "We'll get back to you soon.",
+        "I'll update you by 3pm.",
+        "We'll be in touch soon.",
+      ]);
+      // Said again without the time, a promise that has one is not a vague one: the time stands.
+      expect(flags, JSON.stringify(overrides)).toEqual([false, true, true, false, false]);
+    }
+    // A vague promise about something else, after a time was given for the call back, is.
+    const other = await presses({ startingTemperature: 'angry', style: 'demanding' }, [
+      GREET,
+      "I'll take ownership and call you back by 3pm with an update.",
+      "I'll get back to you soon.",
+    ]);
+    expect(other).toEqual([false, false, true]);
+  });
+
+  it('is pressed on an owner with no time only by a customer who would ask', async () => {
+    const lines = [GREET, 'What laptop are you using?', 'I will take ownership of this.'];
+    expect((await presses(calm, lines)).at(-1)).toBe(false);
+    expect((await presses({ startingTemperature: 'calm', style: 'talkative' }, lines)).at(-1)).toBe(
+      false,
+    );
+    expect(
+      (await presses({ startingTemperature: 'anxious', style: 'talkative' }, lines)).at(-1),
+    ).toBe(true);
+    // Taking the case on is good news to a calm customer: they say so rather than ask.
+    const sim = await talk({ startingTemperature: 'calm', style: 'talkative' }, lines.slice(0, 3));
+    expect(reply(sim, 2)).not.toContain('?');
+    expect(reply(sim, 2)).toMatch(/thank|good|reassur|glad|relief/i);
+  });
+
+  it('is pressed on "I will call you back", which names no time', async () => {
+    const flags = await presses({ startingTemperature: 'anxious', style: 'talkative' }, [
+      GREET,
+      'What laptop are you using?',
+      'I will call you back.',
+    ]);
+    expect(flags.at(-1)).toBe(true);
+  });
+
+  it('is not asked about on top of another ask: the press stands in for the challenge', async () => {
+    const sim = await talk({ startingTemperature: 'angry', style: 'demanding' }, [
+      GREET,
+      "I'll look into it.",
+    ]);
+    // One request for a time, not "when?" and then "that is not specific, who and by when?".
+    expect(reply(sim, 1).match(/\?/g)?.length ?? 0).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('"is there anything you need from your side?"', () => {
+  const ASK = 'Is there anything you need to do from your side before then?';
+
+  it('is a closing question: it is answered, and asks nothing about the problem', async () => {
+    for (const id of [
+      'outlook-shared-mailbox-missing',
+      'teams-cannot-join-external-meetings',
+      'windows-11-slow-after-update',
+      'azure-vm-unreachable-production',
+      'dynamics-records-not-visible-after-role-change',
+    ]) {
+      for (const style of ['terse', 'talkative', 'demanding', 'vague', 'non-native'] as const) {
+        const sim = await simulate(onTheLibrary(id, { style }), [GREET, ASK]);
+        const where = `${id}/${style}: ${reply(sim, 1)}`;
+        // Nothing was earned: the question was not about the problem.
+        expect(Object.keys(sim.runtime.discovery), where).toEqual([]);
+        expect(reply(sim, 1), where).toMatch(NO_MORE);
+        expect(sentenceCount(reply(sim, 1)), where).toBeLessThanOrEqual(3);
+        expect(reply(sim, 1), where).not.toContain('?');
+      }
+    }
+  });
+
+  it('is not about the problem even when a model reads it as being about what changed', async () => {
+    const [ctx] = await captureContexts(
+      onTheLibrary('outlook-shared-mailbox-missing'),
+      [
+        {
+          text: ASK,
+          classification: {
+            askedQuestion: true,
+            discoveryIntents: ['recent_changes', 'timing_onset'],
+            factTargets: [{ id: 'hf-access-tidy', strength: 'full' }],
+          },
+        },
+      ],
+      { matching: 'model' },
+    );
+    expect(ctx?.classification.discoveryIntents).toEqual([]);
+    expect(ctx?.classification.factTargets).toEqual([]);
+    expect(ctx?.discovery.reveal).toEqual([]);
+  });
+
+  it('is still a question about the problem when it asks about the customer’s side as a cause', async () => {
+    const c = await captureContexts(onTheLibrary('outlook-shared-mailbox-missing'), [
+      GREET,
+      'Is there anything on your side that could explain it, like a change to who has access?',
+    ]);
+    expect(c.at(-1)?.classification.discoveryIntents.length).toBeGreaterThan(0);
+  });
+
+  it('is answered, if there is someone the customer said would know, with an offer to ask them', async () => {
+    const lines = [
+      GREET,
+      'Has the administrator changed any sign-in policy?',
+      "I'll take ownership and call you back by 3pm.",
+      ASK,
+    ];
+    const talkative = await talk({ style: 'talkative', startingTemperature: 'calm' }, lines);
+    expect(reply(talkative, 3)).toMatch(/our administrator/i);
+    expect(reply(talkative, 3)).toMatch(NO_MORE);
+    // A terse customer says only that there is nothing.
+    const terse = await talk({ style: 'terse', startingTemperature: 'calm' }, lines);
+    expect(reply(terse, 3)).not.toMatch(/administrator/i);
+    expect(reply(terse, 3)).toMatch(NO_MORE);
+    // And with nobody to offer, no one is offered: nothing is made up.
+    const none = await talk({ style: 'talkative', startingTemperature: 'calm' }, [GREET, ASK]);
+    expect(reply(none, 1)).not.toMatch(/administrator|ask them/i);
+  });
+});
+
+describe('the end of the call', () => {
+  const CLOSE = [GREET, SCOPING, OWN, 'Yes, that is right.'];
+  const PERSONALITIES: [string, ScenarioOverrides][] = [
+    ['outlook-shared-mailbox-missing', { style: 'terse', startingTemperature: 'calm' }],
+    ['windows-11-slow-after-update', { style: 'talkative', startingTemperature: 'calm' }],
+    ['teams-cannot-join-external-meetings', { style: 'demanding', startingTemperature: 'anxious' }],
+    ['sharepoint-site-access-escalated', { style: 'demanding', startingTemperature: 'angry' }],
+    ['m365-apps-excel-crashes-after-update', { style: 'non-native', startingTemperature: 'calm' }],
+    ['power-automate-approvals-stopped', { style: 'vague', startingTemperature: 'calm' }],
+  ];
+
+  it('is closed by the customer when the engineer says goodbye: short, no questions, nothing new', async () => {
+    for (const [id, overrides] of PERSONALITIES) {
+      const sim = await simulate(onTheLibrary(id, overrides), [
+        ...CLOSE,
+        'Is there anything else I can help with?',
+        "Thank you. I'll speak to you at 3pm. Have a good day.",
+      ]);
+      const asked = reply(sim, 4);
+      const closed = reply(sim, 5);
+      const where = `${id}: ${asked} | ${closed}`;
+      // "Is there anything else?" is answered...
+      expect(asked, where).toMatch(NO_MORE);
+      // ...and the goodbye is not: it is a goodbye, in a line or two.
+      expect(closed, where).toMatch(/bye|thank|wait|speak|expect|look out/i);
+      expect(closed, where).not.toContain('?');
+      expect(closed, where).not.toMatch(/so you(?:'ll| will)/i);
+      expect(sentenceCount(closed), where).toBeLessThanOrEqual(overrides.style === 'terse' ? 2 : 3);
+      // Nothing about the problem comes up again.
+      expect(Object.keys(sim.turns[5]?.runtime.discovery ?? {}).length, where).toBe(
+        Object.keys(sim.turns[4]?.runtime.discovery ?? {}).length,
+      );
+    }
+  });
+
+  it('does not close with the same line for every customer, or every call', async () => {
+    for (const [id, overrides] of PERSONALITIES.slice(0, 4)) {
+      const closings = new Map<number, string>();
+      for (let seed = 1; seed <= 8; seed++) {
+        const sim = await simulate(onTheLibrary(id, overrides, seed), [
+          ...CLOSE,
+          'Thanks very much. Goodbye.',
+        ]);
+        closings.set(seed, reply(sim, 4));
+      }
+      // The same customer, with another seed, closes in other words.
+      expect(new Set(closings.values()).size, id).toBeGreaterThanOrEqual(3);
+      expect(closings.get(1), id).not.toBe(closings.get(2));
+    }
+  });
+
+  it('is not said as a farewell when the engineer only wraps up, or asks if that is all', async () => {
+    const sim = await simulate(
+      onTheLibrary('windows-11-slow-after-update', {
+        style: 'talkative',
+        startingTemperature: 'calm',
+      }),
+      [
+        GREET,
+        SCOPING,
+        OWN,
+        'Yes, that is right.',
+        "To recap, I'll call you by 3pm. Is there anything else I can help with?",
+      ],
+    );
+    expect(reply(sim, 4)).toMatch(NO_MORE);
+    expect(reply(sim, 4)).not.toMatch(/\bbye\b|goodbye/i);
+  });
+
+  it('does not take "anything else" about the problem for the end of the call, and does take it when it asks if that is all', async () => {
+    const about = [
+      'Is there anything else you noticed about the error?',
+      'Did you change anything else on the machine?',
+      'Is there anything else that changed before it started?',
+      'Have you tried anything else?',
+      'Is there anything else I should know?',
+      'Is there anything else you can tell me about it?',
+    ];
+    const ends = [
+      'Is there anything else I can help with today?',
+      'Anything else?',
+      'Do you have any other questions?',
+      "Is there anything else you'd like to add?",
+      "Is there anything else you'd like to tell me?",
+    ];
+    const scenario = makeScenario({ startingTemperature: 'calm', style: 'talkative' });
+    for (const [lines, closing] of [
+      [about, false],
+      [ends, true],
+    ] as const) {
+      for (const text of lines) {
+        const ctx = (await captureContexts(scenario, [GREET, text])).at(-1);
+        expect(ctx?.analysis.closingQuestionOnly, text).toBe(closing);
+        expect(ctx?.analysis.anythingElseAboutCase, text).toBe(!closing);
+        expect(ctx && planReply(ctx).close, text).toBe(closing ? 'asks-more' : null);
+      }
+    }
+    // A question about the problem still reaches discovery: the customer is asked what changed.
+    const ctx = (
+      await captureContexts(scenario, [GREET, 'Did anything else change before it started?'])
+    ).at(-1);
+    expect(ctx?.classification.discoveryIntents).toContain('recent_changes');
+  });
+
+  it('is only ever a goodbye when the words are one: thanks, and "thanks for calling", are not', async () => {
+    for (const text of [
+      'Thanks for calling Microsoft support, how can I help?',
+      'Thank you, that helps.',
+      'Until then, please restart your laptop.',
+      'Thanks for holding.',
+      "I'll speak to you at 3pm with an update.",
+    ]) {
+      const [ctx] = await captureContexts(makeScenario({ startingTemperature: 'calm' }), [text]);
+      expect(ctx?.analysis.farewell, text).toBe(false);
+    }
+    for (const text of [
+      'Goodbye.',
+      'Bye for now.',
+      'Have a good day.',
+      'Take care.',
+      'Speak to you then.',
+      'Thank you for your time, bye.',
+    ]) {
+      const [ctx] = await captureContexts(makeScenario({ startingTemperature: 'calm' }), [text]);
+      expect(ctx?.analysis.farewell, text).toBe(true);
+    }
+  });
+});
+
+describe('a recap from the engineer', () => {
+  it('is confirmed when it is right, and put right when it is wrong, by every kind of customer', async () => {
+    for (const definition of library) {
+      for (const style of ['terse', 'talkative', 'demanding', 'vague', 'non-native'] as const) {
+        const scenario = onTheLibrary(definition.id, { style, startingTemperature: 'frustrated' });
+        const right = await simulate(scenario, [
+          GREET,
+          SCOPING,
+          `So just to confirm, ${scenario.openingCore.charAt(0).toLowerCase()}${scenario.openingCore.slice(1)} Is that right?`,
+        ]);
+        expect(reply(right, 2), `${definition.id}/${style}`).toMatch(
+          /yes|right|exactly|that's it/i,
+        );
+        expect(reply(right, 2), `${definition.id}/${style}`).not.toMatch(/not quite|not right/i);
+
+        const wrong = await simulate(scenario, [
+          GREET,
+          'So to confirm, a developer deleted the production database and 400 people are affected. Is that right?',
+        ]);
+        expect(reply(wrong, 1), `${definition.id}/${style}`).toMatch(
+          /not quite|not what i|not right|that's not|don't think that's right|no, /i,
+        );
+      }
+    }
+  });
+
+  it('never gives away a hidden fact in putting the engineer right, however the recap is wrong', async () => {
+    for (const definition of library) {
+      for (const style of ['terse', 'talkative', 'demanding', 'vague', 'non-native'] as const) {
+        const scenario = onTheLibrary(definition.id, { style, startingTemperature: 'calm' });
+        for (const recap of [
+          'So to confirm, a developer deleted the production database and 400 people are affected. Is that right?',
+          'So to confirm, there are 400 users affected and they are all in one office. Is that right?',
+          'So the firewall update crashed your server and the database is corrupted. Is that right?',
+        ]) {
+          const [, ctx] = await captureContexts(scenario, [GREET, recap]);
+          if (!ctx) throw new Error('no context');
+          const said = composeCustomerReply(ctx).text;
+          expect(factPolicy(ctx).leaks(said), `${definition.id}/${style}: ${said}`).toBe(false);
+          for (const fact of scenario.hiddenFacts) {
+            expect(said, `${definition.id}/${style}`).not.toContain(fact.statement.split('. ')[0]);
+          }
+        }
+      }
+    }
+  });
+
+  it('is corrected with who is affected, as the customer gave it, when the recap gets the number wrong', async () => {
+    const sim = await talk({ startingTemperature: 'calm', impact: 'low', style: 'talkative' }, [
+      GREET,
+      'So to confirm, three of you are affected. Is that right?',
+    ]);
+    expect(reply(sim, 1)).toMatch(/not quite|not what i|not right/i);
+    expect(reply(sim, 1)).toMatch(/just my account/i);
+  });
+
+  it('is confirmed, and what it left out is added, when it is right but leaves out who is affected', async () => {
+    let added = 0;
+    for (let seed = 1; seed <= 8; seed++) {
+      const sim = await talk(
+        { startingTemperature: 'calm', impact: 'low', style: 'talkative' },
+        [
+          GREET,
+          'Is it just you, or are other people affected too?',
+          'So just to confirm, you changed your password this morning and now Outlook will not let you in. Is that right?',
+        ],
+        seed,
+      );
+      expect(reply(sim, 2), `seed ${seed}`).toMatch(/yes|right|exactly|that's it/i);
+      expect(reply(sim, 2), `seed ${seed}`).not.toMatch(/not quite/i);
+      if (/just my account/i.test(reply(sim, 2))) added += 1;
+    }
+    expect(added).toBeGreaterThan(0);
+    // A recap that already says who is affected is not added to.
+    const full = await talk({ startingTemperature: 'calm', impact: 'low', style: 'talkative' }, [
+      GREET,
+      'Is it just you, or are other people affected too?',
+      'So just to confirm, you changed your password this morning and now Outlook will not let you in, and it is just you. Is that right?',
+    ]);
+    expect(reply(full, 2)).not.toMatch(/just my account/i);
+  });
+});
+
+describe('the customer’s name, role and organisation', () => {
+  it('are given one at a time, as asked, and together only when asked together', async () => {
+    for (const id of [
+      'outlook-shared-mailbox-missing',
+      'azure-vm-unreachable-production',
+      'sharepoint-site-access-escalated',
+      'm365-apps-excel-crashes-after-update',
+    ]) {
+      for (const style of ['terse', 'talkative', 'demanding', 'non-native'] as const) {
+        const scenario = onTheLibrary(id, { style });
+        const { name, role, organisation } = scenario.persona;
+        const first = name.split(' ')[0] as string;
+        const sim = await simulate(scenario, [
+          GREET,
+          'Thank you. And what is your name?',
+          'And what is your role there?',
+          'Which organisation are you with?',
+          'Could I have your name and your role?',
+        ]);
+        const where = (n: number) => `${id}/${style}: ${reply(sim, n)}`;
+        expect(reply(sim, 1), where(1)).toContain(first);
+        expect(reply(sim, 1), where(1)).not.toContain(organisation);
+        expect(reply(sim, 1), where(1)).not.toMatch(new RegExp(role, 'i'));
+        expect(reply(sim, 2), where(2)).toMatch(new RegExp(role, 'i'));
+        expect(reply(sim, 2), where(2)).not.toContain(first);
+        // Nothing the customer did not have is added: no "I'm not sure" to a plain question.
+        expect(reply(sim, 2), where(2)).not.toMatch(/not sure|don't know|do not know/i);
+        expect(reply(sim, 3), where(3)).toContain(organisation);
+        expect(reply(sim, 4), where(4)).toContain(first);
+        expect(reply(sim, 4), where(4)).toMatch(new RegExp(role, 'i'));
+      }
+    }
+  });
+
+  it('says a role the way a person does: "I\'m the head of programme delivery", "an operations manager"', async () => {
+    const said = async (id: string, style: 'talkative' | 'non-native') =>
+      reply(
+        await simulate(onTheLibrary(id, { style }), [GREET, 'And what is your role there?']),
+        1,
+      );
+    expect(await said('sharepoint-site-access-escalated', 'talkative')).toMatch(
+      /I'm the head of programme delivery/,
+    );
+    expect(await said('teams-cannot-join-external-meetings', 'talkative')).toMatch(
+      /I'm an operations manager/,
+    );
+    expect(await said('windows-11-slow-after-update', 'non-native')).toMatch(
+      /I am a travel consultant/,
+    );
+  });
+
+  it('does not take "do you have a case number?" for asking if they have called before', async () => {
+    const sim = await simulate(
+      onTheLibrary('outlook-shared-mailbox-missing', { style: 'talkative' }),
+      [GREET, 'And do you have a case number?'],
+    );
+    expect(reply(sim, 1)).toContain('SIM-');
+    expect(reply(sim, 1)).not.toMatch(/first time|called before/i);
   });
 });

@@ -9,6 +9,7 @@ import {
   FACT_IMPORTANCE,
   IMPACTS,
   ISSUE_TYPES,
+  PRODUCT_FAMILIES,
   PRODUCT_IDS,
   PROFICIENCIES,
   START_TEMPERATURES,
@@ -232,6 +233,90 @@ const StageFrameSchema = z.object({
   brief: text(300, 10), // what the trainee is told about the case so far
 });
 
+// ---------------------------------------------------------------------------------------
+// Provenance. Every scenario carries an internal record of when it was written and how far its
+// wording about the product has been checked against current public sources. It is for authors and
+// reviewers only: it never reaches a trainee, an API response or a log line (see
+// docs/scenario-authoring.md). Nothing here defaults, so a record can never claim more than someone wrote.
+
+export const SOURCE_CATEGORIES = [
+  'microsoft-learn',
+  'microsoft-support',
+  'product-blog',
+  'tech-community',
+  'author-experience',
+] as const;
+export type SourceCategory = (typeof SOURCE_CATEGORIES)[number];
+
+export const BEHAVIOUR_CHECKS = ['not-checked', 'checked-partly', 'checked-current'] as const;
+export type BehaviourCheck = (typeof BEHAVIOUR_CHECKS)[number];
+
+export const REVIEW_STATES = ['unreviewed', 'assistant-reviewed', 'mentor-reviewed'] as const;
+export type ReviewState = (typeof REVIEW_STATES)[number];
+
+/** The field names of the provenance record. None of them may appear in anything a trainee receives or a log line. */
+export const PROVENANCE_KEYS = [
+  'grounding',
+  'authoredOn',
+  'revisedOn',
+  'checkedOn',
+  'productFamily',
+  'sourceCategories',
+  'behaviourCheck',
+  'syntheticConfirmed',
+  'review',
+] as const;
+
+const isCalendarDate = (value: string): boolean => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  );
+};
+const calendarDate = z.string().refine(isCalendarDate, 'use a real calendar date, YYYY-MM-DD');
+
+export const GroundingSchema = z
+  .object({
+    authoredOn: calendarDate,
+    revisedOn: calendarDate.optional(), // never before authoredOn
+    productFamily: z.enum(PRODUCT_FAMILIES), // must be the family of `product` (checked on load)
+    // Only public categories that were really used. `author-experience` is the author's own
+    // knowledge of how support calls go, not a source about the product.
+    sourceCategories: z.array(z.enum(SOURCE_CATEGORIES)).min(1).max(SOURCE_CATEGORIES.length),
+    behaviourCheck: z.enum(BEHAVIOUR_CHECKS),
+    checkedOn: calendarDate.optional(), // needed once any check was made
+    syntheticConfirmed: z.literal(true), // the people, organisation and numbers are all invented
+    review: z.enum(REVIEW_STATES),
+    notes: text(300).optional(),
+  })
+  .superRefine((grounding, ctx) => {
+    const add = (message: string, path: string) =>
+      ctx.addIssue({ code: 'custom', message, path: [path] });
+    if (grounding.revisedOn && grounding.revisedOn < grounding.authoredOn) {
+      add('revisedOn is before authoredOn', 'revisedOn');
+    }
+    if (new Set(grounding.sourceCategories).size !== grounding.sourceCategories.length) {
+      add('a source category is listed twice', 'sourceCategories');
+    }
+    if (grounding.behaviourCheck !== 'not-checked') {
+      if (!grounding.checkedOn)
+        add('checkedOn is needed once behaviour has been checked', 'checkedOn');
+      if (grounding.sourceCategories.every((c) => c === 'author-experience')) {
+        add('a behaviour check needs at least one public source category', 'sourceCategories');
+      }
+    }
+    if (grounding.behaviourCheck === 'checked-current' && !grounding.notes) {
+      add('notes are needed to say which public pages showed the behaviour is current', 'notes');
+    }
+    if (grounding.review === 'mentor-reviewed' && !grounding.notes) {
+      add('notes are needed to say what the mentor reviewed', 'notes');
+    }
+  });
+export type Grounding = z.output<typeof GroundingSchema>;
+
 export const ScenarioDefinitionSchema = z
   .object({
     id,
@@ -239,6 +324,12 @@ export const ScenarioDefinitionSchema = z
     enabled: z.boolean().default(true),
     spotlight: z.boolean().default(false), // designed for the panel demo
     title: text(80),
+    // The title on a scenario card: two to six plain words in sentence case, worded only from text
+    // the trainee can already read (the title and `publicBrief.issue`), so it adds nothing to it.
+    shortTitle: short(6, 2)
+      .refine((value) => wordCount(value) >= 2, 'use at least 2 words')
+      .refine((value) => /^\p{Lu}/u.test(value), 'use sentence case: start with a capital letter')
+      .refine((value) => !/[.!?:;,]$/.test(value), 'end without a full stop or other punctuation'),
     listSummary: short(18, 10), // one line for the scenario list; no hidden information
     summary: short(60, 20), // public detail view; contains no hidden information
     tags: z.array(text(30)).max(8).default([]),
@@ -251,6 +342,9 @@ export const ScenarioDefinitionSchema = z
       .string()
       .regex(/^SIM-\d{6}$/, 'use the form SIM-000000')
       .optional(),
+    // Internal: when it was written, which public sources it rests on, and how far the product
+    // wording has been checked. Required, so that a scenario cannot be added without saying.
+    grounding: GroundingSchema,
 
     // Default settings (every one of these can be changed when the call is configured)
     issueType: z.enum(ISSUE_TYPES),

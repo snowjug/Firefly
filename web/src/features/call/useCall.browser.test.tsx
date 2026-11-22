@@ -216,15 +216,18 @@ describe('the customer’s voice, spoken by the browser', () => {
     expect(h.snap().stateHistory.map((point) => point.band)).toEqual(['calm', 'angry']);
   });
 
-  it('shapes the customer’s level from the words while it speaks, and is silent after', async () => {
+  it('shapes the customer’s level from the words while it speaks, never calls it measured, and is silent after', async () => {
     await mountBrowser();
     await h.begin(true);
     expect(h.snap().customerLevel).toBe(0);
     act(() => void h.env.speech.startLatest());
     await advance(1500);
     expect(h.snap().customerLevel).toBeGreaterThan(0);
+    // The page cannot hear a browser voice: the screen must not present this level as a measurement.
+    expect(h.snap().customerLevelMeasured).toBe(false);
     await customerFinishes();
     expect(h.snap().customerLevel).toBe(0);
+    expect(h.snap().customerLevelMeasured).toBe(false);
   });
 
   it('keeps the microphone closed while it speaks, so the customer cannot hear themselves', async () => {

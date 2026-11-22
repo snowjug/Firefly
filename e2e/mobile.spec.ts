@@ -8,11 +8,12 @@ import {
 } from './support/call-screen.ts';
 
 // The main journeys on a phone (the "mobile" project, a Pixel 7: touch, 412 px wide). The layout is
-// different at this width: the header keeps Scenarios and Responsible AI in a Menu, the scenario list
-// is a list of links that opens each scenario on a page of its own (with a Back), and the call has a
-// dock of controls and its case in a sheet. Layout and accessibility sweeps at every width are in the
-// responsive and accessibility specs; these only prove that a person can get from the start to a
-// report with a thumb, and that nothing makes the page wider than the screen on the way.
+// different at this width: the header keeps Scenarios and Responsible AI in a Menu, the scenarios are a
+// row of cards that peek and swipe above the details of the chosen one, and the call has a dock of
+// controls and its case in a sheet. Layout and accessibility sweeps at every width are in the
+// responsive and accessibility specs, and the carousel's own touch behaviour is in carousel.spec.ts;
+// these only prove that a person can get from the start to a report with a thumb, and that nothing
+// makes the page wider than the screen on the way.
 
 test.describe.configure({ timeout: 90_000 });
 
@@ -23,7 +24,7 @@ async function expectNoSideways(page: Page, where: string) {
   expect(overflow, `${where} is wider than the screen`).toBeLessThanOrEqual(0);
 }
 
-const list = (page: Page) => page.getByRole('list', { name: 'Scenarios', exact: true });
+const gallery = (page: Page) => page.getByRole('region', { name: 'Scenarios', exact: true });
 const count = (page: Page) =>
   page
     .getByRole('main')
@@ -32,7 +33,11 @@ const count = (page: Page) =>
 
 test('@mobile choose a scenario, read the brief, hold a typed call and open the report on a phone', async ({
   page,
+  api,
 }) => {
+  const chosen = (await api.scenarios()).find(
+    (scenario) => scenario.id === 'outlook-shared-mailbox-missing',
+  )!;
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     'Practise Microsoft support calls safely.',
@@ -53,26 +58,27 @@ test('@mobile choose a scenario, read the brief, hold a typed call and open the 
     await expect(header.getByRole('link', { name: 'Start call' })).toBeVisible();
   });
 
-  await test.step('a touch on Start call opens the scenarios, as a list of links', async () => {
+  await test.step('a touch on Start call opens the scenarios, as a row of cards', async () => {
     await page.getByRole('banner').getByRole('link', { name: 'Start call' }).tap();
     await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
     await expect(count(page)).toHaveText('16 scenarios');
-    await expect(list(page).getByRole('link')).toHaveCount(16);
-    await expectNoSideways(page, 'The scenario list');
+    await expect(gallery(page).getByRole('radio')).toHaveCount(16);
+    await expectNoSideways(page, 'The scenarios');
   });
 
-  await test.step('touching a scenario opens its details on a page of its own, with the setup and the way on', async () => {
-    await list(page)
-      .getByRole('link', { name: 'Shared team mailbox missing from Outlook', exact: true })
-      .tap();
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Shared team mailbox missing from Outlook' }),
-    ).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Scenarios', exact: true })).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Preset' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Customise/ })).toBeVisible();
+  await test.step('touching a card chooses it, and its details, the setup and the way on are on the same page', async () => {
+    // The workspace tidies its address once the list has arrived; a choice made before that is lost.
+    await expect(page).toHaveURL(/[?&]scenario=/);
+    const card = gallery(page).getByRole('radio', { name: chosen.shortTitle, exact: true });
+    await card.scrollIntoViewIfNeeded();
+    await card.tap();
+    await expect(card).toBeChecked();
+    const details = page.getByRole('region', { name: chosen.title, exact: true });
+    await expect(details.getByRole('heading', { level: 2, name: chosen.title })).toBeVisible();
+    await expect(details.getByRole('group', { name: 'Preset' })).toBeVisible();
+    await expect(details.getByRole('button', { name: /^Customise/ })).toBeVisible();
     await expectNoSideways(page, 'The scenario details');
-    await page.getByRole('link', { name: 'Review brief' }).tap();
+    await details.getByRole('link', { name: 'Start configuration' }).tap();
   });
 
   await test.step('the brief says what the microphone and speech will do, then a typed call starts', async () => {
@@ -121,58 +127,6 @@ test('@mobile choose a scenario, read the brief, hold a typed call and open the 
   });
 });
 
-test('@mobile the scenario list has filters behind a button, opens a scenario with a Back, and gives focus back to its row', async ({
-  page,
-  api,
-}) => {
-  const scenarios = await api.scenarios();
-  await page.goto('/scenarios');
-  await expect(count(page)).toHaveText('16 scenarios');
-  const filters = page.getByRole('button', { name: 'Filters', exact: true });
-  await expect(filters).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByRole('combobox', { name: 'Product' })).toBeHidden();
-
-  await test.step('Filters opens the three filters, and says how many are in use', async () => {
-    await filters.tap();
-    await expect(filters).toHaveAttribute('aria-expanded', 'true');
-    await page.getByRole('combobox', { name: 'Product' }).selectOption('windows-11');
-    await expect(page.getByRole('button', { name: 'Filters (1)' })).toBeVisible();
-    const windows = scenarios.filter((scenario) => scenario.product.id === 'windows-11');
-    await expect(list(page).getByRole('link')).toHaveCount(windows.length);
-    await expect(count(page)).toHaveText(`${windows.length} of 16 scenarios`);
-    await expectNoSideways(page, 'The filtered list');
-  });
-
-  const chosen = scenarios.find((scenario) => scenario.product.id === 'windows-11')!;
-  await test.step('opening a row pushes the details, and focus moves to the title', async () => {
-    await list(page).getByRole('link', { name: chosen.title, exact: true }).tap();
-    const title = page.getByRole('heading', { level: 1, name: chosen.title });
-    await expect(title).toBeVisible();
-    await expect(title).toBeFocused();
-    await expect.poll(() => new URL(page.url()).searchParams.get('scenario')).toBe(chosen.id);
-  });
-
-  await test.step('Back returns to the list, with the filter still on, and focus on the row that was open', async () => {
-    await page.getByRole('button', { name: 'Scenarios', exact: true }).tap();
-    await expect(list(page)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Filters (1)' })).toBeVisible();
-    await expect(list(page).getByRole('link', { name: chosen.title, exact: true })).toBeFocused();
-    await expect.poll(() => new URL(page.url()).searchParams.get('scenario')).toBeNull();
-  });
-
-  await test.step('the browser back button does the same from a scenario', async () => {
-    await list(page).getByRole('link', { name: chosen.title, exact: true }).tap();
-    await expect(page.getByRole('heading', { level: 1, name: chosen.title })).toBeVisible();
-    await page.goBack();
-    await expect(list(page)).toBeVisible();
-  });
-
-  await test.step('a shared link to a scenario opens its details straight away', async () => {
-    await page.goto(`/scenarios?scenario=${chosen.id}`);
-    await expect(page.getByRole('heading', { level: 1, name: chosen.title })).toBeVisible();
-  });
-});
-
 test('@mobile the call keeps its controls in a dock at the bottom, and the case opens in a sheet', async ({
   page,
   api,
@@ -190,10 +144,16 @@ test('@mobile the call keeps its controls in a dock at the bottom, and the case 
 
   await test.step('the case opens in a sheet that closes with its button, and focus goes back', async () => {
     const open = page.getByRole('button', { name: 'Case', exact: true });
+    // There is room beside the icon on a phone this wide, so the button says what it is.
+    await expect(page.locator('.cw-bar__case-label')).toBeVisible();
+    // And the bar still says who plays the customer, beside the time and Live.
+    await expect(page.locator('.cw-bar').getByText('Demo mode', { exact: true })).toBeVisible();
     await open.tap();
     const sheet = page.getByRole('dialog', { name: 'Case' });
     await expect(sheet).toBeVisible();
-    await expect(sheet).toContainText('Context found');
+    await expect(sheet).toContainText('Objective');
+    // A standard call shows no live count of what has been found: that would be a cue.
+    await expect(sheet).not.toContainText('Context found');
     await sheet.getByRole('button', { name: 'Close', exact: true }).tap();
     await expect(sheet).toBeHidden();
     await expect(open).toBeFocused();

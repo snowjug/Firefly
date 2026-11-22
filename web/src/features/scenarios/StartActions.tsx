@@ -16,8 +16,9 @@ export interface StartActionsProps {
 
 /**
  * The ways to begin. A spoken call is the main action where the browser can hold one; where it
- * cannot, a typed call is, and it is just as plain. A failure says what happened and what was kept,
- * and the same press, tried again, can never start a second call.
+ * cannot, a typed call is, and it is just as plain. The quieter way to start, a typed call, sits
+ * under it as one block, and the way back to the scenario is apart from both. A failure says what
+ * happened and what was kept, and the same press, tried again, can never start a second call.
  */
 export function StartActions({ speech, start, onStart, editTo, readinessId }: StartActionsProps) {
   const { setup, loading } = speech;
@@ -41,62 +42,70 @@ export function StartActions({ speech, start, onStart, editTo, readinessId }: St
           {failure.detail}
         </MessageBar>
       ) : null}
-      {canSpeak || waiting ? (
-        <Button
-          className="brf-start"
-          appearance="primary"
-          size="large"
-          icon="microphone"
-          fullWidth
-          loading={pending === 'voice'}
-          loadingLabel="Starting the call"
-          disabled={busy && pending !== 'voice'}
-          disabledFocusable={waiting}
-          aria-describedby={readinessId}
-          onClick={() => onStart('voice')}
-        >
-          Start voice call
-        </Button>
-      ) : (
-        <Button
-          className="brf-start"
-          appearance="primary"
-          size="large"
-          icon="keyboard"
-          fullWidth
-          loading={pending === 'text'}
-          loadingLabel="Starting the call"
-          disabled={busy && pending !== 'text'}
-          aria-describedby={readinessId}
-          onClick={() => onStart('text')}
-        >
-          Start text call
-        </Button>
-      )}
-      <LinkButton
-        to={editTo}
-        fullWidth
-        aria-disabled={busy || undefined}
-        tabIndex={busy ? -1 : undefined}
-        onClick={(event) => {
-          if (busy) event.preventDefault();
-        }}
-      >
-        Edit scenario
-      </LinkButton>
-      {canSpeak || waiting ? (
-        <Button
+      <div className="brf-actions__start">
+        {canSpeak || waiting ? (
+          <Button
+            className="brf-start"
+            appearance="primary"
+            size="large"
+            icon="microphone"
+            fullWidth
+            loading={pending === 'voice'}
+            loadingLabel="Starting the call"
+            disabled={busy && pending !== 'voice'}
+            disabledFocusable={waiting}
+            aria-describedby={readinessId}
+            onClick={() => onStart('voice')}
+          >
+            Start voice call
+          </Button>
+        ) : (
+          <Button
+            className="brf-start"
+            appearance="primary"
+            size="large"
+            icon="keyboard"
+            fullWidth
+            loading={pending === 'text'}
+            loadingLabel="Starting the call"
+            disabled={busy && pending !== 'text'}
+            aria-describedby={readinessId}
+            onClick={() => onStart('text')}
+          >
+            Start text call
+          </Button>
+        )}
+        {canSpeak || waiting ? (
+          <Button
+            className="brf-actions__text"
+            appearance="subtle"
+            icon="keyboard"
+            fullWidth
+            loading={pending === 'text'}
+            loadingLabel="Starting the call"
+            disabled={busy && pending !== 'text'}
+            disabledFocusable={waiting}
+            onClick={() => onStart('text')}
+          >
+            Start a text-only call
+          </Button>
+        ) : null}
+      </div>
+      <div className="brf-actions__edit">
+        <LinkButton
+          to={editTo}
           appearance="subtle"
+          icon="arrow-left"
           fullWidth
-          loading={pending === 'text'}
-          loadingLabel="Starting the call"
-          disabled={busy && pending !== 'text'}
-          disabledFocusable={waiting}
-          onClick={() => onStart('text')}
+          aria-disabled={busy || undefined}
+          tabIndex={busy ? -1 : undefined}
+          onClick={(event) => {
+            if (busy) event.preventDefault();
+          }}
         >
-          Start a text-only call
-        </Button>
-      ) : null}
+          Edit scenario
+        </LinkButton>
+      </div>
     </div>
   );
 }

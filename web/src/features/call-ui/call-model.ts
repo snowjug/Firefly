@@ -29,7 +29,10 @@ import { VOICE_STATE_TEXT, type VoiceState } from '../voice/states.ts';
  * What the screen shows for the call, one at a time. These are the states of the product brief
  * (section 15), each mapped from a machine stage (`CallStage`, see contract.ts); "transcript
  * available" is the trainee's turn showing its words while the status says the customer is replying.
- * The words are the voice layer's (`VOICE_STATE_TEXT`) wherever it has a state of the same name.
+ * The words are the voice layer's (`VOICE_STATE_TEXT`) wherever it has a state of the same name,
+ * except for the trainee's own turn: its "Typing" reads as the customer typing and its bare
+ * "Listening" does not say whose turn it is, so the screen says "Your turn" and "Listening to you".
+ * The announcements stay the voice layer's.
  */
 export type StatusId =
   | 'mic-not-requested'
@@ -54,7 +57,7 @@ export type StatusId =
   | 'evaluating'
   | 'completed';
 
-/** How the waveform strip is drawn: whose voice, a quiet line, a shimmer, or dots while the customer thinks. */
+/** How the status strip's signal is drawn: whose voice, nothing at all (`idle`), a shimmer, or dots while the customer thinks. */
 export type WaveMode = 'idle' | 'trainee' | 'customer' | 'transcribing' | 'thinking';
 
 export interface CallStatus {
@@ -65,6 +68,13 @@ export interface CallStatus {
   label: string;
   /** What the pre-flight's microphone row says: the same state, in a word or two. */
   row: string;
+  /**
+   * What the voice strip's own signal is called to assistive technology, where the label does not
+   * already say it: the three points that show the customer is working out a reply say "Customer is
+   * responding". Null everywhere else, because the status label is the name and a second one would
+   * only make it be read twice.
+   */
+  signal: string | null;
   icon: IconName;
   wave: WaveMode;
   /** Whose turn it is, which decides the colour. `alert` is a state that needs the trainee's action. */
@@ -73,7 +83,10 @@ export interface CallStatus {
 
 const voice = (state: VoiceState): string => VOICE_STATE_TEXT[state].label;
 
-type StatusSpec = Pick<CallStatus, 'label' | 'icon' | 'wave' | 'who'> & { row?: string };
+type StatusSpec = Pick<CallStatus, 'label' | 'icon' | 'wave' | 'who'> & {
+  row?: string;
+  signal?: string;
+};
 
 const STATUS: Record<StatusId, StatusSpec> = {
   // Before the call, in the pre-flight's microphone row ("Microphone: Not requested").
@@ -106,7 +119,7 @@ const STATUS: Record<StatusId, StatusSpec> = {
     wave: 'idle',
     who: 'trainee',
   },
-  listening: { label: voice('listening'), icon: 'microphone', wave: 'trainee', who: 'trainee' },
+  listening: { label: 'Listening to you', icon: 'microphone', wave: 'trainee', who: 'trainee' },
   'speech-detected': {
     label: voice('speech-detected'),
     icon: 'waveform',
@@ -121,6 +134,7 @@ const STATUS: Record<StatusId, StatusSpec> = {
   },
   'generating-reply': {
     label: voice('generating-customer-reply'),
+    signal: 'Customer is responding',
     icon: 'more',
     wave: 'thinking',
     who: 'customer',
@@ -137,7 +151,7 @@ const STATUS: Record<StatusId, StatusSpec> = {
   retrying: { label: 'Retrying', icon: 'refresh', wave: 'thinking', who: 'trainee' },
   'limit-reached': { label: 'Message limit', icon: 'flag', wave: 'idle', who: 'alert' },
   'text-fallback': {
-    label: voice('text-fallback'),
+    label: 'Your turn',
     icon: 'keyboard',
     wave: 'idle',
     who: 'trainee',
@@ -176,8 +190,8 @@ const isMicrophoneProblem = (code: string) => code.startsWith('microphone-');
 export function describeStatus(input: StatusInput): CallStatus {
   const { stage, mode, phase, problem, online = true } = input;
   const make = (id: StatusId): CallStatus => {
-    const { row, ...spec } = STATUS[id];
-    return { id, stage, row: row ?? spec.label, ...spec };
+    const { row, signal, ...spec } = STATUS[id];
+    return { id, stage, row: row ?? spec.label, signal: signal ?? null, ...spec };
   };
   if (stage === 'completed') return make('completed');
   if (stage === 'evaluating') return make('evaluating');
@@ -206,7 +220,8 @@ export function describeStatus(input: StatusInput): CallStatus {
 
   // A voice step that failed (speech that could not be turned into text, the customer's voice that
   // could not be made or played) is "Try again" while it is the trainee's turn, as the voice layer
-  // says it. Once the microphone is open again it is Listening, and a typed call stays Typing.
+  // says it. Once the microphone is open again it is "Listening to you", and a typed call stays on
+  // "Your turn".
   if (
     mode === 'voice' &&
     stage === 'ready' &&
@@ -331,6 +346,48 @@ export function stateChangeSentence(view: CustomerStateView): string {
     : `The customer now seems ${view.bandLabel.toLowerCase()}.`;
 }
 
+// ---- The state trace ------------------------------------------------------------------------------
+
+/** The most points the trace draws: a long call shows its latest stretch. */
+export const TRACE_POINTS = 24;
+
+export interface TracePoint {
+  x: number;
+  y: number;
+  band: TemperatureBandId;
+}
+
+/**
+ * Where the trace's points go in a box: the oldest at the left, the newest at the right, and the
+ * hotter the customer, the higher the point. Only the last `TRACE_POINTS` are drawn. It is a shape
+ * and never carries a number: the customer's state is a word, and so is this.
+ */
+export function traceShape(
+  history: readonly CallStatePoint[],
+  box: { width: number; height: number; pad: number },
+): TracePoint[] {
+  const recent = history.slice(-TRACE_POINTS);
+  const hottest = BAND_ORDER.length - 1;
+  const across = box.width - 2 * box.pad;
+  const up = box.height - 2 * box.pad;
+  return recent.map((point, index) => ({
+    band: point.band,
+    x: recent.length === 1 ? box.width - box.pad : box.pad + (index * across) / (recent.length - 1),
+    y: box.height - box.pad - (bandRank(point.band) / hottest) * up,
+  }));
+}
+
+/** The trace in words for a screen reader: each state the customer was in, oldest first, no numbers. */
+export function describeTrace(history: readonly CallStatePoint[]): string {
+  const names: string[] = [];
+  for (const point of history) {
+    const name = point.label.toLowerCase();
+    if (names.at(-1) !== name) names.push(name);
+  }
+  if (names.length === 0) return '';
+  return `Customer state so far: ${names.slice(-5).join(', then ')}.`;
+}
+
 // ---- Times, counts and labels ------------------------------------------------------------------
 
 /** m:ss for a number of seconds. */
@@ -347,26 +404,16 @@ export function clockSince(startedAt: string, at: string): string {
   return clock((moment - start) / 1000);
 }
 
-/** A time is only worth showing when a minute has passed since the last one that was shown. */
-const TIME_EVERY_SECONDS = 60;
-
 /**
- * Which turns carry a timestamp: the first, and then one a minute or more after the last that did.
- * A stamp on every line is noise; a stamp now and then is orientation. Returns turn key to m:ss.
+ * The time on each turn, as m:ss since the call started. Every turn has one, the same quiet way, so
+ * the log reads evenly: a stamp on some turns and not others looks like a mistake. Returns turn key
+ * to m:ss; a turn whose time cannot be read has none. (It is a map so a turn is looked up by key.)
  */
 export function timeMarks(turns: readonly CallTurn[], startedAt: string): Map<string, string> {
   const marks = new Map<string, string>();
-  let shown = Number.NEGATIVE_INFINITY;
   for (const turn of turns) {
-    const at = Date.parse(turn.createdAt);
-    if (Number.isNaN(at)) continue;
-    if (marks.size === 0 || at - shown >= TIME_EVERY_SECONDS * 1000) {
-      const text = clockSince(startedAt, turn.createdAt);
-      if (text) {
-        marks.set(turn.key, text);
-        shown = at;
-      }
-    }
+    const text = clockSince(startedAt, turn.createdAt);
+    if (text) marks.set(turn.key, text);
   }
   return marks;
 }
@@ -374,6 +421,11 @@ export function timeMarks(turns: readonly CallTurn[], startedAt: string): Map<st
 /** How many of the trainee's turns the server holds (a message still being sent does not count). */
 export function traineeTurnCount(turns: readonly CallTurn[]): number {
   return turns.filter((turn) => turn.role === 'trainee' && turn.status === 'sent').length;
+}
+
+/** How many turns the customer has had. */
+export function customerTurnCount(turns: readonly CallTurn[]): number {
+  return turns.filter((turn) => turn.role === 'customer').length;
 }
 
 /** The trainee's words that were never saved: ending the call now would leave them out of the review. */
@@ -626,6 +678,11 @@ export interface ComposerGate {
   canSend: boolean;
   /** Why sending waits, in a few words. Null when it does not. */
   reason: string | null;
+  /**
+   * The customer is replying to what was just sent. The box then shows that message, quietly, and
+   * cannot be edited until the reply is in, so it never reads as a message that was not sent.
+   */
+  waiting?: boolean;
 }
 
 const BLOCKED_BY_PROBLEM: Partial<Record<CallProblem['code'], string>> = {
@@ -648,7 +705,7 @@ export function composerGate(input: {
     return { canSend: false, reason: 'Message limit reached.' };
   }
   if (phase === 'processing') {
-    return { canSend: false, reason: 'Waiting for the customer.' };
+    return { canSend: false, reason: 'Waiting for the customer.', waiting: true };
   }
   if (problem && problem.severity === 'blocking' && !problem.textFallback) {
     return { canSend: false, reason: BLOCKED_BY_PROBLEM[problem.code] ?? RETRY_FIRST };

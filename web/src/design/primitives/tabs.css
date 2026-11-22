@@ -81,7 +81,7 @@
   inset-block-end: 0;
   block-size: 0.1875rem;
   border-radius: var(--r-pill);
-  background: var(--brand);
+  background: var(--brand-stroke);
 }
 .ff-tabs--vertical .ff-tab--selected::before {
   inset-inline: auto;

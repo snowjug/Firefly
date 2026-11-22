@@ -6,6 +6,7 @@ import { ReportView } from './ReportView.tsx';
 import { TranscriptReview } from './Transcript.tsx';
 import { CALLS, withReport, type CallName } from './fixtures.ts';
 import { EvidenceProvider, HIGHLIGHT_MS } from './evidence.tsx';
+import { evidenceTurns } from './evidence-model.ts';
 import { must, renderAtReport, scriptedClient, stubScroll } from './test-utils.tsx';
 
 // Role queries over a whole report are slow in jsdom, and slower on a busy machine.
@@ -37,6 +38,7 @@ function show(name: CallName, report?: CoachingReport) {
 }
 
 const transcript = () => screen.getByRole('region', { name: 'Transcript' });
+const region = (name: string) => screen.getByRole('region', { name });
 const turn = (index: number) => document.getElementById(`turn-${index}`) as HTMLElement;
 const turns = () => [...document.querySelectorAll<HTMLElement>('li[id^="turn-"]')];
 
@@ -250,20 +252,40 @@ describe('evidence navigation', () => {
     expect(document.querySelectorAll('.rp-turn--cited')).toHaveLength(1);
   });
 
-  it('marks only the turn when the quoted words cannot be found in it', async () => {
+  it('marks only the turn, with no words picked out, when the quote is a very short whole turn', async () => {
+    show('weak');
+    const closing = region('Scores').querySelector<HTMLElement>(
+      'li[data-rp-origin="Closing"]',
+    ) as HTMLElement;
+    await userEvent.click(within(closing).getByRole('button', { name: /details$/ }));
+    await userEvent.click(
+      within(closing).getByRole('link', { name: 'See turn 10 in the transcript' }),
+    );
+    expect(turn(10)).toHaveFocus();
+    expect(turn(10)).toHaveTextContent('ok');
+    expect(within(turn(10)).getByText('Cited')).toBeInTheDocument();
+    expect(turn(10).querySelectorAll('mark')).toHaveLength(0);
+  });
+
+  it('does not offer a quote the turn does not say, and does not cite the turn for it', () => {
     const { report } = CALLS.strong;
     const [first, ...rest] = report.strengths;
     show('strong', {
       ...report,
+      dimensions: report.dimensions.map((d) => ({ ...d, evidence: [] })),
+      improvements: [],
       strengths: [
         { ...must(first, 'a strength'), quote: 'words that are not in the turn', turnIndex: 4 },
-        ...rest,
+        ...rest.map((s) => ({ ...s, quote: 'more words nobody said' })),
       ],
     });
-    await userEvent.click(link(4));
-    expect(turn(4)).toHaveFocus();
-    expect(within(turn(4)).getByText('Cited')).toBeInTheDocument();
-    expect(turn(4).querySelectorAll('mark')).toHaveLength(0);
+    const section = region('Strengths');
+    expect(within(section).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('blockquote')).not.toBeInTheDocument();
+    expect(section).not.toHaveTextContent('words that are not in the turn');
+    expect(section).toHaveTextContent('Insufficient evidence');
+    expect(screen.queryByText(/^Cited for:/)).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^Evidence \(0\)/ })).toBeDisabled();
   });
 
   it('marks the turn only for a few seconds, then the mark goes and the way back stays', () => {
@@ -317,21 +339,31 @@ describe('evidence navigation', () => {
     expect(document.querySelectorAll('.rp-turn--cited')).toHaveLength(0);
   });
 
-  it('names the part the link was in: a skill, the journey, a discovery fact', async () => {
+  it('names the part the link was in: a skill, the customer experience, a discovery fact', async () => {
     show('strong');
     const scores = screen.getByRole('region', { name: 'Scores' });
-    await userEvent.click(within(scores).getByRole('button', { name: /^Clarity/ }));
+    const clarity = scores.querySelector<HTMLElement>(
+      'li[data-rp-origin="Clarity"]',
+    ) as HTMLElement;
+    await userEvent.click(within(clarity).getByRole('button', { name: /details$/ }));
     await userEvent.click(
-      within(
-        within(scores)
-          .getByRole('heading', { level: 3, name: /^Clarity/ })
-          .closest('li') as HTMLElement,
-      ).getAllByRole('link', { name: /See turn 12/ })[0] as HTMLElement,
+      within(clarity).getAllByRole('link', { name: /See turn 12/ })[0] as HTMLElement,
     );
     expect(screen.getByRole('button', { name: 'Back to Clarity' })).toBeInTheDocument();
-    await userEvent.click(link(10, 'Customer journey'));
-    expect(screen.getByRole('button', { name: 'Back to Customer journey' })).toBeInTheDocument();
-    await userEvent.click(link(6, 'Discovery'));
+    const experience = screen.getByRole('region', { name: 'Customer experience' });
+    await userEvent.click(
+      within(experience).getAllByRole('link', {
+        name: /^See turn \d+ in the transcript$/,
+      })[0] as HTMLElement,
+    );
+    expect(screen.getByRole('button', { name: 'Back to Customer experience' })).toBeInTheDocument();
+    // A fact that was found is one line: opening it shows the question and its link.
+    await userEvent.click(
+      within(region('Discovery review')).getByRole('button', {
+        name: /^Storage settings changed last week/,
+      }),
+    );
+    await userEvent.click(link(6, 'Discovery review'));
     expect(
       screen.getByRole('button', { name: 'Back to Storage settings changed last week' }),
     ).toBeInTheDocument();
@@ -341,7 +373,7 @@ describe('evidence navigation', () => {
     show('strong');
     await userEvent.click(screen.getByRole('radio', { name: /^Discovered facts/ }));
     expect(document.getElementById('turn-10')).toBeNull();
-    await userEvent.click(link(10, 'Customer journey'));
+    await userEvent.click(link(10, 'Strengths'));
     expect(screen.getByRole('radio', { name: /^All turns/ })).toBeChecked();
     expect(turn(10)).toHaveFocus();
   });
@@ -362,14 +394,72 @@ describe('evidence navigation', () => {
 
   it('shows a reference to a turn the transcript does not have as plain text, never a dead link', () => {
     const { report } = CALLS.strong;
-    const [first, ...rest] = report.strengths;
+    const [first, ...rest] = report.improvements;
     show('strong', {
       ...report,
-      strengths: [{ ...must(first, 'a strength'), turnIndex: 999 }, ...rest],
+      improvements: [{ ...must(first, 'an improvement'), turnIndex: 999, quote: null }, ...rest],
     });
-    const section = screen.getByRole('region', { name: 'Strengths' });
+    const section = screen.getByRole('region', { name: 'Improvement opportunities' });
     expect(within(section).queryByRole('link', { name: /turn 999/ })).not.toBeInTheDocument();
     expect(section).toHaveTextContent('You Turn 999');
+  });
+});
+
+describe('the turn numbers', () => {
+  const numbers = () => [...document.querySelectorAll<HTMLButtonElement>('.rp-turn__pick')];
+
+  it('are one Tab stop for the whole transcript, not one for every turn', () => {
+    show('long');
+    const all = numbers();
+    expect(all.length).toBeGreaterThanOrEqual(60);
+    expect(all.filter((button) => button.tabIndex === 0)).toEqual([all[0]]);
+  });
+
+  it('move with the arrow keys, Home and End, and the one that had focus is the stop', async () => {
+    const user = userEvent.setup();
+    show('strong');
+    const all = numbers();
+    all[0]?.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(all[1]).toHaveFocus();
+    expect(all[1]?.tabIndex).toBe(0);
+    expect(all[0]?.tabIndex).toBe(-1);
+    await user.keyboard('{ArrowDown}{ArrowUp}{ArrowUp}');
+    expect(all[0]).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(all[0]).toHaveFocus();
+    await user.keyboard('{End}');
+    expect(all.at(-1)).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(all.at(-1)).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(all[0]).toHaveFocus();
+    expect(all.filter((button) => button.tabIndex === 0)).toEqual([all[0]]);
+  });
+
+  it('still choose the turn with Enter and Space, and leave the list on Tab', async () => {
+    const user = userEvent.setup();
+    show('strong');
+    const all = numbers();
+    all[3]?.focus();
+    await user.keyboard('{Enter}');
+    expect(all[3]).toHaveAttribute('aria-pressed', 'true');
+    expect(all[3]).toHaveFocus();
+    await user.keyboard(' ');
+    expect(all[3]).toHaveAttribute('aria-pressed', 'false');
+    await user.tab();
+    expect(numbers().some((button) => button === document.activeElement)).toBe(false);
+  });
+
+  it('go back to the first turn shown when a filter hides the one that was the stop', async () => {
+    show('strong');
+    numbers()[0]?.focus();
+    expect(numbers()[0]?.tabIndex).toBe(0);
+    await userEvent.click(screen.getByRole('radio', { name: /^Discovered facts/ }));
+    const now = numbers();
+    expect(now[0]).not.toBeUndefined();
+    expect(now.filter((button) => button.tabIndex === 0)).toEqual([now[0]]);
+    expect(now[0]?.closest('li')?.id).not.toBe('turn-1');
   });
 });
 
@@ -382,7 +472,7 @@ describe('without a report', () => {
       turns: call.session.turns.map(({ markers: _markers, ...rest }) => rest),
     };
     renderAtReport(
-      <EvidenceProvider turnIndexes={plain.turns.map((t) => t.index)}>
+      <EvidenceProvider turns={evidenceTurns(plain)}>
         <TranscriptReview session={plain} report={null} />
       </EvidenceProvider>,
     );

@@ -365,6 +365,35 @@ describe('Scoping & Discovery', () => {
     expect(scoping({ [FACTS.critical]: 'discovered', [FACTS.important]: 'partial' })).toBe(3); // 4 of 7
   });
 
+  it('says how the facts that mattered most went in counts, never as a percentage', () => {
+    const said = (finds: Step['finds']) =>
+      dim(
+        run(
+          simpleCall([
+            ask('Can you tell me what is happening and when it started?', [...THREE], finds),
+          ]),
+        ),
+        'scoping-discovery',
+      ).rationale;
+    expect(said({ [FACTS.critical]: 'discovered', [FACTS.helpful]: 'discovered' })).toContain(
+      'You uncovered 2 of the 4 hidden facts, and 1 of the 2 that mattered most.',
+    );
+    expect(said({ [FACTS.helpful]: 'discovered' })).toContain(
+      'You uncovered 1 of the 4 hidden facts, and none of the 2 that mattered most.',
+    );
+    expect(
+      said({
+        [FACTS.critical]: 'discovered',
+        [FACTS.important]: 'discovered',
+        [FACTS.helpful]: 'discovered',
+      }),
+    ).toContain('You uncovered 3 of the 4 hidden facts, and all 2 that mattered most.');
+    expect(said({})).toContain('You did not uncover any of the 4 hidden facts.');
+    for (const finds of [{}, { [FACTS.critical]: 'discovered' }, { [FACTS.helpful]: 'partial' }]) {
+      expect(said(finds as Step['finds'])).not.toMatch(/%|weighted/i);
+    }
+  });
+
   it('needs at least two quoted questions for a 5', () => {
     const everything = {
       [FACTS.critical]: 'discovered',

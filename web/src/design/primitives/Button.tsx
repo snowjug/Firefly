@@ -226,7 +226,15 @@ export function ToggleButton({
 // ---- Links that look like buttons ----------------------------------------------------------
 
 type LinkTarget =
-  | { to: To; href?: never; external?: never; replace?: boolean; state?: unknown }
+  | {
+      to: To;
+      href?: never;
+      external?: never;
+      replace?: boolean;
+      state?: unknown;
+      /** Moves between pages with the browser's view transition, where it has one. */
+      viewTransition?: boolean;
+    }
   | { href: string; external?: boolean; to?: never };
 
 export type LinkButtonProps = ButtonLook &
@@ -257,8 +265,14 @@ export function LinkButton(props: LinkButtonProps) {
     external,
     replace,
     state,
+    viewTransition,
     ...rest
-  } = props as LinkButtonProps & { replace?: boolean; state?: unknown; external?: boolean };
+  } = props as LinkButtonProps & {
+    replace?: boolean;
+    state?: unknown;
+    external?: boolean;
+    viewTransition?: boolean;
+  };
   const classes = lookClass({ appearance, size, fullWidth, nudge }, {}, className);
   const cue = external ? (
     <>
@@ -273,7 +287,14 @@ export function LinkButton(props: LinkButtonProps) {
   );
   if (to !== undefined) {
     return (
-      <Link {...rest} to={to} replace={replace} state={state} className={classes}>
+      <Link
+        {...rest}
+        to={to}
+        replace={replace}
+        state={state}
+        viewTransition={viewTransition}
+        className={classes}
+      >
         {content}
       </Link>
     );

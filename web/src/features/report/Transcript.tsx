@@ -1,4 +1,13 @@
-import { memo, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import type { SessionDTO } from '#shared/domain/api.ts';
 import type { CoachingReport } from '#shared/domain/report.ts';
 import {
@@ -10,13 +19,15 @@ import {
   Tag,
   VisuallyHidden,
   cx,
+  useAnnouncer,
   type BadgeTone,
   type IconName,
 } from '../../design/index.ts';
 import { pluralise, skillName } from './copy.ts';
-import { scrollToElement } from './dom.ts';
-import { useEvidence } from './evidence.tsx';
+import { scrollToTurn } from './dom.ts';
+import { SectionLink, useEvidence } from './evidence.tsx';
 import { Section } from './parts.tsx';
+import { useTimelineSync } from './selection.tsx';
 import {
   FILTER_FOUND,
   FILTER_LABELS,
@@ -59,6 +70,23 @@ interface TurnRowProps {
   cited: boolean;
   /** The quoted words to mark in the turn, when it is the cited one. */
   quote: string | null;
+  /** This is the turn the reader marked, on the timeline or by choosing it here. */
+  marked: boolean;
+  /** What the timeline calls the moments seen at this turn, or null. */
+  moments: string | null;
+  /** How the turn number marks the turn on the timeline. Not given where there is no timeline. */
+  picking: TurnPicking | null;
+  /** This turn's number is the one Tab stop of all the turn numbers; the others are reached with the arrow keys. */
+  tabStop: boolean;
+}
+
+interface TurnPicking {
+  /** Marks the turn on the timeline, or takes the mark off when it is the marked turn. */
+  pick(index: number): void;
+  /** The number has focus (by the pointer or the keys): it is the tab stop from now on. */
+  reached(index: number): void;
+  /** Up and Down, Home and End move between the turn numbers. */
+  move(event: KeyboardEvent<HTMLButtonElement>): void;
 }
 
 function TurnText({
@@ -110,6 +138,10 @@ const TurnRow = memo(function TurnRow({
   currentStart,
   cited,
   quote,
+  marked,
+  moments,
+  picking,
+  tabStop,
 }: TurnRowProps) {
   return (
     <li
@@ -120,10 +152,26 @@ const TurnRow = memo(function TurnRow({
         `rp-turn--${view.role}`,
         context && 'rp-turn--context',
         cited && 'rp-turn--cited',
+        marked && 'rp-turn--marked',
       )}
     >
       <div className="rp-turn__head">
-        <span className="rp-turn__number">Turn {view.index}</span>
+        {picking ? (
+          <button
+            type="button"
+            className="rp-turn__pick"
+            aria-pressed={marked}
+            tabIndex={tabStop ? 0 : -1}
+            onClick={() => picking.pick(view.index)}
+            onFocus={() => picking.reached(view.index)}
+            onKeyDown={picking.move}
+          >
+            Turn {view.index}
+            <VisuallyHidden>: show on the call journey</VisuallyHidden>
+          </button>
+        ) : (
+          <span className="rp-turn__number">Turn {view.index}</span>
+        )}
         <span className="rp-turn__speaker">{view.speaker}</span>
         <span className="rp-turn__clock">
           <VisuallyHidden>at </VisuallyHidden>
@@ -138,7 +186,7 @@ const TurnRow = memo(function TurnRow({
       <p className="rp-turn__text t-reading" dir="auto">
         <TurnText text={view.text} matches={matches} currentStart={currentStart} quote={quote} />
       </p>
-      {view.markers.length > 0 || view.citedFor.length > 0 ? (
+      {view.markers.length > 0 || view.citedFor.length > 0 || moments || marked ? (
         <ul className="rp-turn__tags" role="list">
           {view.markers.map((marker, i) => (
             <li className="rp-marker" key={`${marker.kind}-${i}`}>
@@ -161,6 +209,20 @@ const TurnRow = memo(function TurnRow({
               ))}
             </li>
           ) : null}
+          {moments || marked ? (
+            <li className="rp-marker">
+              {moments ? (
+                <Tag size="small" icon="list">
+                  On the call journey: {moments}
+                </Tag>
+              ) : null}
+              {marked ? (
+                <SectionLink to="journey" className="rp-turn__tolink">
+                  Show on the call journey
+                </SectionLink>
+              ) : null}
+            </li>
+          ) : null}
         </ul>
       ) : null}
     </li>
@@ -181,15 +243,80 @@ export function TranscriptReview({
   report: CoachingReport | null;
   lead?: string;
 }) {
-  const turns = useMemo(() => buildTranscript(session, report), [session, report]);
+  const { target, highlight, origin, backToOrigin, verify } = useEvidence();
+  const turns = useMemo(() => buildTranscript(session, report, verify), [session, report, verify]);
   const counts = useMemo(() => filterCounts(turns), [turns]);
-  const { target, highlight, origin, backToOrigin } = useEvidence();
+  const sync = useTimelineSync();
+  const announce = useAnnouncer();
 
   const [filter, setFilter] = useState<TranscriptFilter>('all');
   const [query, setQuery] = useState('');
   const searched = useDeferredValue(query);
   const [cursor, setCursor] = useState<{ key: string; index: number } | null>(null);
   const [seenJump, setSeenJump] = useState(0);
+
+  // Choosing a turn number marks it and selects the nearest moment on the call journey; choosing the
+  // marked one again takes the mark off. The handler is kept stable so only the two turns whose mark
+  // changed are drawn again.
+  const latest = useRef({ sync, announce });
+  useEffect(() => {
+    latest.current = { sync, announce };
+  });
+  const pick = useCallback((index: number) => {
+    const { sync: timeline, announce: say } = latest.current;
+    if (!timeline) return;
+    if (timeline.markedTurn === index) {
+      timeline.clearMark();
+      return;
+    }
+    const near = timeline.pickTurn(index);
+    say(
+      near
+        ? near.turnIndex === index
+          ? `Call journey: ${near.label}, turn ${index}, selected.`
+          : `Call journey: ${near.label}, the nearest moment to turn ${index}, selected.`
+        : `Turn ${index} marked.`,
+    );
+  }, []);
+  const momentsAt = useMemo(() => {
+    const labels = new Map<number, string>();
+    for (const event of sync?.events ?? []) {
+      if (event.state !== 'seen' || event.turnIndex === null) continue;
+      const known = labels.get(event.turnIndex);
+      labels.set(event.turnIndex, known ? `${known}, ${event.label}` : event.label);
+    }
+    return labels;
+  }, [sync?.events]);
+
+  // The turn numbers are one Tab stop, not one for every turn of a long call: the arrow keys, Home
+  // and End move between them, and the one that last had focus is where Tab comes back to.
+  const [stop, setStop] = useState<number | null>(null);
+  const move = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
+    const numbers = [
+      ...(event.currentTarget
+        .closest('ol')
+        ?.querySelectorAll<HTMLButtonElement>('.rp-turn__pick') ?? []),
+    ];
+    const from = numbers.indexOf(event.currentTarget);
+    const to =
+      event.key === 'ArrowDown'
+        ? from + 1
+        : event.key === 'ArrowUp'
+          ? from - 1
+          : event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? numbers.length - 1
+              : null;
+    if (to === null || from < 0) return;
+    event.preventDefault();
+    numbers[Math.min(numbers.length - 1, Math.max(0, to))]?.focus();
+  }, []);
+  const hasTimeline = sync !== null;
+  const picking = useMemo<TurnPicking | null>(
+    () => (hasTimeline ? { pick, reached: setStop, move } : null),
+    [hasTimeline, pick, move],
+  );
 
   // Following a link to a turn the filter hides shows every turn again, so the turn is there.
   if (target && target.nonce !== seenJump) {
@@ -199,6 +326,11 @@ export function TranscriptReview({
   }
 
   const shown = useMemo(() => shownTurns(turns, filter), [turns, filter]);
+  // The tab stop is the turn that last had focus, or the first turn shown when it is not shown now.
+  const tabStopTurn =
+    stop !== null && shown.some((s) => s.turn.index === stop)
+      ? stop
+      : (shown[0]?.turn.index ?? null);
   const matches = useMemo(
     () =>
       findMatches(
@@ -254,8 +386,9 @@ export function TranscriptReview({
     if (!target) return;
     const element = document.getElementById(turnId(target.turnIndex));
     if (!element) return;
-    scrollToElement(element);
+    const stop = scrollToTurn(element);
     element.focus({ preventScroll: true });
+    return stop;
   }, [target]);
 
   const status =
@@ -274,6 +407,7 @@ export function TranscriptReview({
     <Section id="transcript" title="Transcript">
       <p className="rp-transcript__lead">
         {lead ?? 'The conversation as it was saved. Nothing has been edited.'}
+        {sync ? ' Choose a turn number to show it on the call journey.' : ''}
         {spoken
           ? ' Spoken turns were transcribed automatically and may contain recognition errors.'
           : ''}
@@ -347,6 +481,10 @@ export function TranscriptReview({
               currentStart={currentMatch?.turnIndex === turn.index ? currentMatch.start : null}
               cited={isCited}
               quote={isCited ? highlight.quote : null}
+              marked={sync?.markedTurn === turn.index}
+              moments={momentsAt.get(turn.index) ?? null}
+              picking={picking}
+              tabStop={tabStopTurn === turn.index}
             />
           );
         })}

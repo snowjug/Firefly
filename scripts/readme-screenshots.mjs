@@ -16,8 +16,9 @@
 // default) and FIREFLY_SHOTS_WORK (a git-ignored folder for the fake microphone's file, by default
 // scripts/_tmp/readme-shots). The browser runs headless.
 //
-// It takes five pictures of the real app: the landing page, the scenario workspace with a scenario
-// selected, the case brief, a spoken call in progress, and the top of the coaching report. The call is
+// It takes seven pictures of the real app: the landing page, the scenario workspace with a scenario
+// chosen in Guided practice, the case brief, a spoken call in progress (with its tips), the top of the
+// coaching report, and the report and the workspace again in the dark theme. The call is
 // a real voice call in demo mode: the microphone is a fake device that plays a generated, speech-like
 // burst in a loop (e2e/support/fake-microphone.ts; no real audio is recorded or committed), the demo
 // speech provider answers each burst with the next of its eight scripted sentences, so what the
@@ -79,15 +80,24 @@ try {
   await page.waitForTimeout(3000); // the preview of a call settles after a few seconds
   await shot('landing');
 
-  // 2. The scenario workspace, with one scenario selected.
+  // 2. The scenario workspace, with one scenario chosen. The carousel names each card by its short
+  // title. Guided practice is chosen so that the call in picture 4 shows its tips.
+  const { scenarios } = await (await context.request.get(`${base}/api/scenarios`)).json();
+  const chosen = scenarios.find((scenario) => scenario.title === SCENARIO);
+  if (!chosen) throw new Error(`There is no scenario titled "${SCENARIO}".`);
   await page.goto(`${base}/scenarios`, { waitUntil: 'networkidle' });
-  await page.getByRole('radio', { name: SCENARIO, exact: true }).check();
+  await page.waitForURL(/[?&]scenario=/); // the workspace settles its address before a choice sticks
+  await page.getByRole('radio', { name: chosen.shortTitle, exact: true }).check();
+  await page
+    .getByRole('group', { name: 'Practice mode' })
+    .getByRole('radio', { name: 'Guided practice' })
+    .check();
   await shot('scenarios');
 
   // 3. The case brief.
   await page
     .getByRole('region', { name: SCENARIO })
-    .getByRole('link', { name: 'Review brief' })
+    .getByRole('link', { name: 'Start configuration' })
     .click();
   await page.waitForURL(/\/brief/);
   await page.getByRole('button', { name: 'Start voice call' }).waitFor();
@@ -117,10 +127,11 @@ try {
   }
   if (!taken) throw new Error('The call picture was not taken.');
 
-  // 5. End the call and read the report.
+  // 5. End the call and read the report. Guided practice asks "Ready to close?", Assessment practice
+  // "End the call?"; either way "End and review" ends it.
   await page.getByRole('button', { name: 'End call', exact: true }).click();
   await page
-    .getByRole('dialog', { name: 'End the call?' })
+    .getByRole('dialog', { name: /^(?:End the call\?|Ready to close\?)$/ })
     .getByRole('button', { name: 'End and review' })
     .click();
   await page.waitForURL(/\/report/, { timeout: 60_000 });
@@ -128,6 +139,21 @@ try {
     .getByRole('heading', { level: 1, name: 'Coaching report' })
     .waitFor({ timeout: 60_000 });
   await shot('report-summary');
+
+  // 6. The same report and the scenario workspace in the dark theme, which follows the system. The
+  // workspace is set to Guided practice again so that the pair differs only in its colours.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.getByRole('heading', { level: 1, name: 'Coaching report' }).waitFor();
+  await shot('report-summary-dark');
+  await page.goto(`${base}/scenarios`, { waitUntil: 'networkidle' });
+  await page.waitForURL(/[?&]scenario=/);
+  await page.getByRole('radio', { name: chosen.shortTitle, exact: true }).check();
+  await page
+    .getByRole('group', { name: 'Practice mode' })
+    .getByRole('radio', { name: 'Guided practice' })
+    .check();
+  await shot('scenarios-dark');
 } finally {
   await browser.close();
 }

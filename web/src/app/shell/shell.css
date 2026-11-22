@@ -44,7 +44,7 @@
 .ff-progress-line__bar {
   block-size: 100%;
   inline-size: 40%;
-  background: var(--brand);
+  background: var(--brand-stroke);
   animation: ff-progress-line var(--dur-slide) var(--ease-easy) infinite;
 }
 @keyframes ff-progress-line {

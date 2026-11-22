@@ -25,6 +25,7 @@ export const GALLERY_STATES = [
   'version-1',
   'no-product',
   'long-text',
+  'tampered',
   'loading',
   'not-found',
   'unreachable',
@@ -84,6 +85,32 @@ function longTextSession(): SessionDTO {
   return withReport(CALLS.strong, long);
 }
 
+/**
+ * The strong call whose report quotes words that its turns do not say: what the page shows for
+ * evidence it cannot confirm ("Insufficient evidence", and no quote at all).
+ */
+function tamperedSession(): SessionDTO {
+  const { report } = CALLS.strong;
+  const wrong = <T extends { quote: string | null }>(item: T): T =>
+    item.quote === null ? item : { ...item, quote: 'Words that the transcript does not hold.' };
+  const tampered: typeof report = {
+    ...report,
+    dimensions: report.dimensions.map((d) => ({ ...d, evidence: d.evidence.map(wrong) })),
+    strengths: report.strengths.map(wrong),
+    improvements: report.improvements.map(wrong),
+    care: report.care?.map((p) => ({
+      ...p,
+      behaviours: p.behaviours.map((b) => ({ ...b, evidence: b.evidence.map(wrong) })),
+    })),
+    journey: {
+      ...report.journey,
+      points: report.journey.points.map(wrong),
+      milestones: report.journey.milestones?.map(wrong),
+    },
+  };
+  return withReport(CALLS.strong, tampered);
+}
+
 export async function galleryScenario(state: string): Promise<GalleryScenario> {
   const done = (name: CallName) => CALLS[name].session;
 
@@ -120,6 +147,8 @@ export async function galleryScenario(state: string): Promise<GalleryScenario> {
     }
     case 'long-text':
       return { client: client({ getSession: () => Promise.resolve(longTextSession()) }) };
+    case 'tampered':
+      return { client: client({ getSession: () => Promise.resolve(tamperedSession()) }) };
     case 'loading':
       return { client: client({}) };
     case 'not-found':

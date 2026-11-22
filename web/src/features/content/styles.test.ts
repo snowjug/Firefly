@@ -54,7 +54,7 @@ describe('the public pages stylesheets', () => {
       );
       for (const size of sizes) {
         expect(size, `${sheet.name} sets a font size of ${size}`).toMatch(
-          /^(?:var\(--fs-[a-z0-9]+\)|[\d.]+em|inherit)$/,
+          /^(?:var\(--fs-[a-z0-9-]+\)|[\d.]+em|inherit)$/,
         );
       }
     }

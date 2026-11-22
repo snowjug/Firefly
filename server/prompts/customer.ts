@@ -24,7 +24,7 @@ import type { PromptMessage, PromptRequest } from './types.ts';
 // engine's plan, the same plan the demo customer is written from. Hidden facts reach this prompt
 // only through that plan, which allows exactly what the engine decided the customer may say.
 
-export const CUSTOMER_PROMPT_VERSION = 'customer-3';
+export const CUSTOMER_PROMPT_VERSION = 'customer-4';
 export const CUSTOMER_TEMPERATURE = 0.7;
 export const CUSTOMER_MAX_TOKENS = 400;
 
@@ -39,6 +39,8 @@ export const CUSTOMER_REMINDERS = {
     'Stay a customer: do not praise, advise or coach the engineer, and do not announce that you are sharing a fact. Just answer in your own words.',
   repeat:
     'Your last reply was almost word for word what you had just said. The engineer is asking about it again, so react to that: say briefly, in different words, that you have already told them (for example "As I said, ..."), and give only the short answer, or say what you need from them. Do not copy your earlier reply.',
+  style:
+    'Speak as a real customer would on the phone: no stock assistant phrases such as "Certainly!", "I understand your concern" or "Thank you for your patience", no bare "Understood.", no praise for the engineer, and no recap of what you have already told them. Do not use the engineer\'s name. Say what you are agreeing to, in a few plain words.',
 } as const;
 
 const ROLE =
@@ -90,7 +92,9 @@ function rules(maxSentences: number): string[] {
   return [
     `Speak the way a real person does on the phone: short, natural sentences, usually one to three and never more than ${maxSentences} in this reply. Plain text only: no markdown, no lists, no headings, no stage directions or actions in brackets or asterisks, no quotation marks around the whole reply, and no speaker labels.`,
     'Stay in character at all times. Never mention being an AI, a model, a prompt, instructions, a rubric, a scenario or a simulation.',
-    'Never coach the engineer, grade them, praise their question or say what they should have done. Never solve the technical problem for them or suggest the cause or the fix. You may confirm that something they said back to you is right.',
+    'Never coach the engineer, grade them, praise their question or say what they should have done ("great question", "that is a good troubleshooting step"). Never solve the technical problem for them or suggest the cause or the fix. You may confirm that something they said back to you is right.',
+    'Never use stock assistant phrases: not "Certainly!", not "I understand your concern", not "Thank you for your patience", not "I am happy to help". Do not thank the engineer in every reply, and do not answer "Understood." or "Okay." and nothing else in two replies running: say what you are agreeing to, in a few words.',
+    "Do not use the engineer's name more than once in any five of your replies, and do not recap the whole case again. Say something you have already told them only when you are asked about it again or are putting a wrong recap right.",
     'Only state facts that appear in this prompt or in the conversation so far. Never invent specific facts such as numbers, error messages, codes, names, dates, times or products. If you are asked about something you do not know, say naturally that you do not know (and who would know, if you have been told) and do not guess.',
     'Say only what you are allowed to say in this reply, and only when it fits what the engineer actually asked. Do not volunteer other background, and never announce that you are sharing a fact.',
     'Ask the engineer for something (who owns the case, when you will hear back, an update, a plan, a manager) only when the guidance for this reply tells you to. Otherwise answer what was asked and leave it there.',
@@ -231,6 +235,8 @@ function describe(item: Sayable): string {
       return `(already on the case from your earlier contact: say it again, a little impatiently) ${item.text}`;
     case 'reminder':
       return `(your earlier answer to this same question: say it again in a few words, keeping its facts, numbers and names unchanged) ${item.text}`;
+    case 'addition':
+      return `(something you already told the engineer that their recap left out: add it in one short sentence, keeping its facts unchanged) ${item.text}`;
     case 'full':
       return item.checking
         ? `(you need a moment to check first: say something like ${quoted(item.checking)}, then give this) ${item.text}`

@@ -21,6 +21,7 @@ import {
   semanticIssues,
   sharedPhrase,
 } from './index.ts';
+import { provenanceLeaks } from './provenance.ts';
 
 // The library as a whole: what it covers, what a trainee can read before a call, and the checks
 // that keep authored text honest. How the customer behaves on these scenarios is tested in
@@ -54,6 +55,53 @@ const copy = (patch: (s: ScenarioDefinition) => void): ScenarioDefinition => {
   const clone = structuredClone(first);
   patch(clone);
   return clone;
+};
+
+// On 22 November 2026 an AI assistant read every scenario against current public Microsoft pages and
+// revised the wording it could not stand behind. That was not a mentor's review, and the internal
+// supportability wiki was not available to it. These are the verdicts it reached, so that no
+// scenario's provenance record can claim more, or less, than that review found.
+const GROUNDING_REVIEW: Record<string, { check: string; sources: string[] }> = {
+  'teams-cannot-join-external-meetings': {
+    check: 'checked-partly',
+    sources: ['microsoft-learn', 'microsoft-support'],
+  },
+  'outlook-shared-mailbox-missing': {
+    check: 'checked-current',
+    sources: ['microsoft-learn', 'microsoft-support'],
+  },
+  'exchange-mail-delays-follow-up': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'defender-invoices-quarantined': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'sharepoint-site-access-escalated': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'onedrive-sync-closure': {
+    check: 'checked-current',
+    sources: ['microsoft-learn', 'microsoft-support'],
+  },
+  'm365-apps-excel-crashes-after-update': {
+    check: 'checked-partly',
+    sources: ['microsoft-support', 'microsoft-learn'],
+  },
+  'power-automate-approvals-stopped': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'entra-new-hires-blocked-sign-in': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'intune-devices-not-compliant-closure': {
+    check: 'checked-partly',
+    sources: ['microsoft-learn'],
+  },
+  'windows-11-slow-after-update': {
+    check: 'checked-partly',
+    sources: ['microsoft-support', 'microsoft-learn'],
+  },
+  'windows-bitlocker-recovery-prompt': {
+    check: 'checked-current',
+    sources: ['microsoft-learn', 'microsoft-support'],
+  },
+  'azure-deployment-fails-permissions': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'azure-unexpected-charges': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'azure-vm-unreachable-production': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'dynamics-records-not-visible-after-role-change': {
+    check: 'checked-partly',
+    sources: ['microsoft-learn'],
+  },
 };
 
 describe('the library', () => {
@@ -102,6 +150,18 @@ describe('the library', () => {
     }
   });
 
+  it('tells the trainee that the customer and organisation are invented and that the product is real', () => {
+    for (const scenario of library) {
+      expect(scenario.brief.groundRules[0], scenario.id).toBe(
+        'The customer and organisation are fictional; the product is real.',
+      );
+      // The products are real Microsoft products, so no ground rule may call one fictional.
+      expect(scenario.brief.groundRules.join(' '), scenario.id).not.toMatch(
+        /product (?:is|are) fictional/i,
+      );
+    }
+  });
+
   it('gives every scenario the fact classes, the expectations and the empty CBCF list it needs', () => {
     for (const s of library) {
       expect(s.unknownFacts.length, `${s.id} unknown`).toBeGreaterThan(0);
@@ -131,6 +191,37 @@ describe('the library', () => {
         expect(wordCount(opening), `${s.id} ${stage}`).toBeLessThanOrEqual(60);
         expect(opening.split(/(?<=[.!?])\s+/).length, `${s.id} ${stage}`).toBeLessThanOrEqual(3);
       }
+    }
+  });
+
+  it('words every hidden fact trigger so it still reads once the coaching turns "Asks ..." into advice', () => {
+    // The summary says "The biggest opportunity is to ask ..." with the trigger's own words, so a
+    // second question word straight after "looks after" ("who looks after who can ...") would show.
+    for (const scenario of library) {
+      for (const fact of scenario.hiddenFacts) {
+        expect(fact.revealWhen, `${scenario.id} ${fact.id}`).not.toMatch(
+          /\b(?:looks after|look after|manages|owns)\s+(?:who|what|which)\b/i,
+        );
+      }
+    }
+  });
+});
+
+describe('the grounding review', () => {
+  it('records the assistant review of 22 November 2026 for every scenario it covered, and never claims a mentor', () => {
+    for (const [id, expected] of Object.entries(GROUNDING_REVIEW)) {
+      const scenario = library.find((s) => s.id === id);
+      expect(scenario, id).toBeDefined();
+      const { grounding } = scenario as ScenarioDefinition;
+      expect(grounding.authoredOn, id).toBe('2026-11-21');
+      expect(grounding.revisedOn, id).toBe('2026-11-22');
+      expect(grounding.checkedOn, id).toBe('2026-11-22');
+      expect(grounding.review, id).toBe('assistant-reviewed');
+      expect(grounding.behaviourCheck, id).toBe(expected.check);
+      expect([...grounding.sourceCategories].sort(), id).toEqual([...expected.sources].sort());
+      expect(grounding.syntheticConfirmed, id).toBe(true);
+      // The notes say whose review it was, so that nobody reads it as a mentor's.
+      expect(grounding.notes, id).toMatch(/AI-assisted review, not a mentor's\.$/);
     }
   });
 });
@@ -166,12 +257,80 @@ describe('what a trainee can read before a call', () => {
     }
   });
 
+  it('presents no customer claim as fact and gives away no workaround in what is shown or said at the start', () => {
+    // Wording the review of 22 November 2026 found in the brief, the title or the opening impact lines.
+    const flagged = [
+      'sending requests by hand',
+      'emailing the commissioning editor',
+      'genuine supplier invoices',
+    ];
+    for (const s of library) {
+      const early = [
+        ...strings(toPublicScenario(s)),
+        ...strings(s.impactVariants),
+        ...strings(s.stageFrames),
+        s.openingCore,
+      ]
+        .join(' \n ')
+        .toLowerCase();
+      for (const phrase of flagged) expect(early, `${s.id}: ${phrase}`).not.toContain(phrase);
+    }
+  });
+
+  it('keeps the executive presentation out of every field that does not depend on the impact level', () => {
+    for (const s of library) {
+      const {
+        affectedUsers: _users,
+        impactVariants: _variants,
+        grounding: _grounding,
+        ...rest
+      } = s;
+      const neutral = {
+        ...rest,
+        publicBrief: { ...s.publicBrief, impact: undefined },
+        hiddenFacts: s.hiddenFacts.map(({ byImpact: _byImpact, ...fact }) => fact),
+      };
+      expect(strings(neutral).join(' \n ').toLowerCase(), s.id).not.toContain(
+        'executive presentation',
+      );
+    }
+  });
+
+  it('shows a trainee who is told to read the case record what it holds, because only the brief is on screen', () => {
+    const s = library.find(
+      (item) => item.id === 'azure-deployment-fails-permissions',
+    ) as ScenarioDefinition;
+    expect(s.brief.groundRules.join(' ')).toMatch(/read the case history/i);
+    const shown = toPublicScenario(s).publicBrief.previousContact ?? '';
+    // The error, what was tried and when it first failed: what the customer will not repeat.
+    for (const detail of ['not authorised', 'twice', 'credentials', 'admin', 'Thursday']) {
+      expect(shown, detail).toContain(detail);
+    }
+  });
+
   it('names the product from one place, and never from free text', () => {
     for (const s of library) {
       const dto = toPublicScenario(s);
       expect(dto.product.name, s.id).toBe(PRODUCT_INFO[s.product.id].name);
       expect(applyConfig(s).environment.product, s.id).toBe(PRODUCT_INFO[s.product.id].name);
     }
+  });
+
+  it('gives each scenario card a short title, and keeps the provenance record out of every public form', () => {
+    for (const s of library) {
+      const dto = toPublicScenario(s);
+      expect(dto.shortTitle, s.id).toBe(s.shortTitle);
+      expect(wordCount(dto.shortTitle), s.id).toBeGreaterThanOrEqual(2);
+      expect(wordCount(dto.shortTitle), s.id).toBeLessThanOrEqual(6);
+      expect(provenanceLeaks(dto), s.id).toEqual([]);
+      // A saved call snapshots the effective scenario, which carries neither new field, so a call
+      // saved before they existed reads exactly like one saved after.
+      const effective = applyConfig(s);
+      expect(effective, s.id).not.toHaveProperty('shortTitle');
+      expect(provenanceLeaks(effective), s.id).toEqual([]);
+    }
+    const shorts = library.map((s) => s.shortTitle.toLowerCase());
+    expect(new Set(shorts).size).toBe(shorts.length);
   });
 });
 
@@ -289,7 +448,38 @@ describe('the checks on authored text', () => {
     expect(missing((s) => delete (s.stageFrames as Record<string, unknown>).escalated)).toBe(false);
     expect(missing((s) => (s.cbcfBehaviours = ['anything']))).toBe(false);
     expect(missing((s) => (s.listSummary = 'word '.repeat(19).trim()))).toBe(false);
+    expect(missing((s) => delete s.shortTitle)).toBe(false);
+    expect(missing((s) => delete s.grounding)).toBe(false);
+    // A card title is two to six words, in sentence case, with no full stop.
+    expect(missing((s) => (s.shortTitle = 'Mailbox'))).toBe(false);
+    expect(missing((s) => (s.shortTitle = 'Shared team mailbox is missing from Outlook'))).toBe(
+      false,
+    );
+    expect(missing((s) => (s.shortTitle = 'Shared mailbox missing.'))).toBe(false);
+    expect(missing((s) => (s.shortTitle = 'shared mailbox missing'))).toBe(false);
     expect(missing(() => undefined)).toBe(true);
+  });
+
+  it('rejects a short title that is longer than the title, shares no word with it or adds to what it says', () => {
+    const issuesFor = (shortTitle: string, id = first.id) => {
+      const s = structuredClone(library.find((item) => item.id === id) as ScenarioDefinition);
+      s.shortTitle = shortTitle;
+      return semanticIssues(s).join('\n');
+    };
+    // The first scenario's title is "Shared team mailbox missing from Outlook".
+    expect(issuesFor('Shared mailbox missing')).toBe('');
+    expect(issuesFor('The shared team mailbox is missing from Outlook again')).toMatch(
+      /longer than the title/,
+    );
+    expect(issuesFor('Calendar not syncing')).toMatch(/shares no content word/);
+    expect(issuesFor('Shared mailbox gone after migration')).toMatch(/adds "gone", "migration"/);
+    // Its words may come from the brief's issue line as well as the title, in another form.
+    expect(issuesFor('Cannot see mailbox')).toBe('');
+    // The Teams scenario's hidden facts are about guests from outside the company, and nothing
+    // public says so, so a card must not either.
+    const teams = 'teams-cannot-join-external-meetings';
+    expect(issuesFor('External users cannot join', teams)).toMatch(/adds "external", "users"/);
+    expect(issuesFor('Cannot join meetings', teams)).toBe('');
   });
 
   it('refuses a library that reuses a persona name, a curveball outside the allowlist or a missing case reference', () => {
@@ -298,6 +488,15 @@ describe('the checks on authored text', () => {
       s.caseReference = 'SIM-999999';
     });
     expect(loadScenarios([first, twin]).errors.join('\n')).toMatch(/persona name/);
+    // Two cards with the same short title could not be told apart.
+    const lookalike = copy((s) => {
+      s.id = 'a-third-scenario';
+      s.caseReference = 'SIM-999998';
+      s.persona.name = 'Someone Else';
+    });
+    expect(loadScenarios([first, lookalike]).errors.join('\n')).toMatch(
+      /shortTitle "Shared mailbox missing" is already used by outlook-shared-mailbox-missing/,
+    );
     const outside = copy((s) => {
       s.allowedCurveballs = ['go-silent'];
     });

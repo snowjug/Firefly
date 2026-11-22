@@ -5,20 +5,24 @@ import type { CreateCallOptions, FireflyApi } from './api.ts';
 // Locators and small flows for the call page, so that each journey reads as what the person does.
 // Every locator is a role or a label with the name the person hears. The exceptions are the status
 // line (it is deliberately not a live region, so it has no role: it is found by its `data-status`,
-// inside the "Customer" region) and the problem card, which is found by its class so that "Retry"
-// and "Replay" on the card are never mixed up with the "Replay" control of the call.
+// inside the "Customer" region), the problem card, which is found by its class so that "Retry"
+// and "Replay" on the card are never mixed up with the "Replay" control of the call, and the tips
+// strip's card in hand and window (the cards are all in the page; the one in hand is `aria-current`).
 //
 //   const screen = callScreen(page);
 //   await screen.preflight.startVoice.click();
 //   await expect(screen.status).toHaveText(STATUS.speaking);
 
-/** The words of the status line: the voice vocabulary the call and its announcements share. */
+/**
+ * The words of the status line: the voice vocabulary the call and its announcements share, apart from
+ * the trainee's own turn, where the screen says "Your turn" (typed) and "Listening to you" (spoken).
+ */
 export const STATUS = {
   micOff: 'Microphone off',
   waiting: 'Waiting for permission',
   blocked: 'Microphone blocked',
   micReady: 'Microphone ready',
-  listening: 'Listening',
+  listening: 'Listening to you',
   hearing: 'Hearing you',
   processing: 'Processing speech',
   replying: 'Customer is replying',
@@ -31,7 +35,7 @@ export const STATUS = {
   ending: 'Ending call',
   preparing: 'Preparing your review',
   complete: 'Call complete',
-  typing: 'Typing',
+  typing: 'Your turn',
 } as const;
 
 /** The status line's `data-status`, for the states that a spoken call moves through. */
@@ -57,7 +61,7 @@ export function callScreen(page: Page) {
   const card = page.locator('.cw-recovery');
   return {
     customer,
-    /** The status line: "Listening", "Hearing you", "Customer speaking" ... */
+    /** The status line: "Listening to you", "Hearing you", "Customer speaking" ... */
     status: customer.locator('[data-status] .cw-status__label'),
     /** The status line itself: its `data-status` says which state the call is in. */
     statusLine: customer.locator('[data-status]'),
@@ -80,9 +84,32 @@ export function callScreen(page: Page) {
     send: page.getByRole('button', { name: 'Send', exact: true }),
     /** The customer's mood, and in guided practice how much context has been found. */
     state: page.getByRole('group', { name: 'Customer state' }),
-    endDialog: page.getByRole('dialog', { name: 'End the call?' }),
+    endDialog: page.getByRole('dialog', { name: /^(?:End the call\?|Ready to close\?)$/ }),
     endingDialog: page.getByRole('dialog', { name: 'Ending and preparing your review' }),
     settingsDialog: page.getByRole('dialog', { name: 'Voice settings' }),
+    /** The tips strip of Guided practice, and what is in it. It is not on any other call. */
+    tips: {
+      region: page.getByRole('region', { name: 'Tips for this call', exact: true }),
+      heading: page.getByRole('heading', { level: 2, name: 'During the call' }),
+      previous: page.getByRole('button', { name: 'Previous tip', exact: true }),
+      next: page.getByRole('button', { name: 'Next tip', exact: true }),
+      hide: page.getByRole('button', { name: 'Hide tips', exact: true }),
+      show: page.getByRole('button', { name: 'Show tips', exact: true }),
+      learnWhy: page.getByRole('button', { name: 'Learn why', exact: true }),
+      /** The cards, each named "Tip 2 of 19". */
+      cards: page
+        .getByRole('region', { name: 'Tips for this call', exact: true })
+        .getByRole('listitem'),
+      /** The tip that is in hand (the card marked `aria-current`): its words. */
+      current: page.locator('.tp-card[aria-current="true"] .tp-card__text'),
+      /** The window the cards slide in. */
+      deck: page.locator('.tp-deck'),
+    },
+    /** The four checks of "Ready to close?" in Guided practice. */
+    closing: {
+      list: page.getByRole('list', { name: 'Closing check' }),
+      rows: page.getByRole('list', { name: 'Closing check' }).getByRole('listitem'),
+    },
     /** The one card that says what went wrong, what was kept and what can be done. */
     problem: {
       card,

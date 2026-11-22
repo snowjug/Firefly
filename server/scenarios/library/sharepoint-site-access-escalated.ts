@@ -7,13 +7,13 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 // Root cause in the story (hidden from the trainee): in the restructure three weeks ago the old team
 // groups that the programme site relied on were retired, and the site's owner moved to another
 // department with no replacement named. The new groups were never added to the site, so people
-// dropped out of access one by one, and nobody can approve access. The first earlier contact told
-// Gareth to add people one by one; the second said the site owner had to approve and set the case to
-// pending without saying who that is. Some of the team work from emailed copies that are out of date.
-// The earlier-advice fact exists only after a first contact (stages follow-up, escalated, closure).
-// The facts that depend on how many people are blocked (earlier advice, emailed copies, the
-// director's question) carry byImpact wordings for low (two people) and medium (nine), matching
-// affectedUsers and impactVariants.detail.
+// dropped out of access one by one, and no programme owner was available to approve access. The
+// first earlier contact told Gareth to add people one by one; the second said the site owner had to
+// approve and set the case to pending without saying who that is. Some of the team work from
+// emailed copies that are out of date. The earlier-advice fact exists only after a first contact
+// (stages follow-up, escalated, closure). The facts that depend on how many people are blocked
+// (earlier advice, emailed copies, the director's question) carry byImpact wordings for low (two
+// people) and medium (nine), matching affectedUsers and impactVariants.detail.
 //
 // Gareth is angry and expert and wants ownership now. A strong call takes ownership early,
 // acknowledges both failed contacts without defending them, asks precise questions, handles
@@ -24,6 +24,7 @@ const scenario = {
   id: 'sharepoint-site-access-escalated',
   version: 1,
   title: 'Programme team still blocked from their SharePoint site',
+  shortTitle: 'Team still blocked from site',
   listSummary:
     "A programme head's team is still blocked from their site after a restructure, and he wants ownership.",
   summary:
@@ -33,6 +34,19 @@ const scenario = {
 
   product: { id: 'sharepoint-online', area: 'Site permissions' },
   caseReference: 'SIM-410004',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
+    syntheticConfirmed: true,
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public Microsoft Learn pages on customising SharePoint site permissions and managing sites in the admin centre. Terms current; approval claim narrowed, earlier-advice wording made consistent, closure opening hedged. AI-assisted review, not a mentor's.",
+  },
   issueType: 'permissions',
   impact: 'high',
   startingTemperature: 'angry',
@@ -107,7 +121,7 @@ const scenario = {
       'A head of programme delivery is calling because his team is blocked from their SharePoint site after a restructure. He wants someone to own the problem.',
     goal: 'Find out what is happening and what was already done, take ownership, and agree specific next steps and a time for the next update.',
     groundRules: [
-      'The customer, organisation and product are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       'You cannot see his site or the case system in this practice call, so rely on what he tells you.',
     ],
@@ -151,7 +165,7 @@ const scenario = {
     },
     closure: {
       opening:
-        "I'm calling to confirm that everyone can open our SharePoint site again, so we can close the case properly.",
+        "I'm calling to check whether everyone can open our SharePoint site again before we close the case.",
       brief:
         'Gareth expects to confirm that the team has access again and to understand why it took so long before the case is closed.',
     },
@@ -273,7 +287,7 @@ const scenario = {
       stages: ['follow-up', 'escalated', 'closure'],
       label: 'What the earlier contacts told him',
       statement:
-        'The first engineer said to add people one by one. That worked for a few, not the rest. The second said the site owner had to approve, then set the case to pending without telling me who that is.',
+        "The first engineer said to add people one by one. That helped a few briefly, but they're blocked again. The second said the site owner had to approve, then set the case to pending without telling me who that is.",
       revealWhen:
         'Asks what he was told on earlier contacts, what advice he was given, or what has already been tried with support.',
       intents: ['previous_contact', 'already_tried'],
@@ -292,23 +306,23 @@ const scenario = {
       statementTerse:
         'Add people one by one, then wait for the site owner. Nobody said who that is.',
       statementSimple:
-        'The first engineer said to add people one by one. That worked for a few people only. The second said the site owner must approve, but did not say who that is.',
+        'The first engineer said to add people one by one. That helped a few people briefly, but they are blocked again. The second said the site owner must approve, but did not say who that is.',
       byImpact: {
         low: {
           statement:
-            'The first engineer said to add people one by one. That worked for one of them, not the other. The second said the site owner had to approve, then set the case to pending without telling me who that is.',
+            'The first engineer said to add people one by one. That helped one briefly, but both are blocked again. The second said the site owner had to approve, then set the case to pending without telling me who that is.',
           statementTerse:
             'Add people one by one, then wait for the site owner. Nobody said who that is.',
           statementSimple:
-            'The first engineer said to add people one by one. That worked for one person only. The second said the site owner must approve, but did not say who that is.',
+            'The first engineer said to add people one by one. That helped one person briefly, but both are blocked again. The second said the site owner must approve, but did not say who that is.',
         },
         medium: {
           statement:
-            'The first engineer said to add people one by one. That worked for a couple of them, not the rest. The second said the site owner had to approve, then set the case to pending without telling me who that is.',
+            'The first engineer said to add people one by one. That helped two briefly, but all nine are blocked again. The second said the site owner had to approve, then set the case to pending without telling me who that is.',
           statementTerse:
             'Add people one by one, then wait for the site owner. Nobody said who that is.',
           statementSimple:
-            'The first engineer said to add people one by one. That worked for two people only. The second said the site owner must approve, but did not say who that is.',
+            'The first engineer said to add people one by one. That helped two people briefly, but all nine are blocked again. The second said the site owner must approve, but did not say who that is.',
         },
       },
       missedConsequence:
@@ -321,9 +335,9 @@ const scenario = {
       importance: 'critical',
       minDifficulty: 'standard',
       availableAfterTurn: 2,
-      label: 'The site has no owner',
+      label: 'The site has no named owner',
       statement:
-        "The person who owned the site moved to another department in the restructure, and nobody has been named in their place. So there's no one who can approve access.",
+        'The person who owned the site moved to another department in the restructure, and nobody has been named in their place. As far as I know, no one on my team can approve access.',
       revealWhen:
         'Asks who owns or administers the site, who can approve access, or who looks after it now.',
       intents: ['account_details'],
@@ -342,7 +356,7 @@ const scenario = {
       ],
       statementTerse: 'The site owner moved departments in the restructure. Nobody replaced them.',
       statementSimple:
-        'The person who owned the site moved to another department. Nobody took their place. So nobody can approve access.',
+        'The person who owned the site moved to another department. Nobody took their place. So I do not know who can approve access.',
       missedConsequence:
         'The gap at the centre of the problem is never found, so the plan stays at "wait for the owner" and the team stays blocked.',
       betterQuestion: 'Who owns the site now, and who is able to approve access to it?',
@@ -477,7 +491,7 @@ const scenario = {
       statement:
         "My view is that the restructure has disturbed people's licences, because they were all moved to new cost centres.",
       truth:
-        'Nothing suggests a licence problem. In this story the site relied on team groups that were retired in the restructure, and its owner left with no replacement, so nobody could add the new groups.',
+        'Nothing suggests a licence problem. In this story the site relied on team groups that were retired in the restructure, and its owner left with no replacement, so the programme team had no named owner to add the new groups.',
     },
   ],
 
@@ -540,7 +554,7 @@ const scenario = {
     'Opens by acknowledging the two failed contacts and that he has been passed around, without defending anyone.',
     'Takes clear ownership in the first minutes and says what they will do first and by when.',
     'Asks precise questions that show they have read the case, and does not repeat advice already tried.',
-    'Finds that nobody currently owns the site and that the old team groups were retired in the restructure.',
+    'Finds that no owner is currently named for the site and that the old team groups were retired in the restructure.',
     'Handles requests for guarantees and doubts about their experience calmly, with honest commitments.',
     'Agrees a named owner, specific actions with times and a time for the next update, then summarises.',
   ],
@@ -579,9 +593,9 @@ const scenario = {
     'Agreeing a named owner, specific actions with times and a time for the next update, then summarising.',
   ],
   expectedOutcome:
-    'Gareth has a named owner and has heard what happens first, by whom, and when he will hear next. He knows the engineer understands that nobody owns the site, that the old groups were retired and that earlier advice failed, and that part of his team works from risky copies. He has a route for involving someone senior or central IT.',
+    'Gareth has a named owner and has heard what happens first, by whom, and when he will hear next. He knows the engineer understands that no owner is named for the site, that the old groups were retired and that earlier advice failed, and that part of his team works from risky copies. He has a route for involving someone senior or central IT.',
   evaluatorNotes:
-    "Root cause in the story: in the restructure the old team groups the programme site relied on were retired, and the site's owner moved to another department with no replacement. The new groups were never added to the site and nobody can approve access. The earlier contacts told him to add people one by one and then to wait for the owner, so he has been passed around, and part of the team works from out-of-date emailed copies. Gareth is angry and expert, and challenges vague or generic answers. A strong call takes ownership early, acknowledges both failed contacts without defending them, asks precise questions, handles guarantees and credibility challenges calmly, and agrees a named owner, concrete actions and a time for the next update.",
+    "Root cause in the story: in the restructure the old team groups the programme site relied on were retired, and the site's owner moved to another department with no replacement. The new groups were never added to the site and no programme owner was available to approve access. The earlier contacts told him to add people one by one and then to wait for the owner, so he has been passed around, and part of the team works from out-of-date emailed copies. Gareth is angry and expert, and challenges vague or generic answers. A strong call takes ownership early, acknowledges both failed contacts without defending them, asks precise questions, handles guarantees and credibility challenges calmly, and agrees a named owner, concrete actions and a time for the next update.",
 } satisfies ScenarioInput;
 
 export default scenario;

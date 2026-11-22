@@ -140,6 +140,39 @@ describe('what a model writes', () => {
       'It is slow today and I cannot sign in.',
     );
   });
+
+  it("has the engineer's name said once in five replies however often the model says it", async () => {
+    const scenario = makeScenario({ startingTemperature: 'calm' });
+    let runtime = createInitialRuntime(scenario);
+    const history: TranscriptTurn[] = [
+      { index: 1, role: 'customer', text: openingMessage(scenario) },
+    ];
+    const replies: string[] = [];
+    for (let n = 0; n < 11; n++) {
+      const traineeText =
+        n === 0 ? 'My name is Alex. What laptop are you using?' : 'What laptop are you using?';
+      const turnIndex = 2 + n * 2;
+      const result = await processTraineeTurn({
+        scenario,
+        runtime,
+        traineeText,
+        turnIndex,
+        history: [...history],
+        classify: mockClassifier(scenario),
+        generate: () =>
+          Promise.resolve({ text: 'Thanks, Alex. It is a Dell.', source: 'live' as const }),
+      });
+      runtime = result.runtime;
+      replies.push(result.customerText);
+      history.push(
+        { index: turnIndex, role: 'trainee', text: traineeText },
+        { index: turnIndex + 1, role: 'customer', text: result.customerText },
+      );
+    }
+    const said = replies.flatMap((text, i) => (/\bAlex\b/.test(text) ? [i] : []));
+    expect(said).toEqual([0, 5, 10]);
+    expect(replies[1]).toBe('Thanks. It is a Dell.');
+  });
 });
 
 describe('opening', () => {
@@ -509,6 +542,120 @@ describe('curveballs', () => {
       "I'm sorry, I can hear this is a lot. What's on your mind?",
     ]);
     expect(after.runtime.customer.silentUntilEngaged).toBe(false);
+  });
+});
+
+describe('a curveball and the end of the call', () => {
+  const GREET = 'Good morning, this is Alex from Microsoft support. How can I help?';
+  const OWN = "I'll take ownership of this and update you by 3 PM today.";
+  const GOODBYE = "Thank you. I'll call you at 3 PM. Have a good day.";
+  const BROWSER = 'What browser are you using?';
+  // The first line only greets, so the one after it is the engineer's first turn. These are three
+  // turns of the call; whatever comes next is the fourth.
+  const BEFORE = [GREET, 'What laptop are you using?', 'When did it start?', OWN];
+  const RUSH = /first patients arrive at nine/;
+
+  /** A deadline curveball that is due from the engineer's `turn`th turn, and not before it. */
+  const dueFrom = (turn: number, overrides: Parameters<typeof makeScenario>[0] = {}) => {
+    const scenario = makeScenario({
+      difficulty: 'challenge',
+      startingTemperature: 'calm',
+      curveballs: ['deadline'],
+      ...overrides,
+    });
+    scenario.curveballs = scenario.curveballs.map((c) => ({
+      ...c,
+      trigger: { earliestTurn: turn, latestTurn: turn },
+    }));
+    return scenario;
+  };
+  const NONE = {
+    status: 'none',
+    type: null,
+    firedAtTurn: null,
+    resolvedAtTurn: null,
+    firedCount: 0,
+  };
+
+  it('is raised on the turn it is due when the call goes on', async () => {
+    const sim = await simulate(dueFrom(4), [...BEFORE, BROWSER]);
+    expect(sim.turns.at(-1)?.customer).toMatch(RUSH);
+    expect(sim.runtime.customer.curveball.firedCount).toBe(1);
+    expect(sim.runtime.closingAtTurn).toBe(0);
+  });
+
+  it('is not raised when the engineer says goodbye, nor later: it is dropped, and the call records none', async () => {
+    const sim = await simulate(dueFrom(4), [...BEFORE, GOODBYE, BROWSER, 'And which version?']);
+    for (const t of sim.turns) expect(t.customer).not.toMatch(RUSH);
+    // Nothing is recorded as having happened, so the state, the markers and the public count agree.
+    expect(sim.runtime.customer.curveball).toEqual(NONE);
+    expect(sim.runtime.firedCurveballs).toEqual([]);
+    expect(sim.runtime.lastCurveballTurn).toBe(0);
+    expect(sim.runtime.closingAtTurn).toBe(BEFORE.length + 1);
+    expect(publicState(sim.runtime).shifts).toBe(0);
+    expect(sim.events.some((e) => e.category === 'curveball')).toBe(false);
+  });
+
+  it.each([
+    ['asks if that is all', 'Is there anything else I can help with?'],
+    ['asks what the customer has to do', 'Is there anything you need to do from your side first?'],
+    ['wraps up', 'So to recap, I will call you back by 3 PM.'],
+  ])(
+    'is not raised on a turn that %s once the customer has been told what happens next',
+    async (_name, line) => {
+      const sim = await simulate(dueFrom(4), [...BEFORE, line, BROWSER, 'And which version?']);
+      for (const t of sim.turns) expect(t.customer).not.toMatch(RUSH);
+      expect(sim.runtime.customer.curveball).toEqual(NONE);
+      expect(sim.runtime.closingAtTurn).toBe(BEFORE.length + 1);
+    },
+  );
+
+  it('is not dropped by a line that only sounds like the end: an offer of help to open with, or "anything else" about the problem', async () => {
+    const opened = await simulate(dueFrom(3), [
+      'Hello, this is Alex from Microsoft support. Is there anything I can help you with today?',
+      'What laptop are you using?',
+      'When did it start?',
+      'What does it say?',
+      'What have you tried?',
+    ]);
+    expect(opened.runtime.customer.curveball.firedCount).toBe(1);
+    expect(opened.runtime.closingAtTurn).toBe(0);
+
+    const about = await simulate(dueFrom(4), [
+      ...BEFORE,
+      'Did you change anything else on the machine?',
+    ]);
+    expect(about.turns.at(-1)?.customer).toMatch(RUSH);
+    expect(about.turns.at(-1)?.classification.discoveryIntents).toContain('recent_changes');
+    expect(about.runtime.closingAtTurn).toBe(0);
+  });
+
+  it('is not dropped by a goodbye that comes with a question about the problem: the call has not ended', async () => {
+    const sim = await simulate(dueFrom(4), [
+      ...BEFORE,
+      'Thank you for your time. What browser are you using?',
+      'And which version is it?',
+    ]);
+    // Not raised with the goodbye, but nothing was dropped: it comes with the next question.
+    expect(sim.turns[4]?.customer).not.toMatch(RUSH);
+    expect(sim.runtime.closingAtTurn).toBe(0);
+    expect(sim.turns[5]?.customer).toMatch(RUSH);
+  });
+
+  it('can still be raised on the turn after the customer asked for a time, when it is due', async () => {
+    const sim = await simulate(dueFrom(3, { startingTemperature: 'angry' }), [
+      GREET,
+      'What laptop are you using?',
+      "I'll look into it.",
+      'I will call you back by 3 PM with an update.',
+    ]);
+    // The vague promise is asked about, and the curveball is not yet due.
+    expect(sim.turns[2]?.runtime.asksForTimelineAtTurn).toBe(3);
+    expect(sim.turns[2]?.customer).not.toMatch(RUSH);
+    // The turn after it, it is raised.
+    expect(sim.turns[3]?.customer).toMatch(RUSH);
+    expect(sim.runtime.customer.curveball.firedCount).toBe(1);
+    expect(sim.runtime.closingAtTurn).toBe(0);
   });
 });
 

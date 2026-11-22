@@ -16,34 +16,42 @@ The scores are practice signals from a simulated call. They are not an assessmen
 
 ## What it does
 
-1. **Choose a scenario.** Pick one of sixteen fictional Microsoft support cases and set how hard the call should be.
-2. **Review the brief.** It shows what you may read before the call, such as the issue, the impact and your objective. It never shows the facts the customer holds back. Choose a customer voice and try it.
+1. **Choose a scenario.** Pick one of sixteen fictional Microsoft support cases from the carousel, narrowing it with the product rail or the difficulty filter. Set how hard the call should be and whether it is Guided practice or Assessment practice, then choose **Start configuration**.
+2. **Review the brief.** The case brief shows what you may read before the call, such as the issue, the impact and your objective. It never shows the facts the customer holds back. Choose a customer voice and try it.
 3. **Start a call.** Start a voice call or a text call. A voice call opens your microphone only after you press a button and your browser allows it.
-4. **Talk to the customer.** The customer greets you first and gives the reason for the call once you have greeted them. Speak, or type if you prefer. Typing always works.
-5. **End the call.** Choose **End call**, then **End and review**.
-6. **Read the coaching report.** It scores six skills, shows the CARE behaviours it found, follows the customer's mood through the call, quotes your words, and suggests better wording and what to practise next.
+4. **Talk to the customer.** The customer greets you first and gives the reason for the call once you have greeted them. Speak, or type if you prefer. Typing always works. In Guided practice, short tips sit under the transcript.
+5. **End the call.** Choose **End call**, then **End and review**. In Guided practice the question is "Ready to close?" and four neutral checks come first (plan, owner, update time, the customer's agreement), under a line that says they are not a score. They never stop you ending.
+6. **Read the coaching report.** It opens with a summary and a call journey, scores six skills with the quotes behind each, shows the CARE review, follows the customer's mood through the call, reviews the facts you found and missed, and suggests better wording and what to practise next.
 
 |                                                                                 |                                                                 |
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | ![The scenario workspace with one scenario selected](docs/images/scenarios.png) | ![The case brief before a call](docs/images/brief.png)          |
 | ![A call in progress](docs/images/call-in-progress.png)                         | ![The top of a coaching report](docs/images/report-summary.png) |
 
-These pictures come from the running app in demo mode with demo speech (`node scripts/readme-screenshots.mjs`). In the call picture, the engineer's lines are the demo speech provider's scripted sentences, not a real voice, and the customer is played by the rules engine. The call preview on the landing page is a captioned illustration, not a call.
+The same two screens in the dark theme, which the footer and the header toggle switch to:
+
+|                                                                             |                                                                                        |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| ![The scenario workspace in the dark theme](docs/images/scenarios-dark.png) | ![The top of a coaching report in the dark theme](docs/images/report-summary-dark.png) |
+
+These pictures come from the running app in demo mode with demo speech (`node scripts/readme-screenshots.mjs`). In the call picture, the engineer's lines are the demo speech provider's scripted sentences, not a real voice, and the customer is played by the rules engine. The call preview on the landing page is a scripted loop with no sound, captioned as an example, not a call. It plays three times, with a Pause button that reads Replay once it has finished.
 
 ## Features
 
 - Sixteen fictional Microsoft support scenarios across Microsoft 365, Windows, Azure and Dynamics 365.
-- Settings for impact, the customer's starting state, proficiency, style, call stage, difficulty and curveballs (called complications in the interface), and live hints for guided practice.
-- A customer who greets first and gives the reason once you have greeted them, remembers what was said and promised, can say "I don't know", and reveals a hidden fact only to a question that fits.
+- A scenario workspace: a product rail, a difficulty filter, a carousel of scenario cards (arrow keys, Home and End, a mouse drag or touch scrolling; it never moves by itself) and the chosen scenario's details and set-up below it. The address keeps your filters, your choice and your settings, so a link reopens the same view.
+- Settings for impact, the customer's starting state, proficiency, style, call stage, difficulty and curveballs (called complications in the set-up and unexpected turns in the report), and a practice mode. **Guided practice** (the default at Starter) adds a "During the call" strip of short tips, "Areas to explore" and a "Context found" count in the case panel, and a "Ready to close?" check when you end the call. **Assessment practice** (the default at Standard and Challenge) shows none of them. The tips are general advice chosen only from the call stage and how many messages you have sent, never from the scenario's hidden facts.
+- A customer who greets first and gives the reason once you have greeted them, remembers what was said and promised, can say "I don't know", and reveals a hidden fact only to a question that fits. The customer also says a clear owner and time back to you or takes it in with a few words, asks when a promise has no time, and answers "Is there anything else?" and a goodbye in a few words.
 - Voice with a text fallback. A voice step that fails never ends the call.
 - Four neutral synthetic voices, Voice A to Voice D, where the speech provider offers them, with a **Test voice** button.
-- A coaching report with six skills scored 1 to 5 and quotes checked against the transcript, CARE behaviours read from what you said, a customer-journey timeline with milestones, better wording, and the facts you found and missed.
+- A coaching report that opens with a summary and a call journey (each moment opens the exact turn), then six skills scored 1 to 5 in a score matrix with the quotes behind each (a score that no quote backs is shown as a "first look", with dashed segments and no rubric word), a CARE review in four tabs, the customer's mood through the call as a chart with a table, and a discovery review of the facts you found and missed. Its better wording shows your own words ("You said") and wording to try ("Try") one under the other, with the removed and added words marked. Every quote is checked against the transcript. The report prints on A4, black on white even when the app is dark, and has a layout for phones.
+- Light and dark themes, from the header toggle or the footer's Light, Dark and System choice. The choice is kept in this browser only (local storage, key `firefly.theme`) and is never sent anywhere. The footer says "Saved on this device" only when the browser kept it, and says so when storage is blocked. System follows the device.
 - Demo mode that needs no credentials. A rules engine plays the customer and writes the coaching.
 - Delete a call, its transcript and its report from the report page.
 
 ## Scenarios
 
-All people, companies and cases are invented. Product details are what a customer might report. They are not checked against product behaviour.
+All people, companies and cases are invented, and the product in each case is real. A scenario says what a customer reports, not how the product behaves. Each one carries an internal record of how far its product wording was checked against public Microsoft documentation (Microsoft Learn and Microsoft Support pages). By those records, 11 of the 16 were checked against current pages and 5 only in part, and all 16 are marked as reviewed by an AI assistant; none is marked as reviewed by a mentor. The internal Microsoft support wiki was not available to this project, so nothing came from it. The records are never shown in the app.
 
 | Family        | Product                 | What the customer reports                                          | Stage         | Difficulty |
 | ------------- | ----------------------- | ------------------------------------------------------------------ | ------------- | ---------- |
@@ -54,7 +62,7 @@ All people, companies and cases are invented. Product details are what a custome
 | Microsoft 365 | Exchange Online         | Email to and from some recipients arrives late                     | Follow-up     | Standard   |
 | Microsoft 365 | Microsoft 365 Apps      | Excel keeps closing since an update                                | First contact | Standard   |
 | Microsoft 365 | Microsoft Intune        | Closing a case on laptops that showed as not compliant             | Closure       | Standard   |
-| Microsoft 365 | Defender for Office 365 | Genuine supplier invoices held in quarantine before a payment run  | First contact | Standard   |
+| Microsoft 365 | Defender for Office 365 | Supplier invoices held in quarantine before a payment run          | First contact | Standard   |
 | Microsoft 365 | SharePoint Online       | Programme team still blocked from their SharePoint site            | Escalated     | Challenge  |
 | Microsoft 365 | Microsoft Entra ID      | New starters blocked from signing in on day one                    | First contact | Challenge  |
 | Windows       | Windows 11              | Laptop has felt slow since an update                               | First contact | Starter    |
@@ -64,13 +72,13 @@ All people, companies and cases are invented. Product details are what a custome
 | Azure         | Azure                   | Scripted deployment now fails for a service account                | Follow-up     | Challenge  |
 | Dynamics 365  | Dynamics 365            | Some sales staff can't see customer records after a reorganisation | First contact | Standard   |
 
-[docs/scenario-authoring.md](docs/scenario-authoring.md) explains how scenarios are written and checked.
+[docs/scenario-authoring.md](docs/scenario-authoring.md) explains how scenarios are written and checked, and what each value in the provenance record means. `npm run validate:scenarios` prints the records.
 
 ## How coaching works
 
-- **Six skills**, each scored 1 to 5: Opening and Rapport, Scoping and Discovery, Empathy and De-escalation, Clarity, Ownership and Next Steps, and Closing. The overall score is their mean. A call that is too short to judge gets no overall score.
-- **CARE** is read separately, behaviour by behaviour, from what you said: Communicate effectively, Be accountable, Be resourceful and Be empathetic. A behaviour that is shown or partly shown carries a quote of the moment.
-- **Evidence is checked.** Every quote in the report must be a word-for-word part of the turn it cites. A quote that is not is dropped. A score of 4 needs one verified quote and a 5 needs two, or the score is lowered.
+- **Six skills**, each scored 1 to 5: Opening and Rapport, Scoping and Discovery, Empathy and De-escalation, Clarity, Ownership and Next Steps, and Closing. The overall score is their mean, shown as one modest "Practice signal" line. A call that is too short to judge gets none.
+- **CARE** is read separately, behaviour by behaviour, from what you said: Communicate effectively, Be accountable, Be resourceful and Be empathetic. A behaviour that is shown or partly shown carries a quote of the moment (one judged by what was left out of the call has nothing to quote). The report shows the four as tabs, each with what the level rests on (how many of its behaviours were shown), what was observed, one quote, from a shown behaviour where there is one (never the same words under two principles), and a next action taken from the weakest skill that feeds it.
+- **Evidence is checked.** Every quote in the report must be a word-for-word part of the turn it cites (case, punctuation and spacing aside). A quote that is not is dropped. A score of 4 needs one verified quote and a 5 needs two, or the score is lowered. The report page checks each quote again against the saved transcript, and shows "Insufficient evidence" in place of any quote the turn does not say. A score that no verified quote backs is drawn as a first look.
 - **Rules or a model.** In demo mode, rules score all six skills from the transcript. With a live model, the model proposes the six scores and the wording, and the server checks them. CARE behaviours, milestones, discovery and the overall score always come from the server's rules, never from a model.
 - **Never scored:** accent, fluency, harmless grammar and speaking style. Tone of voice is never heard.
 - **CBCF mapping is not applied.** No CBCF material was found in this repository or supplied for it. The report says "CBCF mapping is not applied: awaiting authoritative source confirmation." Firefly makes no claim of alignment or compliance with CBCF.
@@ -108,7 +116,7 @@ Firefly runs fully in demo mode with no credentials. The model and the speech se
 
 **What the status column means.** The live adapters are written against each vendor's documentation and tested against local fakes that stand in for the services. CI uses the fake servers and the mock. "Not run" means Firefly has not been run against that service.
 
-Gemini (model `gemini-3.5-flash-lite`, free tier, key supplied locally by the user) got a limited live smoke check on 21 Nov 2026 through the real HTTP API: two scripted calls (Outlook shared mailbox, 7 engineer turns; Teams external meetings, 10 engineer turns) with live customer replies and a model-written v2 report for each; no errors, no retries, no coaching or list-style replies detected by simple automatic checks. That is a smoke check, not a quality evaluation: it says nothing about voice, about other scenarios, or about paid-tier behaviour.
+Gemini (model `gemini-3.5-flash-lite`, free tier, key supplied locally by the user) got a limited live smoke check on 21 Nov 2026 through the real HTTP API: two scripted calls (Outlook shared mailbox, 7 engineer turns; Teams external meetings, 10 engineer turns) with live customer replies and a model-written v2 report for each; no errors, no retries, no coaching or list-style replies detected by simple automatic checks. That is a smoke check, not a quality evaluation: it says nothing about voice, about other scenarios, or about paid-tier behaviour. It was not repeated for the newest customer prompt (`customer-4`) or its guards, which have only met the local fake model.
 
 Azure OpenAI, the OpenAI-compatible endpoint and Azure AI Speech have not been run live.
 
@@ -138,7 +146,7 @@ Typed calls work with no setup. For a spoken call without Azure, either use Edge
 | `npm run check`              | Everything CI's first job runs: format check, lint, type check, scenario validation, unit and API tests, production build, size budgets, secret scan and lockfile check. |
 | `npm test`                   | Unit and API tests with Vitest.                                                                                                                                          |
 | `npm run test:e2e`           | Builds, then runs the Playwright browser tests against the production build in demo mode, in desktop and mobile Chromium.                                                |
-| `npm run validate:scenarios` | Checks every scenario against the schema and the authoring rules.                                                                                                        |
+| `npm run validate:scenarios` | Checks every scenario against the schema and the authoring rules, and prints each scenario's internal provenance record.                                                 |
 | `npm run check:budgets`      | After a build, checks the gzip size budgets in `scripts/budgets.json`.                                                                                                   |
 
 The browser tests need a browser. Run `npx playwright install chromium` once, or set `PW_CHANNEL=msedge` (or `chrome`) to use an installed one.
@@ -156,12 +164,12 @@ npm start       # serves the API and dist/web from one process
 
 ## Known limitations
 
-- **Live providers.** Gemini had one limited smoke check on 21 Nov 2026. Azure OpenAI, the OpenAI-compatible endpoint and Azure AI Speech have not been run live. Everything else about them is tested against local fakes. See [Demo mode and live providers](#demo-mode-and-live-providers).
+- **Live providers.** Gemini had one limited smoke check on 21 Nov 2026, and it was not repeated for the newest customer prompt (`customer-4`) or its guards, which have only met the local fake model. Azure OpenAI, the OpenAI-compatible endpoint and Azure AI Speech have not been run live. Everything else about them is tested against local fakes. See [Demo mode and live providers](#demo-mode-and-live-providers).
 - **No barge-in.** You cannot talk over the customer. Press **Stop customer audio**, then talk. [docs/voice-architecture.md](docs/voice-architecture.md) explains why.
 - **Speech is unverified with real speech.** Recognition and voices were tested with fakes and synthetic signals. Whether the customer's voice sounds like their mood has not been judged.
-- **Browsers.** The browser tests run in Chromium: Playwright's own Chromium in CI, or an installed Edge or Chrome chosen with `PW_CHANNEL`. Firefox and Safari have not been tried.
-- **Accessibility.** Automated axe checks run in the browser tests. No screen reader or other assistive technology has been used to test Firefly.
-- **Scenarios are synthetic.** Product details are not validated against real product behaviour.
+- **Browsers and devices.** The interface was checked in Microsoft Edge, and the browser tests run in Chromium: Playwright's own Chromium in CI, or an installed Edge or Chrome chosen with `PW_CHANNEL`. Firefox, Safari and real touch hardware have not been tried. The phone tests use Playwright's Pixel 7 emulation.
+- **Accessibility.** Automated axe checks run in the browser tests, and a unit test checks the colour tokens' contrast in both themes. No screen reader or other assistive technology has been used to test Firefly.
+- **Scenarios are synthetic and only partly checked.** Product wording was checked against public Microsoft documentation, 11 scenarios against current pages and 5 in part. The records mark all 16 as reviewed by an AI assistant and none as reviewed by a mentor. No internal Microsoft material was used. See [Scenarios](#scenarios).
 - **Demo mode is simpler.** The rules-based customer varies less than a live model.
 - **Scores are rules-based.** They read words, not tone, and they have not been compared with mentors' scores.
 - **English only.** Speech languages are en-GB, en-US, en-IE, en-AU and en-IN.

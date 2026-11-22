@@ -3,30 +3,45 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 // Challenge scenario (first contact). Everything here is fictional: people, organisation and case.
 //
 // Root cause (hidden from the trainee): last Thursday Litware's separate security team changed a
-// sign-in policy, and Nadia only saw the change notes this morning. Accounts whose first sign-in
-// falls after that change meet the policy on day one: the starters are on laptops handed out at
-// nine, over the guest network in reception, and none of them has set anything up yet. People who
-// joined earlier were already past that point and sign in normally. Licences are assigned on every
-// new account. Nadia is an expert and has settled on a theory that the HR feed has not assigned
-// licences. She is right that it concerns new accounts only and wrong about the licences, and she
-// has not pulled a sign-in record for any starter. She opens up when her expertise is respected and
-// the questions are specific. A strong call tests the theory with evidence instead of arguing,
-// finds who is not affected and what changed, asks for one sign-in record, owns the case,
-// promises no fix time, and agrees who involves her security team.
+// sign-in policy, and Nadia only saw the change notes this morning. The policy requires compliant
+// laptops for company apps. Accounts whose first sign-in falls after that change meet the policy on
+// day one: the starters are on laptops handed out at nine, over the guest network in reception,
+// none of those laptops is enrolled and none of the starters has set anything up yet. People who
+// joined earlier were already past that point and use compliant devices, so they sign in normally.
+// Licences show as assigned on every new account. Nadia is an expert and has settled on a theory
+// that the HR feed has not assigned licences. She is right that it concerns new accounts only and
+// wrong about the licences, and she has not pulled a sign-in record for any starter. She opens up
+// when her expertise is respected and the questions are specific. A strong call tests the theory
+// with evidence instead of arguing, finds who is not affected and what changed, asks for one
+// sign-in record, owns the case, promises no fix time, and agrees who involves her security team.
 
 const scenario = {
   id: 'entra-new-hires-blocked-sign-in',
   version: 1,
   title: 'New starters blocked from signing in on day one',
+  shortTitle: 'New starters cannot sign in',
   listSummary:
     'New starters cannot sign in on their first day, and the head of IT has a firm theory.',
   summary:
-    'Nadia leads IT at Litware. Several new starters cannot sign in on their first day, and induction is under way. She is direct, short on patience and technically expert, and she already has a theory about the cause. Find out what is really happening, handle her pushback respectfully, and agree next steps you can honestly commit to.',
+    'Nadia leads IT at Litware. New-starter sign-ins are failing on day one, and induction is under way. She is direct, short on patience and technically expert, and she already has a theory about the cause. Find out what is really happening, handle her pushback respectfully, and agree next steps you can honestly commit to.',
   tags: ['sign-in', 'new starters', 'security policy', 'expert customer', 'pushback'],
   estimatedMinutes: 14,
 
   product: { id: 'entra-id', area: 'Sign-in' },
   caseReference: 'SIM-420003',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
+    syntheticConfirmed: true,
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public Microsoft Learn pages on Conditional Access, security info registration, sign-in troubleshooting and licence assignment state. Terms current; licence claims hedged, policy requirement stated. AI-assisted review, not a mentor's.",
+  },
   issueType: 'policy-security',
   impact: 'high',
   startingTemperature: 'frustrated',
@@ -70,9 +85,9 @@ const scenario = {
   desiredOutcome:
     'Nadia and the engineer agree what evidence to gather, who owns the next step, and a specific time for the next update, with no promise about a fix time.',
   previousTroubleshooting: [
-    'Checked that every new starter shows a licence assigned',
+    'Checked the licence status of at least one new starter',
     'Tested her own account and two longstanding colleagues, who signed in fine',
-    'Reset the password of two of the starters, with no change',
+    "Reset a starter's password, with no change",
     'Asked the service desk to try from a different network, with no change',
   ],
   recentChanges: [
@@ -99,7 +114,7 @@ const scenario = {
       'Nadia is Head of IT at a mid-sized company. New starters cannot sign in on their first day, and she is sure she knows why. She is direct, technical and short on patience.',
     goal: 'Find out what is really happening, test her theory without arguing, take ownership, and agree next steps you can honestly commit to.',
     groundRules: [
-      'The customer, organisation and case are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'You cannot see her tenant in this practice call. Ask what she sees and rely on her answers.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       'Do not promise a fix time or an outcome you cannot guarantee.',
@@ -107,7 +122,7 @@ const scenario = {
   },
 
   openingCore:
-    "New starters can't sign in. It's their first day and they're sitting in induction with no access.",
+    "I'm dealing with a new-starter sign-in problem. It's their first day and induction is under way.",
   impactVariants: {
     low: {
       summary: "It's one new starter, a contractor, but they started today and I want it sorted.",
@@ -237,7 +252,7 @@ const scenario = {
         'pull one',
       ],
       checking: "Give me a moment. I'll open one of the starters' sign-ins.",
-      text: "It shows the sign-in was interrupted by a policy. The screen doesn't tell me which one.",
+      text: "It shows the sign-in was interrupted by a policy. I haven't checked the Conditional Access tab yet.",
     },
   ],
   unknownFacts: [
@@ -478,7 +493,7 @@ const scenario = {
       statement:
         "It's the licences. The HR feed lags every time, and the new accounts don't have theirs yet.",
       truth:
-        'Every starter account shows a licence, so licences are not the cause. The sign-in is stopped by a security policy that was changed last Thursday, which the new accounts meet on their first sign-in. She is right only that it concerns new accounts.',
+        'The accounts show licences assigned, but that alone does not establish the cause. The sign-in is stopped by a security policy that was changed last Thursday, which the new accounts meet on their first sign-in. She is right only that it concerns new accounts.',
     },
   ],
 
@@ -573,7 +588,7 @@ const scenario = {
   expectedOutcome:
     "Nadia feels heard and not lectured. She and the engineer have agreed to look at the sign-in record for one starter and to involve her security team about last Thursday's policy change. The engineer owns the case and has given a specific time for the next update, with no promise of a fix time.",
   evaluatorNotes:
-    "Root cause: Litware's security team changed a sign-in policy last Thursday and Nadia only saw the change notes this morning. Accounts whose first sign-in falls after that change are stopped on day one, on handed-out laptops over the guest network with nothing set up. Licences are fine. Her theory is right only that it concerns new accounts, and she has not pulled a sign-in record. A strong call respects her expertise, tests the theory with evidence rather than argument, finds who is unaffected and what changed, asks for one sign-in record, owns the case, promises no time, and agrees how the security team is involved.",
+    "Root cause: Litware's security team changed a sign-in policy last Thursday and Nadia only saw the change notes this morning. The policy requires compliant laptops for company apps; the new laptops are not enrolled, while existing staff use compliant devices. Licences show as assigned. Her theory is right only that it concerns new accounts, and she has not pulled a sign-in record. A strong call respects her expertise, tests the theory with evidence rather than argument, finds who is unaffected and what changed, asks for one sign-in record, owns the case, promises no time, and agrees how the security team is involved.",
 } satisfies ScenarioInput;
 
 export default scenario;

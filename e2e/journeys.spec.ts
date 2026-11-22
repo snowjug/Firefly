@@ -43,9 +43,9 @@ async function chooseScenarioAndOpenBrief(page: Page): Promise<void> {
   // The workspace tidies its address once the list has arrived; a choice made before that is lost.
   await expect(page).toHaveURL(/[?&]scenario=/);
 
-  await page.getByRole('radio', { name: scenario.title, exact: true }).check();
+  await page.getByRole('radio', { name: scenario.shortTitle, exact: true }).check();
   await expect(region(page, scenario.title)).toBeVisible();
-  await region(page, scenario.title).getByRole('link', { name: 'Review brief' }).click();
+  await region(page, scenario.title).getByRole('link', { name: 'Start configuration' }).click();
   await expect(page).toHaveTitle(`Case brief: ${scenario.title} \u00b7 Firefly`);
   await expect(page.getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
 }
@@ -146,7 +146,7 @@ test('by pointer and typing only: "Start a text-only call", the reply box, End c
     // The call asked about every hidden fact, so the report says every one was found.
     expect(report.discovery.found).toBe(report.discovery.total);
     expect(report.discovery.total).toBeGreaterThan(0);
-    await expect(region(page, 'Discovery')).toContainText(
+    await expect(region(page, 'Discovery review')).toContainText(
       `${report.discovery.found} of ${report.discovery.total} hidden facts found`,
     );
     const transcript = region(page, 'Transcript');

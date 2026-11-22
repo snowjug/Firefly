@@ -284,9 +284,11 @@ describe('a terse customer', () => {
     let asked = 0;
     for (const startingTemperature of ['anxious', 'frustrated', 'angry'] as const) {
       for (let seed = 1; seed <= 4; seed++) {
+        // "Let me check that." is a vague commitment, which the customer asks about (see below):
+        // it is not what this is about, so the engineer only asks and waits.
         const contexts = await captureContexts(
           scenarioFor({ startingTemperature, style: 'terse', callStage: 'follow-up' }, seed),
-          [GREET, 'What laptop are you using?', 'Let me check that.', 'One moment please.'],
+          [GREET, 'What laptop are you using?', 'One moment please.', 'Thanks for waiting.'],
         );
         for (const ctx of contexts) {
           const { push } = planReply(ctx);

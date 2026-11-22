@@ -3,9 +3,15 @@ import {
   type CurveballType,
   type TemperatureBandId,
 } from '#shared/domain/vocab.ts';
-import { describeCommitment } from '../engine/memory.ts';
+import { describeCommitment, spokenTime } from '../engine/memory.ts';
 import type { CustomerGenerationContext } from '../engine/pipeline.ts';
-import { planReply, type Flavour, type PlanPush, type Reaction } from '../engine/plan.ts';
+import {
+  planReply,
+  type Flavour,
+  type PlanPush,
+  type Reaction,
+  type ReplyPlan,
+} from '../engine/plan.ts';
 import { isSilent } from './facts.ts';
 
 // The dynamic part of the customer prompt: how the customer feels right now, how they react to what
@@ -80,7 +86,7 @@ export function moodLines(ctx: CustomerGenerationContext): string[] {
 const quoted = (text: string) => `"${text.replace(/"/g, "'")}"`;
 
 const FIXED_REACTION: Record<
-  Exclude<Reaction, 'confused' | 'conflicting-commitment' | 'echo'>,
+  Exclude<Reaction, 'confused' | 'conflicting-commitment' | 'echo' | 'plan-accepted' | 'closing'>,
   string
 > = {
   blamed:
@@ -104,12 +110,16 @@ const FIXED_REACTION: Record<
   'unsupported-promise':
     'The engineer promised a result or a time they cannot be sure of. Show reasonable doubt: ask what that depends on or how they can be sure.',
   'vague-commitment':
-    "The engineer's commitment was vague. Politely challenge it: ask who exactly is taking this on, or what happens next and when.",
+    'The engineer\'s commitment was vague: it has no time. Politely challenge it, once, in your own words and in keeping with your mood: ask when you will hear back (for example "When will I hear back?") or, if nobody has said who is taking it on, who exactly is taking this on. If they have already given you a time, do not ask again.',
   'summary-wrong':
     'The engineer summarised what they understood, but it contains something you did not say. Politely say that is not what you said, and put it right in one sentence using only what you have told them.',
   ownership:
     'The engineer said they will take responsibility. You feel noticeably more reassured; acknowledge that briefly.',
   'next-steps': 'The engineer gave you a specific next step with a time. Acknowledge it briefly.',
+  'echo-confirmed':
+    'The engineer has confirmed what you said back to them. Accept it briefly, in your own words, for example "That works for me."',
+  'offer-answered':
+    'You asked whether the engineer needs anything from your side, and they have answered. Acknowledge it in a few words. Do not ask for anything else.',
   'knows-case':
     'The engineer showed they know about your earlier contact. Acknowledge that with some relief, briefly.',
   'update-given':
@@ -144,9 +154,25 @@ const FIXED_REACTION: Record<
     'The engineer corrected something they had said. Accept the correction graciously, in a few words.',
   instruction:
     'The engineer gave you something to do. Say you will try it. Do not make up what happens when you do.',
-  closing:
-    'The engineer is wrapping up the call. React as a customer ending a call would: say whether you feel clear about what happens next, thank them briefly, and ask about anything still unclear, such as what happens next or when you will hear back. Do not raise new problems.',
 };
+
+/** What the engineer's commitment was, in the words the customer would have heard it. */
+function commitmentLead(ctx: CustomerGenerationContext): string {
+  const { classification: c } = ctx;
+  const parts: string[] = [];
+  if (c.ownership === 'clear') parts.push('The engineer said they will take responsibility.');
+  if (c.nextSteps === 'specific') parts.push('They gave a specific next step with a time.');
+  return parts.length > 0 ? parts.join(' ') : 'The engineer made a clear commitment.';
+}
+
+/** How the customer closes the call: the answer to "anything else?", or a goodbye. */
+function closingText(plan: ReplyPlan): string {
+  if (plan.close === 'asks-more') {
+    return `The engineer is wrapping up the call and asking whether there is anything else, or anything they need from you. Answer in a few words: usually that there is nothing else, for example ${quoted("No, I think that's everything.")}${plan.offer ? ` You may instead offer to ask ${plan.offer}, since you have said they would know.` : ''} Do not raise new problems, recap the case or ask for anything.`;
+  }
+  const goodbye = plan.close === 'farewell';
+  return `The engineer is wrapping up the call${goodbye ? ' and saying goodbye' : ''}. Close it naturally, in one short line that fits your mood and style, for example ${quoted("Thank you. I'll wait for your update.")}${goodbye ? ` or ${quoted('Thanks, bye.')}` : ''} Do not use the same closing line as before. Do not raise new problems, recap the case or ask for anything.`;
+}
 
 function reactionText(reaction: Reaction, ctx: CustomerGenerationContext): string {
   const plan = planReply(ctx);
@@ -171,10 +197,20 @@ function reactionText(reaction: Reaction, ctx: CustomerGenerationContext): strin
         ? `The engineer gave a time (${quoted(commitment.due)}) that differs from the one they gave earlier (${quoted(conflict.due)}). Politely point out the difference and ask which one it is.`
         : 'The engineer gave a time that differs from the one they gave earlier. Politely point out the difference and ask which one it is.';
     }
+    case 'vague-commitment':
+      return ctx.scenario.config.style === 'terse'
+        ? `${FIXED_REACTION['vague-commitment']} Put it in a few words.`
+        : FIXED_REACTION['vague-commitment'];
     case 'echo':
       return plan.echo
-        ? `The engineer made a commitment. Say it back as a short question to check you have it right, keeping its meaning: ${quoted(`So you'll ${describeCommitment(plan.echo)}?`)}`
+        ? `${commitmentLead(ctx)} Say it back as a short question to check you have it right (you may end with "is that right?" or "correct?"), keeping its meaning: ${quoted(`So you'll ${describeCommitment(plan.echo)}?`)}`
         : FIXED_REACTION['next-steps'];
+    case 'plan-accepted':
+      return plan.accept
+        ? `${commitmentLead(ctx)} Take it in briefly, in a few words that fit your mood and style: say it suits you and name the time, for example ${quoted(`Okay, ${plan.accept.due ? spokenTime(plan.accept.due) : 'then'} then.`)} Do not say it back as a question.`
+        : FIXED_REACTION['next-steps'];
+    case 'closing':
+      return closingText(plan);
     default:
       return FIXED_REACTION[reaction];
   }
@@ -228,6 +264,8 @@ const MOVE = {
     'The engineer has just answered your greeting. This is the moment to say why you are calling: do it briefly and naturally, using what you may say below.',
   notice:
     'The engineer started without a greeting or saying who they are. Say, mildly, that you are not sure who you are speaking to, before anything else.',
+  asksOffer:
+    'Once you have taken that in, ask just once whether the engineer needs anything from your side before then, for example "Is there anything you need from our side before then?" Do not ask it again later in the call.',
 } as const;
 
 // How the customer would describe a concern they raised earlier in the call.
@@ -295,7 +333,8 @@ export function turnGuidance(ctx: CustomerGenerationContext): TurnGuidance {
   const done = (reactions: string[], moves: string[]): TurnGuidance => ({
     reactions,
     moves,
-    timelineAsked: plan.push === 'timeline',
+    // Asking for a time after a vague commitment is asking for a time, whatever else was planned.
+    timelineAsked: plan.push === 'timeline' || plan.presses,
     followUpGiven: curveball.followUp,
   });
 
@@ -334,10 +373,13 @@ export function turnGuidance(ctx: CustomerGenerationContext): TurnGuidance {
         : PUSH[plan.push],
     );
   }
-  if (plan.flavour) moves.push(FLAVOUR[plan.flavour]);
+  if (plan.flavour && !(plan.flavour === 'challenge' && plan.presses)) {
+    moves.push(FLAVOUR[plan.flavour]);
+  }
+  if (plan.asksOffer) moves.push(MOVE.asksOffer);
   if (plan.closingCommitment && plan.reactions.includes('closing')) {
     moves.push(
-      `As the call closes, mention what the engineer committed to, in your own words: ${quoted(describeCommitment(plan.closingCommitment))}.`,
+      `As the call closes, mention what the engineer committed to, in your own words: ${quoted(describeCommitment(plan.closingCommitment))}. Keep it to the time or a few words; do not recap the case.`,
     );
   }
   if (plan.customerCheck && plan.reactions.includes('closing')) {

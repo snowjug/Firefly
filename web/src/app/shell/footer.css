@@ -16,6 +16,21 @@
 .ff-footer__text {
   margin: 0;
 }
+/* The links and the theme choice stay together, so a footer too narrow for all three puts the line of
+   text first and the pair after it, and does not strand the theme choice on a row of its own. */
+.ff-footer__end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-8);
+}
+/* From a desktop up the pair ends at the container's edge even when it has to wrap beneath the text (a
+   wider font than the design's own can need the room), instead of starting at the left of its own row. */
+@media (min-width: 64em) {
+  .ff-footer__end {
+    margin-inline-start: auto;
+  }
+}
 .ff-footer__links {
   display: flex;
   flex-wrap: wrap;
@@ -33,9 +48,42 @@
   display: flex;
 }
 
+/* The choice ends at the container's edge like everything else: its "Saved on this device" does not
+   keep a room of its own beside it but hangs above it for the moment it is shown. */
+.ff-footer__end .ff-theme-select {
+  position: relative;
+}
+.ff-footer__end .ff-theme-select__saved {
+  position: absolute;
+  inset-block-end: calc(100% + var(--sp-1));
+  inset-inline-end: 0;
+  min-inline-size: 0;
+  padding: var(--sp-0h) var(--sp-2);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-4);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* On a phone and a tablet every link and every segment of the choice is a target of 44 px. */
+@media (max-width: 48em) {
+  .ff-footer__links a {
+    min-block-size: var(--target);
+  }
+  .ff-footer__end .ff-segmented {
+    --_h: calc(var(--target) + 0.5rem);
+  }
+}
+
 @media (forced-colors: active) {
   .ff-footer {
     border-block-start-color: CanvasText;
+  }
+  .ff-footer__end .ff-theme-select__saved {
+    border-color: CanvasText;
+    box-shadow: none;
   }
 }
 @media print {

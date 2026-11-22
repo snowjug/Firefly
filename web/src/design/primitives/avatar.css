@@ -50,7 +50,7 @@
    still. While someone speaks, a second ring grows from it and fades (transform and opacity only);
    under reduced motion only the still ring is left. */
 .ff-avatar {
-  --_ring: var(--brand);
+  --_ring: var(--brand-stroke);
 }
 .ff-avatar--customer {
   --_ring: var(--voice-customer);

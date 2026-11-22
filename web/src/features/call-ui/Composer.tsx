@@ -28,9 +28,11 @@ export interface ComposerProps {
 /**
  * The typed reply: the text fallback, which is as much a way to hold the call as speaking is. Enter
  * sends, Shift+Enter adds a line, and a message that is too long says so and is not sent. Sending
- * waits (with its reason in a few words) while the customer replies. The text is only cleared once
- * the call has accepted it, so nothing typed is ever lost. The box takes the keyboard when it appears,
- * because the trainee just chose to type.
+ * waits (with its reason in a few words) while the customer replies, and the box then holds what was
+ * sent, dim, on one line and read-only, so it takes no more room than an empty one and does not look
+ * like a message that was not sent. The text is only cleared once the call has accepted it, so
+ * nothing typed is ever lost. The box takes the keyboard when it appears, because the trainee just
+ * chose to type.
  */
 export function Composer({
   maxChars,
@@ -40,6 +42,7 @@ export function Composer({
   initialDraft = '',
 }: ComposerProps) {
   const [draft, setDraft] = useState(initialDraft);
+  const waiting = gate.waiting === true;
   const form = useRef<HTMLFormElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const sending = useRef(false);
@@ -51,17 +54,23 @@ export function Composer({
     input.current?.focus({ preventScroll: true });
   }, []);
 
-  // Browsers without `field-sizing` grow the box by hand, up to six lines.
+  // Browsers without `field-sizing` grow the box by hand, up to six lines. While the customer
+  // replies it is one line whatever it holds, which the stylesheet sets.
   useEffect(() => {
     const element = input.current;
-    if (!element || supportsFieldSizing() || element.scrollHeight === 0) return;
+    if (!element || supportsFieldSizing()) return;
+    if (waiting) {
+      if (element.style.height) element.style.height = '';
+      return;
+    }
+    if (element.scrollHeight === 0) return;
     element.style.height = 'auto';
     element.style.height = `${Math.min(element.scrollHeight, MAX_HEIGHT_PX)}px`;
-  }, [draft]);
+  }, [draft, waiting]);
 
   const length = draft.length;
   const tooLong = length > maxChars;
-  const showCounter = length >= Math.floor(maxChars * COUNTER_FROM);
+  const showCounter = length >= Math.floor(maxChars * COUNTER_FROM) && !waiting;
   const waits = !gate.canSend || tooLong;
   const number = (value: number) => value.toLocaleString('en-GB');
 
@@ -118,6 +127,7 @@ export function Composer({
           aria-label="Your reply"
           aria-describedby={cx(keysId, reason && reasonId)}
           invalid={tooLong}
+          readOnly={waiting}
           placeholder="Type your reply"
           onChange={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={onKeyDown}

@@ -114,6 +114,49 @@ describe('the support case', () => {
     expect(await valueOf('Objective')).toHaveTextContent(standard.publicBrief.objective);
   });
 
+  it('heads the page with the same product tile as the scenario\u2019s details, the product and the title', async () => {
+    renderApp(briefPath());
+    await valueOf('Customer');
+    const head = document.querySelector('.brf-head') as HTMLElement;
+    expect(head.querySelector('.brf-tile')).toHaveClass('ff-accent', 'ff-accent--purple');
+    expect(head.querySelector('.brf-tile')).toHaveAttribute('aria-hidden', 'true');
+    expect(head).toHaveTextContent('Microsoft Teams \u00b7 Meetings');
+    expect(within(head).getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
+    expect(head).toHaveTextContent(standard.title);
+    expect(within(head).getByText('Synthetic scenario')).toBeVisible();
+    // The note that the scenario is made up stands next to the title, not at the far end of the row.
+    expect(within(head).getByText('Synthetic scenario').closest('.brf-titlerow')).toContainElement(
+      within(head).getByRole('heading', { level: 1 }),
+    );
+  });
+
+  it('names the practice mode and says what it means on screen, by the preset or the choice made', async () => {
+    const mode = async (query: string) => {
+      const { unmount } = renderApp(briefPath(query));
+      await valueOf('Customer');
+      const text = document.querySelector('.brf-mode')?.textContent;
+      unmount();
+      return text;
+    };
+    // Standard is Assessment practice by default; Starter is Guided; either can be chosen on purpose.
+    expect(await mode('')).toBe('Assessment practice. No tips on screen.');
+    expect(await mode('?difficulty=starter')).toBe(
+      'Guided practice. Short tips appear during the call.',
+    );
+    expect(await mode('?difficulty=challenge&hints=on')).toBe(
+      'Guided practice. Short tips appear during the call.',
+    );
+    expect(await mode('?difficulty=starter&hints=off')).toBe(
+      'Assessment practice. No tips on screen.',
+    );
+  });
+
+  it('never says "live hints" anywhere', async () => {
+    renderApp(briefPath('?hints=on'));
+    await valueOf('Customer');
+    expect(document.body.textContent ?? '').not.toMatch(/live hints/i);
+  });
+
   it('says the impact for the level that was chosen, in the words written for that level', async () => {
     const { unmount } = renderApp(briefPath('?impact=high'));
     const high = await valueOf('Impact');
@@ -209,7 +252,7 @@ describe('the support case', () => {
   it('ignores settings it cannot use, and says so', async () => {
     renderApp(briefPath('?difficulty=extreme&hints=maybe&impact=low&voice=voice-z'));
     const note = await screen.findByText(/Some settings in this link could not be used/);
-    expect(note).toHaveTextContent('Difficulty, Live hints, Voice');
+    expect(note).toHaveTextContent('Difficulty, Practice mode, Voice');
     expect(await valueOf('Impact')).toHaveTextContent('Low');
   });
 
@@ -646,6 +689,17 @@ describe('the privacy notice', () => {
     expect(wordCount(MICROPHONE_NOTICE)).toBeLessThanOrEqual(24);
   });
 
+  it('sits under the case rows, apart from the voice card, so the two columns are about as tall', async () => {
+    renderApp(briefPath());
+    const notice = await screen.findByRole('region', { name: 'Privacy notice' });
+    const caseFile = screen.getByRole('region', { name: 'Support case' });
+    expect(screen.getByRole('complementary', { name: 'Voice call' })).not.toContainElement(notice);
+    expect(notice.parentElement).toBe(caseFile.parentElement);
+    expect(
+      caseFile.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it('keeps the details behind a button, and tells the truth about this setup', async () => {
     const user = userEvent.setup();
     mockApi({ config: appConfig({ speech: AZURE_SPEECH }) });
@@ -901,6 +955,19 @@ describe('starting a call', () => {
       mode: 'immersive',
     });
     expect(vi.mocked(api.createSession).mock.calls[0]?.[0]).not.toHaveProperty('voice');
+  });
+
+  it('keeps the two ways to start together, the typed one right after the main one, and the way back apart', async () => {
+    renderApp(briefPath());
+    const main = await startVoice();
+    const typed = screen.getByRole('button', { name: 'Start a text-only call' });
+    const edit = screen.getAllByRole('link', { name: 'Edit scenario' }).at(-1) as HTMLElement;
+    const follows = (first: HTMLElement, second: HTMLElement) =>
+      Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(typed.parentElement).toBe(main.parentElement);
+    expect(edit.parentElement).not.toBe(main.parentElement);
+    expect(follows(main, typed)).toBe(true);
+    expect(follows(typed, edit)).toBe(true);
   });
 
   it('opens a text-only call from the quieter action', async () => {

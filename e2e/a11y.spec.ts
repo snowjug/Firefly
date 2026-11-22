@@ -18,6 +18,7 @@ import {
   startSpokenCall,
   structureProblems,
   test,
+  unpinBars,
   watchAnnouncements,
 } from './support/a11y.ts';
 import { callScreen } from './support/call-screen.ts';
@@ -238,39 +239,34 @@ for (const viewport of VIEWPORTS) {
       ).toHaveText('16 scenarios');
       await check(page, testInfo, 'scenarios', PUBLIC);
 
-      if (narrow) {
-        await page.getByRole('button', { name: 'Filters', exact: true }).click();
-        await expect(page.getByRole('combobox', { name: 'Product' })).toBeVisible();
-        await check(page, testInfo, 'scenarios with the filters open', PUBLIC);
-        await page.getByRole('combobox', { name: 'Product' }).selectOption('windows-11');
-        await check(page, testInfo, 'scenarios, filtered', PUBLIC);
+      // One stacked page at every width: the product rail, the carousel, then the chosen scenario.
+      await page.goto(`/scenarios?scenario=${HARD_SCENARIO_ID}`);
+      const pane = page.getByRole('region', { name: HARD.title, exact: true });
+      await expect(pane.getByRole('heading', { level: 2, name: HARD.title })).toBeVisible();
+      await check(page, testInfo, 'a scenario chosen', PUBLIC);
+      await pane.getByRole('button', { name: /^Customise/ }).click();
+      await pane
+        .getByRole('group', { name: /^Impact/ })
+        .getByRole('radio', { name: 'Low' })
+        .check();
+      // The header and the way-on bar are pinned to the edges of a phone, and a scan counts a control
+      // that is partly under one of them as obscured, wherever the page happens to be scrolled (a wider
+      // font puts the same control in a different place). Bring the first control of the set-up to the
+      // middle, and let the bars scroll with the page for this scan.
+      await pane
+        .getByRole('button', { name: 'Reset to scenario defaults' })
+        .evaluate((element) => element.scrollIntoView({ block: 'center' }));
+      await unpinBars(page);
+      await check(
+        page,
+        testInfo,
+        'a scenario with its set-up open and one setting changed',
+        PUBLIC,
+      );
 
-        await page.goto(`/scenarios?scenario=${HARD_SCENARIO_ID}`);
-        await expect(page.getByRole('heading', { level: 1, name: HARD.title })).toBeVisible();
-        await check(page, testInfo, 'a scenario on its own page', PUBLIC);
-        await page.getByRole('button', { name: /^Customise/ }).click();
-        await check(page, testInfo, 'a scenario with its set-up open', PUBLIC);
-      } else {
-        await page.goto(`/scenarios?scenario=${HARD_SCENARIO_ID}`);
-        const pane = page.getByRole('region', { name: HARD.title, exact: true });
-        await expect(pane.getByRole('heading', { level: 2, name: HARD.title })).toBeVisible();
-        await check(page, testInfo, 'a scenario chosen', PUBLIC);
-        await pane.getByRole('button', { name: /^Customise/ }).click();
-        await pane
-          .getByRole('group', { name: /^Impact/ })
-          .getByRole('radio', { name: 'Low' })
-          .check();
-        await check(
-          page,
-          testInfo,
-          'a scenario with its set-up open and one setting changed',
-          PUBLIC,
-        );
-
-        await page.goto('/scenarios?f_product=windows-11');
-        await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
-        await check(page, testInfo, 'scenarios filtered by product', PUBLIC);
-      }
+      await page.goto('/scenarios?f_product=windows-11');
+      await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
+      await check(page, testInfo, 'scenarios filtered by product', PUBLIC);
 
       await page.goto('/scenarios?f_product=dynamics-365&f_difficulty=starter');
       await expect(
@@ -464,14 +460,14 @@ for (const viewport of VIEWPORTS) {
         .first()
         .click();
       await page
-        .getByRole('button', { name: /^Show details for / })
+        .getByRole('button', { name: /^Show the exact turn for / })
         .first()
         .click();
       await page.getByRole('region', { name: 'About this report' }).locator('summary').click();
       await check(
         page,
         testInfo,
-        'report with behaviours, a fact and the explanation opened',
+        'report with behaviours, an exact turn and the explanation opened',
         PUBLIC,
       );
 

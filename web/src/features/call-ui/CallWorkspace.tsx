@@ -1,10 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { ClosingCheckDTO } from '#shared/domain/api.ts';
 import { MAX_MESSAGE_CHARS } from '#shared/domain/text.ts';
 import { Button, cx, Dialog, useAnnouncer, type CustomerState } from '../../design/index.ts';
+import { TipsStrip } from '../tips/index.ts';
 import type { CallActions, CallSnapshot } from '../call/contract.ts';
 import {
   briefPathFor,
   composerGate,
+  customerTurnCount,
   describeConnection,
   describeControls,
   describeCustomerState,
@@ -30,7 +33,12 @@ import { Preflight } from './Preflight.tsx';
 import { Recovery, RecoveryConfirmed, useRecoveryFeedback } from './Recovery.tsx';
 import { Transcript } from './Transcript.tsx';
 import { findControlsZone, findTalkControl, useRescueFocus } from './use-rescue-focus.ts';
-import { useLayoutMode, useReducedMotion, useVisualViewportHeight } from './use-layout.ts';
+import {
+  useLayoutMode,
+  useReducedMotion,
+  useShortScreen,
+  useVisualViewportHeight,
+} from './use-layout.ts';
 import { VoiceSettings } from './VoiceSettings.tsx';
 import './workspace.css';
 
@@ -39,6 +47,8 @@ export interface InitialUi {
   caseOpen?: boolean;
   endOpen?: boolean;
   settingsOpen?: boolean;
+  /** The tips strip is put away, as if "Hide tips" had been pressed. */
+  tipsHidden?: boolean;
   /** What is already typed in the reply box. */
   draft?: string;
   notes?: string;
@@ -67,6 +77,11 @@ export interface CallWorkspaceProps {
    * dialog offers it only when ending failed for that reason.
    */
   onDiscard?(): void | Promise<void>;
+  /**
+   * Asks the server for the closing check shown when ending a guided call. The screen only draws
+   * what comes back and never waits for it: a check that is slow or fails is left out.
+   */
+  loadClosingCheck?(signal: AbortSignal): Promise<ClosingCheckDTO>;
 }
 
 /**
@@ -153,6 +168,7 @@ function Workspace({
   initialUi,
   onEnded,
   onDiscard,
+  loadClosingCheck,
   stateView,
 }: CallWorkspaceProps & { stateView: CustomerStateView | null }) {
   const session = snapshot.session as NonNullable<CallSnapshot['session']>;
@@ -162,6 +178,7 @@ function Workspace({
   const layout = useLayoutMode();
   const narrow = layout === 'narrow';
   const wide = layout === 'wide';
+  const short = useShortScreen();
   const reducedMotion = useReducedMotion();
   const announce = useAnnouncer();
   const root = useRef<HTMLDivElement>(null);
@@ -345,8 +362,10 @@ function Workspace({
               statusId={statusId}
               micLevel={snapshot.micLevel}
               customerLevel={snapshot.customerLevel}
+              customerLevelMeasured={snapshot.customerLevelMeasured}
               reducedMotion={reducedMotion}
               compact={narrow}
+              trace={guided ? snapshot.stateHistory : null}
             />
           </div>
           {narrow ? null : <div className="cw-stage__zone">{zone('panel')}</div>}
@@ -366,6 +385,17 @@ function Workspace({
             titleId={transcriptTitle}
             showInputMode={showInputMode}
           />
+          {guided && !(narrow && short) ? (
+            // A small phone has no room for the strip beside the transcript and the dock: the
+            // transcript is what the screen is for, so the strip is left out there altogether.
+            <TipsStrip
+              stage={scenario.config.callStage}
+              traineeTurns={traineeTurnCount(snapshot.turns)}
+              customerTurns={customerTurnCount(snapshot.turns)}
+              customerBusy={phase === 'customer-speaking'}
+              defaultHidden={initialUi?.tipsHidden ?? false}
+            />
+          ) : null}
           {voice ? null : (
             <Composer
               maxChars={maxMessageChars}
@@ -409,6 +439,7 @@ function Workspace({
         voice={snapshot.voiceDetails.voice}
         style={snapshot.voiceDetails.style}
         support={snapshot.support}
+        provider={provider}
         actions={actions}
       />
 
@@ -424,6 +455,8 @@ function Workspace({
         problem={problem}
         onDiscard={onDiscard ? () => void discardCall() : undefined}
         discarding={discarding}
+        guided={guided}
+        loadClosingCheck={loadClosingCheck}
         onContinue={continueCall}
         onConfirm={() => void confirmEnd()}
       />

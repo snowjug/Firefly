@@ -1,0 +1,554 @@
+/* The six skills as a matrix of rows (one bordered list, not six cards) and the CARE review behind
+   one selector with a sliding line. The whole row of a skill is its button: the button is small, but
+   it stretches over the row. Rows come in one after another the first time the section scrolls
+   into view, and are simply there under reduced motion. A score no quote backs is drawn as a first
+   look: dashed segments, never a strong word. Tokens only. */
+
+/* ---- The matrix --------------------------------------------------------------------------- */
+.rp-skills {
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.rp-skills__head {
+  display: none;
+}
+.rp-skills__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-skill + .rp-skill {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+}
+
+/* Each row: the skill and its button, the score and its word, the evidence behind it, the reason. */
+.rp-skill__line {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name toggle'
+    'score count'
+    'why why';
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+}
+.rp-skill__name {
+  grid-area: name;
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.rp-skill__score {
+  grid-area: score;
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+}
+/* The number and its word move as one: a wrapped word would leave a dot at the start of a line. */
+.rp-skill__score .ff-scorebar__text {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.rp-skill__count {
+  grid-area: count;
+  justify-self: end;
+  align-self: center;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.rp-skill__why {
+  grid-area: why;
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+.rp-skill__toggle {
+  grid-area: toggle;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  justify-self: end;
+  min-block-size: var(--target);
+  padding-inline: var(--sp-2);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--brand-fg-2);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+/* The button stretches over the whole row, so the row is the target; links inside the opened
+   details sit below it and keep their own targets. */
+.rp-skill__toggle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.rp-skill__chevron {
+  transition: transform var(--dur-fast) var(--ease-easy);
+}
+.rp-skill__toggle[aria-expanded='true'] .rp-skill__chevron {
+  transform: rotate(180deg);
+}
+@media (hover: hover) {
+  .rp-skill__line:hover {
+    background: var(--bg-hover);
+  }
+}
+/* The button keeps the page's own focus ring. The row it stretches over is tinted as well, so it is
+   clear what the focus is on. */
+.rp-skill__line:has(.rp-skill__toggle:focus-visible) {
+  background: var(--bg-hover);
+}
+.rp-skill__panel {
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+.rp-skill__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.rp-skill__confidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+}
+
+/* A first look: the segments that were earned are drawn as dashed outlines, not as filled ones, so
+   a score that rests on no quote does not look as firm as one that does. */
+.rp-skill__bar--first .ff-scorebar__segment {
+  background: transparent;
+}
+.rp-skill__bar--first .ff-scorebar__fill {
+  box-sizing: border-box;
+  border: var(--stroke-w) dashed var(--brand-stroke);
+  border-radius: inherit;
+  background: transparent;
+}
+
+/* With room, a row is one line of facts and the reason under it: a matrix with a heading row. The
+   columns are fixed, so the skill's name never breaks and every row puts its parts in the same place. */
+@container (min-width: 52rem) {
+  .rp-skills__head {
+    display: grid;
+    grid-template-columns: 14rem 16rem minmax(0, 1fr) 9.5rem;
+    gap: var(--sp-4);
+    padding: var(--sp-2) var(--sp-4);
+    border-block-end: var(--stroke-w) solid var(--stroke-2);
+    color: var(--fg-3);
+    font-size: var(--fs-caption);
+    line-height: var(--lh-caption);
+    font-weight: var(--fw-semibold);
+  }
+  .rp-skill__line {
+    grid-template-columns: 14rem 16rem minmax(0, 1fr) 9.5rem;
+    grid-template-areas:
+      'name score count toggle'
+      'why why why why';
+    gap: var(--sp-1) var(--sp-4);
+  }
+  .rp-skill__count {
+    justify-self: start;
+  }
+}
+
+/* The rows come in one after another. Nothing is hidden without motion: the start state is only
+   there while motion is allowed, and the transition is a few tens of milliseconds a row. */
+@media (prefers-reduced-motion: no-preference) {
+  .rp-skills .rp-skill {
+    opacity: 0;
+    transform: translateY(var(--move-xs));
+    transition:
+      opacity var(--dur-slow) var(--ease-decelerate),
+      transform var(--dur-slow) var(--ease-decelerate);
+  }
+  .rp-skills[data-revealed] .rp-skill {
+    opacity: 1;
+    transform: none;
+  }
+  .rp-skills[data-revealed] .rp-skill:nth-child(2) {
+    transition-delay: var(--dur-stagger);
+  }
+  .rp-skills[data-revealed] .rp-skill:nth-child(3) {
+    transition-delay: calc(var(--dur-stagger) * 2);
+  }
+  .rp-skills[data-revealed] .rp-skill:nth-child(4) {
+    transition-delay: calc(var(--dur-stagger) * 3);
+  }
+  .rp-skills[data-revealed] .rp-skill:nth-child(5) {
+    transition-delay: calc(var(--dur-stagger) * 4);
+  }
+  .rp-skills[data-revealed] .rp-skill:nth-child(6) {
+    transition-delay: calc(var(--dur-stagger) * 5);
+  }
+  .rp-skill__panel:not([hidden]) {
+    animation: ff-enter var(--dur-normal) var(--ease-decelerate) both;
+  }
+}
+
+/* ---- CARE: four principles behind one selector -------------------------------------------- */
+.rp-care {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+/* The selector: the Tabs control as one row at every width. It scrolls sideways when the four do
+   not fit, and the edge that has more beyond it fades out. The line drawn by this review slides
+   under the chosen tab (only transform moves: its place and width are two numbers kept as custom
+   properties, measured in the row's own scroll, so it stays under the tab wherever the row is). */
+.rp-care__tabs {
+  position: relative;
+}
+.rp-care .rp-care__tabs {
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--sp-2);
+  scrollbar-width: none;
+}
+.rp-care .rp-care__tabs::-webkit-scrollbar {
+  display: none;
+}
+/* The fade is a mask (only its opacity matters, so it takes no colour of its own). */
+.rp-care__tabs[data-more='end'] {
+  -webkit-mask-image: linear-gradient(to right, currentColor calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to right, currentColor calc(100% - 2.5rem), transparent);
+}
+.rp-care__tabs[data-more='start'] {
+  -webkit-mask-image: linear-gradient(to left, currentColor calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to left, currentColor calc(100% - 2.5rem), transparent);
+}
+.rp-care__tabs[data-more='start end'] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    currentColor 2.5rem,
+    currentColor calc(100% - 2.5rem),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    currentColor 2.5rem,
+    currentColor calc(100% - 2.5rem),
+    transparent
+  );
+}
+/* A tab keeps its width (the four share the row when it is wide enough) and never changes it when
+   it is chosen: the name is the same weight either way. */
+.rp-care .ff-tab {
+  flex: 1 0 9.5rem;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  scroll-snap-align: start;
+  text-align: start;
+  white-space: normal;
+}
+.rp-care .ff-tab__label {
+  align-items: flex-start;
+}
+.rp-care .ff-tab--selected::before {
+  display: none;
+}
+.rp-care__tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+}
+.rp-care__tabname {
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.rp-care__indicator {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  inline-size: 1px;
+  block-size: 3px;
+  background: var(--brand-stroke);
+  transform-origin: 0 50%;
+  transform: translateX(var(--care-x, 0px)) scaleX(var(--care-w, 0));
+  transition: transform var(--dur-slow) var(--ease-easy);
+  pointer-events: none;
+}
+/* Under each name: a segment for each behaviour, and the count in words. In a tab with little room
+   the count is under the segments; with room it is beside them. */
+.rp-care__coverage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-0h);
+  color: var(--fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-regular);
+  white-space: nowrap;
+}
+@container (min-width: 40rem) {
+  .rp-care__coverage {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-0h) var(--sp-2);
+  }
+}
+/* A segment for each behaviour: solid when shown, light when partly shown, an empty outline when
+   not shown. The count is written beside them. */
+.rp-care__segments {
+  display: inline-flex;
+  gap: 2px;
+}
+.rp-care__seg {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px var(--stroke-accessible);
+}
+.rp-care__seg--shown {
+  background: var(--brand-stroke);
+  box-shadow: inset 0 0 0 1px var(--brand-stroke);
+}
+.rp-care__seg--partly {
+  background: var(--brand-tint-pressed);
+  box-shadow: inset 0 0 0 1px var(--brand-stroke);
+}
+.rp-care__seg--not-shown {
+  background: transparent;
+}
+
+.rp-care__panels {
+  padding: var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-block-start: 0;
+  border-radius: 0 0 var(--r-xl) var(--r-xl);
+  background: var(--bg-raised);
+}
+.rp-care__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+.rp-care__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-4);
+}
+.rp-care__name {
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+}
+/* What the level rests on, on a line of its own under the name and the level. */
+.rp-care__basis {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: var(--sp-0h) var(--sp-4);
+  margin: 0;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-care__summary {
+  text-wrap: pretty;
+}
+.rp-care__shows,
+.rp-care__source {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+/* The next action is the one sentence that is set apart: an accent edge and a tint, so it does not
+   read like the observation above it. What is left of the guidance stays plain. */
+.rp-care__action .rp-field__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.rp-care__next {
+  padding: var(--sp-2) var(--sp-3);
+  border-inline-start: 3px solid var(--brand-stroke);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: var(--brand-tint);
+  font-weight: var(--fw-semibold);
+  text-wrap: pretty;
+}
+.rp-care__nextmore {
+  color: var(--fg-2);
+  text-wrap: pretty;
+}
+.rp-care__more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-1) var(--sp-4);
+}
+/* The toggle and what it opens are part of this row: the button, and the behaviours on a line of
+   their own below it. */
+.rp-care__toggle {
+  display: contents;
+}
+.rp-care__more .ff-disclosure__panel {
+  flex: 1 0 100%;
+}
+.rp-care__more .ff-disclosure__summary {
+  white-space: nowrap;
+}
+.rp-behaviours {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rp-behaviour {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1h);
+  padding-block-start: var(--sp-3);
+  border-block-start: var(--stroke-w) solid var(--stroke-3);
+}
+.rp-behaviour__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+}
+.rp-behaviour__label {
+  font-weight: var(--fw-semibold);
+}
+.rp-behaviour__note {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+/* CBCF is not applied: said plainly first, then in the report's own words. */
+.rp-care__cbcf {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  max-inline-size: var(--read-max);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.rp-care__cbcf .ff-icon {
+  flex: none;
+  margin-block-start: 1px;
+}
+
+@media (forced-colors: active) {
+  .rp-skills,
+  .rp-care__panels {
+    border-color: CanvasText;
+  }
+  .rp-skill + .rp-skill {
+    border-color: CanvasText;
+  }
+  .rp-skill__toggle {
+    color: LinkText;
+  }
+  .rp-skill__bar--first .ff-scorebar__fill {
+    border-color: Highlight;
+  }
+  .rp-care__indicator {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .rp-care__next {
+    border-color: Highlight;
+  }
+  .rp-care__seg {
+    forced-color-adjust: none;
+    box-shadow: inset 0 0 0 1px CanvasText;
+  }
+  .rp-care__seg--shown {
+    background: CanvasText;
+  }
+  .rp-care__seg--partly {
+    background: GrayText;
+  }
+}
+
+/* On paper: a score row is its name, its score and word, the reason once and one quote; the four
+   principles are four short blocks one under another (what was observed, one quote, the next
+   action), with no selector and no list of behaviours. */
+@media print {
+  .rp-skills {
+    overflow: visible;
+  }
+  .rp-skills .rp-skill {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    break-inside: avoid;
+  }
+  .rp-skill__toggle,
+  .rp-skills__head {
+    display: none !important;
+  }
+  .rp-skill__line {
+    padding-block: var(--sp-2);
+  }
+  .rp-skill__name,
+  .rp-care__name {
+    break-after: avoid;
+  }
+  .rp-skill__panel[hidden] {
+    display: block !important;
+  }
+  .rp-skill__panel {
+    padding-block-end: var(--sp-2);
+    animation: none;
+  }
+  .rp-skill__body {
+    gap: var(--sp-2);
+  }
+  .rp-skill__body .rp-quotes > :nth-child(n + 2) {
+    display: none;
+  }
+  .rp-care__tabs,
+  .rp-care__indicator,
+  .rp-care__more {
+    display: none !important;
+  }
+  .rp-care__panels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-4) var(--sp-6);
+    padding: 0;
+    border: 0;
+    background: Canvas;
+  }
+  .rp-care .ff-tabpanel--stacked {
+    grid-area: auto;
+    opacity: 1;
+    visibility: visible;
+    break-inside: avoid;
+  }
+  .rp-care__panel {
+    gap: var(--sp-2);
+  }
+  .rp-care__next {
+    border-inline-start-color: CanvasText;
+    background: Canvas;
+  }
+}

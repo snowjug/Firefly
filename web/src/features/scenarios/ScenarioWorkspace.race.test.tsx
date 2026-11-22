@@ -3,18 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PublicScenarioDTO } from '#shared/domain/api.ts';
 import { api } from '../../lib/api.ts';
 import type * as ApiModule from '../../lib/api.ts';
+import type * as CarouselModule from '../../design/carousel/Carousel.tsx';
 import { sortScenarios } from './catalogue.ts';
-import type * as ListModule from './ScenarioList.tsx';
+import { cardTitle } from './labels.ts';
 import { publicScenarios } from './testing/fixtures.ts';
-import { mockApi, renderApp, stubViewport } from './testing/harness.tsx';
+import { mockApi, renderApp } from './testing/harness.tsx';
 
 // The workspace tidies its address once the scenarios have arrived (it adds the scenario it
-// selected). That tidying was worked out in the render that showed the list and ran a moment later,
-// in an effect. A choice made in between (a filter or a scenario) was then overwritten by the
+// selected). That tidying was worked out in the render that showed the gallery and ran a moment
+// later, in an effect. A choice made in between (a filter or a scenario) was then overwritten by the
 // tidying of a screen the person had already moved on from, and silently lost.
 //
-// These tests make the choice at the one moment that is hard to hit by hand: while the list is being
-// put on the page, after the render that worked out the tidying and before the effect that applies it.
+// These tests make the choice at the one moment that is hard to hit by hand: while the gallery is
+// being put on the page, after the render that worked out the tidying and before the effect that
+// applies it.
 
 vi.mock('../../lib/api.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiModule>();
@@ -24,21 +26,21 @@ vi.mock('../../lib/api.ts', async (importOriginal) => {
   };
 });
 
-// What happens the moment the list is first put on the page: the list itself is the real one.
-const whenListCommits = vi.hoisted(() => ({ run: null as (() => void) | null }));
+// What happens the moment the gallery is first put on the page: the carousel itself is the real one.
+const whenGalleryCommits = vi.hoisted(() => ({ run: null as (() => void) | null }));
 
-vi.mock('./ScenarioList.tsx', async (importOriginal) => {
-  const actual = await importOriginal<typeof ListModule>();
+vi.mock('../../design/carousel/Carousel.tsx', async (importOriginal) => {
+  const actual = await importOriginal<typeof CarouselModule>();
   const { createElement, useLayoutEffect } = await import('react');
-  function ListThatSaysWhen(props: Parameters<typeof actual.ScenarioList>[0]) {
+  function GalleryThatSaysWhen(props: Parameters<typeof actual.Carousel>[0]) {
     useLayoutEffect(() => {
-      const run = whenListCommits.run;
-      whenListCommits.run = null;
+      const run = whenGalleryCommits.run;
+      whenGalleryCommits.run = null;
       run?.();
     }, []);
-    return createElement(actual.ScenarioList, props);
+    return createElement(actual.Carousel, props);
   }
-  return { ...actual, ScenarioList: ListThatSaysWhen };
+  return { ...actual, Carousel: GalleryThatSaysWhen };
 });
 
 const scenarios = publicScenarios();
@@ -47,59 +49,62 @@ const second = sorted[1] as PublicScenarioDTO;
 
 beforeEach(() => {
   mockApi();
-  stubViewport(true);
 });
 afterEach(() => {
   cleanup();
-  whenListCommits.run = null;
+  whenGalleryCommits.run = null;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
-/** Opens the workspace with the list still on its way, and lets it arrive; `choice` is made as it does. */
+/** Opens the workspace with the scenarios still on their way, and lets them arrive; `choice` is made as they do. */
 async function arriveWhile(choice: () => void) {
   let arrive: (list: PublicScenarioDTO[]) => void = () => undefined;
   vi.mocked(api.scenarios).mockReturnValue(new Promise((resolve) => (arrive = resolve)));
   const app = renderApp('/scenarios');
   expect(app.where()).toBe('/scenarios');
 
-  whenListCommits.run = choice;
+  whenGalleryCommits.run = choice;
   await act(async () => arrive(scenarios));
-  expect(whenListCommits.run, 'the choice was made as the list arrived').toBeNull();
+  expect(whenGalleryCommits.run, 'the choice was made as the gallery arrived').toBeNull();
   return app;
 }
 
 /** Lets anything left over from the tidying happen, then looks again. */
 const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 60)));
 
-const list = () => screen.getByRole('group', { name: 'Scenarios' });
+const gallery = () => screen.getByRole('region', { name: 'Scenarios' });
 
-describe('a choice made as the list arrives is kept', () => {
+describe('a choice made as the gallery arrives is kept', () => {
   it('a filter', async () => {
     const app = await arriveWhile(() => {
-      const product = screen.getByRole('combobox', { name: 'Product' }) as HTMLSelectElement;
-      product.value = 'azure';
-      product.dispatchEvent(new Event('change', { bubbles: true }));
+      within(screen.getByRole('group', { name: 'Product' }))
+        .getByRole('radio', { name: /^Azure/ })
+        .click();
     });
 
     await waitFor(() => expect(app.query().get('f_product')).toBe('azure'));
     await settle();
     expect(app.query().get('f_product')).toBe('azure');
-    expect(screen.getByRole('combobox', { name: 'Product' })).toHaveValue('azure');
-    expect(within(list()).getAllByRole('radio')).toHaveLength(
+    expect(
+      within(screen.getByRole('group', { name: 'Product' })).getByRole('radio', { name: /^Azure/ }),
+    ).toBeChecked();
+    expect(within(gallery()).getAllByRole('radio')).toHaveLength(
       scenarios.filter((scenario) => scenario.product.id === 'azure').length,
     );
   });
 
   it('a scenario', async () => {
     const app = await arriveWhile(() => {
-      within(list()).getByRole('radio', { name: second.title }).click();
+      within(gallery())
+        .getByRole('radio', { name: cardTitle(second) })
+        .click();
     });
 
     await waitFor(() => expect(app.query().get('scenario')).toBe(second.id));
     await settle();
     expect(app.query().get('scenario')).toBe(second.id);
-    expect(within(list()).getByRole('radio', { name: second.title })).toBeChecked();
+    expect(within(gallery()).getByRole('radio', { name: cardTitle(second) })).toBeChecked();
     expect(screen.getByRole('heading', { level: 2, name: second.title })).toBeVisible();
   });
 

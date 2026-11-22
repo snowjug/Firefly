@@ -17,11 +17,13 @@ import {
   clock,
   clockSince,
   composerGate,
+  customerTurnCount,
   describeCase,
   describeConnection,
   describeControls,
   describeCustomerState,
   describeStatus,
+  describeTrace,
   isEndFailure,
   latestCustomerTurn,
   preferredLanguage,
@@ -30,6 +32,8 @@ import {
   SHORT_CALL_TURNS,
   stateChangeSentence,
   timeMarks,
+  traceShape,
+  TRACE_POINTS,
   traineeTurnCount,
   unsavedMessage,
   type ControlsInput,
@@ -114,7 +118,7 @@ describe('the status of the call', () => {
     expect(status({ stage: 'transcribing', micOpen: false })).toBe('processing-speech');
   });
 
-  it('says each state in the voice layer’s own words', () => {
+  it('says each state in the voice layer’s own words, apart from the trainee’s own turn', () => {
     const label = (input: Partial<StatusInput>) =>
       describeStatus({
         stage: 'ready',
@@ -125,7 +129,6 @@ describe('the status of the call', () => {
         ...input,
       }).label;
     expect(label({})).toBe(VOICE_STATE_TEXT['microphone-ready'].label);
-    expect(label({ stage: 'listening' })).toBe(VOICE_STATE_TEXT.listening.label);
     expect(label({ stage: 'listening', speechDetected: true })).toBe(
       VOICE_STATE_TEXT['speech-detected'].label,
     );
@@ -136,7 +139,6 @@ describe('the status of the call', () => {
     expect(label({ stage: 'customer-speaking' })).toBe(VOICE_STATE_TEXT['customer-speaking'].label);
     expect(label({ stage: 'paused' })).toBe(VOICE_STATE_TEXT.paused.label);
     expect(label({ stage: 'muted' })).toBe(VOICE_STATE_TEXT.muted.label);
-    expect(label({ mode: 'text' })).toBe(VOICE_STATE_TEXT['text-fallback'].label);
     expect(label({ stage: 'ending', phase: 'ending' })).toBe(VOICE_STATE_TEXT['ending-call'].label);
     expect(label({ stage: 'evaluating', phase: 'ending' })).toBe(VOICE_STATE_TEXT.evaluating.label);
     expect(label({ stage: 'completed', phase: 'completed' })).toBe(
@@ -145,6 +147,25 @@ describe('the status of the call', () => {
     // The states the voice layer has no word for keep ours.
     expect(label({ stage: 'retrying' })).toBe('Retrying');
     expect(label({ stage: 'ready', online: false })).toBe('Offline');
+  });
+
+  it('says whose turn it is: "Your turn" in a typed call and "Listening to you" while the microphone is open', () => {
+    const label = (input: Partial<StatusInput>) =>
+      describeStatus({
+        stage: 'ready',
+        mode: 'voice',
+        phase: 'ready-for-next-turn',
+        speechDetected: false,
+        microphone: 'granted',
+        ...input,
+      }).label;
+    // The voice layer's "Typing" reads as the customer typing, and its bare "Listening" does not say
+    // whose turn it is. Its announcements are unchanged, and the ids stay.
+    expect(label({ mode: 'text' })).toBe('Your turn');
+    expect(label({ stage: 'listening' })).toBe('Listening to you');
+    expect(status({ mode: 'text' })).toBe('text-fallback');
+    expect(status({ stage: 'listening' })).toBe('listening');
+    expect(VOICE_STATE_TEXT['text-fallback'].label).toBe('Typing');
   });
 
   it('puts being offline above a pause, and a pause above a problem, so it never lies about whose turn it is', () => {
@@ -255,6 +276,31 @@ describe('the status of the call', () => {
     expect(new Set(turn.map((item) => item.label)).size).toBe(4);
     expect(new Set(turn.map((item) => item.icon)).size).toBe(4);
   });
+
+  it('gives the three-point signal its words only while the customer’s reply is being made', () => {
+    const signals = CALL_STAGES.map((stage) =>
+      describeStatus({
+        stage,
+        mode: 'voice',
+        phase: 'ready-for-next-turn',
+        speechDetected: false,
+        microphone: 'granted',
+      }),
+    ).filter((item) => item.signal !== null);
+    expect(signals.map((item) => [item.id, item.signal])).toEqual([
+      ['generating-reply', 'Customer is responding'],
+    ]);
+    // Every other state keeps its own label, which is the only thing a reader hears for it.
+    expect(
+      describeStatus({
+        stage: 'transcribing',
+        mode: 'voice',
+        phase: 'transcribing',
+        speechDetected: false,
+        microphone: 'granted',
+      }).signal,
+    ).toBeNull();
+  });
 });
 
 describe('the connection badge', () => {
@@ -334,6 +380,66 @@ describe('the customer’s state', () => {
   });
 });
 
+describe('the state trace', () => {
+  const BOX = { width: 120, height: 24, pad: 3 };
+  const named = (band: TemperatureBandId, turnIndex: number): CallStatePoint => ({
+    turnIndex,
+    band,
+    label: TEMPERATURE_BANDS.find((candidate) => candidate.id === band)!.label,
+  });
+
+  it('draws nothing for a call with no history', () => {
+    expect(traceShape([], BOX)).toEqual([]);
+    expect(describeTrace([])).toBe('');
+  });
+
+  it('puts the oldest point at the left and the newest at the right, and a hotter customer higher', () => {
+    const shape = traceShape([point('calm', 1), point('angry', 2), point('concerned', 3)], BOX);
+    expect(shape.map((p) => p.band)).toEqual(['calm', 'angry', 'concerned']);
+    expect(shape[0]?.x).toBe(BOX.pad);
+    expect(shape[2]?.x).toBe(BOX.width - BOX.pad);
+    // Up is smaller y: calm sits on the floor of the box, and angry above concerned.
+    expect(shape[0]?.y).toBe(BOX.height - BOX.pad);
+    expect(shape[1]!.y).toBeLessThan(shape[2]!.y);
+    expect(shape[2]!.y).toBeLessThan(shape[0]!.y);
+    for (const p of shape) {
+      expect(p.x).toBeGreaterThanOrEqual(BOX.pad);
+      expect(p.x).toBeLessThanOrEqual(BOX.width - BOX.pad);
+      expect(p.y).toBeGreaterThanOrEqual(BOX.pad);
+      expect(p.y).toBeLessThanOrEqual(BOX.height - BOX.pad);
+    }
+  });
+
+  it('puts the only point of a short call at the right, where the newest always is', () => {
+    expect(traceShape([point('frustrated', 1)], BOX)).toEqual([
+      expect.objectContaining({ x: BOX.width - BOX.pad, band: 'frustrated' }),
+    ]);
+  });
+
+  it('draws only the latest stretch of a long call', () => {
+    const long = Array.from({ length: TRACE_POINTS + 10 }, (_, index) =>
+      point(index < 10 ? 'angry' : 'calm', index),
+    );
+    const shape = traceShape(long, BOX);
+    expect(shape).toHaveLength(TRACE_POINTS);
+    expect(shape.every((p) => p.band === 'calm')).toBe(true);
+  });
+
+  it('says it in words, oldest first, once for each state and without a number', () => {
+    expect(describeTrace([named('calm', 1)])).toBe('Customer state so far: calm.');
+    expect(
+      describeTrace([named('calm', 1), named('calm', 2), named('concerned', 3), named('calm', 4)]),
+    ).toBe('Customer state so far: calm, then concerned, then calm.');
+    const many = (
+      ['calm', 'concerned', 'frustrated', 'angry', 'frustrated', 'concerned'] as const
+    ).map((band, index) => named(band, index));
+    const sentence = describeTrace(many);
+    expect(sentence.split(', then ')).toHaveLength(5);
+    expect(sentence).not.toContain('calm');
+    expect(sentence).not.toMatch(/\d/);
+  });
+});
+
 describe('times and counts', () => {
   it('writes minutes and seconds, and never goes below zero or to NaN', () => {
     expect(clock(0)).toBe('0:00');
@@ -363,7 +469,7 @@ describe('times and counts', () => {
     interrupted: false,
   });
 
-  it('stamps the first turn and then one every minute, counted from the last stamp', () => {
+  it('stamps every turn the same way, counted from the start of the call', () => {
     const turns = [
       turnAt('a', 0),
       turnAt('b', 20),
@@ -374,7 +480,10 @@ describe('times and counts', () => {
     ];
     expect([...timeMarks(turns, '2026-11-21T09:00:00.000Z')]).toEqual([
       ['a', '0:00'],
+      ['b', '0:20'],
+      ['c', '0:59'],
       ['d', '1:00'],
+      ['e', '1:40'],
       ['f', '2:01'],
     ]);
   });
@@ -401,6 +510,8 @@ describe('times and counts', () => {
       trainee('failed', null),
     ];
     expect(traineeTurnCount(turns)).toBe(1);
+    expect(customerTurnCount(turns)).toBe(1);
+    expect(customerTurnCount([])).toBe(0);
     expect(unsavedMessage(turns)).toBe(true);
     // A failed turn the server already has (a failed reply, not a failed save) is not unsaved.
     expect(unsavedMessage([turnAt('c', 0), trainee('failed', 4)])).toBe(false);
@@ -695,9 +806,30 @@ describe('the reply box', () => {
   });
 
   it('waits, in a few words, while the customer replies and while the call closes', () => {
-    expect(gate('processing')).toEqual({ canSend: false, reason: 'Waiting for the customer.' });
+    expect(gate('processing')).toEqual({
+      canSend: false,
+      reason: 'Waiting for the customer.',
+      waiting: true,
+    });
     expect(gate('ending').reason).toBe('The call is ending.');
     expect(gate('completed').canSend).toBe(false);
+  });
+
+  it('holds the box read-only only while the customer replies, not for any other wait', () => {
+    // A message that was sent is shown, quietly, until the reply is in; every other wait (a problem to
+    // handle first, the limit, the end of the call) leaves the box as the person left it.
+    expect(gate('processing').waiting).toBe(true);
+    for (const other of [
+      gate('ready-for-next-turn'),
+      gate('ending'),
+      gate('completed'),
+      gate('ready', describeProblem('reply-failed')),
+      gate('ready', describeProblem('offline')),
+      gate('ready', describeProblem('turn-limit')),
+      gate('ready', describeProblem('session-ended')),
+    ]) {
+      expect(other.waiting).toBeFalsy();
+    }
   });
 
   it('waits for a problem that needs handling first, and says which', () => {

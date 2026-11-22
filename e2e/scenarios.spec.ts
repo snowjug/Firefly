@@ -1,21 +1,22 @@
 import type { Locator, Page } from '@playwright/test';
 import type { PublicScenarioDTO } from '../shared/domain/api.ts';
+import { formatEstimate } from '../shared/domain/duration.ts';
 import {
   CALL_STAGE_LABELS,
   CURVEBALL_LABELS,
+  DIMENSIONS,
   IMPACT_LABELS,
-  ISSUE_TYPE_LABELS,
   PROFICIENCY_LABELS,
   START_TEMPERATURE_LABELS,
-  STYLE_LABELS,
 } from '../shared/domain/vocab.ts';
 import { expect, test } from './support/fixtures.ts';
 import { leakedSecrets, libraryScenarios } from './support/scenario-library.ts';
 
-// Choosing a scenario, setting up the call, and reading the case brief. The workspace is a split view:
-// the product, issue type and difficulty filters and the list on the left, the chosen scenario on the
-// right. What is chosen lives in the address, so a view can be shared and survives a refresh. (The
-// narrow-screen version of the same workspace is walked in mobile.spec.ts.)
+// Choosing a scenario, setting up the call, and reading the case brief. The workspace is one page in
+// three areas: the product rail, a carousel of the scenarios it leaves, and the details of the chosen
+// one (what it is on the left, how to run it and "Start configuration" on the right). What is chosen
+// lives in the address, so a view can be shared and survives a refresh. How the carousel itself
+// behaves (keys, dragging, touch, the peek, themes) is in carousel.spec.ts.
 
 const MARCUS = 'outlook-shared-mailbox-missing'; // starter, first contact, calm, terse, novice
 const EXCHANGE = 'exchange-mail-delays-follow-up'; // standard, a follow-up with an earlier contact
@@ -27,6 +28,10 @@ const countText = (shown: number, total: number) =>
 const productLine = (scenario: PublicScenarioDTO) =>
   [scenario.product.name, scenario.product.area].filter(Boolean).join(' \u00b7 ');
 
+/** What a card calls a scenario: the short title. It is also the name of the card's radio button. */
+const cardName = (scenario: Pick<PublicScenarioDTO, 'title' | 'shortTitle'>) =>
+  scenario.shortTitle.trim() ? scenario.shortTitle : scenario.title;
+
 /** The scenario count under the heading, which is a polite status. */
 const count = (page: Page) =>
   page
@@ -34,11 +39,27 @@ const count = (page: Page) =>
     .getByRole('status')
     .filter({ hasText: /\bscenarios?$/ });
 
-const list = (page: Page) => page.getByRole('group', { name: 'Scenarios', exact: true });
+/** The carousel of cards: a region named "Scenarios". */
+const gallery = (page: Page) => page.getByRole('region', { name: 'Scenarios', exact: true });
+const rail = (page: Page) => page.getByRole('group', { name: 'Product', exact: true });
+const difficulty = (page: Page) => page.getByRole('group', { name: 'Difficulty', exact: true });
+
+/** The card of a scenario: the radio that chooses it is inside. */
+const cardOf = (page: Page, scenario: Pick<PublicScenarioDTO, 'id'>): Locator =>
+  page.locator(`[data-scenario="${scenario.id}"]`);
+const radioOf = (page: Page, scenario: Pick<PublicScenarioDTO, 'title' | 'shortTitle'>): Locator =>
+  gallery(page).getByRole('radio', { name: cardName(scenario), exact: true });
 
 /** The details of the chosen scenario, a region named by the scenario's title. */
 const paneFor = (page: Page, scenario: Pick<PublicScenarioDTO, 'title'>): Locator =>
   page.getByRole('region', { name: scenario.title, exact: true });
+
+/** What a fact says in the details: the text that follows its term. */
+const fact = (pane: Locator, term: string): Locator =>
+  pane
+    .getByRole('term')
+    .filter({ hasText: new RegExp(`^${term}$`) })
+    .locator('xpath=following-sibling::dd[1]');
 
 /**
  * Opens the workspace and waits until it has settled: the list is loaded and the address has caught
@@ -52,8 +73,35 @@ async function openWorkspace(page: Page, search = '') {
   await expect(page).toHaveURL(/[?&]scenario=/);
 }
 
+/**
+ * What a thumb has to find on the page (inside `main`: the shell's header and footer are not this
+ * page's) that is under `min` px either way. A radio or a checkbox is drawn by what it sits in, so
+ * the box of its option, or its label, is the one measured.
+ */
+async function smallTargets(page: Page, min: number): Promise<string[]> {
+  return page.evaluate((limit) => {
+    const found: string[] = [];
+    const controls = document.querySelectorAll<HTMLElement>(
+      'main a[href], main button, main select, main summary, main input:not([type="hidden"])',
+    );
+    for (const control of controls) {
+      if (control.closest('[hidden], .visually-hidden') || !control.checkVisibility()) continue;
+      let box = control.getBoundingClientRect();
+      if (control.matches('input[type="radio"], input[type="checkbox"]') && box.width < 2) {
+        box = (control.closest('label') ?? control).getBoundingClientRect();
+      }
+      if (box.width === 0 || box.height === 0 || Math.min(box.width, box.height) >= limit) continue;
+      const name = control.getAttribute('aria-label') ?? control.textContent ?? '';
+      found.push(
+        `${control.tagName.toLowerCase()} "${name.replace(/\s+/g, ' ').trim().slice(0, 30)}" ${Math.round(box.width)}x${Math.round(box.height)}`,
+      );
+    }
+    return found;
+  }, min);
+}
+
 test.describe('choose a scenario', () => {
-  test('every scenario in the library is a row with its product, difficulty, title and summary, and the first is chosen', async ({
+  test('the library is one carousel of cards with the product, the short title, how it starts, the time and the level, and the first is chosen', async ({
     page,
     api,
   }) => {
@@ -63,75 +111,130 @@ test.describe('choose a scenario', () => {
     await expect(page).toHaveTitle('Scenarios \u00b7 Firefly');
     await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
 
-    await test.step('the count and one radio for each scenario', async () => {
+    await test.step('the count, and one card with one radio button for each scenario', async () => {
       await expect(count(page)).toHaveText('16 scenarios');
-      await expect(list(page).getByRole('radio')).toHaveCount(16);
+      await expect(gallery(page).getByRole('radio')).toHaveCount(16);
+      await expect(gallery(page).getByRole('listitem')).toHaveCount(16);
       for (const scenario of scenarios) {
-        const row = page.locator(`[data-scenario="${scenario.id}"]`);
-        await expect(row.getByRole('radio', { name: scenario.title, exact: true })).toBeAttached();
-        await expect(row).toContainText(productLine(scenario));
-        await expect(row).toContainText(
+        const card = cardOf(page, scenario);
+        await expect(
+          card.getByRole('radio', { name: cardName(scenario), exact: true }),
+        ).toBeAttached();
+        // The product is said in a short name that the full name contains ("Teams", "Windows").
+        const product = (await card.locator('.scn-card__product').innerText()).trim();
+        expect(product.length, `${scenario.id} has a product name`).toBeGreaterThan(0);
+        expect(scenario.product.name).toContain(product);
+        await expect(card.locator('.scn-card__meta')).toHaveText(
+          /^(Low|Medium|High) impact \u00b7 \S.* \u00b7 (First contact|Follow-up|Escalated|Closure)$/,
+        );
+        await expect(card).toContainText(formatEstimate(scenario.estimatedMinutes));
+        // The level is said in words as well as in bars.
+        await expect(card).toContainText(
           scenario.difficulty.charAt(0).toUpperCase() + scenario.difficulty.slice(1),
         );
-        await expect(row).toContainText(scenario.listSummary);
+        // A card is quick to scan: no summary, only a title of a few words.
+        expect(
+          cardName(scenario).split(/\s+/).length,
+          `${scenario.id}: title length`,
+        ).toBeLessThanOrEqual(6);
+        await expect(card).not.toContainText(scenario.listSummary);
       }
     });
 
-    await test.step('the three filters, with the number of scenarios each choice would show', async () => {
-      const product = page.getByRole('combobox', { name: 'Product' });
-      await expect(product).toHaveValue('');
-      // Products are grouped by family, each with its count.
-      await expect(product.locator('optgroup')).toHaveCount(4);
-      await expect(product.locator('optgroup').first()).toHaveAttribute('label', 'Microsoft 365');
-      await expect(product.locator('option[value="windows-11"]')).toHaveText('Windows 11 (2)');
-      const issue = page.getByRole('combobox', { name: 'Issue type' });
-      await expect(issue).toHaveValue('');
-      await expect(issue.locator('option[value="permissions"]')).toHaveText(
-        `${ISSUE_TYPE_LABELS.permissions} (3)`,
-      );
-      const difficulty = page.getByRole('group', { name: 'Difficulty' });
-      await expect(difficulty.getByRole('radio', { name: /^All\b/ })).toBeChecked();
-      await expect(
-        difficulty.getByRole('radio', { name: /^Starter\b.*4 scenarios$/ }),
-      ).toBeVisible();
-      await expect(
-        difficulty.getByRole('radio', { name: /^Standard\b.*8 scenarios$/ }),
-      ).toBeVisible();
-      await expect(
-        difficulty.getByRole('radio', { name: /^Challenge\b.*4 scenarios$/ }),
-      ).toBeVisible();
-    });
-
-    await test.step('the first scenario is chosen, and its details are shown beside the list', async () => {
+    await test.step('the first scenario is "Selected" in words, the others invite "Use scenario"', async () => {
       const first = scenarios.find(
         (scenario) => scenario.id === 'teams-cannot-join-external-meetings',
       );
       expect(first, 'the library has the Teams scenario').toBeDefined();
       const chosen = first as PublicScenarioDTO;
-      await expect(page.getByRole('radio', { name: chosen.title, exact: true })).toBeChecked();
+      await expect(radioOf(page, chosen)).toBeChecked();
+      await expect(cardOf(page, chosen)).toContainText('Selected');
+      await expect(cardOf(page, chosen).locator('.scn-card__meta')).toHaveText(
+        'High impact \u00b7 Anxious \u00b7 First contact',
+      );
+      await expect(gallery(page).getByRole('radio', { checked: true })).toHaveCount(1);
+      await expect(page.locator('[data-scenario]:not([data-selected])').first()).toContainText(
+        'Use scenario',
+      );
+    });
+
+    await test.step('the product rail: All and a chip for each product, each with how many it would show', async () => {
+      const chips = rail(page).getByRole('radio');
+      const products = new Set(scenarios.map((scenario) => scenario.product.id));
+      await expect(chips).toHaveCount(products.size + 1);
+      await expect(chips.first()).toHaveAccessibleName(/^All\b.*16 scenarios$/);
+      await expect(chips.first()).toBeChecked();
+      await expect(chips.last()).toHaveAccessibleName(/^Power Platform\b/);
+      await expect(
+        rail(page).getByRole('radio', { name: /^Windows\b.*2 scenarios$/ }),
+      ).toBeAttached();
+      await expect(rail(page).getByRole('radio', { name: /^Teams\b.*1 scenario$/ })).toBeAttached();
+    });
+
+    await test.step('the difficulty filter, with the number of scenarios each choice would show', async () => {
+      await expect(difficulty(page).getByRole('radio', { name: /^All\b/ })).toBeChecked();
+      await expect(
+        difficulty(page).getByRole('radio', { name: /^Starter\b.*4 scenarios$/ }),
+      ).toBeAttached();
+      await expect(
+        difficulty(page).getByRole('radio', { name: /^Standard\b.*8 scenarios$/ }),
+      ).toBeAttached();
+      await expect(
+        difficulty(page).getByRole('radio', { name: /^Challenge\b.*4 scenarios$/ }),
+      ).toBeAttached();
+    });
+
+    await test.step('there is no issue-type filter any more', async () => {
+      await expect(page.getByRole('combobox', { name: 'Issue type' })).toHaveCount(0);
+      await expect(page.getByRole('combobox', { name: 'Product' })).toHaveCount(0);
+    });
+
+    await test.step('the details of the first scenario are below the carousel, and nothing else is hidden away', async () => {
+      const chosen = scenarios.find(
+        (scenario) => scenario.id === 'teams-cannot-join-external-meetings',
+      ) as PublicScenarioDTO;
       const pane = paneFor(page, chosen);
       await expect(pane.getByRole('heading', { level: 2, name: chosen.title })).toBeVisible();
       await expect(pane).toContainText(productLine(chosen));
-      await expect(pane).toContainText(chosen.summary);
-      for (const term of ['Impact', 'Call stage', 'Style', 'Duration']) {
+      for (const term of [
+        'Issue',
+        'Business impact',
+        'Customer',
+        'Customer state',
+        'Call stage',
+        'Difficulty',
+        'Estimated duration',
+        'Coaching focus',
+      ]) {
         await expect(
           pane.getByRole('term').filter({ hasText: new RegExp(`^${term}$`) }),
         ).toHaveCount(1);
       }
-      await expect(pane).toContainText(`About ${chosen.estimatedMinutes} min`);
-      // The customer as the call starts.
-      await expect(pane.getByRole('heading', { name: 'Starting state' })).toBeVisible();
-      await expect(pane).toContainText(chosen.persona.name);
-      await expect(pane).toContainText('Synthetic customer');
+      await expect(fact(pane, 'Issue')).toHaveText(chosen.publicBrief.issue);
+      await expect(fact(pane, 'Business impact')).toContainText(IMPACT_LABELS[chosen.impact].label);
+      await expect(fact(pane, 'Customer')).toContainText(chosen.persona.name);
+      await expect(fact(pane, 'Customer')).toContainText(
+        `${chosen.persona.role}, ${chosen.persona.organisation}`,
+      );
+      await expect(fact(pane, 'Customer')).toContainText('Synthetic customer');
+      await expect(fact(pane, 'Estimated duration')).toContainText(
+        formatEstimate(chosen.estimatedMinutes),
+      );
+      for (const id of chosen.coachingFocus) {
+        await expect(fact(pane, 'Coaching focus')).toContainText(DIMENSIONS[id].label);
+      }
+      // The way to set it up: a preset, a practice mode, and the rest behind "Customise".
       await expect(pane.getByRole('group', { name: 'Preset' })).toBeVisible();
+      await expect(pane.getByRole('group', { name: 'Practice mode' })).toBeVisible();
       await expect(pane.getByRole('button', { name: /^Customise/ })).toHaveAttribute(
         'aria-expanded',
         'false',
       );
-      await expect(pane.getByRole('link', { name: 'Review brief' })).toHaveAttribute(
+      await expect(pane.getByRole('link', { name: 'Start configuration' })).toHaveAttribute(
         'href',
         new RegExp(`^/scenarios/${chosen.id}/brief`),
       );
+      await expect(pane.getByRole('link', { name: 'Review brief' })).toHaveCount(0);
     });
   });
 
@@ -142,14 +245,16 @@ test.describe('choose a scenario', () => {
     const scenarios = await api.scenarios();
     const other = scenarios.find((scenario) => scenario.id === MARCUS) as PublicScenarioDTO;
     await openWorkspace(page);
-    await page.getByRole('radio', { name: other.title, exact: true }).check();
+    await radioOf(page, other).check();
 
     await expect(
       paneFor(page, other).getByRole('heading', { level: 2, name: other.title }),
     ).toBeVisible();
     await expect(paneFor(page, other)).toContainText(other.persona.name);
     await expect.poll(() => new URL(page.url()).searchParams.get('scenario')).toBe(other.id);
-    await expect(page.getByRole('radio', { name: other.title, exact: true })).toBeChecked();
+    await expect(radioOf(page, other)).toBeChecked();
+    await expect(cardOf(page, other)).toContainText('Selected');
+    await expect(gallery(page).getByRole('radio', { checked: true })).toHaveCount(1);
     // It opens with its own settings: its own difficulty is the preset, and nothing is marked changed.
     await expect(
       paneFor(page, other)
@@ -165,12 +270,21 @@ test.describe('choose a scenario', () => {
     await page.goto('/scenarios?q=checkout');
     await expect(count(page)).toHaveText('16 scenarios');
     await expect(page.getByRole('searchbox')).toHaveCount(0);
-    await expect(list(page).getByRole('radio')).toHaveCount(16);
+    await expect(gallery(page).getByRole('radio')).toHaveCount(16);
     // The address is tidied to what the workspace understands.
     await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBeNull();
   });
 
-  test('each filter keeps exactly the scenarios that match it, filters combine, and Clear filters brings everything back', async ({
+  test('an old link with an issue-type filter still opens, shows the whole library and drops the filter', async ({
+    page,
+  }) => {
+    await page.goto('/scenarios?f_issue=permissions');
+    await expect(count(page)).toHaveText('16 scenarios');
+    await expect(gallery(page).getByRole('radio')).toHaveCount(16);
+    await expect.poll(() => new URL(page.url()).searchParams.get('f_issue')).toBeNull();
+  });
+
+  test('the rail and the difficulty each keep exactly the scenarios that match, they combine, and Clear filters brings everything back', async ({
     page,
     api,
   }) => {
@@ -179,40 +293,25 @@ test.describe('choose a scenario', () => {
     await openWorkspace(page);
     const counted = async (expected: PublicScenarioDTO[]) => {
       await expect(count(page)).toHaveText(countText(expected.length, total));
-      await expect(list(page).getByRole('radio')).toHaveCount(expected.length);
+      await expect(gallery(page).getByRole('radio')).toHaveCount(expected.length);
     };
 
     await test.step('product', async () => {
-      await page.getByRole('combobox', { name: 'Product' }).selectOption('windows-11');
+      await rail(page)
+        .getByRole('radio', { name: /^Windows\b/ })
+        .check();
       await counted(scenarios.filter((scenario) => scenario.product.id === 'windows-11'));
       await expect.poll(() => new URL(page.url()).searchParams.get('f_product')).toBe('windows-11');
       // A scenario that is filtered out is not the chosen one: the first that remains is.
-      const shown = await list(page).getByRole('radio', { checked: true }).count();
-      expect(shown).toBe(1);
-    });
-
-    await test.step('issue type, alongside the product', async () => {
-      await page.getByRole('combobox', { name: 'Product' }).selectOption('');
-      await page.getByRole('combobox', { name: 'Issue type' }).selectOption('permissions');
-      await counted(scenarios.filter((scenario) => scenario.issueType === 'permissions'));
-      // An option with nothing behind it cannot be chosen, so pick the issue of an Azure scenario.
-      const azure = scenarios.find(
-        (scenario) => scenario.product.id === 'azure',
-      ) as PublicScenarioDTO;
-      await page.getByRole('combobox', { name: 'Issue type' }).selectOption('');
-      await page.getByRole('combobox', { name: 'Product' }).selectOption('azure');
-      await page.getByRole('combobox', { name: 'Issue type' }).selectOption(azure.issueType);
-      await counted(
-        scenarios.filter(
-          (scenario) => scenario.issueType === azure.issueType && scenario.product.id === 'azure',
-        ),
-      );
-      await page.getByRole('combobox', { name: 'Issue type' }).selectOption('');
+      await expect(gallery(page).getByRole('radio', { checked: true })).toHaveCount(1);
+      await expect(rail(page).getByRole('radio', { name: /^Windows\b/ })).toBeChecked();
     });
 
     await test.step('difficulty, with the product still chosen', async () => {
-      await page
-        .getByRole('group', { name: 'Difficulty' })
+      await rail(page)
+        .getByRole('radio', { name: /^Azure\b/ })
+        .check();
+      await difficulty(page)
         .getByRole('radio', { name: /^Challenge/ })
         .check();
       await counted(
@@ -223,21 +322,21 @@ test.describe('choose a scenario', () => {
       await expect
         .poll(() => new URL(page.url()).searchParams.get('f_difficulty'))
         .toBe('challenge');
+      await expect(page.getByRole('button', { name: 'Clear filters' })).toBeVisible();
     });
 
-    await test.step('Clear filters puts all of them back and leaves focus on the first filter', async () => {
+    await test.step('Clear filters puts all of them back and leaves focus on "All" in the rail', async () => {
       await page.getByRole('button', { name: 'Clear filters' }).click();
       await counted(scenarios);
-      await expect(page.getByRole('combobox', { name: 'Product' })).toHaveValue('');
-      await expect(page.getByRole('combobox', { name: 'Product' })).toBeFocused();
-      await expect(
-        page.getByRole('group', { name: 'Difficulty' }).getByRole('radio', { name: /^All\b/ }),
-      ).toBeChecked();
+      await expect(rail(page).getByRole('radio', { name: /^All\b/ })).toBeChecked();
+      await expect(rail(page).getByRole('radio', { name: /^All\b/ })).toBeFocused();
+      await expect(difficulty(page).getByRole('radio', { name: /^All\b/ })).toBeChecked();
       await expect
         .poll(() =>
           [...new URL(page.url()).searchParams.keys()].filter((key) => key.startsWith('f_')),
         )
         .toEqual([]);
+      await expect(page.getByRole('button', { name: 'Clear filters' })).toHaveCount(0);
     });
   });
 
@@ -248,7 +347,7 @@ test.describe('choose a scenario', () => {
     await expect(page.getByText('No scenario selected')).toBeVisible();
     await page.getByRole('button', { name: 'Clear filters' }).first().click();
     await expect(count(page)).toHaveText('16 scenarios');
-    await expect(list(page).getByRole('radio')).toHaveCount(16);
+    await expect(gallery(page).getByRole('radio')).toHaveCount(16);
   });
 
   test('a link to a scenario that has been retired says so once and shows the library', async ({
@@ -259,7 +358,7 @@ test.describe('choose a scenario', () => {
     const notice = page.getByText('That scenario is no longer in the library. Choose another.');
     await expect(notice).toBeVisible();
     // The first scenario is chosen instead, and the address says so.
-    await expect(list(page).getByRole('radio', { checked: true })).toHaveCount(1);
+    await expect(gallery(page).getByRole('radio', { checked: true })).toHaveCount(1);
     await expect.poll(() => new URL(page.url()).searchParams.get('scenario')).not.toBe(RETIRED);
     await page.getByRole('button', { name: 'Dismiss' }).click();
     await expect(notice).toHaveCount(0);
@@ -290,7 +389,7 @@ test.describe('choose a scenario', () => {
 });
 
 test.describe('set up the call', () => {
-  test('the preset and every setting update the summary, mark what was changed, and travel in the address and the brief link', async ({
+  test('the preset, the practice mode and every setting update the summary, mark what was changed, and travel in the address and the link to the brief', async ({
     page,
     api,
   }) => {
@@ -299,14 +398,16 @@ test.describe('set up the call', () => {
     await openWorkspace(page, `?scenario=${MARCUS}`);
     const pane = paneFor(page, scenario);
     const customise = pane.getByRole('button', { name: /^Customise/ });
-    const summary = pane.locator('.scn-pane__summary-line');
+    const summary = pane.locator('.scn-detail__summary-line');
     const changed = pane.locator('.scn-cf__changed');
     const reset = pane.getByRole('button', { name: 'Reset to scenario defaults' });
+    const preset = (name: string) =>
+      pane.getByRole('group', { name: 'Preset' }).getByRole('radio', { name });
+    const practice = (name: RegExp) =>
+      pane.getByRole('group', { name: 'Practice mode' }).getByRole('radio', { name });
 
     await test.step('it starts as the scenario was written, with nothing marked as changed', async () => {
-      await expect(
-        pane.getByRole('group', { name: 'Preset' }).getByRole('radio', { name: 'Starter' }),
-      ).toBeChecked();
+      await expect(preset('Starter')).toBeChecked();
       await expect(summary).toContainText('Starter');
       await expect(summary).toContainText('Low impact');
       await expect(summary).toContainText('Calm');
@@ -314,18 +415,17 @@ test.describe('set up the call', () => {
       await expect(customise).toHaveAttribute('aria-expanded', 'true');
       await expect(changed).toHaveCount(0);
       await expect(reset).toHaveAttribute('aria-disabled', 'true');
-      // A starter call has live hints on, as its own default.
-      await expect(pane.getByRole('switch', { name: /^Live hints/ })).toBeChecked();
+      // A starter call is guided practice, as its own default.
+      await expect(practice(/^Guided practice/)).toBeChecked();
+      await expect(summary).toContainText('Guided practice');
     });
 
-    await test.step('the preset', async () => {
-      await pane
-        .getByRole('group', { name: 'Preset' })
-        .getByRole('radio', { name: 'Challenge' })
-        .check();
+    await test.step('the preset, and the practice mode that goes with it', async () => {
+      await preset('Challenge').check();
       await expect(summary).toContainText('Challenge');
-      // Live hints follow the preset: off for a challenge call.
-      await expect(pane.getByRole('switch', { name: /^Live hints/ })).not.toBeChecked();
+      // The practice mode follows the preset: a challenge call has no tips on screen.
+      await expect(practice(/^Assessment practice/)).toBeChecked();
+      await expect(summary).toContainText('Assessment practice');
       await pane.getByRole('button', { name: 'About presets' }).click();
       await expect(pane.getByText(/High pressure, incomplete first information/)).toBeVisible();
     });
@@ -336,12 +436,7 @@ test.describe('set up the call', () => {
         .getByRole('radio', { name: IMPACT_LABELS.high.label })
         .check();
       await expect(summary).toContainText('High impact');
-      await expect(
-        pane
-          .getByRole('term')
-          .filter({ hasText: /^Impact$/ })
-          .locator('xpath=following-sibling::dd[1]'),
-      ).toContainText(IMPACT_LABELS.high.label);
+      await expect(fact(pane, 'Business impact')).toContainText(IMPACT_LABELS.high.label);
     });
 
     await test.step('starting state', async () => {
@@ -350,6 +445,7 @@ test.describe('set up the call', () => {
         .getByRole('radio', { name: 'Angry' })
         .check();
       await expect(summary).toContainText(START_TEMPERATURE_LABELS.angry.label.split(/[\s/]/)[0]!);
+      await expect(fact(pane, 'Customer state')).toContainText('Angry');
     });
 
     await test.step('proficiency', async () => {
@@ -361,17 +457,12 @@ test.describe('set up the call', () => {
 
     await test.step('style', async () => {
       await pane.getByRole('combobox', { name: 'Style' }).selectOption('talkative');
-      await expect(pane).toContainText(`${STYLE_LABELS.talkative.label}, expert user`);
+      await expect(pane.getByRole('combobox', { name: 'Style' })).toHaveValue('talkative');
     });
 
     await test.step('call stage', async () => {
       await pane.getByRole('combobox', { name: 'Call stage' }).selectOption('follow-up');
-      await expect(
-        pane
-          .getByRole('term')
-          .filter({ hasText: /^Call stage$/ })
-          .locator('xpath=following-sibling::dd[1]'),
-      ).toHaveText(CALL_STAGE_LABELS['follow-up'].label);
+      await expect(fact(pane, 'Call stage')).toHaveText(/follow-up/i);
     });
 
     await test.step('complications: choose one, and the page says how many, never which', async () => {
@@ -382,29 +473,26 @@ test.describe('set up the call', () => {
       await pane.getByRole('checkbox', { name: CURVEBALL_LABELS['ask-manager'].label }).check();
       await expect(pane.getByText(/1 of 2 chosen/)).toBeVisible();
       await expect(summary).not.toContainText(CURVEBALL_LABELS['ask-manager'].label);
-      await expect(
-        pane
-          .getByRole('term')
-          .filter({ hasText: /^Style$/ })
-          .locator('xpath=following-sibling::dd[1]'),
-      ).not.toContainText(/manager/i);
+      await expect(pane.locator('.scn-facts')).not.toContainText(
+        CURVEBALL_LABELS['ask-manager'].label,
+      );
     });
 
-    await test.step('live hints (off by default for a challenge call)', async () => {
-      const hints = pane.getByRole('switch', { name: /^Live hints/ });
-      await expect(hints).not.toBeChecked();
-      await hints.check();
-      await expect(hints).toBeChecked();
+    await test.step('practice mode: assessment is the default for a challenge call, guided practice is one press away', async () => {
+      await expect(practice(/^Assessment practice/)).toBeChecked();
+      await practice(/^Guided practice/).check();
+      await expect(practice(/^Guided practice/)).toBeChecked();
+      await expect(summary).toContainText('Guided practice');
     });
 
     await test.step('every setting that was changed says so, in words, and the disclosure counts them', async () => {
-      await expect(changed).toHaveCount(7);
-      await expect(customise).toContainText('7 changed');
+      await expect(changed).toHaveCount(6);
+      await expect(customise).toContainText('6 changed');
       await expect(reset).not.toHaveAttribute('aria-disabled', 'true');
     });
 
-    await test.step('the brief link carries every setting', async () => {
-      const link = pane.getByRole('link', { name: 'Review brief' });
+    await test.step('the link to the brief carries every setting', async () => {
+      const link = pane.getByRole('link', { name: 'Start configuration' });
       const href = new URL((await link.getAttribute('href')) ?? '', page.url());
       expect(href.pathname).toBe(`/scenarios/${MARCUS}/brief`);
       expect(Object.fromEntries(href.searchParams)).toEqual({
@@ -429,19 +517,21 @@ test.describe('set up the call', () => {
       await expect(
         again.getByRole('group', { name: 'Preset' }).getByRole('radio', { name: 'Challenge' }),
       ).toBeChecked();
-      await expect(again.getByRole('button', { name: /^Customise/ })).toContainText('7 changed');
+      await expect(
+        again.getByRole('group', { name: 'Practice mode' }).getByRole('radio', { name: /^Guided/ }),
+      ).toBeChecked();
+      await expect(again.getByRole('button', { name: /^Customise/ })).toContainText('6 changed');
     });
 
     await test.step('Reset to scenario defaults puts everything back', async () => {
       await pane.getByRole('button', { name: /^Customise/ }).click();
       await pane.getByRole('button', { name: 'Reset to scenario defaults' }).click();
-      await expect(
-        pane.getByRole('group', { name: 'Preset' }).getByRole('radio', { name: 'Starter' }),
-      ).toBeChecked();
+      await expect(preset('Starter')).toBeChecked();
+      await expect(practice(/^Guided practice/)).toBeChecked();
       await expect(pane.locator('.scn-cf__changed')).toHaveCount(0);
       await expect(summary).toContainText('Low impact');
       const href = new URL(
-        (await pane.getByRole('link', { name: 'Review brief' }).getAttribute('href')) ?? '',
+        (await pane.getByRole('link', { name: 'Start configuration' }).getAttribute('href')) ?? '',
         page.url(),
       );
       expect([...href.searchParams.keys()]).toEqual([]);
@@ -468,6 +558,33 @@ test.describe('set up the call', () => {
     ).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get('curveballs')).toBe('ask-manager');
   });
+
+  test('the two practice modes are named and explained, and choosing the one the preset does not give is a change that the address records', async ({
+    page,
+    api,
+  }) => {
+    const scenarios = await api.scenarios();
+    const scenario = scenarios.find((item) => item.id === EXCHANGE) as PublicScenarioDTO;
+    await openWorkspace(page, `?scenario=${EXCHANGE}`);
+    const pane = paneFor(page, scenario);
+    const modes = pane.getByRole('group', { name: 'Practice mode' });
+    await expect(modes.getByRole('radio')).toHaveCount(2);
+    await expect(modes).toContainText('Guided practice');
+    await expect(modes).toContainText('Shows short tips and light cues during the call.');
+    await expect(modes).toContainText('Assessment practice');
+    await expect(modes).toContainText('No tips or cues on screen. Feels like a real call.');
+    // The old on/off switch is gone.
+    await expect(pane.getByRole('switch')).toHaveCount(0);
+    await expect(pane.getByText('Live hints')).toHaveCount(0);
+
+    // Standard is assessment by default; choosing guided is a change, and the address says so.
+    await expect(modes.getByRole('radio', { name: /^Assessment practice/ })).toBeChecked();
+    await modes.getByRole('radio', { name: /^Guided practice/ }).check();
+    await expect.poll(() => new URL(page.url()).searchParams.get('hints')).toBe('on');
+    // Choosing the default again takes the choice out of the address.
+    await modes.getByRole('radio', { name: /^Assessment practice/ }).check();
+    await expect.poll(() => new URL(page.url()).searchParams.get('hints')).toBeNull();
+  });
 });
 
 test.describe('the case brief', () => {
@@ -485,6 +602,13 @@ test.describe('the case brief', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
     await expect(page.getByText(scenario.title).first()).toBeVisible();
     await expect(page.getByText('Synthetic scenario', { exact: true })).toBeVisible();
+
+    await test.step('the header carries the product, and the practice mode in its own name and a plain sentence', async () => {
+      await expect(page.locator('.brf-head')).toContainText(productLine(scenario));
+      await expect(page.locator('.brf-mode')).toHaveText(
+        'Guided practice. Short tips appear during the call.',
+      );
+    });
 
     const caseFile = page.getByRole('region', { name: 'Support case' });
     await test.step('the case is six rows', async () => {
@@ -563,6 +687,13 @@ test.describe('the case brief', () => {
       await expect(caseFile).toContainText(IMPACT_LABELS.high.label);
       await expect(caseFile).toContainText(CALL_STAGE_LABELS.escalated.label);
       await expect(caseFile).toContainText(/Case SIM-\d+/);
+    });
+    await test.step('the practice mode is the one the preset gives, or the one that was chosen', async () => {
+      await expect(page.locator('.brf-mode')).toHaveText('Assessment practice. No tips on screen.');
+      await page.goto(`/scenarios/${EXCHANGE}/brief?${CONFIGURED}&hints=on`);
+      await expect(page.locator('.brf-mode')).toHaveText(
+        'Guided practice. Short tips appear during the call.',
+      );
     });
     await test.step('a call back has an earlier contact to read about', async () => {
       const previous = caseFile.getByRole('button', { name: 'Previous contact', exact: true });
@@ -671,6 +802,7 @@ test.describe('the case brief', () => {
 
     const pane = paneFor(page, scenario);
     await expect(pane.getByRole('heading', { level: 2, name: scenario.title })).toBeVisible();
+    await expect(radioOf(page, scenario)).toBeChecked();
     await expect(
       pane.getByRole('group', { name: 'Preset' }).getByRole('radio', { name: 'Challenge' }),
     ).toBeChecked();
@@ -688,7 +820,7 @@ test.describe('the case brief', () => {
     ).toBeChecked();
 
     // And on to the brief again: the address is the same.
-    await pane.getByRole('link', { name: 'Review brief' }).click();
+    await pane.getByRole('link', { name: 'Start configuration' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
     expect(Object.fromEntries(new URL(page.url()).searchParams)).toEqual(
       Object.fromEntries(new URLSearchParams(CONFIGURED)),
@@ -711,6 +843,116 @@ test.describe('the case brief', () => {
     }
     await page.getByRole('link', { name: 'Choose a scenario' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
+  });
+
+  test('puts the two ways to start in one block with the way back apart, the notice under the case, and the note beside the title, so the columns end about level', async ({
+    page,
+  }) => {
+    await page.goto(`/scenarios/${MARCUS}/brief`);
+    const side = page.getByRole('complementary', { name: 'Voice call' });
+    const notice = page.getByRole('region', { name: 'Privacy notice' });
+    await expect(notice).toBeVisible();
+
+    const box = async (locator: Locator) => {
+      const found = await locator.boundingBox();
+      if (!found) throw new Error('The element has no box on screen.');
+      return found;
+    };
+    await test.step('the main way to start, the typed one right under it, and the way back apart', async () => {
+      const main = await box(side.getByRole('button', { name: 'Start voice call' }));
+      const typed = await box(side.getByRole('button', { name: 'Start a text-only call' }));
+      const back = await box(side.getByRole('link', { name: 'Edit scenario' }));
+      const together = typed.y - (main.y + main.height);
+      expect(together, 'the typed call comes right after the main one').toBeGreaterThanOrEqual(0);
+      expect(together).toBeLessThan(12);
+      expect(back.y - (typed.y + typed.height), 'the way back is further off').toBeGreaterThan(
+        together,
+      );
+    });
+
+    await test.step('the notice is under the case rows, in their column', async () => {
+      await expect(side.getByRole('region', { name: 'Privacy notice' })).toHaveCount(0);
+      const rows = await box(page.getByRole('region', { name: 'Support case' }));
+      const under = await box(notice);
+      expect(under.y).toBeGreaterThanOrEqual(rows.y + rows.height);
+      expect(under.x).toBeCloseTo(rows.x, 0);
+      // Neither column leaves the other a block of empty page.
+      const left = under.y + under.height;
+      const card = await box(side);
+      expect(Math.abs(left - (card.y + card.height))).toBeLessThan(100);
+    });
+
+    await test.step('the note that the scenario is made up stands beside the title', async () => {
+      const title = await box(page.getByRole('heading', { level: 1, name: 'Case brief' }));
+      const note = await box(page.getByText('Synthetic scenario', { exact: true }));
+      expect(note.x - (title.x + title.width)).toBeLessThan(40);
+      expect(Math.abs(note.y + note.height / 2 - (title.y + title.height / 2))).toBeLessThan(12);
+    });
+
+    await test.step('the rules under the optional rows run from edge to edge of the card', async () => {
+      const rows = await box(page.getByRole('region', { name: 'Support case' }));
+      const known = await box(
+        page.getByRole('region', { name: 'Support case' }).locator('.ff-disclosure--row').first(),
+      );
+      expect(known.x).toBeLessThanOrEqual(rows.x + 2);
+      expect(known.x + known.width).toBeGreaterThanOrEqual(rows.x + rows.width - 2);
+    });
+  });
+});
+
+test.describe('a phone, 320 px wide', () => {
+  test.use({ viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true });
+
+  test('every control on the workspace is at least 40 px, the difficulty filter is four equal cells in one row, and the way on is the button alone', async ({
+    page,
+  }) => {
+    await openWorkspace(page, `?scenario=${MARCUS}`);
+    await page.getByRole('button', { name: /^Customise/ }).tap();
+
+    await test.step('nothing is under 40 px, with the setup open', async () => {
+      expect(await smallTargets(page, 40)).toEqual([]);
+    });
+
+    await test.step('the difficulty filter is one native group of four cells as wide as the column', async () => {
+      await expect(difficulty(page).getByRole('radio')).toHaveCount(4);
+      const cells = await difficulty(page)
+        .locator('.ff-segmented__item')
+        .evaluateAll((items) =>
+          items.map((item) => {
+            const { x, y, width, height } = item.getBoundingClientRect();
+            return { x, y, width, height };
+          }),
+        );
+      expect(new Set(cells.map((cell) => Math.round(cell.y))).size, 'one row').toBe(1);
+      for (const cell of cells) expect(cell.height).toBeGreaterThanOrEqual(40);
+      const widths = cells.map((cell) => cell.width);
+      expect(Math.max(...widths) - Math.min(...widths), 'equal cells').toBeLessThan(1.5);
+      const group = await difficulty(page).boundingBox();
+      expect(group?.width, 'as wide as the column (320 less 16 each side)').toBeGreaterThan(280);
+      const first = cells[0]!;
+      const last = cells.at(-1)!;
+      expect(last.x + last.width - first.x, 'the cells fill the group').toBeGreaterThan(
+        (group?.width ?? 0) - 12,
+      );
+    });
+
+    await test.step('the way on is the button alone, about 70 px high, and the words it would say are still there', async () => {
+      const bar = page.locator('.scn-detail__bar');
+      const barBox = await bar.boundingBox();
+      expect(barBox?.height).toBeLessThan(80);
+      const start = await bar.getByRole('link', { name: 'Start configuration' }).boundingBox();
+      expect(start?.height).toBeGreaterThanOrEqual(44);
+      expect(start?.width).toBeGreaterThan(280);
+      const recap = bar.locator('.scn-detail__summary-line');
+      await expect(recap).toContainText('Starter');
+      expect(await recap.evaluate((line) => getComputedStyle(line).display)).not.toBe('none');
+    });
+  });
+
+  test('every control on the brief is at least 40 px', async ({ page }) => {
+    await page.goto(`/scenarios/${MARCUS}/brief`);
+    await expect(page.getByRole('region', { name: 'Privacy notice' })).toBeVisible();
+    expect(await smallTargets(page, 40)).toEqual([]);
   });
 });
 
@@ -752,7 +994,9 @@ test.describe('nothing the customer keeps back is shown before it is asked for',
     }
   });
 
-  test('the scenario details of every scenario, with the setup open', async ({ page }) => {
+  test('the carousel and the scenario details of every scenario, with the setup open', async ({
+    page,
+  }) => {
     test.setTimeout(180_000);
     for (const scenario of libraryScenarios()) {
       await test.step(scenario.title, async () => {
@@ -765,6 +1009,12 @@ test.describe('nothing the customer keeps back is shown before it is asked for',
         expect(
           leakedSecrets(text, scenario.secrets),
           `The details of "${scenario.title}" show something the customer keeps back`,
+        ).toEqual([]);
+        // The cards say little, and nothing that the customer keeps back.
+        const cards = await gallery(page).innerText();
+        expect(
+          leakedSecrets(cards, scenario.secrets),
+          `The cards beside "${scenario.title}" show something the customer keeps back`,
         ).toEqual([]);
       });
     }

@@ -2,8 +2,9 @@ import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { describeProblem } from '../call/problems.ts';
+import type { CallSnapshot } from '../call/contract.ts';
 import { clock, traineeTurnCount } from './call-model.ts';
-import { FIXTURES } from './call-fixtures.ts';
+import { closingCheckLoader, FIXTURES } from './call-fixtures.ts';
 import { clearViewport, renderCall, WIDTH } from './test-utils.tsx';
 
 afterEach(() => {
@@ -29,7 +30,7 @@ describe('the question', () => {
     renderCall('end-confirm');
     const fact = (label: string) => inQuestion().getByText(label).nextElementSibling;
     expect(fact('Call length')).toHaveTextContent(clock(snapshot.elapsedSeconds));
-    expect(fact('Messages')).toHaveTextContent(String(traineeTurnCount(snapshot.turns)));
+    expect(fact('Your messages')).toHaveTextContent(String(traineeTurnCount(snapshot.turns)));
     expect(fact('Customer state')).toHaveTextContent('Concerned');
   });
 
@@ -247,5 +248,118 @@ describe('the question at every width', () => {
         .getAllByRole('button')
         .map((item) => item.textContent),
     ).toEqual(expect.arrayContaining(['Continue call', 'End and review']));
+  });
+});
+
+describe('in Guided practice: Ready to close?', () => {
+  const ready = () => screen.getByRole('dialog', { name: 'Ready to close?' });
+  const inReady = () => within(ready());
+  const settled = () => act(async () => undefined);
+
+  it('asks "Ready to close?" and lists the four checks, by words, above the facts', async () => {
+    renderCall('end-ready-to-close');
+    const list = await inReady().findByRole('list', { name: 'Closing check' });
+    expect(
+      within(list)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent),
+    ).toEqual([
+      'Plan statedDone',
+      'Owner statedDone',
+      'Update time statedNot yet',
+      'Customer agreement confirmedNot yet',
+    ]);
+    const facts = ready().querySelector('.cw-end__facts') as HTMLElement;
+    expect(list.compareDocumentPosition(facts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The usual actions, and what the call has covered, are all still there.
+    expect(inReady().getByText('Call length')).toBeInTheDocument();
+    expect(inReady().getByRole('button', { name: 'Continue call' })).toBeInTheDocument();
+    expect(inReady().getByRole('button', { name: 'End and review' })).toBeInTheDocument();
+  });
+
+  it('shows four Done when all four are', async () => {
+    renderCall('end-ready-to-close-complete');
+    const list = await inReady().findByRole('list', { name: 'Closing check' });
+    expect(within(list).getAllByText('Done')).toHaveLength(4);
+    expect(within(list).queryByText('Not yet')).toBeNull();
+  });
+
+  it('keeps "End the call?" and asks for no check in Assessment practice', async () => {
+    const load = vi.fn(() => Promise.reject(new Error('Never asked.')));
+    renderCall('end-confirm', { loadClosingCheck: load });
+    await settled();
+    expect(screen.getByRole('dialog', { name: 'End the call?' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Ready to close?' })).toBeNull();
+    expect(load).not.toHaveBeenCalled();
+    expect(document.querySelector('.cw-close')).toBeNull();
+  });
+
+  it('never makes ending wait: End and review is there at once and ends the call while the check loads', async () => {
+    const user = userEvent.setup();
+    const { actions } = renderCall('end-ready-to-close-loading');
+    const end = inReady().getByRole('button', { name: 'End and review' });
+    expect(end).not.toHaveAttribute('aria-disabled');
+    expect(end).not.toHaveAttribute('aria-busy');
+    expect(ready().querySelector('.cw-close--loading')).not.toBeNull();
+    await user.click(end);
+    expect(actions.endCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the check out without a word when it fails, and still ends the call', async () => {
+    const user = userEvent.setup();
+    const { actions } = renderCall('end-ready-to-close-failed');
+    await settled();
+    expect(ready().querySelector('.cw-close')).toBeNull();
+    expect(inReady().queryByRole('alert')).toBeNull();
+    expect(inReady().queryByText(/could not|failed|error|try again/i)).toBeNull();
+    await user.click(inReady().getByRole('button', { name: 'End and review' }));
+    expect(actions.endCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again each time the dialog opens, so the check is about the call as it stands', async () => {
+    const user = userEvent.setup();
+    const load = vi.fn(closingCheckLoader('mixed'));
+    renderCall('guided-hints', { loadClosingCheck: load });
+    const end = () =>
+      within(document.querySelector('header') as HTMLElement).getByRole('button', {
+        name: 'End call',
+      });
+    await user.click(end());
+    await inReady().findByRole('list', { name: 'Closing check' });
+    expect(load).toHaveBeenCalledTimes(1);
+    await user.click(inReady().getByRole('button', { name: 'Continue call' }));
+    expect(screen.queryByRole('dialog', { name: 'Ready to close?' })).toBeNull();
+    await user.click(end());
+    await inReady().findByRole('list', { name: 'Closing check' });
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not ask for a check when there is nothing to review: carrying on or leaving is all that is offered', async () => {
+    const base = FIXTURES['end-nothing-to-review'].snapshot;
+    const session = base.session as NonNullable<CallSnapshot['session']>;
+    const guided: CallSnapshot = {
+      ...base,
+      session: {
+        ...session,
+        scenario: {
+          ...session.scenario,
+          config: { ...session.scenario.config, mode: 'guided' },
+        },
+      },
+    };
+    const load = vi.fn(closingCheckLoader('mixed'));
+    renderCall(guided, { initialUi: { endOpen: true }, loadClosingCheck: load });
+    await settled();
+    expect(load).not.toHaveBeenCalled();
+    expect(document.querySelector('.cw-close')).toBeNull();
+  });
+
+  it('is the same dialog, with its check, at every width', async () => {
+    for (const width of [WIDTH.narrow, WIDTH.medium, WIDTH.wide]) {
+      renderCall('end-ready-to-close', { width });
+      const list = await inReady().findByRole('list', { name: 'Closing check' });
+      expect(within(list).getAllByRole('listitem')).toHaveLength(4);
+      cleanup();
+    }
   });
 });

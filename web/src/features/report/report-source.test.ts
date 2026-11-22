@@ -51,13 +51,18 @@ function declarations(sheet: string): { property: string; value: string; within:
 }
 
 describe('the report\u2019s stylesheets', () => {
-  it('are the five this feature owns', () => {
+  it('are the ten this feature owns, one for each part of the page', () => {
     expect([...STYLESHEETS].sort()).toEqual([
+      'coaching.css',
       'journey-chart.css',
       'journey.css',
       'report.css',
+      'scores.css',
       'states.css',
+      'summary.css',
+      'timeline.css',
       'transcript.css',
+      'wording.css',
     ]);
   });
 
@@ -177,27 +182,51 @@ describe('motion', () => {
 
 describe('print', () => {
   const all = STYLESHEETS.map((name) => css(name)).join('\n');
+  const printRules = (name: string) => css(name).slice(css(name).indexOf('@media print'));
 
   it('has print rules in the stylesheet of each part that needs them', () => {
-    for (const name of ['report.css', 'transcript.css', 'journey.css', 'journey-chart.css']) {
+    for (const name of [
+      'report.css',
+      'summary.css',
+      'timeline.css',
+      'scores.css',
+      'coaching.css',
+      'wording.css',
+      'transcript.css',
+      'journey.css',
+      'journey-chart.css',
+    ]) {
       expect(css(name), name).toMatch(/@media print\s*\{/);
     }
   });
 
   it('hides the app header and footer, the navigation, the words that name a toggle and the Actions section', () => {
-    const text = css('report.css');
-    const print = text.slice(text.indexOf('@media print'));
+    const print = printRules('report.css');
     expect(print).toMatch(/\.ff-header/);
     expect(print).toMatch(/\.ff-footer/);
     expect(print).toMatch(/\.rp-nav/);
-    expect(print).toMatch(/\.rp-header__actions/);
-    expect(print).toMatch(/\.rp-row__toggle/);
     expect(print).toMatch(/\.rp-more/);
     expect(print).toMatch(/#actions/);
     expect(print).toMatch(/display:\s*none\s*!important/);
-    const transcript = css('transcript.css').slice(css('transcript.css').indexOf('@media print'));
+    expect(printRules('summary.css')).toMatch(
+      /\.rp-exec__actions\s*\{\s*display:\s*none\s*!important/,
+    );
+    expect(printRules('scores.css')).toMatch(
+      /\.rp-skill__toggle[^{]*\{\s*display:\s*none\s*!important/,
+    );
+    const transcript = printRules('transcript.css');
     expect(transcript).toMatch(/\.rp-tools/);
     expect(transcript).toMatch(/\.rp-back/);
+  });
+
+  it('opens what is closed: score details and the CARE panels all show, and the selector goes', () => {
+    expect(printRules('scores.css')).toMatch(
+      /\.rp-skill__panel\[hidden\]\s*\{\s*display:\s*block\s*!important/,
+    );
+    expect(printRules('scores.css')).toMatch(
+      /\.rp-care__tabs[^{]*\{\s*display:\s*none\s*!important/,
+    );
+    expect(printRules('scores.css')).toMatch(/\.rp-care \.ff-tabpanel--stacked/);
   });
 
   it('shows the print header, and sets the page black on white', () => {
@@ -207,12 +236,15 @@ describe('print', () => {
     expect(css('report.css')).toMatch(/background:\s*Canvas/);
   });
 
-  it('keeps quotes, rows, facts and turns whole across pages', () => {
+  it('keeps quotes, rows, facts, moments, wording and turns whole across pages', () => {
     expect(all).toMatch(/\.rp-quote[^{]*\{[^}]*break-inside:\s*avoid/);
-    expect(all).toMatch(/\.rp-row,[\s\S]*?break-inside:\s*avoid/);
+    expect(all).toMatch(/\.rp-skill\b[^{]*\{[^}]*break-inside:\s*avoid/);
     expect(all).toMatch(/\.rp-table tr[^{]*\{[^}]*break-inside:\s*avoid/);
     expect(all).toMatch(/\.rp-turn\s*\{[^}]*break-inside:\s*avoid/);
     expect(all).toMatch(/\.rp-fact[^{]*\{[^}]*break-inside:\s*avoid/);
+    expect(all).toMatch(/\.rp-moment[^{]*\{[^}]*break-inside:\s*avoid/);
+    expect(all).toMatch(/\.rp-bw\s*\{[^}]*break-inside:\s*avoid/);
+    expect(all).toMatch(/\.rp-tl__printitem[^{]*\{[^}]*break-inside:\s*avoid/);
   });
 
   it('shows links as plain text', () => {

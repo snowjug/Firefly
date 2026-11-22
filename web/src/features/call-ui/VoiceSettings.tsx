@@ -1,7 +1,7 @@
 import { Button, Dialog, Field, Select, Switch } from '../../design/index.ts';
 import { SPEECH_LANGUAGES, type SpeechLanguage } from '#shared/domain/speech.ts';
 import type { CallActions, CallSnapshot, CallSupport } from '../call/contract.ts';
-import { LANGUAGE_NAMES } from './call-model.ts';
+import { LANGUAGE_NAMES, providerDescription } from './call-model.ts';
 import './dialogs.css';
 
 export interface VoiceSettingsProps {
@@ -18,6 +18,11 @@ export interface VoiceSettingsProps {
     CallSupport,
     'capture' | 'playback' | 'captureLabel' | 'playbackLabel' | 'speechDemo'
   >;
+  /**
+   * Who plays the customer. Below 360 px the call bar has no room for the "Demo mode" label, so it
+   * is said here, in words, and in the pre-flight.
+   */
+  provider?: { demo: boolean; label: string };
   actions: Pick<CallActions, 'setHandsFree' | 'setLanguage' | 'setAudio'>;
 }
 
@@ -57,6 +62,7 @@ export function VoiceSettings({
   voice,
   style,
   support,
+  provider,
   actions,
 }: VoiceSettingsProps) {
   const spoken = describeVoice(voice, style, support);
@@ -99,6 +105,12 @@ export function VoiceSettings({
           </Select>
         </Field>
         <dl className="cw-settings__facts">
+          {provider ? (
+            <div className="cw-settings__fact">
+              <dt>Customer AI</dt>
+              <dd>{providerDescription(provider)}</dd>
+            </div>
+          ) : null}
           <div className="cw-settings__fact">
             <dt>Customer voice</dt>
             <dd>{spoken.voice}</dd>

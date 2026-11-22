@@ -5,8 +5,9 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 //
 // The case record (priorHistory and previousTroubleshooting) already holds what Lukas told support on
 // the earlier contact: the error, the steps tried, the first failure and that the same script works
-// under his own admin account. He expects the engineer to have read it, so asking for any of it again
-// should make this calm, terse customer curt.
+// under his own admin account. The trainee sees the brief and not the record, so the brief's
+// previousContact line carries those details in short form. He expects the engineer to have read
+// them, so asking for any of it again should make this calm, terse customer curt.
 //
 // Root cause (hidden from the trainee; plausible, not validated product behaviour): last Thursday
 // morning his security team ran an access clean-up and removed permissions from a batch of service
@@ -24,6 +25,7 @@ const scenario = {
   id: 'azure-deployment-fails-permissions',
   version: 1,
   title: 'Scripted deployment now fails for a service account',
+  shortTitle: 'Deployment now fails',
   listSummary:
     'A scripted deployment that worked last week now fails for a service account. The case is already logged.',
   summary:
@@ -33,6 +35,19 @@ const scenario = {
 
   product: { id: 'azure', area: 'Deployments' },
   caseReference: 'SIM-440004',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
+    productFamily: 'azure',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
+    syntheticConfirmed: true,
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public Microsoft Learn pages on deploying templates with the Azure CLI, assigning Azure roles and governing service accounts. Case details now shown in the brief; change-timing and deadline wording made consistent. AI-assisted review, not a mentor's.",
+  },
 
   issueType: 'setup-deployment',
   impact: 'medium',
@@ -95,7 +110,7 @@ const scenario = {
     knownContext:
       'Release pipeline for a grid-monitoring portal. The customer is a cloud architect who prefers short, factual exchanges.',
     previousContact:
-      'Case logged last Friday with the error text, the steps tried and the first failure time. He sent script output on Monday and has had no update.',
+      'Case logged Friday: first failed Thursday afternoon; not authorised. Reran twice, credentials valid, works as admin. Output sent Monday; no update.',
     environment:
       'Scripted deployments to Azure resource groups for production and test, run by a service account.',
   },
@@ -104,7 +119,7 @@ const scenario = {
       'A cloud architect at a power utility is following up on a case about a scripted deployment that worked last week and now fails for a service account. He gave details on the earlier contact and expects them to have been read. He is calm and brief, and short on patience for repeated questions.',
     goal: 'Show you have read the case, give a real update, ask only what the case does not already answer, and agree a specific next step and time.',
     groundRules: [
-      'The customer, organisation and case are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Read the case history before you start; the customer will not repeat what it already says.',
       "You cannot see the customer's environment in this practice call, so rely on the case notes and what he tells you.",
     ],
@@ -347,7 +362,7 @@ const scenario = {
       importance: 'critical',
       label: 'Security team ran an access clean-up',
       statement:
-        'Our security team ran an access clean-up last Thursday morning. They removed permissions from a batch of service accounts. I only heard about it after the failures started.',
+        'Our security team ran an access clean-up last Thursday morning. They removed permissions from a batch of service accounts. I only heard about it after I logged the case.',
       revealWhen:
         "Asks whether anything has changed on the customer's side recently, or been found out, including anything done by other teams.",
       intents: ['recent_changes'],
@@ -368,9 +383,9 @@ const scenario = {
       hint: 'The timing lines up with something our security team did.',
       minDifficulty: 'starter',
       statementTerse:
-        'Our security team ran an access clean-up last Thursday and removed permissions from a batch of service accounts.',
+        'I learned after I logged the case that our security team removed service-account permissions last Thursday.',
       statementSimple:
-        'I learned that our security team did an access clean-up last Thursday morning. They removed permissions from a group of service accounts. I only heard about it after the failures started.',
+        'I learned that our security team did an access clean-up last Thursday morning. They removed permissions from a group of service accounts. I only heard about it after I logged the case.',
       missedConsequence:
         'The likely cause never comes up, and the call ends with another request for logs, which is exactly what the customer wanted to avoid.',
       betterQuestion:
@@ -553,10 +568,10 @@ const scenario = {
       type: 'deadline',
       trigger: { earliestTurn: 4, latestTurn: 7, whenImpactUnacknowledged: true },
       statement:
-        "I should say there's a hard limit. If the pipeline isn't working in time, we lose our slot. What can you do before then?",
-      followUp: 'The slot is not moving. What exactly happens next, and when?',
+        'I should say timing matters. If the pipeline stays blocked, what can you do, and when?',
+      followUp: 'What exactly happens next, and when will you update me?',
       expectedResponse:
-        'Acknowledge the window, be honest about what you can and cannot commit to, say what you will do first and by when, and ask what can be done if access cannot be restored in time.',
+        'Acknowledge the timing, be honest about what you can and cannot commit to, say what you will do first and by when, and ask what can be done if access cannot be restored in time.',
       minDifficulty: 'standard',
     },
     {
@@ -581,16 +596,16 @@ const scenario = {
 
   expectedDiscoveryAreas: [
     'What the case already records',
-    'Anything that changed since the case was logged',
+    'Changes before the failure or discovered since',
     'Whether it fails for every target',
     'Whether other pipelines or accounts are affected',
     'Who on his side can change the access',
-    'Options if the deployment window is at risk',
+    'Options if the deployment cannot wait',
   ],
   successCriteria: [
     'Opens by showing the case has been read: says what is already known and asks only what the case does not answer.',
     'Gives a real update, or says plainly that there is none yet, and does not ask him to repeat the steps already recorded.',
-    'Asks what has changed since the case was logged and finds the access clean-up by the security team.',
+    "Asks about changes before the failure or discovered since, and finds the security team's access clean-up.",
     'Finds that only production fails and that other pipelines on the same account fail too.',
     'Finds who can restore the access and what the request must say, and what can be done if the deployment cannot wait.',
     'Summarises the plan, gives a specific time for the next update, and does not promise the fix will work until it is tried.',
@@ -604,7 +619,7 @@ const scenario = {
       'Owns the case from this call, says what happens next and when he will hear back, and does not promise the fix until it has been tried.',
     ],
     resourceful: [
-      'Uses the case notes first, then asks what changed since, whether other pipelines share the account, and who can restore access.',
+      'Uses the case notes first, then asks about changes before the failure or learned since, whether other pipelines share the account, and who can restore access.',
     ],
     empathetic: [
       'Acknowledges that he has already given the details and waited without an update, without being effusive or defensive.',
@@ -619,7 +634,7 @@ const scenario = {
     'Promising the deployment will work once access is restored, or committing his security team to a time.',
   ],
   goodBehaviours: [
-    'Starting with a short summary of what the case says, then asking whether anything has changed since.',
+    'Starting with a short summary of what the case says, then asking about changes before the failure or learned since.',
     'Asking whether it fails for every target and whether other pipelines share the account.',
     'Asking who on his side can restore access and what that team needs in the request.',
     'Raising what depends on the deployment and asking what can be done if access cannot be restored in time.',

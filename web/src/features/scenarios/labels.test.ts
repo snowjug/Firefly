@@ -1,9 +1,17 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
+import { wordCount } from '#shared/domain/scenario.ts';
+import { PRODUCT_IDS } from '#shared/domain/vocab.ts';
 import {
+  MODE_SENTENCE,
+  PRODUCT_SHORT,
+  RAIL_ORDER,
+  STAGE_SHORT,
+  cardTitle,
   curveballChoices,
   complicationCount,
   impactLabel,
+  metaLine,
   minutesLabel,
   moodLabel,
   productLine,
@@ -50,5 +58,43 @@ describe('curveballChoices', () => {
 
   it('offers none to choose from when the server does not send the list', () => {
     expect(curveballChoices({})).toEqual([]);
+  });
+});
+
+describe('what a card says', () => {
+  it('writes how a scenario starts as three short phrases', () => {
+    expect(metaLine(scenarioById(SAMPLE.challenge))).toBe(
+      'High impact \u00b7 Angry \u00b7 Escalated',
+    );
+    expect(metaLine(scenarioById(SAMPLE.followUp))).toBe(
+      'Medium impact \u00b7 Frustrated \u00b7 Follow-up',
+    );
+  });
+
+  it('names every call stage in a word or two', () => {
+    expect(Object.values(STAGE_SHORT).map(wordCount)).toEqual([2, 1, 1, 1]);
+  });
+
+  it('uses the short title, and the full one when there is no short one', () => {
+    const scenario = scenarioById(SAMPLE.standard);
+    expect(cardTitle(scenario)).toBe('Meeting recordings missing');
+    expect(cardTitle({ ...scenario, shortTitle: '  ' })).toBe(scenario.title);
+    expect(cardTitle({ title: 'A full title' } as Parameters<typeof cardTitle>[0])).toBe(
+      'A full title',
+    );
+  });
+
+  it('names every product in a few words, and lists each in the rail once', () => {
+    for (const id of PRODUCT_IDS) expect(wordCount(PRODUCT_SHORT[id])).toBeLessThanOrEqual(3);
+    expect([...RAIL_ORDER].sort()).toEqual([...PRODUCT_IDS].sort());
+    // The brief's rail ends with Dynamics 365; Power Platform is the one added after it.
+    expect(RAIL_ORDER.slice(-2)).toEqual(['dynamics-365', 'power-platform']);
+  });
+
+  it('says what each practice mode means in a sentence a person can read at a glance', () => {
+    expect(MODE_SENTENCE).toEqual({
+      guided: 'Short tips appear during the call',
+      immersive: 'No tips on screen',
+    });
   });
 });

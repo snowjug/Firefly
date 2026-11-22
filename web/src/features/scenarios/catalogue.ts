@@ -2,32 +2,30 @@ import type { PublicProductDTO, PublicScenarioDTO } from '#shared/domain/api.ts'
 import {
   DIFFICULTIES,
   DIFFICULTY_RANK,
-  ISSUE_TYPES,
-  ISSUE_TYPE_LABELS,
   PRODUCT_FAMILIES,
   PRODUCT_IDS,
   type Difficulty,
-  type IssueType,
-  type ProductFamily,
   type ProductId,
 } from '#shared/domain/vocab.ts';
-import { difficultyLabel } from './labels.ts';
+import { RAIL_ORDER, difficultyLabel } from './labels.ts';
 
-// Finding scenarios: the three filters, the order scenarios are listed in, and the counts the
-// filters show. Pure functions over the public scenarios, so the list can be tested without a page.
+// Finding scenarios: the two filters, the order scenarios are shown in, and the counts the filters
+// show. Pure functions over the public scenarios, so the gallery can be tested without a page.
 
 export interface Filters {
   product: ProductId | null;
-  issue: IssueType | null;
   difficulty: Difficulty | null;
 }
 
-export const NO_FILTERS: Filters = { product: null, issue: null, difficulty: null };
+export const NO_FILTERS: Filters = { product: null, difficulty: null };
 
-/** The query keys of the filters. `difficulty` alone always means the call's setup. */
+/**
+ * The query keys of the filters. `difficulty` alone always means the call's setup. An older link may
+ * also carry `f_issue` (the issue-type filter that the product rail replaced): it is not read, so such
+ * a link shows every scenario of its product and difficulty, and the address is tidied without it.
+ */
 export const FILTER_KEYS = {
   product: 'f_product',
-  issue: 'f_issue',
   difficulty: 'f_difficulty',
 } as const;
 
@@ -39,7 +37,6 @@ function oneOf<T extends string>(list: readonly T[], value: string | null): T | 
 export function readFilters(params: URLSearchParams): Filters {
   return {
     product: oneOf(PRODUCT_IDS, params.get(FILTER_KEYS.product)),
-    issue: oneOf(ISSUE_TYPES, params.get(FILTER_KEYS.issue)),
     difficulty: oneOf(DIFFICULTIES, params.get(FILTER_KEYS.difficulty)),
   };
 }
@@ -47,13 +44,12 @@ export function readFilters(params: URLSearchParams): Filters {
 /** Writes the filters that are set. */
 export function writeFilters(filters: Filters, params: URLSearchParams): void {
   if (filters.product) params.set(FILTER_KEYS.product, filters.product);
-  if (filters.issue) params.set(FILTER_KEYS.issue, filters.issue);
   if (filters.difficulty) params.set(FILTER_KEYS.difficulty, filters.difficulty);
 }
 
 /** How many filters are in use. */
 export function activeFilterCount(filters: Filters): number {
-  return [filters.product, filters.issue, filters.difficulty].filter(Boolean).length;
+  return [filters.product, filters.difficulty].filter(Boolean).length;
 }
 
 // ---- Matching ------------------------------------------------------------------------------
@@ -61,7 +57,6 @@ export function activeFilterCount(filters: Filters): number {
 export function matchesFilters(scenario: PublicScenarioDTO, filters: Filters): boolean {
   return (
     (filters.product === null || scenario.product.id === filters.product) &&
-    (filters.issue === null || scenario.issueType === filters.issue) &&
     (filters.difficulty === null || scenario.difficulty === filters.difficulty)
   );
 }
@@ -109,12 +104,6 @@ export interface FilterOption<T extends string> {
   count: number;
 }
 
-export interface ProductGroup {
-  family: ProductFamily;
-  label: string;
-  options: FilterOption<ProductId>[];
-}
-
 /** The scenarios that match every filter except one: the pool that filter's options are counted in. */
 function without(
   scenarios: readonly PublicScenarioDTO[],
@@ -124,44 +113,27 @@ function without(
   return scenarios.filter((scenario) => matchesFilters(scenario, { ...filters, [key]: null }));
 }
 
-/** The products in the library, grouped by family, each with its count. */
-export function productGroups(
+/**
+ * The product rail: every product the library has a scenario for, in rail order, each with how many
+ * scenarios it would show with the difficulty as it is, and the number "All" would show. A product
+ * with no scenario at all is left out; one that the difficulty empties is kept, with a count of zero.
+ */
+export function railProducts(
   scenarios: readonly PublicScenarioDTO[],
   filters: Filters,
-): ProductGroup[] {
+): { products: { id: ProductId; count: number }[]; total: number } {
   const pool = without(scenarios, filters, 'product');
-  const products = new Map<ProductId, PublicProductDTO>();
-  for (const scenario of scenarios) {
-    if (!products.has(scenario.product.id)) products.set(scenario.product.id, scenario.product);
-  }
-  const groups: ProductGroup[] = [];
-  for (const product of [...products.values()].sort(byProduct)) {
-    let group = groups.find((item) => item.family === product.family);
-    if (!group) {
-      group = { family: product.family, label: product.familyLabel, options: [] };
-      groups.push(group);
-    }
-    group.options.push({
-      value: product.id,
-      label: product.name,
-      count: pool.filter((scenario) => scenario.product.id === product.id).length,
-    });
-  }
-  return groups;
-}
-
-export function issueOptions(
-  scenarios: readonly PublicScenarioDTO[],
-  filters: Filters,
-): FilterOption<IssueType>[] {
-  const pool = without(scenarios, filters, 'issue');
-  return ISSUE_TYPES.filter((type) =>
-    scenarios.some((scenario) => scenario.issueType === type),
-  ).map((type) => ({
-    value: type,
-    label: ISSUE_TYPE_LABELS[type],
-    count: pool.filter((scenario) => scenario.issueType === type).length,
-  }));
+  const have = new Set(scenarios.map((scenario) => scenario.product.id));
+  const known = RAIL_ORDER.filter((id) => have.has(id));
+  // A product the rail does not know (a new one in the library) still gets a chip, after the others.
+  const extra = PRODUCT_IDS.filter((id) => have.has(id) && !known.includes(id));
+  return {
+    products: [...known, ...extra].map((id) => ({
+      id,
+      count: pool.filter((scenario) => scenario.product.id === id).length,
+    })),
+    total: pool.length,
+  };
 }
 
 export function difficultyOptions(

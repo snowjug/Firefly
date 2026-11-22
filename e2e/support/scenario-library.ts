@@ -25,6 +25,8 @@ export interface LibraryUnknownFact {
 export interface LibraryScenario {
   id: string;
   title: string;
+  /** The title on the scenario's card, which is also the name of the card's radio button. */
+  shortTitle: string;
   persona: { name: string; role: string; organisation: string };
   callStage: string;
   difficulty: string;
@@ -53,6 +55,7 @@ export function libraryScenarios(): LibraryScenario[] {
   return getScenarioLibrary().map((scenario) => ({
     id: scenario.id,
     title: scenario.title,
+    shortTitle: scenario.shortTitle,
     persona: {
       name: scenario.persona.name,
       role: scenario.persona.role,

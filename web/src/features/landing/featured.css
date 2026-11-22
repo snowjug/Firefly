@@ -1,0 +1,73 @@
+/* The featured scenarios: the heading row, the grey cards that stand in while they load, and the one
+   quiet line for when they cannot be shown. The gallery and the cards are styled by their own
+   stylesheets (design/carousel, features/scenarios). Tokens only. */
+
+.lp-featured__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-6);
+}
+.lp-featured__all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1h);
+  min-block-size: var(--target);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Grey cards while the scenarios load: about the size of the real ones, so the page below does not
+   move when they arrive. As many as fit across the window, in one row: a card that would stick out of
+   the window wraps below the row and is cut by its height instead. ------------------------------------- */
+.lp-featured__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-block-size: 18rem;
+}
+.lp-featured__skeletons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: var(--sp-4);
+  block-size: 14rem;
+  overflow: hidden;
+}
+.lp-featured__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-block-size: 14rem;
+  padding: var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+}
+
+/* ---- One quiet line when there is nothing to show -------------------------------------------------------- */
+.lp-featured__quiet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-quiet);
+  color: var(--fg-2);
+}
+.lp-featured__quiet > p {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+
+@media (forced-colors: active) {
+  .lp-featured__skeleton,
+  .lp-featured__quiet {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+}

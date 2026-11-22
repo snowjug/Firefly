@@ -13,6 +13,38 @@
   inline-size: 100%;
 }
 
+/* The large control gives its label the room: "Done speaking" stays on one line in half a panel. */
+.ff-button.cw-talk {
+  --_px: var(--sp-2h);
+  gap: var(--sp-1h);
+}
+
+/* A control that cannot be used right now keeps its fill and its edge: the status says why, and a
+   dock washed out in grey would be louder than the signal it waits for. It shows by its label,
+   lighter but still 3:1 or better, and by the cursor. */
+.cw-ctl .ff-button[aria-disabled='true']:not(.ff-button--loading) {
+  background: var(--_bg);
+  border-color: var(--_bd);
+  color: var(--fg-3);
+}
+.cw-ctl .ff-button--primary[aria-disabled='true']:not(.ff-button--loading) {
+  color: color-mix(in srgb, var(--fg-on-brand) 70%, var(--brand));
+}
+
+/* Press: every control compresses a shallow step and comes back on a spring. This is one of the four
+   places the spring is allowed. The distance and the time are zero under reduced motion, so the press
+   is then only the colour change. */
+.cw-ctl .ff-button {
+  transition:
+    background-color var(--dur-faster) var(--ease-easy),
+    border-color var(--dur-faster) var(--ease-easy),
+    color var(--dur-faster) var(--ease-easy),
+    transform var(--dur-spring) var(--ease-spring);
+}
+.cw-ctl .ff-button:active:not(:disabled, [aria-disabled='true']) {
+  transform: scale(calc(1 - var(--press-grow)));
+}
+
 /* Microphone: ready is a stable outline, listening is a soft pulse that grows and fades. */
 .ff-button.cw-talk::after {
   content: '';
@@ -27,7 +59,7 @@
   opacity: 1;
 }
 .ff-button.cw-talk[data-kind='done']::after {
-  border-color: var(--brand);
+  border-color: var(--brand-stroke);
   animation: cw-ring var(--dur-pulse) var(--ease-decelerate) infinite;
 }
 /* Returning to voice from text is the one thing the panel offers: it takes the whole row. */
@@ -66,6 +98,49 @@
   line-height: var(--lh-compact);
   text-align: center;
   text-wrap: balance;
+}
+
+/* The dock is what a thumb reaches: it is no wider than a hand's reach (a tablet does not stretch it
+   into slabs), and the quiet controls are as big a target as the others (44 px) and share their row. */
+.cw-ctl--dock {
+  max-inline-size: 34rem;
+  margin-inline: auto;
+}
+.cw-ctl--dock .cw-ctl__more {
+  gap: var(--sp-1h);
+}
+.cw-ctl--dock .cw-ctl__more .ff-button {
+  --_h: var(--target);
+  --_px: var(--sp-1h);
+  flex: 1 1 auto;
+}
+/* A typed call: the way back to voice and Settings share one row. */
+.cw-ctl--dock:has(.cw-talk[data-kind='voice']) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.cw-ctl--dock:has(.cw-talk[data-kind='voice']) .ff-button.cw-talk[data-kind='voice'],
+.cw-ctl--dock:has(.cw-talk[data-kind='voice']) .cw-ctl__more {
+  grid-column: auto;
+}
+/* On the narrowest phones the three quiet controls fit in one row only as words (a wide font would
+   push the third onto a row of its own, which the transcript cannot spare), and the buttons above
+   them have a little less padding, so that "Stop customer audio" is two lines and not three, and
+   "Done speaking" one. Every row of the dock is height the transcript could have had. */
+@media (max-width: 22.49em) {
+  .cw-ctl--dock {
+    gap: var(--sp-1h);
+  }
+  .cw-ctl--dock .cw-ctl__more .ff-icon {
+    display: none;
+  }
+  .cw-ctl--dock > .ff-button {
+    --_px: var(--sp-2);
+    gap: var(--sp-1h);
+  }
+  .ff-button.cw-talk {
+    --_fs: var(--fs-body);
+    --_lh: var(--lh-body);
+  }
 }
 
 @media (forced-colors: active) {

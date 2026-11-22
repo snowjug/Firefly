@@ -133,6 +133,7 @@ interface Store {
   interim: string;
   micLevel: number;
   customerLevel: number;
+  customerLevelMeasured: boolean;
   elapsed: number;
   language: SpeechLanguage;
   captureKind: CaptureKind;
@@ -175,6 +176,7 @@ export function createCallController(
       interim: '',
       micLevel: 0,
       customerLevel: 0,
+      customerLevelMeasured: false,
       elapsed: 0,
       language: options.language ?? DEFAULT_SPEECH_LANGUAGE,
       captureKind: chooseCapture(options.serverSpeech, features),
@@ -255,6 +257,7 @@ export function createCallController(
       micOpen: machine.phase === 'listening' && pass.open,
       micLevel: store.micLevel,
       customerLevel: store.customerLevel,
+      customerLevelMeasured: store.customerLevelMeasured,
       interim: store.interim,
       turns: turnsView(),
       customerState: store.customerState,
@@ -953,8 +956,8 @@ export function createCallController(
         onFailure: (kind) => {
           if (live()) dispatch({ type: 'speak-failed', token, reason: kind });
         },
-        onLevel: (level) => {
-          if (live()) setCustomerLevel(level);
+        onLevel: (level, measured) => {
+          if (live()) setCustomerLevel(level, measured === true);
         },
         onDetails: (details) => {
           if (!live()) return;
@@ -981,9 +984,10 @@ export function createCallController(
     if (attached) emit();
   }
 
-  function setCustomerLevel(level: number): void {
-    if (store.customerLevel === level) return;
+  function setCustomerLevel(level: number, measured = false): void {
+    if (store.customerLevel === level && store.customerLevelMeasured === measured) return;
     store.customerLevel = level;
+    store.customerLevelMeasured = measured;
     if (attached) emit();
   }
 

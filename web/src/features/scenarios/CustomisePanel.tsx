@@ -20,7 +20,7 @@ import {
 import { cx } from '../../design/cx.ts';
 import { CUSTOMER_STATE_ICONS } from '../../design/primitives/Badge.tsx';
 import { Button, IconButton } from '../../design/primitives/Button.tsx';
-import { Checkbox, Switch } from '../../design/primitives/Choice.tsx';
+import { Checkbox } from '../../design/primitives/Choice.tsx';
 import { useAnnouncer } from '../../design/primitives/LiveRegion.tsx';
 import { SegmentedControl } from '../../design/primitives/SegmentedControl.tsx';
 import { Select } from '../../design/primitives/TextInput.tsx';
@@ -28,8 +28,6 @@ import {
   changedFromDefault,
   effectiveVoice,
   fitCurveballs,
-  hintsDefault,
-  hintsOn,
   maxCurveballs,
   type CallConfig,
   type ConfigKey,
@@ -51,8 +49,6 @@ const CURVEBALL_MODES = [
   { value: 'choose', label: 'Choose' },
 ] as const;
 
-const HINTS_HELP =
-  'Adds a short list of areas worth exploring to the case panel during the call. Off for a realistic call.';
 const VOICE_HELP = 'A synthetic voice. It does not change how the customer behaves.';
 
 function pick<T extends string>(list: readonly T[], value: string): T | undefined {
@@ -76,8 +72,6 @@ interface FrameProps {
   /** Wide enough to hold a row of options. */
   full?: boolean;
   label: string;
-  /** The control names itself (a switch does): the frame adds only the help button. */
-  bare?: boolean;
   /** The control's own group names it, so the visible label is not read a second time. */
   decorative?: boolean;
   labelId: string;
@@ -92,7 +86,6 @@ interface FrameProps {
 function Frame({
   full,
   label,
-  bare,
   decorative,
   labelId,
   changed,
@@ -102,35 +95,23 @@ function Frame({
   children,
 }: FrameProps) {
   const helpId = `${labelId}-help`;
-  const button = (
-    <IconButton
-      icon="help"
-      size="small"
-      label={`About ${label.toLowerCase()}`}
-      aria-expanded={helpOpen}
-      aria-controls={helpId}
-      onClick={onHelp}
-    />
-  );
   return (
-    <div className={cx('scn-cf', full && 'scn-cf--full', bare && 'scn-cf--bare')}>
-      {bare ? (
-        <div className="scn-cf__row">
-          {children}
-          {button}
-        </div>
-      ) : (
-        <>
-          <div className="scn-cf__head">
-            <span className="scn-cf__label" id={labelId} aria-hidden={decorative || undefined}>
-              {label}
-            </span>
-            {changed ? <span className="scn-cf__changed">Changed</span> : null}
-            {button}
-          </div>
-          {children}
-        </>
-      )}
+    <div className={cx('scn-cf', full && 'scn-cf--full')}>
+      <div className="scn-cf__head">
+        <span className="scn-cf__label" id={labelId} aria-hidden={decorative || undefined}>
+          {label}
+        </span>
+        {changed ? <span className="scn-cf__changed">Changed</span> : null}
+        <IconButton
+          icon="help"
+          size="small"
+          label={`About ${label.toLowerCase()}`}
+          aria-expanded={helpOpen}
+          aria-controls={helpId}
+          onClick={onHelp}
+        />
+      </div>
+      {children}
       <div className="scn-cf__help" id={helpId} hidden={!helpOpen}>
         {help}
       </div>
@@ -148,10 +129,10 @@ export interface CustomisePanelProps {
 }
 
 /**
- * Every setting that shapes the call except the difficulty (which is the preset above it). Each
- * starts at the scenario's own value, says in a word when it has been changed, and explains itself
- * only when asked. Nothing here reveals what the customer keeps back, or what an unexpected turn is
- * or when it comes.
+ * Every setting that shapes the call except the preset and the practice mode (which sit above it).
+ * Each starts at the scenario's own value, says in a word when it has been changed, and explains
+ * itself only when asked. Nothing here reveals what the customer keeps back, or what an unexpected
+ * turn is or when it comes.
  */
 export function CustomisePanel({
   scenario,
@@ -267,6 +248,7 @@ export function CustomisePanel({
           full
         >
           <SegmentedControl
+            className="scn-cf__states"
             legend={name('Starting state', 'temperature')}
             hideLegend
             layout="segments"
@@ -288,6 +270,7 @@ export function CustomisePanel({
             PROFICIENCY_LABELS[config.proficiency].description,
           )}
           decorative
+          full
         >
           <SegmentedControl
             legend={name('Proficiency', 'proficiency')}
@@ -413,27 +396,6 @@ export function CustomisePanel({
               </div>
             </fieldset>
           ) : null}
-        </Frame>
-
-        <Frame {...field('hints', 'Live hints', HINTS_HELP)} bare full>
-          <Switch
-            label={
-              <>
-                Live hints
-                {isChanged('hints') ? <span className="scn-cf__changed">Changed</span> : null}
-              </>
-            }
-            checked={hintsOn(config)}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                hints:
-                  event.target.checked === hintsDefault(config.difficulty)
-                    ? null
-                    : event.target.checked,
-              })
-            }
-          />
         </Frame>
       </div>
     </div>

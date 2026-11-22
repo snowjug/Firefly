@@ -121,20 +121,3 @@ export function useInterval(fn: () => void, ms: number, active = true): void {
     return () => window.clearInterval(id);
   }, [ms, active]);
 }
-
-/** True while the element is on screen (used to pause decorative animation). */
-export function useOnScreen<T extends Element>(): [React.RefObject<T | null>, boolean] {
-  const ref = useRef<T | null>(null);
-  const [visible, setVisible] = useState(true);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver(
-      ([entry]) => setVisible(Boolean(entry?.isIntersecting)),
-      { threshold: 0.05 },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return [ref, visible];
-}

@@ -80,6 +80,12 @@ export interface EngineRuntime {
   firedCurveballs: string[]; // curveball definition ids
   lastCurveballTurn: number; // trainee turn number, 0 if none
   curveballFollowUpGiven: boolean;
+  /**
+   * The trainee turn at which the call began to close, 0 if it has not. A call that is closing is
+   * not reopened: no curveball is raised from that turn on, and one that had not come up by then
+   * is dropped for the rest of the call (see `processCurveball`).
+   */
+  closingAtTurn: number;
   behaviourStreak: Record<string, number>; // consecutive turns showing a behaviour
   turnsWithoutEmpathy: number;
   lastTemperatureDelta: number; // net temperature change caused by the latest trainee turn

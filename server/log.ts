@@ -7,8 +7,10 @@ export interface Logger {
   error(event: string, fields?: Record<string, unknown>): void;
 }
 
+// The last names are a scenario's internal provenance record (PROVENANCE_KEYS in
+// shared/domain/scenario.ts): it is never logged, even by a caller that passes it.
 const FORBIDDEN_KEYS =
-  /^(text|body|transcript|apiKey|api_key|authorization|password|secret|token|prompt)$/i;
+  /^(text|body|transcript|apiKey|api_key|authorization|password|secret|token|prompt|grounding|authoredOn|revisedOn|checkedOn|productFamily|sourceCategories|behaviourCheck|syntheticConfirmed|review)$/i;
 
 function scrub(fields: Record<string, unknown> | undefined): Record<string, unknown> {
   if (!fields) return {};

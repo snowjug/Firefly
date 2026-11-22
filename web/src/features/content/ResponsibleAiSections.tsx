@@ -190,6 +190,30 @@ function AiAndCoaching() {
             short messages, a terse style, or a communication style that differs from a reviewer’s
             own. Coaching judges behaviours in the call, not personality, and reads words only.
           </p>
+          <h3 className="ct-h3">Tips, the closing check and wording to try</h3>
+          <ul>
+            <li>
+              In Guided practice, short tips are chosen only from the call stage and how many
+              messages you have sent. They never come from the facts the customer holds back.
+              Assessment practice shows no tips.
+            </li>
+            <li>
+              The “Ready to close?” check in Guided practice is neutral. It lists what the call has
+              covered and never stops you from ending the call.
+            </li>
+            <li>
+              “Better wording” is wording the coaching suggests for your call, shown as a difference
+              from your own words. It is something to try, not a script to repeat.
+            </li>
+          </ul>
+          <h3 className="ct-h3">Where the scenarios come from</h3>
+          <p>
+            Customers, organisations and cases are fictional, and the Microsoft products in them are
+            real. The product wording in each scenario was checked against public Microsoft
+            documentation, some of it only in part, and reviewed by an AI assistant. None is marked
+            as reviewed by a mentor yet. Firefly did not use Microsoft’s internal support wiki, and
+            nothing from it is in the scenarios.
+          </p>
         </>
       }
     />

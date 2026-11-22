@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   DIFFICULTIES,
   DIFFICULTY_RANK,
-  ISSUE_TYPES,
   PRODUCT_FAMILIES,
   PRODUCT_IDS,
 } from '#shared/domain/vocab.ts';
@@ -13,15 +12,15 @@ import {
   countLabel,
   difficultyOptions,
   filterScenarios,
-  issueOptions,
   matchesFilters,
-  productGroups,
+  railProducts,
   readFilters,
   sortScenarios,
   writeFilters,
   type Filters,
 } from './catalogue.ts';
 import { defaultConfig, parseConfig } from './config-params.ts';
+import { RAIL_ORDER } from './labels.ts';
 import { SAMPLE, publicScenarios, scenarioById } from './testing/fixtures.ts';
 import { defaultVoiceFor } from './voice-choice.ts';
 import { normaliseSearch, workspaceSearch } from './workspace-url.ts';
@@ -46,10 +45,7 @@ describe('filters', () => {
     const challenge = filterScenarios(all, { ...NO_FILTERS, difficulty: 'challenge' });
     expect(challenge.every((scenario) => scenario.difficulty === 'challenge')).toBe(true);
 
-    const slow = filterScenarios(all, { ...NO_FILTERS, issue: 'slow-performance' });
-    expect(slow.every((scenario) => scenario.issueType === 'slow-performance')).toBe(true);
-
-    const both = filterScenarios(all, { product: 'teams', issue: null, difficulty: 'challenge' });
+    const both = filterScenarios(all, { product: 'teams', difficulty: 'challenge' });
     expect(ids(both)).toEqual(ids(teams.filter((scenario) => scenario.difficulty === 'challenge')));
     expect(both.length).toBeLessThan(teams.length);
   });
@@ -57,32 +53,42 @@ describe('filters', () => {
   it('match a scenario only when every filter set matches it', () => {
     const one = scenarioById(SAMPLE.standard);
     expect(matchesFilters(one, NO_FILTERS)).toBe(true);
-    expect(
-      matchesFilters(one, { product: 'teams', issue: 'data-missing', difficulty: 'standard' }),
-    ).toBe(true);
+    expect(matchesFilters(one, { product: 'teams', difficulty: 'standard' })).toBe(true);
     expect(matchesFilters(one, { ...NO_FILTERS, product: 'outlook' })).toBe(false);
     expect(matchesFilters(one, { ...NO_FILTERS, difficulty: 'starter' })).toBe(false);
   });
 
   it('are read from the address, ignoring what is not valid', () => {
     const filters = readFilters(
-      new URLSearchParams('f_product=teams&f_issue=how-to&f_difficulty=hard&q=old&f_impact=high'),
+      new URLSearchParams('f_product=teams&f_difficulty=hard&q=old&f_impact=high'),
     );
-    expect(filters).toEqual({ product: 'teams', issue: 'how-to', difficulty: null });
+    expect(filters).toEqual({ product: 'teams', difficulty: null });
     expect(readFilters(new URLSearchParams('f_product=notes&difficulty=challenge'))).toEqual(
       NO_FILTERS,
     );
   });
 
+  it('read an older link that names an issue type without applying it', () => {
+    // The issue-type filter went when the product rail came: such a link still opens, and still
+    // honours the product and difficulty in it.
+    const filters = readFilters(
+      new URLSearchParams('f_product=azure&f_issue=billing-licence&f_difficulty=starter'),
+    );
+    expect(filters).toEqual({ product: 'azure', difficulty: 'starter' });
+    const written = new URLSearchParams();
+    writeFilters(filters, written);
+    expect(written.has('f_issue')).toBe(false);
+  });
+
   it('use keys that never clash with the call configuration', () => {
     const params = new URLSearchParams();
-    writeFilters({ product: 'azure', issue: 'how-to', difficulty: 'starter' }, params);
-    expect([...params.keys()]).toEqual(['f_product', 'f_issue', 'f_difficulty']);
+    writeFilters({ product: 'azure', difficulty: 'starter' }, params);
+    expect([...params.keys()]).toEqual(['f_product', 'f_difficulty']);
   });
 
   it('are counted', () => {
     expect(activeFilterCount(NO_FILTERS)).toBe(0);
-    expect(activeFilterCount({ product: 'teams', issue: null, difficulty: 'starter' })).toBe(2);
+    expect(activeFilterCount({ product: 'teams', difficulty: 'starter' })).toBe(2);
   });
 });
 
@@ -116,30 +122,43 @@ describe('order', () => {
   });
 });
 
-describe('the counts the filters show', () => {
-  it('group the products by family, in order, with a count each', () => {
-    const groups = productGroups(all, NO_FILTERS);
-    expect(groups.map((group) => group.family)).toEqual(
-      PRODUCT_FAMILIES.filter((family) =>
-        all.some((scenario) => scenario.product.family === family),
-      ),
-    );
-    expect(groups.find((group) => group.family === 'microsoft-365')?.label).toBe('Microsoft 365');
-    const options = groups.flatMap((group) => group.options);
-    expect(options.reduce((sum, option) => sum + option.count, 0)).toBe(all.length);
-    expect(options.find((option) => option.value === 'teams')?.count).toBe(2);
-    expect(options.find((option) => option.value === 'teams')?.label).toBe('Microsoft Teams');
+describe('the product rail', () => {
+  it('lists every product that has a scenario, in the brief\u2019s order with Power Platform last', () => {
+    const { products, total } = railProducts(all, NO_FILTERS);
+    expect(products.map((product) => product.id)).toEqual([...RAIL_ORDER]);
+    expect(RAIL_ORDER.at(-1)).toBe('power-platform');
+    expect(products.reduce((sum, product) => sum + product.count, 0)).toBe(all.length);
+    expect(total).toBe(all.length);
+    expect(products.find((product) => product.id === 'teams')?.count).toBe(2);
   });
 
-  it('count each filter against the others, never against itself', () => {
-    const filters: Filters = { product: 'teams', issue: null, difficulty: 'challenge' };
-    // Choosing Teams does not hide the other products' counts: they show what choosing one would give.
-    const challenge = productGroups(all, filters)
-      .flatMap((group) => group.options)
-      .reduce((sum, option) => sum + option.count, 0);
-    expect(challenge).toBe(all.filter((scenario) => scenario.difficulty === 'challenge').length);
+  it('leaves out a product the library has no scenario for', () => {
+    const withoutAzure = all.filter((scenario) => scenario.product.id !== 'azure');
+    const { products } = railProducts(withoutAzure, NO_FILTERS);
+    expect(products.map((product) => product.id)).not.toContain('azure');
+    expect(products).toHaveLength(RAIL_ORDER.length - 1);
+  });
 
-    const byDifficulty = difficultyOptions(all, filters);
+  it('counts each product against the difficulty, and keeps one the difficulty empties', () => {
+    const { products, total } = railProducts(all, { ...NO_FILTERS, difficulty: 'starter' });
+    expect(products.find((product) => product.id === 'teams')?.count).toBe(0);
+    expect(products.find((product) => product.id === 'outlook')?.count).toBe(1);
+    expect(total).toBe(all.filter((scenario) => scenario.difficulty === 'starter').length);
+  });
+
+  it('counts against the others, never against the product that is chosen', () => {
+    // Choosing Teams does not hide the other products' counts: they show what choosing one would give.
+    const filters: Filters = { product: 'teams', difficulty: 'challenge' };
+    const { products, total } = railProducts(all, filters);
+    const challenge = all.filter((scenario) => scenario.difficulty === 'challenge');
+    expect(total).toBe(challenge.length);
+    expect(products.reduce((sum, product) => sum + product.count, 0)).toBe(challenge.length);
+  });
+});
+
+describe('the difficulty filter', () => {
+  it('counts each difficulty against the product, never against itself', () => {
+    const byDifficulty = difficultyOptions(all, { product: 'teams', difficulty: 'challenge' });
     expect(byDifficulty.map((option) => [option.value, option.count])).toEqual([
       ['starter', 0],
       ['standard', 1],
@@ -151,26 +170,10 @@ describe('the counts the filters show', () => {
       'Challenge',
     ]);
   });
+});
 
-  it('keep a choice with nothing behind it in the list, with a count of zero', () => {
-    const groups = productGroups(all, { ...NO_FILTERS, difficulty: 'starter' });
-    expect(
-      groups.flatMap((group) => group.options).find((option) => option.value === 'teams')?.count,
-    ).toBe(0);
-    const issues = issueOptions(all, { ...NO_FILTERS, product: 'teams' });
-    expect(issues.find((option) => option.value === 'how-to')?.count).toBe(0);
-    expect(issues.find((option) => option.value === 'data-missing')?.count).toBe(1);
-  });
-
-  it('list the issue types in the vocabulary order, and only those the library has', () => {
-    const issues = issueOptions(all, NO_FILTERS);
-    expect(issues.map((option) => option.value)).toEqual(
-      ISSUE_TYPES.filter((type) => all.some((scenario) => scenario.issueType === type)),
-    );
-    expect(issues.reduce((sum, option) => sum + option.count, 0)).toBe(all.length);
-  });
-
-  it('say how many scenarios there are, in words', () => {
+describe('the count in words', () => {
+  it('says how many scenarios there are', () => {
     expect(countLabel(16, 16)).toBe('16 scenarios');
     expect(countLabel(3, 16)).toBe('3 of 16 scenarios');
     expect(countLabel(0, 16)).toBe('0 of 16 scenarios');
@@ -180,14 +183,14 @@ describe('the counts the filters show', () => {
 
 describe('the workspace address', () => {
   const scenario = scenarioById(SAMPLE.standard);
-  const filters: Filters = { product: 'teams', issue: 'data-missing', difficulty: null };
+  const filters: Filters = { product: 'teams', difficulty: 'standard' };
 
   it('writes filters, then the scenario, then its configuration, in a fixed order', () => {
     // A voice that is the scenario's own is left out, so the test names one that is not.
     const other = defaultVoiceFor(scenario.id) === 'voice-d' ? 'voice-c' : 'voice-d';
     const config = parseConfig(`hints=on&difficulty=challenge&voice=${other}`, scenario);
     expect(workspaceSearch(filters, { scenarioId: scenario.id, scenario, config })).toBe(
-      `?f_product=teams&f_issue=data-missing&scenario=${scenario.id}&difficulty=challenge&hints=on&voice=${other}`,
+      `?f_product=teams&f_difficulty=standard&scenario=${scenario.id}&difficulty=challenge&hints=on&voice=${other}`,
     );
   });
 

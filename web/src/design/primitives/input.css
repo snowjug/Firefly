@@ -33,7 +33,7 @@
   border-color: var(--fg-1);
 }
 .ff-input:focus {
-  border-color: var(--brand);
+  border-color: var(--brand-stroke);
 }
 .ff-input[aria-invalid='true'] {
   border-color: var(--status-danger-fg);

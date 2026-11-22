@@ -229,11 +229,17 @@ export const CURVEBALL_LABELS: Record<CurveballType, { label: string; descriptio
 export const PRACTICE_MODES = ['immersive', 'guided'] as const;
 export type PracticeMode = (typeof PRACTICE_MODES)[number];
 
+// The stored mode ids stay `immersive` and `guided`, so calls saved earlier still read correctly.
+// The names a person sees are Assessment practice and Guided practice. Assessment practice is a
+// practice mode that shows no tips; its report is still a practice signal, not an assessment.
 export const PRACTICE_MODE_LABELS: Record<PracticeMode, { label: string; description: string }> = {
-  immersive: { label: 'Immersive', description: 'Feels like a real call. Minimal on-screen cues.' },
+  immersive: {
+    label: 'Assessment practice',
+    description: 'No tips or cues on screen. Feels like a real call.',
+  },
   guided: {
     label: 'Guided practice',
-    description: 'Shows light cues: discovery areas, uncovered facts and a temperature label.',
+    description: 'Shows short tips and light cues during the call.',
   },
 };
 

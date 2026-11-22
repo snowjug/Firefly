@@ -22,9 +22,9 @@ import { libraryScenario } from './support/scenario-library.ts';
 // Responsive and user-preference checks: no horizontal scrolling at any width (WCAG 1.4.10), the call's
 // key controls reachable and big enough (2.5.5, 2.5.8), nothing cut off, the transcript scrolling
 // inside its own region, and the interface holding up under reduced motion, forced colours, more
-// contrast, a dark colour scheme, enlarged text and changed text spacing. The layout changes at three
-// widths (the scenario workspace at 1024 px, the call at 1024 and 1280 px), so every width in the list
-// is on one side of each change.
+// contrast, a dark colour scheme, enlarged text and changed text spacing. The layout changes at two
+// widths (the call at 1024 and 1280 px; the scenario workspace is one stacked page at every width), so
+// every width in the list is on one side of each change.
 
 test.describe.configure({ timeout: 180_000 });
 
@@ -48,8 +48,6 @@ test.afterEach(async ({ request }) => {
 
 const WIDTHS = [320, 375, 430, 768, 1024, 1280, 1440, 1920];
 const heightFor = (width: number) => (width < 768 ? 740 : 900);
-/** At and above this width the scenario workspace is a list and a pane side by side. */
-const WORKSPACE_WIDE = 1024;
 
 async function expectNoOverflow(page: Page, label: string) {
   const result = await overflow(page);
@@ -142,40 +140,29 @@ test('no control is smaller than 24 by 24 pixels where the layout changes', asyn
   }
 });
 
-test('the scenario workspace holds together at every width: its filters and its set-up open without sideways scrolling', async ({
+test('the scenario workspace holds together at every width: the carousel, the rail and the set-up open without sideways scrolling', async ({
   page,
 }) => {
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: heightFor(width) });
     await page.goto('/scenarios');
     await expect(page.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
-    const wide = width >= WORKSPACE_WIDE;
+    // One stacked page at every width: the rail, the carousel of cards, then the chosen scenario.
+    await expect(page.getByRole('group', { name: 'Product', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Scenarios', exact: true })).toBeVisible();
+    await expectNoOverflow(page, `the carousel at ${width}`);
 
-    if (wide) {
-      // A list and a pane side by side, each whole inside its own column.
-      await expect(page.getByRole('group', { name: 'Scenarios', exact: true })).toBeVisible();
-      await page.goto(`/scenarios?scenario=${HARD_SCENARIO_ID}`);
-      const pane = page.getByRole('region', { name: HARD.title, exact: true });
-      await expect(pane).toBeVisible();
-      await pane.getByRole('button', { name: /^Customise/ }).click();
-      await expect(pane.getByRole('group', { name: /^Impact/ })).toBeVisible();
-      const sizes = await pane.evaluate((element) => ({
-        scroll: element.scrollWidth,
-        client: element.clientWidth,
-      }));
-      expect(sizes.scroll, `the pane at ${width}`).toBeLessThanOrEqual(sizes.client);
-      await expectNothingCut(page, `the pane at ${width}`);
-    } else {
-      await expect(page.getByRole('list', { name: 'Scenarios', exact: true })).toBeVisible();
-      await page.getByRole('button', { name: /^Filters/ }).click();
-      await expect(page.getByRole('combobox', { name: 'Product' })).toBeVisible();
-      await expectNoOverflow(page, `the filters at ${width}`);
-      await page.goto(`/scenarios?scenario=${HARD_SCENARIO_ID}`);
-      await expect(page.getByRole('heading', { level: 1, name: HARD.title })).toBeVisible();
-      await page.getByRole('button', { name: /^Customise/ }).click();
-      await expect(page.getByRole('group', { name: /^Impact/ })).toBeVisible();
-      await expectNothingCut(page, `the set-up at ${width}`);
-    }
+    await page.goto(`/scenarios?scenario=${HARD_SCENARIO_ID}`);
+    const pane = page.getByRole('region', { name: HARD.title, exact: true });
+    await expect(pane).toBeVisible();
+    await pane.getByRole('button', { name: /^Customise/ }).click();
+    await expect(pane.getByRole('group', { name: /^Impact/ })).toBeVisible();
+    const sizes = await pane.evaluate((element) => ({
+      scroll: element.scrollWidth,
+      client: element.clientWidth,
+    }));
+    expect(sizes.scroll, `the details at ${width}`).toBeLessThanOrEqual(sizes.client);
+    await expectNothingCut(page, `the set-up at ${width}`);
     await expectNoOverflow(page, `the workspace at ${width}`);
   }
 });
@@ -243,10 +230,94 @@ test.describe('a spoken call', () => {
       await expectReachable(page, 'End call', 44);
       await expectReachable(page, /^(Talk|Done speaking|Return to voice)$/, 44);
       for (const name of ['Mute', 'Pause', 'Replay', 'Text', 'Settings']) {
-        await expectReachable(page, name, 24);
+        // On a phone every one of them is a full 44 px target, the quiet ones too.
+        await expectReachable(page, name, width < 640 ? 44 : 24);
       }
     });
   }
+});
+
+test('the pre-flight keeps its main action whole in the window on a phone, and the card still scrolls to the rest', async ({
+  page,
+}) => {
+  for (const [width, height] of [
+    [375, 812],
+    [320, 640],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    const id = await createSession(page.request, HARD_SCENARIO_ID);
+    const screen = callScreen(page);
+    await page.goto(`/calls/${id}?input=voice`);
+    await expect(screen.preflight.heading).toBeVisible();
+    await expectNoOverflow(page, `the pre-flight at ${width} by ${height}`);
+    // The first button is the main one: whole in the window with nothing scrolled.
+    await expectReachable(page, /^Start (?:voice|text) call$/, 44);
+    // The card is longer than the window, and scrolling reaches all of it, with the buttons still there.
+    const scrolls = await page.evaluate(
+      () => document.documentElement.scrollHeight > window.innerHeight,
+    );
+    if (scrolls) {
+      await screen.preflight.voiceDetails.scrollIntoViewIfNeeded();
+      await expect(screen.preflight.voiceDetails).toBeVisible();
+      await expectReachable(page, /^Start (?:voice|text) call$/, 44);
+    }
+    await page.request.delete(`/api/sessions/${id}`);
+  }
+});
+
+test('on the smallest phone the call keeps room to read, even in a wide font: the bar is two rows and the transcript is not squeezed out', async ({
+  page,
+}) => {
+  // This file reads everything in a deliberately wide font (see above), so the floor here is the
+  // wide-font one; the full 250 px at 320 by 640 is measured in the usual font, in the call specs.
+  await page.setViewportSize({ width: 320, height: 640 });
+  const id = await createSession(page.request, HARD_SCENARIO_ID);
+  await openTextCall(page, id);
+  const room = async () => (await page.locator('#cw-transcript').boundingBox())!.height;
+  expect(await room(), 'the transcript of a typed call').toBeGreaterThanOrEqual(250);
+  expect((await page.locator('.cw-bar').boundingBox())!.height, 'the bar').toBeLessThanOrEqual(112);
+  await expectNoOverflow(page, 'a typed call at 320 by 640');
+  await page.request.delete(`/api/sessions/${id}`);
+
+  await startSpokenCall(page);
+  await callScreen(page).stopAudio.click();
+  await expectStatus(page, 'listening');
+  expect(await room(), 'the transcript of a spoken call').toBeGreaterThanOrEqual(190);
+  await expectNoOverflow(page, 'a spoken call at 320 by 640');
+  // Below 360 px the bar has no room for who plays the customer: Voice settings says it.
+  await expect(page.locator('.cw-bar').getByText('Demo mode', { exact: true })).toBeHidden();
+});
+
+test('the call bar keeps the "Demo mode" label whole in the window from 360 px up, in a wide font too, with the transcript still 250 px at 375 by 812', async ({
+  page,
+}) => {
+  const id = await createSession(page.request, HARD_SCENARIO_ID);
+  await page.setViewportSize({ width: 375, height: 812 });
+  await openTextCall(page, id);
+  const chip = page.locator('.cw-bar').getByText('Demo mode', { exact: true });
+  for (const [width, height] of [
+    [375, 812],
+    [360, 740],
+    [430, 932],
+    [639, 900],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect(chip, `the label at ${width}`).toBeVisible();
+    const box = (await chip.boundingBox())!;
+    expect(box.x, `the label starts inside the window at ${width}`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `the label ends inside the window at ${width}`).toBeLessThanOrEqual(
+      width + 1,
+    );
+    await expectNoOverflow(page, `the call bar at ${width}`);
+  }
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(
+    (await page.locator('#cw-transcript').boundingBox())!.height,
+    'the transcript at 375 by 812',
+  ).toBeGreaterThanOrEqual(250);
+  await page.setViewportSize({ width: 359, height: 740 });
+  await expect(chip, 'and below 360 px it is left to Voice settings').toBeHidden();
+  await page.request.delete(`/api/sessions/${id}`);
 });
 
 test('400 percent zoom and an on-screen keyboard leave the call usable', async ({ page }) => {
@@ -383,16 +454,21 @@ test.describe('user preferences', () => {
       expect(await longAnimations(), `${path}: running animations`).toEqual([]);
     }
 
-    // The call still works, and each stage keeps its own words and icon.
+    // The call still works, and each stage keeps its own words and its own shape: an icon, or the three
+    // points that stand in for one while the customer works out a reply (one cue, not both).
     const { delays } = await startSpokenCall(page);
     const screen = callScreen(page);
     const seen = new Map<string, { label: string; icon: string }>();
     const record = async (status: string) => {
       await expectStatus(page, status, 30_000);
       const line = page.locator(`.cw-status[data-status="${status}"]`);
+      const icon = line.locator('.cw-status__icon');
       seen.set(status, {
         label: (await line.locator('.cw-status__label').textContent()) ?? '',
-        icon: (await line.locator('svg').first().innerHTML()) ?? '',
+        icon:
+          (await icon.count()) > 0
+            ? await icon.innerHTML()
+            : `${await line.locator('.cw-think__dot').count()} points`,
       });
       expect(await longAnimations(), `${status}: running animations`).toEqual([]);
     };
@@ -432,23 +508,24 @@ test.describe('user preferences', () => {
     expect(ring.width).toBeGreaterThanOrEqual(2);
 
     // The chosen scenario is told apart from the others by more than colour: an outline.
-    await expect(page.locator('.scn-row[data-selected]')).toHaveCount(1);
+    await expect(page.locator('.scn-card[data-selected]')).toHaveCount(1);
     const marks = await page.evaluate(() => {
-      const describe = (face: Element | null) => {
-        if (!face) return null;
-        const style = getComputedStyle(face);
+      const describe = (card: Element | null) => {
+        if (!card) return null;
+        const style = getComputedStyle(card);
         return { outline: `${style.outlineWidth} ${style.outlineStyle}` };
       };
       return {
-        chosen: describe(document.querySelector('.scn-row[data-selected] .scn-row__face')),
-        other: describe(document.querySelector('.scn-row:not([data-selected]) .scn-row__face')),
+        chosen: describe(document.querySelector('.scn-card[data-selected]')),
+        other: describe(document.querySelector('.scn-card:not([data-selected])')),
       };
     });
     expect(marks.chosen).not.toBeNull();
-    expect(marks.chosen?.outline, 'the chosen row has an outline').toMatch(/^[2-9]\S* solid$/);
-    expect(JSON.stringify(marks.chosen), 'the chosen row looks different from the others').not.toBe(
-      JSON.stringify(marks.other),
-    );
+    expect(marks.chosen?.outline, 'the chosen card has an outline').toMatch(/^[2-9]\S* solid$/);
+    expect(
+      JSON.stringify(marks.chosen),
+      'the chosen card looks different from the others',
+    ).not.toBe(JSON.stringify(marks.other));
     await testInfo.attach('forced colours: scenarios', {
       body: await page.screenshot(),
       contentType: 'image/png',
@@ -517,23 +594,39 @@ test.describe('user preferences', () => {
     }
   });
 
-  test('a dark colour scheme is ignored: the interface stays light and readable', async ({
+  test('a dark colour scheme is followed, a saved light choice is kept, and both stay readable', async ({
     page,
     world,
   }, testInfo) => {
+    const colours = () =>
+      page.evaluate(() => {
+        const read = (value: string) => (value.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+        const style = getComputedStyle(document.body);
+        return {
+          theme: document.documentElement.getAttribute('data-theme'),
+          background: read(style.backgroundColor),
+          text: read(style.color),
+        };
+      });
     await page.emulateMedia({ colorScheme: 'dark' });
     for (const path of ['/', `/sessions/${world.reportId}/report`]) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
-      const colours = await page.evaluate(() => {
-        const read = (value: string) => (value.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
-        const style = getComputedStyle(document.body);
-        return { background: read(style.backgroundColor), text: read(style.color) };
-      });
-      expect(Math.min(...colours.background), `${path}: a light page`).toBeGreaterThanOrEqual(235);
-      expect(Math.max(...colours.text), `${path}: dark text`).toBeLessThanOrEqual(80);
+      const dark = await colours();
+      expect(dark.theme, `${path}: follows the system`).toBe('dark');
+      expect(Math.max(...dark.background), `${path}: a dark page`).toBeLessThanOrEqual(60);
+      expect(Math.min(...dark.text), `${path}: light text`).toBeGreaterThanOrEqual(200);
       await expectAccessible(page, testInfo, `${path} with a dark colour scheme`);
     }
+
+    // A choice saved on this device wins over the system.
+    await page.evaluate(() => window.localStorage.setItem('firefly.theme', 'light'));
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+    const light = await colours();
+    expect(light.theme, 'a saved light choice').toBe('light');
+    expect(Math.min(...light.background), 'a light page').toBeGreaterThanOrEqual(235);
+    expect(Math.max(...light.text), 'dark text').toBeLessThanOrEqual(80);
   });
 
   test('text at 200 percent and wider text spacing lose no content and no function', async ({

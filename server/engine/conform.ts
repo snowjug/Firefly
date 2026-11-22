@@ -9,19 +9,35 @@ import { normalizeWhitespace, sentences } from '#shared/domain/text.ts';
 //   formatting  list markers, headings and line breaks are flattened into plain speech
 //   praise      "great question" and "well done" are removed, "that's correct" becomes "that's right"
 //   coaching    "you should ask me about..." is removed, and so is announcing a hidden fact
+//   assistant   "Certainly!", "I understand your concern", "Thank you for your patience" and the
+//               rest of what a chatbot says and a customer does not are removed
+//   name        the engineer's name is said once, not in every reply
 //
 // The result is always usable text, or empty when nothing of the reply could be kept. `problems`
 // lists what was found even when it was repaired, so a caller can ask a model to try again when the
 // reply could not be saved.
 
 export type ConformProblem =
-  'too-long' | 'list-or-heading' | 'praise' | 'coaching' | 'announces-facts' | 'empty';
+  | 'too-long'
+  | 'list-or-heading'
+  | 'praise'
+  | 'coaching'
+  | 'announces-facts'
+  | 'ai-politeness'
+  | 'repeats-name'
+  | 'empty';
 
 export interface ConformOptions {
   /** Most sentences the reply may have (see `ReplyPlan.maxSentences`). */
   maxSentences: number;
   /** Most characters, as a second limit for a very long sentence. */
   maxChars?: number;
+  /**
+   * The engineer's name, and what the customer said in their last few replies. A customer who is
+   * on first-name terms says it now and then, not in every reply: it is left out of a reply when
+   * it is in any of those, and every time but the first within the reply itself.
+   */
+  engineerName?: { name: string; recent: readonly string[] };
 }
 
 export interface ConformResult {
@@ -34,10 +50,35 @@ const LIST_MARKER = /^[ \t]*(?:[-*\u2022]|\d{1,2}[.)]|#{1,6}|>)[ \t]+/;
 
 // Praise at the start of a sentence: "Great question.", "Good point, ..." and the like.
 const PRAISE_LEAD =
-  /^(?:(?:oh|well|ah|ok(?:ay)?|right|yes|yeah|great|good|excellent|brilliant|fantastic|perfect|lovely|nice)[,!.]?\s+)*(?:that(?:'s| is) )?(?:an? |such an? )?(?:very |really |truly )?(?:great|good|excellent|fantastic|brilliant|perfect|fair|smart|sharp|clever|insightful|helpful|valid|astute)\s+(?:question|point|catch|observation|suggestion|idea|thinking|call)\b[,.!:;]?\s*/i;
+  /^(?:(?:oh|well|ah|ok(?:ay)?|right|yes|yeah|great|good|excellent|brilliant|fantastic|perfect|lovely|nice)[,!.]?\s+)*(?:that(?:'s| is) )?(?:an? |such an? )?(?:very |really |truly )?(?:great|good|excellent|fantastic|brilliant|perfect|fair|smart|sharp|clever|insightful|helpful|valid|astute)\s+(?:(?:troubleshooting|diagnostic|follow-?up) )?(?:question|point|catch|observation|suggestion|idea|thinking|call|step|approach|move|plan|thing to (?:ask|check|try)|way to (?:look at it|think about it))\b[,.!:;]?\s*/i;
 const PRAISE =
   /\b(?:well done|good job|great job|nicely done|nice work|excellent work|good work|you(?:'re| are) doing (?:great|well|a (?:great|good) job)|you did (?:great|well|a (?:great|good) job)|spot on|bingo)\b/i;
 const THATS_CORRECT = /\bthat(?:'s| is) (?:absolutely |completely |entirely |exactly )?correct\b/i;
+
+/**
+ * What an assistant says and a customer does not: cheerful assent ("Certainly!"), a pledge of
+ * understanding ("I understand your concern"), thanks for patience, an offer of help, and the
+ * closing lines of a support email. Said in every reply, they are what makes a customer sound like
+ * a chatbot. Each is tested on a whole sentence; "Understood." alone is the robotic agreement.
+ */
+export const AI_POLITENESS = new RegExp(
+  [
+    String.raw`^certainly\b`,
+    String.raw`^(?:absolutely|definitely|of course|sure thing)\s*!`,
+    String.raw`^(?:understood|acknowledged|noted|very well)\s*[.!]*$`,
+    String.raw`^i (?:completely |totally |fully |really )?understand (?:your|the|how) (?:concern|frustration|worry|situation|position)s?\b`,
+    String.raw`^(?:thank you|thanks) for (?:your|the) (?:patience|understanding|assistance|prompt|quick)\b`,
+    String.raw`^(?:thank you|thanks) for (?:bringing|reaching|getting in touch|contacting)\b`,
+    String.raw`^i (?:really |truly |do )?appreciate your (?:patience|assistance|understanding|prompt|quick)\b`,
+    String.raw`^(?:i'?m|i am) (?:happy|glad|delighted|pleased) to (?:help|assist)\b`,
+    String.raw`^i'?d be (?:happy|glad|delighted) to\b`,
+    String.raw`^(?:how|what) (?:can|may) i (?:help|assist|do for) you\b`,
+    String.raw`^is there anything else i can (?:help|assist)\b`,
+    String.raw`^(?:i hope (?:this|that) helps|please (?:let me know|feel free)|feel free to|don'?t hesitate to)\b`,
+    String.raw`^(?:i )?(?:sincerely |truly )?apologi[sz]e for (?:any|the) (?:inconvenience|confusion|trouble)\b`,
+  ].join('|'),
+  'i',
+);
 
 const COACHING = new RegExp(
   [
@@ -59,7 +100,42 @@ const COACHING = new RegExp(
   'i',
 );
 const ANNOUNCES =
-  /\bhidden facts?\b|\banother (?:hidden )?fact\b|\bi(?:'ll| will| can| could) (?:now )?(?:reveal|disclose)\b|\bhere(?:'s| is) (?:another|a|the next) (?:hidden )?(?:fact|detail|clue)\b|\bnext (?:fact|clue)\b/i;
+  /\bhidden facts?\b|\banother (?:hidden )?fact\b|\bi(?:'ll| will| can| could) (?:now )?(?:reveal|disclose)\b|\bhere(?:'s| is) (?:another|a|the next) (?:hidden )?(?:fact|detail|clue)\b|\bnext (?:fact|clue)\b|\byou(?:'ve| have) (?:just )?(?:discovered|uncovered|unlocked|earned)\b[^.?!]{0,40}\b(?:fact|clue|detail|information)\b/i;
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// A name said to someone, as opposed to a word that happens to be one (a "Will" at the start of
+// "Will you call me?" is not an address): "Thanks, Alex.", "Hi Alex, thanks.", "Alex, I need this."
+const GREETING_WORD = String.raw`(?:hi|hello|hey|thanks|thank you|okay|ok|right|yes|sure|well|great|sorry|please)`;
+
+function addressForms(name: string): [RegExp, string][] {
+  const n = escapeRegExp(name);
+  return [
+    [new RegExp(`,\\s*${n}(?=\\s*[.!?]*$)`, 'i'), ''],
+    [new RegExp(`\\b(${GREETING_WORD})\\s+${n}(?=\\s*[.!?]*$)`, 'i'), '$1'],
+    [new RegExp(`^${n}\\s*,\\s*`, 'i'), ''],
+    [new RegExp(`\\b(${GREETING_WORD})\\s+${n}(?=\\s*,)`, 'i'), '$1'],
+    [new RegExp(`,\\s*${n}\\s*,`, 'i'), ','],
+  ];
+}
+
+/** Whether the text says the name to the engineer, in any sentence of it. */
+export function addressesBy(text: string, name: string): boolean {
+  const forms = addressForms(name);
+  return sentences(text).some((sentence) => forms.some(([pattern]) => pattern.test(sentence)));
+}
+
+/** The sentence without the engineer's name, and without the comma or space it leaves behind. */
+function withoutName(sentence: string, name: string): string {
+  let out = sentence;
+  for (const [pattern, replacement] of addressForms(name)) out = out.replace(pattern, replacement);
+  out = out
+    .replace(/,\s*,/g, ',')
+    .replace(/\s+([.,!?;:])/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return out === '' ? '' : out.charAt(0).toUpperCase() + out.slice(1);
+}
 
 /**
  * Turns the lines of a list or heading into sentences of their own, for the step that collapses
@@ -100,6 +176,13 @@ export function conformCustomerReply(input: string, options: ConformOptions): Co
   const { text: flat, markers } = flatten(input);
   if (markers > 0) problems.add('list-or-heading');
 
+  // The engineer's name is said once in any five replies: not again if it was said in the last four,
+  // and once at most in this one.
+  const addressed = options.engineerName;
+  let nameAllowed =
+    addressed !== undefined &&
+    !addressed.recent.slice(-4).some((earlier) => addressesBy(earlier, addressed.name));
+
   const kept: string[] = [];
   for (const raw of sentences(flat)) {
     let sentence = raw;
@@ -113,8 +196,12 @@ export function conformCustomerReply(input: string, options: ConformOptions): Co
       problems.add('praise');
       continue;
     }
+    if (AI_POLITENESS.test(sentence.replace(/[\u2018\u2019]/g, "'"))) {
+      problems.add('ai-politeness');
+      continue;
+    }
     if (THATS_CORRECT.test(sentence)) {
-      problems.add('praise');
+      // A customer says "that's right", not "that's correct": a rewording, not praise.
       sentence = sentence.replace(new RegExp(THATS_CORRECT.source, 'gi'), (m) =>
         m[0] === 'T' ? "That's right" : "that's right",
       );
@@ -126,6 +213,15 @@ export function conformCustomerReply(input: string, options: ConformOptions): Co
     if (ANNOUNCES.test(sentence)) {
       problems.add('announces-facts');
       continue;
+    }
+    if (addressed && addressesBy(sentence, addressed.name)) {
+      if (nameAllowed) {
+        nameAllowed = false;
+      } else {
+        problems.add('repeats-name');
+        sentence = withoutName(sentence, addressed.name);
+        if (sentence === '') continue;
+      }
     }
     kept.push(sentence);
   }

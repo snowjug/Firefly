@@ -1,0 +1,332 @@
+/* The report preview: the words a score rests on, then the scores. A card of two parts: the evidence
+   for the chosen skill, and the six skills as one choice, one short row each: the skill, its level
+   and the turn its words are from. The chosen row is marked by a bar and a tint and, beside the
+   evidence, by a short line that joins it to the words, so the choice never depends on colour. The
+   evidence and every level are there from the start; once the card has scrolled into view the levels
+   take their colour, one row after another, a beat after the evidence. Under reduced motion they have
+   it at once. Every word and score is in the document throughout. Tokens only. */
+
+.lp-rp {
+  margin: 0;
+}
+.lp-rp__caption {
+  margin-block-start: var(--sp-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-3);
+}
+
+.lp-rp__card {
+  --lp-rp-gap: var(--sp-5);
+  display: grid;
+  gap: var(--lp-rp-gap);
+  padding: var(--sp-4);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+}
+@media (max-width: 23em) {
+  .lp-rp__card {
+    padding: var(--sp-3);
+  }
+}
+@media (min-width: 48em) {
+  .lp-rp__card {
+    --lp-rp-gap: var(--sp-8);
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    padding: var(--sp-6);
+  }
+}
+.lp-rp__label {
+  margin: 0;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--fg-3);
+}
+
+/* ---- The evidence --------------------------------------------------------------------------- */
+.lp-rp__evidence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-inline-size: 0;
+  padding: var(--sp-4);
+  border: var(--stroke-w) solid var(--brand-stroke-2);
+  border-radius: var(--r-lg);
+  background: var(--brand-tint);
+}
+/* The words of all six skills share one cell, so the card is as tall as the longest of them and the
+   rows below it never move when the choice changes. The chosen words rise in as the others go: by
+   opacity and transform on the shared durations, and under reduced motion at once. The quote starts
+   where the label ends and the coaching rests on the card's floor, however tall the card stands
+   beside the six rows. */
+.lp-rp__stack {
+  display: grid;
+  flex: 1;
+}
+.lp-rp__linked {
+  grid-area: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(var(--move-xs));
+  transition:
+    opacity var(--motion-control) var(--ease-easy),
+    transform var(--motion-control) var(--ease-easy),
+    visibility 0s linear var(--motion-control);
+}
+.lp-rp__linked[data-active] {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--motion-component) var(--ease-decelerate) var(--dur-faster),
+    transform var(--motion-component) var(--ease-decelerate) var(--dur-faster);
+}
+.lp-rp__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  color: var(--fg-2);
+}
+.lp-rp__turn {
+  padding-inline: var(--sp-2);
+  border: var(--stroke-w) solid var(--brand-stroke-2);
+  border-radius: var(--r-pill);
+  background: var(--bg-raised);
+  color: var(--brand-fg-2);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.lp-rp__quote {
+  margin: 0;
+  color: var(--fg-1);
+}
+.lp-rp__quote p {
+  margin: 0;
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  text-wrap: pretty;
+}
+@media (min-width: 48em) {
+  .lp-rp__quote p {
+    font-size: var(--fs-subtitle1);
+    line-height: var(--lh-subtitle1);
+  }
+}
+/* Wide, the quote is the largest thing on the card: the words are what the scores stand on. */
+@media (min-width: 64em) {
+  .lp-rp__quote p {
+    font-size: var(--fs-title3);
+    line-height: var(--lh-title3);
+  }
+}
+.lp-rp__quote p::before {
+  content: open-quote;
+}
+.lp-rp__quote p::after {
+  content: close-quote;
+}
+.lp-rp__noted {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-block-start: auto;
+  padding-block-start: var(--sp-3);
+  border-block-start: var(--stroke-w) solid var(--brand-stroke-2);
+}
+.lp-rp__note {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+/* Wide, the inset is roomier, in proportion to its width: the evidence fills the card's height with
+   its own air, not with a gap under the quote. */
+@media (min-width: 64em) {
+  .lp-rp__evidence {
+    gap: var(--sp-4);
+    padding: var(--sp-6);
+  }
+  .lp-rp__linked {
+    gap: var(--sp-4);
+  }
+  .lp-rp__noted {
+    padding-block-start: var(--sp-4);
+  }
+}
+
+/* ---- The six skills: one choice, one row each ------------------------------------------------
+   Every row is one line of 44px: the skill, its level and the turn its words are from, all centred on
+   the row, so the chosen row's tint, its bar and the line to the evidence are centred on the label. */
+.lp-rp__skills {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+.lp-rp__rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-rp__item {
+  position: relative;
+}
+.lp-rp__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--target);
+  padding: var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-4);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: background-color var(--motion-control) var(--ease-easy);
+}
+.lp-rp__row[data-active] {
+  background: var(--brand-tint);
+}
+/* The chosen row's bar: a shape, so the choice never depends on colour. */
+.lp-rp__row::before {
+  content: '';
+  position: absolute;
+  inset-block: var(--sp-2);
+  inset-inline-start: var(--sp-1);
+  inline-size: 0.1875rem;
+  border-radius: var(--r-pill);
+  background: var(--brand-stroke);
+  opacity: 0;
+  transform: scaleY(0.5);
+  transition:
+    opacity var(--motion-control) var(--ease-easy),
+    transform var(--motion-component) var(--ease-decelerate);
+}
+.lp-rp__row[data-active]::before {
+  opacity: 1;
+  transform: none;
+}
+.lp-rp__row:has(.lp-rp__input:focus-visible) {
+  outline: var(--stroke-w-thick) solid var(--focus-outer);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-inner);
+}
+/* The chosen row is shown by its bar and its tint, never by a heavier weight: a bolder name is wider, so
+   in a wider font it could wrap and make the card taller exactly when a row is pointed at. */
+.lp-rp__skill {
+  min-inline-size: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+}
+.lp-rp__at {
+  /* The widest turn ("Turn 12") sets the column, so the levels of all six rows stand in one line. */
+  min-inline-size: 2.5rem;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
+}
+/* The level is five small segments; "4 of 5, Strong" stays in the document as text, in the row's own
+   name. They are there from the start in a neutral colour and take the product's colour, one row after
+   another, a beat after the evidence, once the card has come into view. */
+.lp-rp__level {
+  position: relative;
+  display: inline-flex;
+}
+.lp-rp__pips {
+  --pip-w: 0.625rem;
+  display: inline-flex;
+  gap: var(--sp-1);
+}
+.lp-rp__pip {
+  flex: none;
+  inline-size: var(--pip-w);
+  block-size: 0.375rem;
+  border-radius: var(--r-pill);
+  background: var(--bg-strong);
+  box-shadow: inset 0 0 0 1px var(--stroke-1);
+}
+.lp-rp__pip[data-on] {
+  background: var(--stroke-accessible);
+  box-shadow: none;
+  transition: background-color var(--motion-component) var(--ease-easy);
+}
+.lp-rp__card[data-revealed] .lp-rp__pip[data-on] {
+  background: var(--brand-stroke);
+  transition-delay: calc(var(--motion-panel) + var(--dur-stagger) * var(--i));
+}
+
+/* On a phone the segments are a little smaller, so the longest skill name, its level and its turn
+   still share one line. */
+@media (max-width: 30em) {
+  .lp-rp__pips {
+    --pip-w: 0.5rem;
+  }
+}
+
+/* On the narrowest phones the turn is left to the evidence, so the longest skill name and its level
+   still share one line; it stays in the row's own name. */
+@media (max-width: 23em) {
+  .lp-rp__row {
+    padding-inline: var(--sp-3) var(--sp-2);
+  }
+  .lp-rp__at {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
+/* From 48em the evidence stands beside the rows, and a short line joins the chosen row to it. */
+@media (min-width: 48em) {
+  .lp-rp__row[data-active]::after {
+    content: '';
+    position: absolute;
+    inset-inline-end: 100%;
+    inset-block-start: calc(50% - var(--stroke-w-thick) / 2);
+    inline-size: var(--lp-rp-gap);
+    block-size: var(--stroke-w-thick);
+    background: var(--brand-stroke);
+  }
+}
+
+@media (forced-colors: active) {
+  .lp-rp__card,
+  .lp-rp__evidence {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .lp-rp__row::before,
+  .lp-rp__row[data-active]::after {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+  .lp-rp__row[data-active] {
+    outline: var(--stroke-w) solid Highlight;
+  }
+  .lp-rp__pip {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
+  .lp-rp__pip[data-on] {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}

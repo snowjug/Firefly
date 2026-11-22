@@ -241,15 +241,26 @@ function buildEffects(input: StateTurnInput): TurnEffects {
   }
 
   if (c.ownership === 'clear') {
-    effects.push({
-      category: 'ownership',
-      reason: 'Took clear ownership',
-      quote: quoteFor(c, ['ownership-clear']),
-      temperature: -6,
-      trust: 5,
-      confidence: 8,
-      ownershipConfidence: 25,
-    });
+    if (state.ownershipStated) {
+      // It counted when it was first said; saying it again is not a second reason to calm down.
+      effects.push({
+        category: 'ownership',
+        reason: 'Said again that they own the case',
+        quote: quoteFor(c, ['ownership-clear']),
+        temperature: -1,
+        trust: 1,
+      });
+    } else {
+      effects.push({
+        category: 'ownership',
+        reason: 'Took clear ownership',
+        quote: quoteFor(c, ['ownership-clear']),
+        temperature: -6,
+        trust: 5,
+        confidence: 8,
+        ownershipConfidence: 25,
+      });
+    }
   } else if (c.ownership === 'vague') {
     effects.push({
       category: 'ownership',
@@ -261,16 +272,30 @@ function buildEffects(input: StateTurnInput): TurnEffects {
   }
 
   // A time only calms when it belongs to something the engineer will do. A promise about the
-  // outcome ("it will be fixed by three") names a time too, but it is not a plan.
+  // outcome ("it will be fixed by three") names a time too, but it is not a plan. A time that
+  // contradicts the one given earlier is charged below, and is not also a reason to calm down; the
+  // same time said again is no more of one than the owner said again.
   if (c.nextSteps === 'specific' && !unsupportedTimeOnly) {
-    effects.push({
-      category: 'next-steps',
-      reason: 'Gave specific next steps with a time',
-      quote: quoteFor(c, ['next-steps-specific']),
-      temperature: -5,
-      trust: 4,
-      confidence: 6,
-    });
+    if (analysis.conflict) {
+      // The penalty for the changed time stands on its own.
+    } else if (analysis.restates && state.nextStepsStated) {
+      effects.push({
+        category: 'next-steps',
+        reason: 'Said again what they would do and when',
+        quote: quoteFor(c, ['next-steps-specific']),
+        temperature: -1,
+        trust: 1,
+      });
+    } else {
+      effects.push({
+        category: 'next-steps',
+        reason: 'Gave specific next steps with a time',
+        quote: quoteFor(c, ['next-steps-specific']),
+        temperature: -5,
+        trust: 4,
+        confidence: 6,
+      });
+    }
   } else if (c.nextSteps === 'vague' && c.ownership !== 'clear') {
     effects.push({
       category: 'next-steps',
@@ -422,7 +447,10 @@ function buildEffects(input: StateTurnInput): TurnEffects {
     });
   }
 
-  if ((c.wrapsUp || c.confirmsNextContact || c.asksAnythingElse) && n >= 3) {
+  if (
+    (c.wrapsUp || c.confirmsNextContact || c.asksAnythingElse || analysis.asksCustomerSide) &&
+    n >= 3
+  ) {
     effects.push({
       category: 'closing',
       reason: 'Closed with a summary or a check that everything is clear',
@@ -464,9 +492,12 @@ function buildEffects(input: StateTurnInput): TurnEffects {
     'closing',
     'rapport',
   ]);
-  // Saying hello when the customer has only said hello is not a wasted turn.
+  // Saying hello to a customer who has only said hello is not a wasted turn, nor is answering the
+  // customer's "so you'll call at three?" with a yes, nor saying goodbye.
   const madeProgress =
     analysis.greetingOnly ||
+    analysis.confirmsEcho ||
+    analysis.farewell ||
     effects.some((e) => progressCategories.has(e.category) && (e.temperature ?? 0) <= 0);
   if (!madeProgress && !c.blame && !c.dismissive) {
     effects.push({

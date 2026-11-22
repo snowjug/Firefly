@@ -20,25 +20,18 @@ function isWaiting(pending: Pending, address: string): boolean {
 /** A choice that never reaches the address (it was refused) must not hold the screen for ever. */
 const GIVE_UP_MS = 2000;
 
-/** What the entry pushed by `open` carries, so the screen it opened knows `back` can pop it. */
-const FROM_LIST = 'scnFromList';
-
-function cameFromList(state: unknown): boolean {
-  return typeof state === 'object' && state !== null && FROM_LIST in state;
-}
-
 /**
  * The workspace's query string, as the person last chose it.
  *
  * The router takes a few frames to commit a navigation. A control that waits for the address would
  * show its old value for those frames (the highlighted option goes dark, then lights up again), so a
- * choice is shown at once and the address follows it. The address is replaced, never added to,
- * except for the one step that moves from the list into a scenario on a narrow screen (`open`),
- * which Back undoes. Once the address has caught up with the latest choice, or has been moved by
- * something else (such as Back), the address is the truth again.
+ * choice is shown at once and the address follows it. The address is always replaced, never added
+ * to, so the Back button leaves the workspace instead of stepping through every choice. Once the
+ * address has caught up with the latest choice, or has been moved by something else (such as Back),
+ * the address is the truth again.
  */
 export function useWorkspaceSearch() {
-  const { search: address, state } = useLocation();
+  const { search: address } = useLocation();
   const navigate = useNavigate();
   const [pending, setPending] = useState<Pending | null>(null);
 
@@ -79,26 +72,6 @@ export function useWorkspaceSearch() {
     [navigate, commit],
   );
 
-  /** Adds an entry to the history (so Back returns to where this was), and scrolls to the top. */
-  const open = useCallback(
-    (search: string) => {
-      commit(search);
-      void navigate({ search }, { state: { [FROM_LIST]: true } });
-    },
-    [navigate, commit],
-  );
-
-  /** Goes back to the list: pops the entry `open` added, or replaces the address when there is none. */
-  const back = useCallback(
-    (search: string) => {
-      if (cameFromList(state)) {
-        commit(search);
-        void navigate(-1);
-      } else replace(search);
-    },
-    [navigate, commit, replace, state],
-  );
-
   /**
    * Moves the address to a tidied form, unless a choice has been made since the render that worked
    * that form out. An effect runs a little after its render, and a choice can land in between (the
@@ -120,8 +93,6 @@ export function useWorkspaceSearch() {
     /** The address has caught up with every choice. */
     settled: !waiting,
     replace,
-    open,
-    back,
     tidy,
   };
 }

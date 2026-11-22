@@ -123,3 +123,17 @@
   flex-wrap: wrap;
   gap: var(--sp-3);
 }
+
+/* Dark theme: the page is the darkest surface and the bar and the cards are one step up, as in the
+   workspace these stand in for. */
+:root[data-theme='dark'] .cw-skel,
+:root[data-theme='dark'] .cw-page {
+  background: var(--bg-canvas);
+}
+:root[data-theme='dark'] .cw-skel__bar,
+:root[data-theme='dark'] .cw-skel__panel {
+  background: var(--bg-raised);
+}
+:root[data-theme='dark'] .ff-surface.cw-page__card {
+  background: var(--bg-raised);
+}

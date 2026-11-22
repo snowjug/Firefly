@@ -106,7 +106,7 @@ describe.each([
     expect(talk).toHaveAttribute('aria-busy', 'true');
     expect(talk).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('region', { name: 'Customer' })).toHaveTextContent('Microphone ready');
-    expect(screen.queryByText('Listening')).toBeNull();
+    expect(screen.queryByText('Listening to you')).toBeNull();
     await user.click(talk);
     expect(actions.talk).not.toHaveBeenCalled();
     expect(actions.stopTalking).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe.each([
     // Only then is it Listening, and the control becomes the one that finishes the sentence.
     update(FIXTURES.listening.snapshot);
     expect(control('Done speaking')).not.toHaveAttribute('aria-busy');
-    expect(screen.getByRole('region', { name: 'Customer' })).toHaveTextContent('Listening');
+    expect(screen.getByRole('region', { name: 'Customer' })).toHaveTextContent('Listening to you');
   });
 });
 
@@ -169,6 +169,14 @@ describe('typing a reply (the text fallback)', () => {
       expect(within(controls()).queryByRole('button', { name })).toBeNull();
     }
     expect(within(controls()).getByRole('button', { name: 'Return to voice' })).toBeInTheDocument();
+  });
+
+  it('offers the way back to voice as a quiet button, not a second main one beside Send', () => {
+    renderCall('text-fallback');
+    const back = within(controls()).getByRole('button', { name: 'Return to voice' });
+    expect(back).toHaveClass('ff-button--outline');
+    expect(back).not.toHaveClass('ff-button--large');
+    expect(screen.getByRole('button', { name: 'Send' })).toHaveClass('ff-button--primary');
   });
 
   it('is not in a spoken call', () => {
@@ -248,6 +256,44 @@ describe('typing a reply (the text fallback)', () => {
     await user.click(send);
     expect(actions.sendText).not.toHaveBeenCalled();
     expect(box()).toHaveValue('Is the driver version on that PC');
+  });
+
+  it('shows the sent message read-only while the customer replies, and gives the box back, empty, when the reply is in', async () => {
+    const user = userEvent.setup();
+    const { actions, update } = renderCall('text-fallback');
+    let accept!: (accepted: boolean) => void;
+    actions.sendText.mockReturnValueOnce(new Promise<boolean>((resolve) => (accept = resolve)));
+    await user.type(box(), 'Hello there{Enter}');
+    expect(box()).not.toHaveAttribute('readonly');
+    // The call has taken the message and the customer is replying.
+    update(FIXTURES['text-thinking'].snapshot);
+    expect(box()).toHaveAttribute('readonly');
+    expect(box()).toHaveValue('Hello there');
+    expect(box()).toHaveAccessibleDescription(/Waiting for the customer\./);
+    // It is not editable meanwhile, so what was sent cannot be mistaken for a message still to send.
+    await user.type(box(), ' and more');
+    expect(box()).toHaveValue('Hello there');
+    expect(box()).toHaveFocus();
+    // The reply is in: the box is the person's again, and empty.
+    accept(true);
+    update(FIXTURES['text-fallback'].snapshot);
+    await waitFor(() => expect(box()).toHaveValue(''));
+    expect(box()).not.toHaveAttribute('readonly');
+  });
+
+  it('does not show the count of a message that is waiting for its reply: nothing is being written', () => {
+    // 32 characters of a 40 limit: the count would show, were the box open for writing.
+    renderCall('text-thinking', { maxMessageChars: 40 });
+    expect(box()).toHaveAttribute('readonly');
+    expect(screen.queryByText(/ \/ 40/)).toBeNull();
+  });
+
+  it('is read-only only while the customer replies: any other wait leaves the box as it was', () => {
+    renderCall('problem-save-failed');
+    expect(box()).not.toHaveAttribute('readonly');
+    cleanup();
+    renderCall('text-limit');
+    expect(box()).not.toHaveAttribute('readonly');
   });
 
   it('refuses a message over the limit, says by how much, and allows it again once it fits', async () => {

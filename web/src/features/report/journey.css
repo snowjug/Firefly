@@ -1,15 +1,21 @@
-/* The customer-journey section: the chart, the call milestones under it, the turns that moved the
-   customer, the unexpected-turn block, the table that stands in for the chart, and the marker
-   shapes the list and the chart share. */
+/* The customer-experience section: the chart (its own stylesheet loads with it), the panel under it
+   that shows the exact turn, the important points as rows, the unexpected-turn block, the table
+   that stands in for the chart, and the marker shapes the chart and its key share. Tokens only. */
 
 .rp-journey {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-5);
+  gap: var(--sp-4);
 }
 .rp-journey__chart {
   min-inline-size: 0;
-  max-inline-size: 48rem;
+}
+.rp-journey__panel {
+  padding: var(--sp-4) var(--sp-5);
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
 }
 .rp-chart-placeholder {
   min-block-size: 18rem;
@@ -31,169 +37,42 @@
   color: var(--fg-2);
 }
 
-/* ---- Call milestones: a rail with six marks ----------------------------------------------- */
-.rp-timeline-box {
+/* ---- The important points ----------------------------------------------------------------- */
+.rp-moments {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--stroke-w) solid var(--stroke-2);
+  border-radius: var(--r-xl);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.rp-moment {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
   min-inline-size: 0;
   padding: var(--sp-4);
-  border: var(--stroke-w) solid var(--stroke-2);
-  border-radius: var(--r-xl);
 }
-.rp-timeline {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.rp-moment + .rp-moment {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
 }
-.rp-milestone {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1.5rem minmax(0, 1fr);
-  gap: var(--sp-3);
-  padding-block-end: var(--sp-4);
-}
-.rp-milestone:last-child {
-  padding-block-end: 0;
-}
-.rp-milestone:not(:last-child)::before {
-  content: '';
-  position: absolute;
-  inset-block: 1.5rem 0;
-  inset-inline-start: 0.6875rem;
-  inline-size: 2px;
-  background: var(--stroke-1);
-}
-/* A mark has its own shape for each status, so the colour is never the only cue: a solid disc with a
-   tick, an empty ring, a dashed ring with a dash. */
-.rp-milestone__mark {
-  position: relative;
-  display: grid;
-  place-items: center;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-  border: var(--stroke-w-thick) solid var(--stroke-accessible);
-  border-radius: var(--r-pill);
-  background: var(--bg-canvas);
-  color: var(--fg-on-brand);
-}
-.rp-milestone[data-status='reached'] .rp-milestone__mark {
-  border-color: var(--status-success-fg);
-  background: var(--status-success-fg);
-}
-.rp-milestone[data-status='not-applicable'] .rp-milestone__mark {
-  border-style: dashed;
-  color: var(--fg-3);
-}
-.rp-milestone__body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  min-inline-size: 0;
-}
-.rp-milestone__head {
+.rp-moment__head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 var(--sp-3);
-  margin: 0;
-}
-.rp-milestone__label {
-  font-weight: var(--fw-semibold);
-}
-.rp-milestone__status {
-  color: var(--fg-2);
-  font-size: var(--fs-compact);
-  line-height: var(--lh-compact);
-}
-.rp-milestone[data-status='not-reached'] .rp-milestone__label,
-.rp-milestone[data-status='not-applicable'] .rp-milestone__label {
-  color: var(--fg-2);
-  font-weight: var(--fw-regular);
-}
-.rp-milestone__quote {
-  align-self: stretch;
-  padding-block: var(--sp-2);
-}
-.rp-milestone__quote .t-quote {
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-}
-.rp-milestone__link {
-  font-size: var(--fs-compact);
-  line-height: var(--lh-compact);
-}
-/* With room, the milestones are a grid in call order instead of a rail: two, then three across. */
-@container (min-width: 36rem) {
-  .rp-timeline {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--sp-5) var(--sp-6);
-  }
-  .rp-milestone {
-    padding-block-end: 0;
-  }
-  .rp-milestone:not(:last-child)::before {
-    display: none;
-  }
-}
-@container (min-width: 52rem) {
-  .rp-timeline {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-/* ---- What moved the customer -------------------------------------------------------------- */
-.rp-moves {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-@container (min-width: 40rem) {
-  .rp-moves {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-.rp-move {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-1);
-  min-inline-size: 0;
-  padding: var(--sp-3) var(--sp-4);
-  border: var(--stroke-w) solid var(--stroke-2);
-  border-radius: var(--r-xl);
-}
-.rp-move__kind {
-  display: inline-flex;
   align-items: center;
-  gap: var(--sp-2);
-  margin: 0;
-  color: var(--fg-3);
-  font-size: var(--fs-caption);
-  line-height: var(--lh-caption);
+  gap: var(--sp-2) var(--sp-3);
+}
+.rp-moment__title {
   font-weight: var(--fw-semibold);
 }
-.rp-move__heading {
-  font-weight: var(--fw-semibold);
+.rp-moment__toggle {
+  min-inline-size: 0;
 }
-.rp-move__reason {
-  max-inline-size: var(--read-max);
-  color: var(--fg-2);
-}
-.rp-move > .rp-quote {
-  align-self: stretch;
-  max-inline-size: var(--read-max);
-}
-.rp-move__link {
-  font-size: var(--fs-compact);
-  line-height: var(--lh-compact);
+.rp-moment .ff-disclosure__panel {
+  padding-inline: 0;
 }
 
 /* ---- Unexpected turn ---------------------------------------------------------------------- */
@@ -224,7 +103,7 @@
 .rp-disclosure {
   border: var(--stroke-w) solid var(--stroke-2);
   border-radius: var(--r-xl);
-  background: var(--bg-canvas);
+  background: var(--bg-raised);
 }
 .rp-disclosure__summary {
   display: flex;
@@ -283,6 +162,12 @@
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
 }
+/* Each row names its kind with the marker the chart uses for it. */
+.rp-table__point {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
 /* Narrow: each point is one block, still a table to assistive technology. */
 @container (max-width: 47.99rem) {
   .rp-table,
@@ -335,20 +220,6 @@
 }
 
 @media (forced-colors: active) {
-  .rp-milestone:not(:last-child)::before {
-    background: CanvasText;
-  }
-  .rp-milestone__mark {
-    forced-color-adjust: none;
-    border-color: CanvasText;
-    background: Canvas;
-    color: CanvasText;
-  }
-  .rp-milestone[data-status='reached'] .rp-milestone__mark {
-    background: Highlight;
-    border-color: Highlight;
-    color: HighlightText;
-  }
   .rp-shape {
     fill: CanvasText;
     stroke: Canvas;
@@ -360,18 +231,39 @@
   .rp-glyph {
     color: CanvasText;
   }
+  .rp-moments,
+  .rp-journey__panel,
+  .rp-unexpected,
+  .rp-disclosure {
+    border-color: CanvasText;
+  }
+  .rp-moment + .rp-moment {
+    border-color: CanvasText;
+  }
 }
 
 @media print {
-  .rp-move,
-  .rp-milestone,
+  .rp-moments {
+    overflow: visible;
+  }
+  .rp-moment,
   .rp-unexpected,
-  .rp-table tr {
+  .rp-table tr,
+  .rp-journey__panel {
     break-inside: avoid;
   }
-  .rp-milestone__mark {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
+  .rp-moment {
+    gap: var(--sp-1);
+    padding: var(--sp-2) var(--sp-3);
+  }
+  .rp-table tr {
+    padding-block: var(--sp-1);
+  }
+  .rp-journey__panel {
+    box-shadow: none;
+  }
+  .rp-moment__toggle {
+    display: none !important;
   }
   .rp-disclosure__summary {
     display: none;

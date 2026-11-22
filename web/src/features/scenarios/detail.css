@@ -1,0 +1,314 @@
+/* The chosen scenario, below the carousel. From 64em it is one panel of two columns (what it is on the
+   left, how to run it on the right, with the way on under the setup); below that there is no panel:
+   everything stacks in the page. At every width the way on is pinned to the bottom of the screen
+   (across the page on a phone, in the right-hand column from 64em) until the end of what it belongs to
+   is reached. */
+
+.scn-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-inline-size: 0;
+}
+/* The two halves (what it is; how to run it, and the way on) take no box of their own below 64em: what
+   is in them is laid out by whatever holds them. */
+.scn-detail__main,
+.scn-detail__side {
+  display: contents;
+}
+/* The details fade in when another scenario is chosen. */
+.scn-detail__head,
+.scn-facts,
+.scn-setup {
+  animation: scn-fade var(--motion-component) var(--ease-decelerate) both;
+}
+@keyframes scn-fade {
+  from {
+    opacity: 0;
+  }
+}
+/* A value that changes (a mood, a level, a sentence) fades in, so a change is seen, not jumped to. */
+.scn-swap {
+  animation: scn-swap var(--motion-component) var(--ease-decelerate) both;
+}
+@keyframes scn-swap {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---- The header: the product's mark and the scenario's name ------------------------------------- */
+.scn-detail__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+.scn-detail__tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border: var(--stroke-w) solid var(--accent-border);
+  border-radius: var(--r-xl);
+  background: var(--accent-bg);
+  color: var(--accent-fg);
+}
+.scn-detail__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+.scn-detail__product {
+  color: var(--fg-3);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-detail__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-subtitle1);
+  line-height: var(--lh-subtitle1);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+
+/* ---- What it is --------------------------------------------------------------------------------- */
+.scn-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--sp-4) var(--sp-5);
+  align-content: start;
+  min-inline-size: 0;
+}
+.scn-fact {
+  min-inline-size: 0;
+}
+.scn-fact--wide {
+  grid-column: 1 / -1;
+}
+.scn-fact > dt {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.scn-fact > dd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  color: var(--fg-1);
+}
+.scn-sub {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-note-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-time {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-variant-numeric: tabular-nums;
+}
+.scn-focus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The customer's patience and trust as the call will start: small meters, always with their words. */
+.scn-meters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-4);
+}
+.scn-meter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.scn-meter__label {
+  /* The same width for both names, so the bars and the words after them line up one under the other. */
+  min-inline-size: 4.5em;
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-meter__value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1h);
+  min-inline-size: 5rem;
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+}
+.scn-meter__bars {
+  display: inline-flex;
+  gap: 2px;
+}
+.scn-meter__bars > span {
+  inline-size: 0.625rem;
+  block-size: 0.375rem;
+  border-radius: 1px;
+  background: var(--stroke-1);
+  transition: background-color var(--motion-component) var(--ease-easy);
+}
+.scn-meter__bars[data-steps='1'] > span:nth-child(-n + 1),
+.scn-meter__bars[data-steps='2'] > span:nth-child(-n + 2),
+.scn-meter__bars[data-steps='3'] > span {
+  background: var(--brand-stroke);
+}
+
+/* ---- How to run it ------------------------------------------------------------------------------ */
+.scn-setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+/* The way on is pinned to the bottom of the screen, so a control that takes focus is scrolled to
+   above it, not left behind it. */
+.scn-setup :is(input, select, button, a) {
+  scroll-margin-block-end: 7rem;
+}
+.scn-mode .ff-segmented__legend {
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-detail__custom {
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  padding-block-start: var(--sp-1);
+}
+
+/* ---- The way on --------------------------------------------------------------------------------- */
+.scn-detail__bar {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-inline: calc(var(--gutter) * -1);
+  padding: var(--sp-3) var(--gutter);
+  padding-block-end: calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+  border-block-start: var(--stroke-w) solid var(--stroke-2);
+  background: var(--bg-canvas);
+}
+.scn-detail__summary-line {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+/* On a phone the button takes the whole width of the bar, with the recap of the setup over it. On the
+   narrowest phones (under 360 px) the recap is out of sight, kept for a screen reader (ScenarioDetail
+   does that), so a second line of words does not make the bar a fifth of the screen. */
+@media (max-width: 30em) {
+  .scn-detail__bar .ff-button {
+    flex: 1 1 100%;
+  }
+}
+
+/* ---- Loading and nothing chosen ----------------------------------------------------------------- */
+.scn-detail--quiet {
+  padding: var(--sp-4);
+  border-radius: var(--r-xl);
+  background: var(--bg-quiet);
+}
+.scn-detail--empty {
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-10) var(--sp-6);
+  color: var(--fg-3);
+}
+.scn-detail__empty-title {
+  color: var(--fg-1);
+  font-size: var(--fs-subtitle2);
+  line-height: var(--lh-subtitle2);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---- Narrow: no panel. Its header, facts and setup, and the way on, are laid out by the page itself.
+   The way on is pinned to the bottom of the screen, and a pinned bar can only move inside the box it
+   sits in: that box has to be the page, not a panel that starts below the carousel, or on a short
+   screen the bar would be held down there, half off the bottom. ---------------------------------- */
+@media (max-width: 63.99em) {
+  .scn-detail:not(.scn-detail--quiet) {
+    display: contents;
+  }
+}
+
+/* ---- Wide: one panel of two columns. What it is on the left; how to run it, and the way on directly
+   under it, on the right, so the primary action is in view without scrolling on a laptop. --------- */
+@media (min-width: 64em) {
+  .scn-detail:not(.scn-detail--quiet) {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    column-gap: var(--sp-8);
+    align-items: start;
+    padding: var(--sp-6);
+    border: var(--stroke-w) solid var(--stroke-2);
+    border-radius: var(--r-xl);
+    background: var(--bg-raised);
+    box-shadow: var(--shadow-2);
+  }
+  .scn-detail__main,
+  .scn-detail__side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-5);
+    min-inline-size: 0;
+  }
+  /* The way on stays in view as the page scrolls, as it does on a phone: it is pinned to the bottom
+     of the screen while the right-hand column runs on below it, and settles under the setup where
+     the column ends. It is as wide as the column, and opaque, so the setup does not show through. */
+  .scn-detail__bar {
+    margin: 0;
+    padding-inline: 0;
+    background: var(--bg-raised);
+  }
+}
+
+/* The tile moves from this page to the case brief with the same easing as a panel. */
+::view-transition-group(scenario-tile) {
+  animation-duration: var(--motion-panel);
+  animation-timing-function: var(--ease-easy-max);
+}
+
+@media (forced-colors: active) {
+  .scn-detail:not(.scn-detail--quiet) {
+    border-color: ButtonText;
+    box-shadow: none;
+  }
+  .scn-detail__tile {
+    border-color: ButtonText;
+  }
+  .scn-meter__bars > span {
+    forced-color-adjust: none;
+    background: GrayText;
+  }
+  .scn-meter__bars[data-steps='1'] > span:nth-child(-n + 1),
+  .scn-meter__bars[data-steps='2'] > span:nth-child(-n + 2),
+  .scn-meter__bars[data-steps='3'] > span {
+    background: Highlight;
+  }
+}

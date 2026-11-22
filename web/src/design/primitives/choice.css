@@ -144,7 +144,7 @@
   /* From the left stop to the right one: the track's inner width less the thumb and its two gaps. */
   transform: translateX(calc(1.125rem - 2 * var(--stroke-w)));
   background: var(--bg-canvas);
-  color: var(--brand);
+  color: var(--brand-fg);
 }
 .ff-choice:hover .ff-choice__input:checked:not(:disabled) + .ff-choice__track {
   border-color: var(--brand-hover);

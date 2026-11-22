@@ -4,9 +4,10 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 // case number.
 //
 // Root cause (hidden from the trainee; plausible, and never confirmed on the call): the manuscript
-// approval process was built by Mira under her own sign-in. A few weeks ago she moved to the
-// marketing team and was taken off the editorial team's shared sites. Nothing has run since, and
-// nobody now looks after the process. The contracts approval process, built by Tove, still runs.
+// approval process uses a SharePoint connection under Mira's sign-in. A few weeks ago she moved to
+// the marketing team and her access to the editorial team's shared sites was removed, so requests
+// stopped and no one else is looking after the process. The contracts approval process, built by
+// Tove, still runs.
 // Joseph does not know what the tools are called, did not build the process and has never opened
 // it. A strong call is gentle and plain: it reads the case history first, asks one question at a
 // time, finds the builder and the move, avoids jargon, owns the case, and agrees who contacts Mira
@@ -16,15 +17,29 @@ const scenario = {
   id: 'power-automate-approvals-stopped',
   version: 1,
   title: 'An approval process that used to run by itself has stopped',
+  shortTitle: 'Approvals stopped running',
   listSummary:
     'An editorial assistant says an approval process that used to run by itself has stopped.',
   summary:
-    'An editorial assistant reports that an approval process that used to run by itself has stopped, and manuscripts are waiting for sign-off. He is polite but vague about what it is called and how it works. Help him describe it simply and agree who will look after it.',
+    'An editorial assistant reports that an approval process that used to run by itself has stopped, and he is worried about sign-off. He is polite but vague about what it is called and how it works. Help him describe it simply and agree who will look after it.',
   tags: ['automation', 'approvals', 'follow-up', 'plain language', 'ownership'],
   estimatedMinutes: 9,
 
   product: { id: 'power-platform', area: 'Automated flows' },
   caseReference: 'SIM-430002',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
+    syntheticConfirmed: true,
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public Microsoft Learn pages on approval workflows, connection failures, sharing a flow and changing its owner. Terms current; low-impact text made neutral so it no longer gives away the workaround. AI-assisted review, not a mentor's.",
+  },
 
   issueType: 'feature-not-working',
   impact: 'medium',
@@ -56,8 +71,7 @@ const scenario = {
   affectedUsers: {
     low: {
       count: 1,
-      summary:
-        'Only Joseph, whose own new entries no longer trigger a request. He sends them by hand.',
+      summary: 'Joseph is the only person adding new entries, and he sends requests by hand.',
     },
     medium: {
       count: 8,
@@ -87,9 +101,9 @@ const scenario = {
 
   publicBrief: {
     issue:
-      'An approval process that used to run by itself has stopped, and manuscripts are waiting for sign-off.',
+      'An approval process that used to run by itself has stopped, and Joseph is worried about sign-off.',
     impact: {
-      low: 'Only his own new entries are affected. He is sending requests by hand.',
+      low: 'Joseph is the only person adding new entries and is doing extra work.',
       medium: 'Several editors are not getting requests, so manuscripts are waiting for sign-off.',
       high: 'The whole editorial schedule is waiting on approvals, and authors are asking questions.',
     },
@@ -102,10 +116,10 @@ const scenario = {
   },
   brief: {
     situation:
-      'An editorial assistant is calling about an approval process that used to run by itself and has stopped. Manuscripts are waiting for sign-off. He is polite, a little unsure, and vague about how the process works or what it is called.',
+      'An editorial assistant is calling about an approval process that used to run by itself and has stopped. He is worried about sign-off. He is polite, a little unsure, and vague about how the process works or what it is called.',
     goal: 'Help him describe the problem in plain words, take ownership of the case, and agree clearly what happens next and when he will hear from you.',
     groundRules: [
-      'The customer and organisation are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       'You cannot see the process in this practice call, so rely on what Joseph tells you.',
       'Joseph is not a technical user, so use plain words.',
@@ -116,9 +130,9 @@ const scenario = {
     "The approvals thing for our manuscripts has stopped working. It used to send everything out by itself, and now it doesn't.",
   impactVariants: {
     low: {
-      summary: "It's mostly just me so far, and I'm sending the requests by hand.",
+      summary: "It's mostly just me so far, and I'm finding a way to keep things moving.",
       detail:
-        "It's really only my own new entries. I've been emailing the commissioning editor myself each time, so nothing is stuck yet, but it takes a while and I worry I'll miss one.",
+        "I'm the only one adding new entries. Nothing is stuck yet, but keeping things moving takes a while.",
       deadline: "No hard deadline, but I'd like it working before the next batch comes in.",
     },
     medium: {
@@ -560,9 +574,9 @@ const scenario = {
     'Giving him something simple he can tell his manager, with a time for the next update.',
   ],
   expectedOutcome:
-    'Joseph understands what has probably happened and what happens next: the process had one builder who has moved teams, so the engineer owns the case, agrees who at Lucerne must be involved and by when, and gives a specific time for the next update.',
+    'Joseph understands what is known and what happens next: the process had one builder who has moved teams, so the engineer owns the case, agrees who at Lucerne must be involved and by when, and gives a specific time for the next update.',
   evaluatorNotes:
-    "Root cause (plausible, not confirmed on the call): the approval process was built by Mira under her own sign-in. A few weeks ago she moved to marketing and was taken off the editorial team's shared sites, and nothing has run since. Nobody owns it now. Only the manuscript process is affected; the contracts one, built by Tove, still runs. A strong call is gentle and plain: it reads the history, asks one question at a time, finds the builder and the move, avoids jargon, owns the case, agrees who contacts Mira and by when, and gives a time for the next update.",
+    "Root cause (plausible, not confirmed on the call): the approval process uses a SharePoint connection under Mira's sign-in. After she moved, her editorial-site access was removed and requests stopped. No one else is looking after it. Only the manuscript process is affected; the contracts one, built by Tove, still runs. A strong call is gentle and plain: it reads the history, asks one question at a time, finds the builder and the move, avoids jargon, owns the case, agrees who contacts Mira and by when, and gives a time for the next update.",
 } satisfies ScenarioInput;
 
 export default scenario;

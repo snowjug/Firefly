@@ -3,18 +3,16 @@ import type { CoachingReport } from '#shared/domain/report.ts';
 import { DIFFICULTY_PROFILES } from '#shared/domain/state.ts';
 import { Badge, LinkButton } from '../../design/index.ts';
 import { practiceLink } from './brief-href.ts';
-import { dimensionLabel } from './copy.ts';
-import { ClampedText, Section } from './parts.tsx';
+import { dimensionLabel, plainUnexpectedTurn, splitSentences } from './copy.ts';
+import { Field, Section } from './parts.tsx';
 import type { ScenarioIndex } from './scenario-index.ts';
 import './report.css';
 
-/** The most words the recommendation shows before "Show more". */
-const RECOMMENDATION_WORDS = 30;
-
 /**
- * One scenario to practise next: its title, its difficulty and the skill it is for. If the scenario
- * the report suggests no longer exists, no title is shown (the skill takes its place) and the
- * button opens the scenario list instead.
+ * One scenario to practise next. The skill it is for is the heading, the learning focus is one
+ * sentence shown whole (never cut), and what is left of the recommendation (the question worth
+ * practising from this call) follows it plainly. If the scenario the report suggests no longer
+ * exists, the button opens the scenario list instead.
  */
 export function NextPractice({
   session,
@@ -28,32 +26,36 @@ export function NextPractice({
   const next = report.nextPractice;
   const link = practiceLink(session, next, index);
   const skill = dimensionLabel(next.dimension);
+  const [focus, ...rest] = splitSentences(plainUnexpectedTurn(next.recommendation));
   return (
     <Section id="next-practice" title="Next practice">
       <div className="rp-next">
         <div className="rp-next__body">
-          <h3 className="rp-next__title">{link.scenario ? link.scenario.title : skill}</h3>
+          <p className="rp-next__eyebrow">Target skill</p>
+          <h3 className="rp-next__title">{skill}</h3>
           <p className="rp-next__meta">
+            {link.scenario ? (
+              <span className="rp-next__scenario">{link.scenario.title}</span>
+            ) : null}
             {link.scenario?.product ? (
               <span className="rp-next__product">{link.scenario.product}</span>
             ) : null}
             <Badge tone="neutral" appearance="outline" icon={null}>
               {DIFFICULTY_PROFILES[next.suggestedDifficulty].label}
             </Badge>
-            {link.scenario ? <span>Skill: {skill}</span> : null}
           </p>
-          <ClampedText
-            className="rp-next__text"
-            text={next.recommendation}
-            budget={RECOMMENDATION_WORDS}
-          />
+          <Field label="Learning focus">
+            <p className="rp-next__text">{focus ?? next.recommendation}</p>
+            {rest.length > 0 ? <p className="rp-next__more">{rest.join(' ')}</p> : null}
+          </Field>
         </div>
         <LinkButton
           to={link.to}
-          appearance="secondary"
+          appearance="primary"
           size="large"
           icon="arrow-right"
           iconPosition="end"
+          nudge
           className="rp-next__cta"
         >
           {link.scenario ? 'Practise this scenario' : 'Choose a scenario'}

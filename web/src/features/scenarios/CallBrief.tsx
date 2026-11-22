@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
+import { PRACTICE_MODE_LABELS } from '#shared/domain/vocab.ts';
 import { useAppSection } from '../../app/section.tsx';
+import { cx } from '../../design/cx.ts';
 import { Icon } from '../../design/icons.tsx';
 import { Button, LinkButton } from '../../design/primitives/Button.tsx';
 import { MessageBar } from '../../design/primitives/MessageBar.tsx';
+import { ProductIcon } from '../../design/primitives/ProductIcon.tsx';
 import { Skeleton } from '../../design/primitives/Skeleton.tsx';
 import { Tag } from '../../design/primitives/Badge.tsx';
+import { accentClass } from '../../design/product-accent.ts';
 import { api, errorMessage, isApiError } from '../../lib/api.ts';
 import { useApi, useDocumentTitle, useOnline } from '../../lib/hooks.ts';
 import { CaseRows } from './CaseRows.tsx';
@@ -17,6 +21,7 @@ import {
   type ConfigKey,
 } from './config-params.ts';
 import { useFirstUseNotice } from './first-use.ts';
+import { MODE_SENTENCE, productLine } from './labels.ts';
 import { describeReadiness } from './mic-readiness.ts';
 import { PrivacyNotice } from './PrivacyNotice.tsx';
 import { privacyDetails } from './privacy.ts';
@@ -27,6 +32,7 @@ import { useMicrophonePermission } from './use-mic-permission.ts';
 import { useSpeechSetup } from './use-speech-setup.ts';
 import { useStartCall, type StartInput } from './use-start-call.ts';
 import { useVoicePreview } from './use-voice-preview.ts';
+import { useTileTransition } from './view-transition.ts';
 import {
   defaultVoiceFor,
   offeredVoice,
@@ -46,7 +52,7 @@ const KEY_NAMES: Record<ConfigKey, string> = {
   style: 'Style',
   stage: 'Call stage',
   curveballs: 'Complications',
-  hints: 'Live hints',
+  hints: 'Practice mode',
   voice: 'Voice',
 };
 
@@ -93,10 +99,11 @@ function Unavailable() {
 }
 
 /**
- * The case brief: the support case in six short rows, the customer's voice, the microphone, and the
- * way to start. What the trainee chose on the scenario page is read from the address. Starting the
- * call creates it once, however many times the button is pressed or retried, and it opens a spoken
- * call or a typed one; a typed one is always possible.
+ * The case brief: the support case in six short rows with the privacy notice under it, and beside
+ * them the customer's voice, the microphone and the way to start. What the trainee chose on the
+ * scenario page is read from the address. Starting the call creates it once, however many times the
+ * button is pressed or retried, and it opens a spoken call or a typed one; a typed one is always
+ * possible.
  */
 export function CallBrief() {
   const { id = '' } = useParams();
@@ -110,6 +117,8 @@ export function CallBrief() {
   const editTo = useMemo(() => editPathFromSearch(id, search), [id, search]);
   useAppSection('Case brief', { backTo: editTo, backLabel: 'Scenarios' });
   useDocumentTitle(scenario ? `Case brief: ${scenario.title}` : 'Case brief');
+  // The product tile is the one on the scenario's details, carried over by a view transition.
+  const tile = useTileTransition(editTo);
 
   const read = useMemo(
     () => (scenario ? inspectConfig(search, scenario) : null),
@@ -183,6 +192,7 @@ export function CallBrief() {
   }
 
   const { setup, config, loading: speechLoading, error: speechError } = speech;
+  const practiceMode = settings?.mode ?? 'immersive';
   const speechState = setup
     ? setup.canSpeak
       ? 'voice'
@@ -209,9 +219,25 @@ export function CallBrief() {
   return (
     <div className="l-page brf-page">
       <header className="brf-head">
-        <h1 className="brf-title">Case brief</h1>
-        <p className="brf-subtitle">{scenario.title}</p>
-        <Tag size="small">Synthetic scenario</Tag>
+        <span
+          className={cx('brf-tile', accentClass(scenario.product.id))}
+          style={tile}
+          aria-hidden="true"
+        >
+          <ProductIcon product={scenario.product.id} size={24} />
+        </span>
+        <div className="brf-head__text">
+          <p className="brf-product">{productLine(scenario.product)}</p>
+          <div className="brf-titlerow">
+            <h1 className="brf-title">Case brief</h1>
+            <Tag size="small">Synthetic scenario</Tag>
+          </div>
+          <p className="brf-subtitle">{scenario.title}</p>
+          <p className="brf-mode">
+            <strong>{PRACTICE_MODE_LABELS[practiceMode].label}.</strong>{' '}
+            {MODE_SENTENCE[practiceMode]}.
+          </p>
+        </div>
       </header>
       {read.ignored.length > 0 ? (
         <MessageBar intent="info">
@@ -220,7 +246,16 @@ export function CallBrief() {
         </MessageBar>
       ) : null}
       <div className="brf-layout">
-        <CaseRows scenario={scenario} config={read.config} />
+        <div className="brf-main">
+          <CaseRows scenario={scenario} config={read.config} />
+          {speechState === 'loading' ? null : (
+            <PrivacyNotice
+              details={details}
+              introduce={speechState === 'voice' && !notice.seen}
+              onAcknowledge={notice.markSeen}
+            />
+          )}
+        </div>
         <aside className="brf-side" aria-labelledby="brf-side-title">
           <h2 className="brf-side__title" id="brf-side-title">
             Voice call
@@ -245,13 +280,6 @@ export function CallBrief() {
               preview={preview}
             />
           ) : null}
-          {speechState === 'loading' ? null : (
-            <PrivacyNotice
-              details={details}
-              introduce={speechState === 'voice' && !notice.seen}
-              onAcknowledge={notice.markSeen}
-            />
-          )}
           <MicRow
             readiness={readiness}
             status={check.status}

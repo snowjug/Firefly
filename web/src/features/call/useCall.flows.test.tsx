@@ -968,14 +968,17 @@ describe('the microphone level', () => {
     expect(h.snap().micLevel).toBe(0);
   });
 
-  it('shapes the customer\u2019s level from the audio while it plays, and reads 0 when it stops', async () => {
+  it('shapes the customer\u2019s level from the audio while it plays, says it is measured, and reads 0 when it stops', async () => {
     await h.mount();
     await h.begin(true);
+    expect(h.snap().customerLevelMeasured).toBe(false);
     h.env.audio.analyserRms = 0.1;
     await advance(500);
     expect(h.snap().customerLevel).toBeGreaterThan(0.3);
+    expect(h.snap().customerLevelMeasured).toBe(true);
     await h.customerFinishes();
     expect(h.snap().customerLevel).toBe(0);
+    expect(h.snap().customerLevelMeasured).toBe(false);
   });
 });
 

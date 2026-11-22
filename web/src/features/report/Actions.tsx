@@ -82,9 +82,10 @@ export function DeleteCall({ sessionId, client }: { sessionId: string; client: R
 }
 
 /**
- * The next moves: another call, the same scenario again, the transcript or a printout. If the
- * scenario of this call no longer exists, "Repeat scenario" opens the scenario list and says why,
- * rather than leading to a page that is not there. Deleting the call sits apart, below.
+ * The next moves: another call, the same scenario again, the whole transcript, a printout or home.
+ * If the scenario of this call no longer exists, "Repeat scenario" opens the scenario list and says
+ * why, rather than leading to a page that is not there. Deleting the call sits apart, below. There
+ * is no share or export: nothing here sends the report anywhere, so none is offered.
  */
 export function Actions({
   session,
@@ -113,11 +114,14 @@ export function Actions({
           Repeat scenario
         </LinkButton>
         <Button icon="document" onClick={() => jumpToSection('transcript')}>
-          Review transcript
+          Review full transcript
         </Button>
         <Button icon="print" onClick={onPrint}>
           Print report
         </Button>
+        <LinkButton to="/" appearance="subtle" icon="home">
+          Return home
+        </LinkButton>
       </div>
       {repeat.available ? null : (
         <p id={note} className="rp-actions__note">

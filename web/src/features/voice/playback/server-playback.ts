@@ -264,6 +264,8 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
     let level = 0;
     job.meter = setInterval(() => {
       let next: number;
+      // Without an analyser (the audio context could not start) the level is only shaped from the words.
+      const measured = Boolean(analyser && buffer);
       if (analyser && buffer) {
         analyser.getFloatTimeDomainData(buffer);
         next = levelFromRms(rmsOf(buffer));
@@ -271,7 +273,7 @@ export function createServerPlayback(options: ServerPlaybackOptions): Playback {
         next = shaped(el.currentTime * 1000);
       }
       level = smoothLevel(level, next);
-      job.handlers.onLevel(level);
+      job.handlers.onLevel(level, measured);
     }, LEVEL_INTERVAL_MS);
   }
 

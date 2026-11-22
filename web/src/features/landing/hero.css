@@ -21,6 +21,13 @@
   max-inline-size: 30rem;
   margin: 0;
 }
+/* The two lines of the lead come out even, and "evidence-based" never splits at its hyphen. */
+.lp-hero__copy .lp-hero__lead {
+  text-wrap: balance;
+}
+.lp-hero__keep {
+  white-space: nowrap;
+}
 .lp-hero__actions {
   display: flex;
   flex-wrap: wrap;
@@ -48,5 +55,23 @@
 @media (min-width: 80em) {
   .lp-hero__inner {
     gap: var(--sp-16);
+  }
+}
+/* Wide, the two halves weigh the same: a larger promise beside a call of about its width, in the same
+   page container as everything else. */
+@media (min-width: 90em) {
+  .lp-hero__inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .lp-hero__copy .lp-hero__title {
+    font-size: var(--fs-display-wide);
+  }
+  .lp-hero__lead {
+    max-inline-size: 34rem;
+  }
+}
+@media (min-width: 120em) {
+  .lp-hero__copy .lp-hero__title {
+    font-size: var(--fs-display-widest);
   }
 }

@@ -39,6 +39,39 @@ export async function settle(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Lets every fixed or sticky element scroll with the page, so that a scan does not count a control
+ * that happens to sit under a pinned bar as obscured. It writes through the style object, which the
+ * page's content security policy allows. The page keeps this until it is next loaded.
+ */
+export async function unpinBars(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    for (const element of document.querySelectorAll<HTMLElement>('body *')) {
+      const { position } = getComputedStyle(element);
+      if (position === 'fixed' || position === 'sticky') element.style.position = 'static';
+    }
+  });
+}
+
+/**
+ * True when the design's own font (Segoe UI Variable) is installed on this machine. Some sizes are
+ * measured in it: a wider fallback, such as DejaVu Sans on the Linux CI runner, needs more room for the
+ * same words, and wrapping there is not a fault.
+ */
+export function hasDesignFont(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const context = document.createElement('canvas').getContext('2d');
+    if (!context) return false;
+    const first = getComputedStyle(document.body).fontFamily.split(',')[0]?.trim() ?? '';
+    if (!/Segoe UI/i.test(first)) return false;
+    const width = (family: string) => {
+      context.font = `16px ${family}`;
+      return context.measureText('Done speaking Wi').width;
+    };
+    return width(`${first}, monospace`) !== width('monospace');
+  });
+}
+
 export async function scan(
   page: Page,
   options: { include?: string; exclude?: string[] } = {},
@@ -768,7 +801,7 @@ export async function watchAnnouncements(page: Page): Promise<() => Promise<stri
 /**
  * The call's status line has reached this state. The line carries it as `data-status`: `customer-speaking`,
  * `mic-ready`, `listening`, `speech-detected` ("Hearing you"), `processing-speech`,
- * `generating-reply` ("Customer is replying"), `muted`, `paused`, `text-fallback` ("Typing") ...
+ * `generating-reply` ("Customer is replying"), `muted`, `paused`, `text-fallback` ("Your turn") ...
  */
 export async function expectStatus(page: Page, status: string, timeout = 20_000): Promise<void> {
   await expect(page.locator(`.cw-status[data-status="${status}"]`)).toBeVisible({ timeout });

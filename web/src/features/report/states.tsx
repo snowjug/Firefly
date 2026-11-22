@@ -15,6 +15,7 @@ import { DeleteCall } from './Actions.tsx';
 import { TranscriptReview } from './Transcript.tsx';
 import { PHASE_STEPS, phaseAnnouncement, stepStatuses, type StepStatus } from './evaluation.ts';
 import { EvidenceProvider, SectionLink } from './evidence.tsx';
+import { evidenceTurns } from './evidence-model.ts';
 import type { ReportClient, ReportViewState } from './useReportSession.ts';
 import './states.css';
 
@@ -119,7 +120,7 @@ export function EvaluatingView({
   const [slow, setSlow] = useState(false);
   const announce = useAnnouncer();
   const statuses = stepStatuses(session.evaluationPhase);
-  const turnIndexes = useMemo(() => session.turns.map((turn) => turn.index), [session.turns]);
+  const turns = useMemo(() => evidenceTurns(session), [session]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSlow(true), slowAfterMs);
@@ -162,7 +163,7 @@ export function EvaluatingView({
             This is taking longer than usual. Your transcript is saved and you can leave this page.{' '}
             <SectionLink to="transcript">Read your transcript</SectionLink>
           </MessageBar>
-          <EvidenceProvider turnIndexes={turnIndexes}>
+          <EvidenceProvider turns={turns}>
             <TranscriptReview
               session={session}
               report={null}
@@ -194,7 +195,7 @@ export function FailedView({
   client: ReportClient;
 }) {
   const { session, retryable, message, unreadable } = state;
-  const turnIndexes = useMemo(() => session.turns.map((turn) => turn.index), [session.turns]);
+  const turns = useMemo(() => evidenceTurns(session), [session]);
   const what = unreadable
     ? 'The saved coaching report for this call could not be read.'
     : (message ?? 'Something went wrong while the coaching report was being prepared.');
@@ -240,7 +241,7 @@ export function FailedView({
         </LinkButton>
         <DeleteCall sessionId={session.id} client={client} />
       </div>
-      <EvidenceProvider turnIndexes={turnIndexes}>
+      <EvidenceProvider turns={turns}>
         <TranscriptReview
           session={session}
           report={null}

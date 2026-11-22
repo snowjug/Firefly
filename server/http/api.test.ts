@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { BEHAVIOUR_CHECKS, REVIEW_STATES, SOURCE_CATEGORIES } from '#shared/domain/scenario.ts';
+import { createLogger } from '../log.ts';
+import { createMockProvider } from '../providers/mock.ts';
+import type { ModelProvider } from '../providers/types.ts';
+import { getScenarioLibrary } from '../scenarios/index.ts';
 import exemplar from '../scenarios/library/outlook-shared-mailbox-missing.ts';
+import { provenanceLeaks } from '../scenarios/provenance.ts';
 import { LIMITS } from '../services/sessions.ts';
 import { createTestApp, type TestApp } from './harness.ts';
 
@@ -613,6 +619,235 @@ describe('diagnostics endpoints', () => {
       expect((await c.get('/api/dev/sessions/abc/runtime')).status).toBe(404);
     } finally {
       await plain.close();
+    }
+  });
+});
+
+describe('the closing check', () => {
+  const closing = (client: ReturnType<typeof app.client>, id: string) =>
+    client.get(`/api/sessions/${id}/closing-check`);
+
+  /** A call whose turns are exactly these, so the customer's side is the test's own words. */
+  const scripted = (profile: string, turns: ['trainee' | 'customer', string][]) => {
+    const { id } = app.service.createSession(profile, { scenarioId: SCENARIO });
+    turns.forEach(([role, text], i) =>
+      app.repo.insertTurn(id, {
+        idx: i + 2,
+        role,
+        text,
+        source: role === 'trainee' ? 'trainee' : 'demo',
+        inputMode: 'text',
+        clientMessageId: null,
+        classification: null,
+        createdAt: new Date().toISOString(),
+      }),
+    );
+    return id;
+  };
+  const asProfile = async (profile: string, id: string) => {
+    const res = await app.client().raw(`/api/sessions/${id}/closing-check`, {
+      headers: { cookie: `firefly_profile=${profile}` },
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  it('says yes or no and how many turns, and nothing else', async () => {
+    const { client, session } = await newSession();
+    const empty = await closing(client, session.id);
+    expect(empty.status).toBe(200);
+    expect(empty.headers.get('cache-control')).toBe('no-store');
+    expect(empty.body).toEqual({
+      sessionId: session.id,
+      traineeTurns: 0,
+      checks: { plan: false, owner: false, updateTime: false, agreement: false },
+    });
+
+    await say(client, session.id, 'Hello, this is Sam from Microsoft support. How can I help?');
+    await say(client, session.id, "I'll own this and update you by 3 PM today. Does that work?");
+    const stated = await closing(client, session.id);
+    expect(stated.body.traineeTurns).toBe(2);
+    expect(stated.body.checks).toMatchObject({ plan: true, owner: true, updateTime: true });
+    expect(typeof stated.body.checks.agreement).toBe('boolean');
+    // Exactly the contract: no quotes, no wording, no scenario, no hint, no score.
+    expect(Object.keys(stated.body).sort()).toEqual(['checks', 'sessionId', 'traineeTurns']);
+    expect(Object.keys(stated.body.checks).sort()).toEqual([
+      'agreement',
+      'owner',
+      'plan',
+      'updateTime',
+    ]);
+    expect(JSON.stringify(stated.body)).not.toMatch(/own this|3 PM|Marcus|mailbox|score|hidden/i);
+  });
+
+  it('does not count a vague "I\'ll look into it"', async () => {
+    const { client, session } = await newSession();
+    await say(client, session.id, 'Hello, this is Sam from Microsoft support. How can I help?');
+    await say(client, session.id, "I'll look into it.");
+    const { body } = await closing(client, session.id);
+    expect(body.checks).toEqual({ plan: false, owner: false, updateTime: false, agreement: false });
+  });
+
+  it('reads the customer’s agreement from what they said back, and no further', async () => {
+    const said = [
+      ['trainee', 'Hello, this is Sam from Microsoft support. How can I help?'],
+      ['customer', 'I cannot see the shared mailbox in Outlook.'],
+      ['trainee', "I'll own this and update you by 3 PM today. Does that work?"],
+    ] as ['trainee' | 'customer', string][];
+    const agreed = await asProfile(
+      'c'.repeat(32),
+      scripted('c'.repeat(32), [...said, ['customer', 'That works for me, thank you.']]),
+    );
+    expect(agreed.body.checks).toEqual({
+      plan: true,
+      owner: true,
+      updateTime: true,
+      agreement: true,
+    });
+    const pushedBack = await asProfile(
+      'd'.repeat(32),
+      scripted('d'.repeat(32), [
+        ...said,
+        ['customer', "That's not very specific. When will I hear from you?"],
+      ]),
+    );
+    expect(pushedBack.body.checks).toMatchObject({ updateTime: true, agreement: false });
+    const unanswered = await asProfile('e'.repeat(32), scripted('e'.repeat(32), said));
+    expect(unanswered.body.checks).toMatchObject({ plan: true, agreement: false });
+  });
+
+  it('is for the profile that owns the call, and for an active call only', async () => {
+    const { client, session } = await newSession();
+    const stranger = await closing(app.client(), session.id);
+    expect(stranger.status).toBe(404);
+    expect(stranger.body.error.code).toBe('not_found');
+    expect((await closing(client, 'no-such-session')).status).toBe(404);
+
+    await say(client, session.id, 'Hello, I am Sam. What is happening?');
+    await client.post(`/api/sessions/${session.id}/end`, {});
+    await app.service.settle(session.id);
+    const done = await closing(client, session.id);
+    expect(done.status).toBe(409);
+    expect(done.body.error).toMatchObject({ code: 'session_not_active', retryable: false });
+    expect(Object.keys(done.body)).toEqual(['error']);
+
+    // A call whose coaching failed has ended too.
+    const failing = await newSession();
+    await say(failing.client, failing.session.id, 'Hello, I am Sam. What is happening?');
+    await app.client().post('/api/test/fail-next', { target: 'evaluator', count: 1 });
+    await failing.client.post(`/api/sessions/${failing.session.id}/end`, {});
+    await app.service.settle(failing.session.id);
+    expect((await closing(failing.client, failing.session.id)).status).toBe(409);
+  });
+
+  it('asks no model, changes nothing and gives the same answer each time', async () => {
+    let modelCalls = 0;
+    const base = createMockProvider({ delayMs: 0 });
+    const counting: ModelProvider = {
+      ...base,
+      classifyTurn: (args, signal) => {
+        modelCalls += 1;
+        return base.classifyTurn(args, signal);
+      },
+      generateCustomer: (ctx, signal) => {
+        modelCalls += 1;
+        return base.generateCustomer(ctx, signal);
+      },
+    };
+    const own = await createTestApp({ provider: counting });
+    try {
+      const client = own.client();
+      const { body } = await client.post('/api/sessions', { scenarioId: SCENARIO });
+      await client.post(`/api/sessions/${body.session.id}/messages`, {
+        text: "I'll own this and update you by 3 PM today.",
+        clientMessageId: randomUUID(),
+      });
+      const before = modelCalls;
+      expect(before).toBeGreaterThan(0);
+      const turnsBefore = (await client.get(`/api/sessions/${body.session.id}`)).body.session.turns;
+
+      const first = await closing(client, body.session.id);
+      const again = await closing(client, body.session.id);
+      expect(again.body).toEqual(first.body);
+      expect(modelCalls).toBe(before);
+      const turnsAfter = (await client.get(`/api/sessions/${body.session.id}`)).body.session.turns;
+      expect(turnsAfter).toEqual(turnsBefore);
+    } finally {
+      await own.close();
+    }
+  });
+
+  it('counts against the same allowance as every other read', async () => {
+    const { client, session } = await newSession();
+    let limited = 0;
+    for (let i = 0; i < 320 && limited === 0; i++) {
+      const res = await closing(client, session.id);
+      if (res.status === 429) {
+        limited += 1;
+        expect(res.body.error).toMatchObject({ code: 'rate_limited', retryable: true });
+      } else {
+        expect(res.status).toBe(200);
+      }
+    }
+    expect(limited).toBe(1);
+  });
+});
+
+describe('scenario provenance stays internal', () => {
+  it('is in no scenario, call, transcript, report or log line, for every scenario in the library', async () => {
+    const lines: string[] = [];
+    const full = await createTestApp({
+      library: getScenarioLibrary(),
+      log: createLogger((line) => lines.push(line)),
+    });
+    try {
+      const client = full.client();
+      const bodies: unknown[] = [];
+      const list = await client.get('/api/scenarios');
+      expect(list.status).toBe(200);
+      bodies.push(list.body);
+      for (const scenario of list.body.scenarios as { id: string; shortTitle: string }[]) {
+        expect(scenario.shortTitle, scenario.id).toEqual(expect.any(String));
+        const one = await client.get(`/api/scenarios/${scenario.id}`);
+        const created = await client.post('/api/sessions', { scenarioId: scenario.id });
+        const id = created.body.session.id as string;
+        bodies.push(
+          one.body,
+          created.body,
+          (await client.get(`/api/sessions/${id}`)).body,
+          (await client.get(`/api/sessions/${id}/transcript`)).body,
+          (await client.get(`/api/sessions/${id}/closing-check`)).body,
+        );
+      }
+      // A finished call carries a report as well.
+      const first = list.body.scenarios[0].id as string;
+      const { body } = await client.post('/api/sessions', { scenarioId: first });
+      await client.post(`/api/sessions/${body.session.id}/messages`, {
+        text: 'Hello, I am Sam. What is happening?',
+        clientMessageId: randomUUID(),
+      });
+      await client.post(`/api/sessions/${body.session.id}/end`, {});
+      await full.service.settle(body.session.id);
+      bodies.push(
+        (await client.get(`/api/sessions/${body.session.id}`)).body,
+        (await client.get(`/api/sessions/${body.session.id}/report`)).body,
+      );
+
+      const values: readonly string[] = [
+        ...SOURCE_CATEGORIES,
+        ...BEHAVIOUR_CHECKS,
+        ...REVIEW_STATES,
+      ];
+      for (const response of bodies) {
+        expect(provenanceLeaks(response)).toEqual([]);
+        const text = JSON.stringify(response);
+        for (const value of values) expect(text).not.toContain(value);
+      }
+      const logged = lines.join('\n');
+      expect(logged.length).toBeGreaterThan(0);
+      expect(provenanceLeaks(lines.map((line) => JSON.parse(line) as unknown))).toEqual([]);
+      for (const value of values) expect(logged).not.toContain(value);
+    } finally {
+      await full.close();
     }
   });
 });

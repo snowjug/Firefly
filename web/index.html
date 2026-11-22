@@ -3,8 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#ffffff" />
+    <!-- Applies the saved or system theme before the first paint, so there is no flash. It is a
+         file, not inline script, because the content security policy allows this origin only. -->
+    <script src="/theme-init.js"></script>
     <meta
       name="description"
       content="Firefly is a practice environment for customer-facing support conversations. Choose a fictional scenario, speak with a simulated customer and get coaching based on what was actually said."

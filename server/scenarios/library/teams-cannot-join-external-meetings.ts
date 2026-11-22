@@ -3,32 +3,47 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 // Standard scenario. Everything here is fictional: people, organisation and case. Teams is a real
 // product, so the scenario describes only what the customer sees and was told, never how Teams works.
 //
-// Root cause in the story (hidden from the trainee): yesterday afternoon an administrator at Tailspin
-// Toys changed a policy. Since then people in the sales and executive group are stopped when a
-// meeting has someone from outside the company on the invite, while internal meetings are fine and
-// the web version still works. Priya heard about the change in passing, does not know which policy
-// it was and did not link it to the problem. The desktop app was already reinstalled on a few
-// laptops with no change. The count of 27 people is written for the default (high) impact; the two
-// facts that depend on how many people are affected (hf-affected-count, hf-reinstalled) carry
-// byImpact wordings for low (one person) and medium (eight people), matching affectedUsers.
+// Possible trigger in the story (hidden from the trainee): yesterday afternoon an administrator at
+// Tailspin Toys changed a policy, and nothing here confirms that the change caused the pattern.
+// Since then people in the sales and executive group are stopped when a meeting has someone from
+// outside the company on the invite, while internal meetings are fine and the web version still
+// works. Priya heard about the change in passing, does not know which policy it was and did not
+// link it to the problem. The desktop app was already reinstalled on a few laptops with no change.
+// The count of 27 people is written for the default (high) impact; the two facts that depend on
+// how many people are affected (hf-affected-count, hf-reinstalled) carry byImpact wordings for low
+// (one person) and medium (eight people), matching affectedUsers.
 //
 // A strong call is not one that guesses the policy. It names the pressure, scopes the pattern, finds
-// the browser route for the presentation, takes ownership, gets the administrator involved and
+// the browser route for the affected meeting, takes ownership, gets the administrator involved and
 // agrees when Priya will hear next, and it handles the demand for a manager without defensiveness.
 
 const scenario = {
   id: 'teams-cannot-join-external-meetings',
   version: 1,
   title: 'Colleagues cannot join scheduled Teams meetings',
+  shortTitle: 'Cannot join meetings',
   listSummary:
-    'An operations manager reports that colleagues cannot join scheduled Teams meetings as an executive presentation nears.',
+    'An operations manager reports trouble joining scheduled Teams meetings and wants a clear plan.',
   summary:
-    'Priya Raman manages operations at Tailspin Toys. Colleagues cannot join their scheduled Microsoft Teams meetings, and an executive presentation to a customer is about to start. Understand the problem, take ownership and agree what happens next, with a time for the next update.',
+    'Priya Raman manages operations at Tailspin Toys. Her team has trouble joining scheduled Microsoft Teams meetings, and customer plans are affected. Understand the problem, take ownership and agree what happens next, with a time for the next update.',
   tags: ['meetings', 'time pressure', 'ownership', 'escalation request'],
   estimatedMinutes: 12,
 
   product: { id: 'teams', area: 'Meetings' },
   caseReference: 'SIM-410001',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['microsoft-learn', 'microsoft-support'],
+    behaviourCheck: 'checked-partly',
+    checkedOn: '2026-11-22',
+    syntheticConfirmed: true,
+    review: 'assistant-reviewed',
+    notes:
+      "Terminology and plausibility reviewed against current public Microsoft Learn and Support pages on 22 Nov 2026; customer claims hedged, impact wording made neutral. The exact policy mechanism is not verified. AI-assisted review, not a mentor's.",
+  },
   issueType: 'feature-not-working',
   impact: 'high',
   startingTemperature: 'anxious',
@@ -67,13 +82,13 @@ const scenario = {
     },
   },
   customerObjective:
-    'Get the executive presentation started on time, and have one named person own the problem until everyone can join meetings again.',
+    'Keep the affected customer meetings on track, and have one named person own the problem until everyone can join again.',
   customerExpectation:
     'Someone who takes charge straight away, says what they will do first and by when, and does not send her back to her own IT team.',
   desiredOutcome:
-    'Priya has a way to get the presentation going, knows who owns the case and when she will next hear, and the person who looks after her company settings is brought in to check what changed.',
+    'Priya has a possible way to keep the meeting moving, knows who owns the case and when she will next hear, and the person who looks after her company settings is brought in to check what changed.',
   previousTroubleshooting: [
-    'The desktop app was reinstalled on several laptops, with no change.',
+    'The desktop app was reinstalled, with no change.',
     'People retried joining several times and always got the same result.',
     'One team member opened the meeting in a web browser and got in.',
   ],
@@ -100,7 +115,7 @@ const scenario = {
       'An operations manager is calling because colleagues cannot join their scheduled Teams meetings. She wants someone to take charge.',
     goal: 'Find out what is happening and how far it reaches, take ownership, and make sure she knows what happens next and when she will hear from you.',
     groundRules: [
-      'The customer, organisation and product are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       'You cannot see her settings in this practice call, so rely on what she tells you.',
     ],
@@ -165,10 +180,10 @@ const scenario = {
   knownFacts: [
     {
       id: 'kf-tried-myself',
-      text: "I've tried myself as well, a few times, and I get nowhere. It never puts me into the meeting.",
+      text: "I've tried to help a few times, and got nowhere. It never puts my colleague into the meeting.",
       intents: ['problem_description', 'reproducibility'],
       elaboration: "I've been trying things for a while now, and none of it has helped.",
-      simple: 'I tried myself. It does not work. It never puts me in the meeting.',
+      simple: 'I tried to help. It does not work. It never puts my colleague in the meeting.',
     },
     {
       id: 'kf-environment',
@@ -279,7 +294,7 @@ const scenario = {
       statementSimple:
         'Meetings inside the company work. Only meetings with a person from outside the company do not work.',
       missedConsequence:
-        'The pattern stays hidden, so the call treats this as a general Teams fault and she hears generic fixes while the presentation clock runs down.',
+        'The pattern stays hidden, so the call treats this as a general Teams fault and she hears generic fixes while the affected meetings stay blocked.',
       betterQuestion:
         'Does it happen on every meeting, or only on some, and what do the failing ones have in common?',
     },
@@ -297,7 +312,7 @@ const scenario = {
       statementSimple:
         'Our administrator changed a policy yesterday afternoon. I heard about it, but I did not think it was the reason.',
       missedConsequence:
-        'The likely trigger is never found, so nobody asks the administrator what changed and the engineer has no useful next step to give her.',
+        'The possible trigger is never found, so nobody asks the administrator what changed and the engineer has no useful next step to give her.',
       betterQuestion:
         'Did anything change recently, for example a setting or a policy, and did your administrator touch anything?',
     },
@@ -328,7 +343,7 @@ const scenario = {
       statementSimple:
         'The web version still works. One person on my team joined in a browser. It worked.',
       missedConsequence:
-        'The one route that could get the presentation going is never found, so she is left with no way in and no interim plan while the clock runs down.',
+        'A possible route into the meeting is never found, so she is left with no way in and no interim plan.',
       betterQuestion:
         'Is there any other way people can join at the moment, for example through a browser?',
     },
@@ -361,7 +376,7 @@ const scenario = {
         },
       },
       missedConsequence:
-        'The scale stays unknown, so the case is treated as a nuisance for one person and is not prioritised or escalated as the company-wide, time-critical problem it is.',
+        'The scale stays unknown, so the case may be prioritised poorly and Priya cannot explain who is affected.',
       betterQuestion: 'How many people are affected, and are they all in the same teams?',
     },
     {
@@ -378,10 +393,9 @@ const scenario = {
       byImpact: {
         low: {
           statement:
-            "We've already had the desktop app reinstalled on her laptop and on mine. It made no difference.",
-          statementTerse: 'We reinstalled the desktop app on her laptop and mine. No change.',
-          statementSimple:
-            'We reinstalled the desktop app on her laptop and on mine. It did not help.',
+            "We've already had the desktop app reinstalled on her laptop. It made no difference.",
+          statementTerse: 'We reinstalled the desktop app on her laptop. No change.',
+          statementSimple: 'We reinstalled the desktop app on her laptop. It did not help.',
         },
         medium: {
           statement:
@@ -432,7 +446,7 @@ const scenario = {
       statement:
         "I'd say this has to be a fault on your side. Nothing we've done would stop people joining.",
       truth:
-        'Nothing confirms a fault with the service. In this story a policy change made at Tailspin Toys yesterday is the likely trigger, and Priya did not connect it to the problem.',
+        'Nothing confirms a fault with the service. In this story a policy change made at Tailspin Toys yesterday is a possible trigger, and Priya did not connect it to the problem.',
     },
   ],
 
@@ -456,7 +470,7 @@ const scenario = {
       trigger: { earliestTurn: 4, latestTurn: 7, whenImpactUnacknowledged: true },
       statement:
         'I should be clear about the time. The customer meeting is coming up, and I need to know what you can do before then.',
-      followUp: "I'm running out of time. What exactly can you do in the next few minutes?",
+      followUp: 'I need a clear plan. What will you do first, and when will you update me?',
       expectedResponse:
         'Acknowledge the deadline, be honest about what can and cannot be promised, say what you will do first and give a specific time for the next update. Ask whether there is any other way to get people into the meeting if that has not come up yet.',
       minDifficulty: 'standard',
@@ -474,7 +488,7 @@ const scenario = {
     'The deadline and what depends on it',
   ],
   successCriteria: [
-    'Acknowledges the clock and the pressure on Priya before starting on questions.',
+    'Acknowledges the impact and any deadline before starting on questions.',
     'Finds that only some meetings fail, and that another way into the meeting still works.',
     'Learns that a policy was changed yesterday and that Priya does not know which one, without guessing the fix.',
     'Says plainly that they own the case and gives a specific time for the next update.',
@@ -489,14 +503,14 @@ const scenario = {
     ],
     accountable: [
       'States early that they own the case, names the first thing they will do and gives a specific time for the next update.',
-      'Promises only what they control, such as their own actions and when she will hear next, not that the presentation will work.',
+      'Promises only what they control, such as their own actions and when she will hear next, not that the meeting will work.',
     ],
     resourceful: [
-      'Asks what the failing meetings have in common and whether there is another way into the meeting, to keep the presentation moving.',
+      'Asks what the failing meetings have in common and whether there is another way into the meeting, to keep it moving.',
       'Brings in the person who looks after her company settings, and says how a manager can join if she still wants one.',
     ],
     empathetic: [
-      'Names the pressure of an executive presentation in the first minute, before asking questions.',
+      'Names the pressure on Priya and the affected meeting in the first minute, before asking questions.',
       'Stays calm and unhurried when she asks for a manager, and does not take the request personally.',
     ],
   },
@@ -505,20 +519,20 @@ const scenario = {
     'Starting generic fixes (sign out and back in, clear the cache, reinstall the app) before asking what is happening or who is affected.',
     'Saying "I understand" and then asking her to explain everything from the start, with no sign of ownership.',
     'Telling her to ask her own IT team to deal with it, which repeats the runaround she is afraid of.',
-    'Promising that the presentation will go ahead, or that the problem will be fixed by a certain time, without knowing the cause.',
+    'Promising that the meeting will go ahead, or that the problem will be fixed by a certain time, without knowing the cause.',
     'Getting defensive when she asks for a manager, or refusing without explaining what else can be done.',
   ],
   goodBehaviours: [
-    'Acknowledging the clock and the pressure in the first minute, then saying plainly "I will own this case".',
+    'Acknowledging the impact and any deadline in the first minute, then saying plainly "I will own this case".',
     'Asking whether it happens on every meeting, who is affected and when it started, in plain language.',
-    'Asking whether anything changed recently and whether there is another way to get people in, to keep the presentation moving.',
+    'Asking whether anything changed recently and whether there is another way to get people in, to keep the meeting moving.',
     'Answering the request for a manager by explaining what happens first and how an escalation contact can join.',
     'Agreeing a first step, who does it and a specific time for the next update, and summarising before the call ends.',
   ],
   expectedOutcome:
-    'Priya has a way to start the presentation, understands that the meetings that fail all involve people from outside and that a policy changed yesterday, and knows the engineer owns the case. The engineer has agreed a first step, a way to involve her administrator and a specific time for the next update.',
+    'Priya has a possible way to join the affected meeting, understands that the meetings that fail all involve people from outside and that a policy changed yesterday, and knows the engineer owns the case. The engineer has agreed a first step, a way to involve her administrator and a specific time for the next update.',
   evaluatorNotes:
-    'Root cause in the story: an administrator at Tailspin Toys changed a policy yesterday afternoon. Since then meetings with someone from outside the company stop people joining, internal meetings are fine and the web version still works. Priya does not know which policy changed and has already reinstalled the desktop app. 27 people are affected at the default impact. A strong call acknowledges the clock early, finds the pattern and the web route, takes ownership in plain words, involves the administrator, handles the request for a manager calmly and gives a specific time for the next update, without guessing the fix or promising an outcome.',
+    'Possible trigger in the story: an administrator at Tailspin Toys changed a policy yesterday afternoon. Since then meetings with someone from outside the company stop people joining, but the unnamed policy is not confirmed as the cause. Internal meetings are fine and the web version still works. Priya does not know which policy changed and has already reinstalled the desktop app. 27 people are affected at the default impact. A strong call acknowledges the impact and any deadline early, finds the pattern and the web route, takes ownership in plain words, involves the administrator, handles the request for a manager calmly and gives a specific time for the next update, without guessing the fix or promising an outcome.',
 } satisfies ScenarioInput;
 
 export default scenario;

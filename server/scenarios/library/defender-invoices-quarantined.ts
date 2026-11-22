@@ -2,23 +2,24 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 
 // Standard scenario. Everything here is fictional: people, organisation and case number.
 //
-// Root cause (hidden from the trainee; plausible, and never confirmed on the call): a few of
+// Root cause (hidden from the trainee; plausible, and never confirmed on the call): some of
 // Proseware's regular suppliers recently moved to a new invoicing system, so their invoices now
 // arrive differently. Just before that, Proseware's own IT team tightened email protection after
 // someone nearly paid a fake invoice, and the quarantine list shows the held invoices as suspected
-// phishing. The IT manager is on leave, so nobody inside Proseware has looked at the held messages,
-// and the service desk told Sofia to call Microsoft. Nothing in the call depends on knowing where a
-// setting lives. A strong call acknowledges the payment run early, scopes by supplier and timing,
-// finds the change and the reason shown, never blames IT or promises a release, looks for a
-// temporary way to protect the payment run, agrees who acts and by when, and stays steady when
-// Sofia threatens to move to another provider.
+// phishing. The IT manager is on leave, so nobody inside Proseware has reviewed the contents of the
+// held messages yet, and the service desk told Sofia to call Microsoft. Nothing in the call depends
+// on knowing where a setting lives. A strong call acknowledges the payment run early, scopes by
+// supplier and timing, finds the change and the reason shown, never blames IT or promises a release,
+// looks for a temporary way to protect the payment run, agrees who acts and by when, and stays
+// steady when Sofia threatens to move to another provider.
 
 const scenario = {
   id: 'defender-invoices-quarantined',
   version: 1,
-  title: 'Genuine supplier invoices held in quarantine before a payment run',
+  title: 'Supplier invoices held in quarantine before a payment run',
+  shortTitle: 'Invoices held in quarantine',
   listSummary:
-    'A finance director says genuine supplier invoices are held in quarantine, putting a payment run at risk.',
+    'A finance director says supplier invoices are held in quarantine, putting a payment run at risk.',
   summary:
     'A finance director reports that invoices from regular suppliers are being held in quarantine instead of reaching her accounts payable team, and a supplier payment run depends on them. She is short on patience and wants clear commitments and times.',
   tags: [
@@ -33,6 +34,19 @@ const scenario = {
 
   product: { id: 'defender-office-365', area: 'Quarantine' },
   caseReference: 'SIM-430001',
+  // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
+  grounding: {
+    authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
+    productFamily: 'microsoft-365',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
+    syntheticConfirmed: true,
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public Microsoft Learn pages on quarantined messages, admin quarantine management and false positives. Terms current; invoices no longer called genuine in public text, manager-away wording hedged. AI-assisted review, not a mentor's.",
+  },
 
   issueType: 'policy-security',
   impact: 'high',
@@ -90,7 +104,7 @@ const scenario = {
 
   publicBrief: {
     issue:
-      'Genuine supplier invoices are being held in quarantine instead of reaching the accounts payable team.',
+      'Supplier invoices are reportedly being held in quarantine instead of reaching the accounts payable team.',
     impact: {
       low: 'A few invoices from one supplier are held. The next payment run is not close.',
       medium: "Invoices from several suppliers are held, and this week's payment run may slip.",
@@ -107,7 +121,7 @@ const scenario = {
       'A finance director is calling because invoices from regular suppliers are being held in quarantine and are not reaching her accounts payable team. A supplier payment run depends on them. She is short on patience and wants a clear owner and clear times.',
     goal: 'Find out what is held and why, take ownership, and make sure she knows exactly what happens next and when she will hear from you.',
     groundRules: [
-      'The customer and organisation are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       "You cannot see Proseware's email settings in this practice call, so rely on what Sofia tells you.",
       'Be honest about what you can and cannot do on this call.',
@@ -327,7 +341,7 @@ const scenario = {
       statementSimple:
         'Our IT team made the email protection stricter just before this started. One of my team almost paid a fake invoice.',
       missedConsequence:
-        "The most useful lead stays hidden, so the engineer cannot link the held invoices to a change on Proseware's side and may blame the service.",
+        'A possible lead stays hidden, so the engineer may miss a useful question for IT or blame the service.',
       betterQuestion:
         'Has anything changed on your side recently, such as a setting your IT team adjusted, just before the invoices were held?',
     },
@@ -354,7 +368,7 @@ const scenario = {
         'what does the list say',
       ],
       knowledge: 'after-checking',
-      checking: "Hold on, I'll open the list and read what it says.",
+      checking: "Hold on, I'll ask my accounts payable lead to read what it says.",
       hint: "There's some sort of reason shown next to each one.",
       statementTerse: 'It says suspected phishing against each one.',
       statementSimple: 'The list says each message was held as suspected phishing.',
@@ -393,7 +407,7 @@ const scenario = {
       statementSimple:
         'I called our IT help desk first. They said only our IT manager can change these settings. She is away until the end of the week. They told me to call you.',
       missedConsequence:
-        'The engineer plans actions that nobody at Proseware can take before the payment run, and Sofia hears yet another suggestion to go back to IT.',
+        'The engineer relies on the unavailable IT manager and does not check who else can review the messages before the payment run.',
       betterQuestion:
         'Who at Proseware looks after the email protection settings, and have you been able to speak to them yet?',
     },
@@ -566,7 +580,7 @@ const scenario = {
   expectedOutcome:
     'Sofia understands that nothing has been confirmed as a fault: the held invoices share a pattern, and her IT team recently tightened protection. The engineer owns the case, agrees who at Proseware must review the held messages and a specific time for the next update, and explores a temporary way to protect the payment run, without promising a release or that it will not recur.',
   evaluatorNotes:
-    "Root cause (plausible, not confirmed on the call): a few suppliers recently moved to a new invoicing system, so their invoices arrive differently. Just before, Proseware's IT team tightened email protection after a fake invoice was nearly paid, and the quarantine list shows the held invoices as suspected phishing. The IT manager is on leave, so nobody at Proseware has looked at them. A strong call acknowledges the payment run early, scopes by supplier and timing, finds the change and the reason shown, avoids blaming IT, avoids promising a release or that it will not recur, looks for a temporary way to protect the run, agrees who acts and by when, and stays steady when Sofia threatens to move provider.",
+    "Root cause (plausible, not confirmed on the call): some suppliers recently moved to a new invoicing system, so their invoices arrive differently. Just before, Proseware's IT team tightened email protection after a fake invoice was nearly paid, and the quarantine list shows the held invoices as suspected phishing. The IT manager is on leave, so nobody at Proseware has reviewed their contents yet. A strong call acknowledges the payment run early, scopes by supplier and timing, finds the change and the reason shown, avoids blaming IT, avoids promising a release or that it will not recur, looks for a temporary way to protect the run, agrees who acts and by when, and stays steady when Sofia threatens to move provider.",
 } satisfies ScenarioInput;
 
 export default scenario;

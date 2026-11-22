@@ -1111,8 +1111,6 @@ describe('numbers in the coaching text', () => {
       ];
       for (const text of texts) {
         for (const n of numbers(text)) {
-          // a weighted share of the facts found is computed; everything else must be recorded
-          if (/weighted \d+%/.test(text) && n <= 100) continue;
           expect(allowed.has(n) || n <= 7, `${n} in "${text}"`).toBe(true);
         }
       }

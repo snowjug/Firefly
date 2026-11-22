@@ -10,22 +10,8 @@ import { ScenarioWorkspace } from '../ScenarioWorkspace.tsx';
 import { appConfig, publicScenarios } from './fixtures.ts';
 
 // Shared setup for the component tests. The test file mocks `lib/api.ts` (so `api` here is the
-// mock), and this file gives each test the same fixture scenarios, a router with stand-ins for the
-// pages the screens link to, and a way to pretend the window is wide or narrow.
-
-/** Pretends the window is wide (the list and the details side by side) or narrow (list, then details). */
-export function stubViewport(wide: boolean): void {
-  vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query.includes('min-width: 64em') ? wide : false,
-    media: query,
-    onchange: null,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    dispatchEvent: () => false,
-  }));
-}
+// mock), and this file gives each test the same fixture scenarios and a router with stand-ins for
+// the pages the screens link to.
 
 export function stubOnline(online: boolean): void {
   vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(online);
