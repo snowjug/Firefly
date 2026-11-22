@@ -1,12 +1,18 @@
 /* ==========================================================================================
    Firefly design tokens
 
-   Informed by the public Fluent 2 web light theme (values checked against Microsoft's open-source
-   Fluent UI tokens), as an original Firefly interface. Light theme only.
+   Informed by the public Fluent 2 web themes (values checked against Microsoft's open-source
+   Fluent UI tokens), as an original Firefly interface. Two themes: the light theme is :root, and
+   the dark theme is authored separately (not an inversion) in the :root[data-theme='dark'] block
+   near the end. The dark block only applies on screen, so paper is always the light theme.
 
-   Rules: components use semantic tokens (--fg-*, --bg-*, --brand*, --state-*, --status-*) and never
-   raw colour values. Breakpoints cannot be custom properties, so they are written as media queries:
-   30em (480), 40em (640), 48em (768), 64em (1024), 80em (1280), 90em (1440), 120em (1920).
+   Rules: components use semantic tokens (--fg-*, --bg-*, --brand*, --state-*, --status-*,
+   --accent-*, --diff-*) and never raw colour values. Brand roles: --brand* is a solid fill that
+   carries text (a primary button), --brand-stroke is a line, bar or indicator, --brand-fg and
+   --brand-fg-2 are text and icons. In the light theme all of them are the same blue; in the dark
+   theme each is tuned for its own job. Breakpoints cannot be custom properties, so they are written
+   as media queries: 30em (480), 40em (640), 48em (768), 64em (1024), 80em (1280), 90em (1440),
+   120em (1920).
    ========================================================================================== */
 
 :root {
@@ -57,6 +63,7 @@
   --bg-hover: #f5f5f5;
   --bg-pressed: #e0e0e0;
   --bg-selected: #ebebeb;
+  --bg-raised: #ffffff; /* popovers, tip cards and reading surfaces that sit above the page */
   --bg-scrim: rgb(0 0 0 / 0.4);
 
   /* ---- Text ------------------------------------------------------------------------------ */
@@ -138,6 +145,50 @@
   --voice-trainee: #0f6cbd; /* waveform: the trainee */
   --voice-customer: #0e7c86; /* waveform: the customer (restrained teal) */
 
+  /* ---- Product accents: seven hues, each a text colour, a tint and an edge. A product is given one
+          (see design/product-accent.ts) so a scenario is recognised at a glance. They are small
+          marks, never large fills, and never the only way a product is named. ------------------ */
+  --accent-blue-fg: #0f6cbd;
+  --accent-blue-bg: #ebf3fc;
+  --accent-blue-border: #b4d6fa;
+  --accent-indigo-fg: #4b53bc;
+  --accent-indigo-bg: #f0f1fb;
+  --accent-indigo-border: #c4c8ee;
+  --accent-purple-fg: #5b5fc7;
+  --accent-purple-bg: #f0f0fb;
+  --accent-purple-border: #c5c6ec;
+  --accent-teal-fg: #0b6a6f;
+  --accent-teal-bg: #eef8f8;
+  --accent-teal-border: #a1d5d8;
+  --accent-green-fg: #0e700e;
+  --accent-green-bg: #f1faf1;
+  --accent-green-border: #9fd89f;
+  --accent-orange-fg: #a8430d;
+  --accent-orange-bg: #fff6f0;
+  --accent-orange-border: #f5c9ac;
+  --accent-magenta-fg: #a3245f;
+  --accent-magenta-bg: #fdf1f7;
+  --accent-magenta-border: #efb3d3;
+
+  /* ---- Wording changes in the report: what was removed and what was added. The meaning is also in
+          the markup (<del>, <ins>, a strike and an underline) so colour is never the only cue. --- */
+  --diff-del-fg: var(--status-danger-fg);
+  --diff-del-bg: var(--status-danger-bg);
+  --diff-del-border: var(--status-danger-border);
+  --diff-add-fg: var(--status-success-fg);
+  --diff-add-bg: var(--status-success-bg);
+  --diff-add-border: var(--status-success-border);
+
+  /* ---- Charts: the customer-state trace and the score summary ------------------------------ */
+  --chart-grid: var(--stroke-3);
+  --chart-axis: var(--fg-3);
+  --chart-line: var(--brand-stroke);
+  --chart-area: var(--brand-tint);
+
+  /* ---- Edge light: the soft highlight on an interactive card's edge ------------------------- */
+  --edge-light: rgb(15 108 189 / 0.45);
+  --edge-light-soft: rgb(15 108 189 / 0.16);
+
   /* ---- Spacing (4 px grid) ---------------------------------------------------------------- */
   --sp-0h: 0.125rem; /* 2 */
   --sp-1: 0.25rem; /* 4 */
@@ -202,6 +253,7 @@
   --dur-shimmer: 1600ms; /* a placeholder or an inline progress shimmer */
   --dur-pulse: 1800ms; /* a soft ring while someone is speaking */
   --dur-wave: 1100ms; /* one gentle swing of the preview waveform */
+  --dur-stagger: 40ms; /* the step between items that arrive one after another */
 
   /* How far things travel. Only transform moves, so a layout never shifts. Zero when motion is
      reduced, which turns every enter, press and nudge into a plain state change. */
@@ -209,6 +261,23 @@
   --move-sm: 0.5rem; /* 8: a larger entrance */
   --press-shift: 1px; /* a button compresses this far while it is pressed */
   --press-shift-lg: 2px; /* the large (48 px) button */
+  --move-lift: 0.125rem; /* 2: an interactive card rises this far under the pointer */
+  --press-grow: 0.015; /* a card or tip compresses by this fraction while it is pressed */
+
+  /* Spring. Only four things use it: a dragged carousel item settling, a tip card released after a
+     drag, a call control being pressed, and the report's evidence moving into view. Everything
+     else (dialogs, pages, the theme change, transcript entry, report expansion) uses easing. The
+     cubic-bezier overshoots a little; browsers that understand linear() get a real spring curve. */
+  --dur-spring: 420ms;
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* The five tiers of the interaction system, by what they are for. They are names for the
+     durations above, so reduced motion collapses them with the rest. */
+  --motion-instant: var(--dur-faster); /* 100: a press, a toggle */
+  --motion-control: var(--dur-fast); /* 150: hover, focus, a small control */
+  --motion-component: var(--dur-normal); /* 200: a card, a menu, a tooltip */
+  --motion-panel: var(--dur-slow); /* 300: a panel, a drawer, a report section */
+  --motion-page: var(--dur-slower); /* 400: a page, the theme change */
 
   /* ---- Layout ---------------------------------------------------------------------------- */
   --page-max: 80rem; /* 1280 */
@@ -244,10 +313,34 @@
     --dur-shimmer: 0.01ms;
     --dur-pulse: 0.01ms;
     --dur-wave: 0.01ms;
+    --dur-stagger: 0.01ms;
     --move-xs: 0px;
     --move-sm: 0px;
     --press-shift: 0px;
     --press-shift-lg: 0px;
+    --move-lift: 0px;
+    --press-grow: 0;
+    --dur-spring: 0.01ms;
+  }
+}
+
+/* A real spring curve for browsers that understand linear(): a quick rise, one small overshoot and
+   a settle. The cubic-bezier above is what the others get. */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(
+      0,
+      0.18 3%,
+      0.5 7%,
+      0.88 12%,
+      1.07 17%,
+      1.1 20%,
+      1.06 25%,
+      1.01 33%,
+      0.99 41%,
+      1.004 55%,
+      1
+    );
   }
 }
 
@@ -258,5 +351,149 @@
     --stroke-2: #616161;
     --stroke-3: #8a8a8a;
     --fg-3: #424242;
+  }
+}
+
+/* ==========================================================================================
+   Dark theme
+
+   Authored, not inverted: a charcoal-navy canvas whose surfaces get lighter as they come nearer,
+   the same Microsoft-style blue for actions, a controlled cyan only for the live voice, warm amber
+   for a customer's concern and muted orange to red as a call escalates. Text is strong, borders
+   are quiet, shadows have no bloom, and there is no pure black anywhere. Every token the light
+   theme declares for colour or depth is declared here too (a test checks that), and every pair is
+   checked for contrast by the same test. The block applies on screen only, so a printed report
+   is always the light document.
+   ========================================================================================== */
+@media screen {
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --bg-canvas: #161a22;
+    --bg-quiet: #1b202a;
+    --bg-subtle: #202632;
+    --bg-section: #262d3a;
+    --bg-strong: #2f3847;
+    --bg-hover: #212835;
+    --bg-pressed: #2b3443;
+    --bg-selected: #2a3547;
+    --bg-raised: #1f2531;
+    --bg-scrim: rgb(5 8 14 / 0.64);
+
+    --fg-1: #f3f5f8;
+    --fg-2: #d3d8e0;
+    --fg-3: #a9b1bd;
+    --fg-disabled: #6b7482;
+    --fg-on-brand: #ffffff;
+
+    --stroke-1: #4a5363;
+    --stroke-2: #394150;
+    --stroke-3: #2d3441;
+    --stroke-accessible: #98a2b3;
+
+    --brand: #1c6eb9;
+    --brand-hover: #2078cc;
+    --brand-pressed: #0f4f8c;
+    --brand-selected: #135a9d;
+    --brand-tint: #16283d;
+    --brand-tint-hover: #1c3550;
+    --brand-tint-pressed: #24456a;
+    --brand-fg: #62abf5;
+    --brand-fg-2: #7bb9f7;
+    --brand-stroke: #62abf5;
+    --brand-stroke-2: #2a4a70;
+
+    --focus-inner: #161a22;
+    --focus-outer: #ffffff;
+
+    --status-success-fg: #7fd37f;
+    --status-success-bg: #14261a;
+    --status-success-border: #2f6b3b;
+    --status-warning-fg: #f1a35c;
+    --status-warning-bg: #2a1d12;
+    --status-warning-border: #7a4a1e;
+    --status-danger-fg: #f08b94;
+    --status-danger-bg: #2d1519;
+    --status-danger-border: #7d2f38;
+    --status-info-fg: #7bb9f7;
+    --status-info-bg: #14263a;
+    --status-info-border: #2a4a70;
+    --status-neutral-fg: #d3d8e0;
+    --status-neutral-bg: #222836;
+    --status-neutral-border: #4a5363;
+
+    --state-calm-fg: #7fd37f;
+    --state-calm-bg: #14261a;
+    --state-calm-border: #2f6b3b;
+    --state-concerned-fg: #f2c25a;
+    --state-concerned-bg: #2a2210;
+    --state-concerned-border: #7a6320;
+    --state-frustrated-fg: #f4a06a;
+    --state-frustrated-bg: #2c1b10;
+    --state-frustrated-border: #80471f;
+    --state-angry-fg: #f08b94;
+    --state-angry-bg: #2d1519;
+    --state-angry-border: #7d2f38;
+    --state-escalating-fg: #ffa6ae;
+    --state-escalating-bg: #3a1219;
+    --state-escalating-border: #a03a47;
+    --state-recovering-fg: #7fd37f;
+    --state-recovering-bg: #14261a;
+    --state-recovering-border: #2f6b3b;
+
+    --danger: #c4262e;
+    --danger-hover: #d13440;
+    --danger-pressed: #a31d25;
+
+    --ai-fg: #a5a8f0;
+    --ai-bg: #1c1e3a;
+    --ai-border: #3d4085;
+    --voice-trainee: #62abf5;
+    --voice-customer: #3fc7cf;
+
+    --accent-blue-fg: #62abf5;
+    --accent-blue-bg: #14263a;
+    --accent-blue-border: #2a4a70;
+    --accent-indigo-fg: #8f9cf5;
+    --accent-indigo-bg: #1a1f3d;
+    --accent-indigo-border: #3a4388;
+    --accent-purple-fg: #a6a9f0;
+    --accent-purple-bg: #201f3d;
+    --accent-purple-border: #454791;
+    --accent-teal-fg: #4fc3c8;
+    --accent-teal-bg: #102a2c;
+    --accent-teal-border: #1f6064;
+    --accent-green-fg: #7fd37f;
+    --accent-green-bg: #14261a;
+    --accent-green-border: #2f6b3b;
+    --accent-orange-fg: #f4a06a;
+    --accent-orange-bg: #2c1b10;
+    --accent-orange-border: #80471f;
+    --accent-magenta-fg: #f09ac8;
+    --accent-magenta-bg: #341626;
+    --accent-magenta-border: #86345f;
+
+    --edge-light: rgb(98 171 245 / 0.5);
+    --edge-light-soft: rgb(98 171 245 / 0.18);
+
+    --shadow-2: 0 0 2px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-4: 0 0 2px rgb(0 0 0 / 0.5), 0 2px 4px rgb(0 0 0 / 0.4);
+    --shadow-8: 0 0 2px rgb(0 0 0 / 0.5), 0 4px 8px rgb(0 0 0 / 0.4);
+    --shadow-16: 0 0 2px rgb(0 0 0 / 0.5), 0 8px 16px rgb(0 0 0 / 0.42);
+    --shadow-28: 0 0 8px rgb(0 0 0 / 0.5), 0 14px 28px rgb(0 0 0 / 0.45);
+    --shadow-64: 0 0 8px rgb(0 0 0 / 0.5), 0 32px 64px rgb(0 0 0 / 0.5);
+
+    --acrylic-bg: #161a22;
+    --acrylic-solid: #161a22;
+    --acrylic-border: rgb(255 255 255 / 0.08);
+  }
+}
+
+@media screen and (prefers-contrast: more) {
+  :root[data-theme='dark'] {
+    --stroke-1: #98a2b3;
+    --stroke-2: #98a2b3;
+    --stroke-3: #6f7a8c;
+    --fg-3: #d3d8e0;
   }
 }

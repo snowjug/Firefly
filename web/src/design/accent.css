@@ -1,0 +1,43 @@
+/* Product accents: `.ff-accent--<hue>` hands an element its hue as --accent-fg, --accent-bg and
+   --accent-border, resolved from the theme's tokens so the same class works in light and dark. */
+
+.ff-accent {
+  --accent-fg: var(--accent-blue-fg);
+  --accent-bg: var(--accent-blue-bg);
+  --accent-border: var(--accent-blue-border);
+}
+.ff-accent--blue {
+  --accent-fg: var(--accent-blue-fg);
+  --accent-bg: var(--accent-blue-bg);
+  --accent-border: var(--accent-blue-border);
+}
+.ff-accent--indigo {
+  --accent-fg: var(--accent-indigo-fg);
+  --accent-bg: var(--accent-indigo-bg);
+  --accent-border: var(--accent-indigo-border);
+}
+.ff-accent--purple {
+  --accent-fg: var(--accent-purple-fg);
+  --accent-bg: var(--accent-purple-bg);
+  --accent-border: var(--accent-purple-border);
+}
+.ff-accent--teal {
+  --accent-fg: var(--accent-teal-fg);
+  --accent-bg: var(--accent-teal-bg);
+  --accent-border: var(--accent-teal-border);
+}
+.ff-accent--green {
+  --accent-fg: var(--accent-green-fg);
+  --accent-bg: var(--accent-green-bg);
+  --accent-border: var(--accent-green-border);
+}
+.ff-accent--orange {
+  --accent-fg: var(--accent-orange-fg);
+  --accent-bg: var(--accent-orange-bg);
+  --accent-border: var(--accent-orange-border);
+}
+.ff-accent--magenta {
+  --accent-fg: var(--accent-magenta-fg);
+  --accent-bg: var(--accent-magenta-bg);
+  --accent-border: var(--accent-magenta-border);
+}

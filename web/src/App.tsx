@@ -1,17 +1,20 @@
 import type { ReactNode } from 'react';
 import { RouterProvider } from 'react-router';
 import { AnnouncerProvider } from './design/primitives/LiveRegion.tsx';
+import { ThemeProvider } from './design/theme/ThemeProvider.tsx';
 import { ConfigProvider } from './lib/config.tsx';
 import type { AppRouter } from './app/router.tsx';
 
 export { appRoutes, createAppRouter, type AppRouter } from './app/router.tsx';
 
-/** The providers every page may rely on: the server's config, and the polite announcer. */
+/** The providers every page may rely on: the theme, the server's config, and the polite announcer. */
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <ConfigProvider>
-      <AnnouncerProvider>{children}</AnnouncerProvider>
-    </ConfigProvider>
+    <ThemeProvider>
+      <ConfigProvider>
+        <AnnouncerProvider>{children}</AnnouncerProvider>
+      </ConfigProvider>
+    </ThemeProvider>
   );
 }
 

@@ -1,0 +1,116 @@
+/* The theme switch and the footer's theme choice. Motion is transform and opacity only, from the
+   shared tokens; under reduced motion the tokens collapse and the sun and moon simply swap. */
+
+.ff-theme-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--target);
+  block-size: var(--target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--fg-2);
+  transition:
+    background-color var(--motion-instant) var(--ease-easy),
+    color var(--motion-instant) var(--ease-easy),
+    transform var(--motion-instant) var(--ease-easy);
+}
+.ff-theme-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--fg-1);
+}
+.ff-theme-toggle:active {
+  background: var(--bg-pressed);
+  transform: translateY(var(--press-shift));
+}
+.ff-theme-toggle__icon {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  overflow: visible;
+}
+.ff-theme-toggle__core {
+  fill: currentColor;
+  transform-origin: 12px 12px;
+  transition: transform var(--motion-component) var(--ease-easy);
+}
+.ff-theme-toggle__cut {
+  /* Out of the picture while the sun shows: the mask has nothing to cut. */
+  transform: translate(14px, -14px);
+  transition: transform var(--motion-component) var(--ease-easy);
+}
+.ff-theme-toggle__rays {
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  transform-origin: 12px 12px;
+  transition:
+    transform var(--motion-component) var(--ease-easy),
+    opacity var(--motion-component) var(--ease-easy);
+}
+.ff-theme-toggle[data-state='dark'] .ff-theme-toggle__core {
+  transform: scale(1.75);
+}
+.ff-theme-toggle[data-state='dark'] .ff-theme-toggle__cut {
+  transform: translate(0, 0);
+}
+.ff-theme-toggle[data-state='dark'] .ff-theme-toggle__rays {
+  opacity: 0;
+  transform: rotate(45deg) scale(0.5);
+}
+
+/* The whole page crossfades when the theme changes (where the browser can), at the page tier. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--motion-page);
+  animation-timing-function: var(--ease-easy);
+}
+
+/* ---- The footer's Light / Dark / System choice ---------------------------------------------- */
+.ff-theme-select {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+}
+.ff-theme-select__label {
+  color: var(--fg-2);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.ff-theme-select__saved {
+  min-inline-size: 9.5rem;
+  color: var(--status-success-fg);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  opacity: 0;
+  transform: translateY(var(--move-xs));
+  transition:
+    opacity var(--motion-component) var(--ease-decelerate),
+    transform var(--motion-component) var(--ease-decelerate);
+}
+.ff-theme-select__saved[data-on] {
+  opacity: 1;
+  transform: none;
+}
+
+@media (forced-colors: active) {
+  .ff-theme-toggle__core {
+    forced-color-adjust: none;
+    fill: CanvasText;
+  }
+  .ff-theme-toggle__rays {
+    forced-color-adjust: none;
+    stroke: CanvasText;
+  }
+}
+
+/* The toggle and the choice are controls: paper has neither. */
+@media print {
+  .ff-theme-toggle,
+  .ff-theme-select {
+    display: none;
+  }
+}

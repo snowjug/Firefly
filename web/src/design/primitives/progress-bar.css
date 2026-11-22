@@ -1,6 +1,6 @@
 .ff-progress {
   --_h: 0.375rem;
-  --_fill: var(--brand);
+  --_fill: var(--brand-stroke);
   display: flex;
   flex-direction: column;
   gap: var(--sp-1h);

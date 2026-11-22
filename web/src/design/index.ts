@@ -89,3 +89,28 @@ export {
   type Announce,
 } from './primitives/LiveRegion.tsx';
 export { VisuallyHidden } from './primitives/VisuallyHidden.tsx';
+
+export {
+  ThemeProvider,
+  useOptionalTheme,
+  useTheme,
+  type ThemeValue,
+} from './theme/ThemeProvider.tsx';
+export { ThemeSelect, ThemeToggle } from './theme/ThemeToggle.tsx';
+export {
+  THEME_PREFERENCES,
+  THEME_STORAGE_KEY,
+  applyTheme,
+  parsePreference,
+  readStoredPreference,
+  resolveTheme,
+  storePreference,
+  systemPrefersDark,
+  withThemeTransition,
+  type ResolvedTheme,
+  type ThemePreference,
+} from './theme/theme.ts';
+export { ACCENTS, PRODUCT_ACCENT, accentClass, type AccentId } from './product-accent.ts';
+
+// Interaction hooks: card tilt, mouse drag and swipe, in-view activation, the call-preview clock.
+export * from './interaction/index.ts';
