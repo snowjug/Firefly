@@ -4,13 +4,14 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 // real, so the customer only describes what she sees and was told, in everyday words.
 //
 // Root cause (hidden from the trainee; plausible, not validated product behaviour): in the sales
-// reorganisation the administrator moved people into new regional teams in one go over a weekend. The
-// customer accounts those people worked with were looked after by their old teams, and nobody
-// reassigned them to the new teams. The people who were moved can no longer see those accounts (they
-// can still see accounts they created themselves); colleagues who stayed in the old teams still can.
-// Nobody checked what people could see afterwards, and a few affected reps are emailing customer
-// lists around to keep working. Amara guesses it is a licence problem, or that it will sort itself
-// out.
+// reorganisation the administrator moved the people changing teams out of their old owner teams and
+// into new regional teams in one go over a weekend. The customer accounts those people worked with
+// belong to the old owner teams, which supplied the moved reps' only Read access, and nobody
+// reassigned the accounts to the new teams. The moved reps keep user-level Read for accounts they
+// own, so they can still see accounts they created themselves, but they have no broader role or
+// sharing for the missing records. Colleagues who stayed in the old teams still see them. Nobody
+// checked what people could see afterwards, and a few affected reps are emailing customer lists
+// around to keep working. Amara guesses it is a licence problem, or that it will sort itself out.
 //
 // A strong call is patient with a vague, anxious caller: it asks one focused question at a time,
 // finds the pattern in who is and is not affected, finds how the move was done, notices the data
@@ -34,11 +35,15 @@ const scenario = {
   // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
   grounding: {
     authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
     productFamily: 'dynamics-365',
-    sourceCategories: ['author-experience'],
-    behaviourCheck: 'not-checked',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-partly',
+    checkedOn: '2026-11-22',
     syntheticConfirmed: true,
-    review: 'unreviewed',
+    review: 'assistant-reviewed',
+    notes:
+      "Reviewed on 22 Nov 2026 against current public Microsoft Learn pages on Dataverse security roles, teams and group-based access. Owner-team story and who stayed unaffected made consistent; not tried in a live system. AI-assisted review, not a mentor's.",
   },
 
   issueType: 'permissions',
@@ -106,7 +111,7 @@ const scenario = {
       'A sales operations lead at VanArsdel is calling because some sales staff cannot see customer records that their colleagues can see. It began after the sales teams were reorganised. She is worried and finds it hard to put the problem into words at first.',
     goal: 'Help her describe the problem clearly, work out who is affected and why, reassure her honestly, and agree what happens next.',
     groundRules: [
-      'The customer, organisation and case are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       "You cannot see the customer's system in this practice call, so rely on what she tells you.",
     ],
@@ -409,9 +414,9 @@ const scenario = {
     {
       id: 'hf-bulk-move-no-check',
       importance: 'important',
-      label: 'Everyone was moved in one go, unchecked',
+      label: 'People changing teams moved together, unchecked',
       statement:
-        'Our administrator moved everybody into the new teams in one go over the reorganisation weekend. Nobody checked afterwards what each person could still see.',
+        'Our administrator moved the people changing teams in one go over the reorganisation weekend. Nobody checked afterwards what they could still see.',
       revealWhen:
         'Asks how or by whom the team changes were carried out in the system, or whether anyone checked the result afterwards.',
       intents: ['recent_changes'],
@@ -431,9 +436,9 @@ const scenario = {
       ],
       minDifficulty: 'standard',
       statementTerse:
-        'Our administrator moved everyone in one go that weekend. Nobody checked afterwards.',
+        'Our administrator moved the people changing teams in one go that weekend. Nobody checked afterwards.',
       statementSimple:
-        'Our administrator moved everyone to the new teams in one go, over the weekend. Nobody checked what people could see after that.',
+        'Our administrator moved the people changing teams in one go over the weekend. Nobody checked what they could see after that.',
       missedConsequence:
         'The engineer never learns the change was done in bulk without a check, so the useful next step, asking her administrator to review the people who moved, is missing.',
       betterQuestion:
@@ -606,7 +611,7 @@ const scenario = {
   expectedOutcome:
     'Amara understands that the problem follows who was moved in the reorganisation, knows her administrator needs to check what the moved people can reach, has a plan to stop emailing customer lists, and has a time for the next update.',
   evaluatorNotes:
-    'Root cause (plausible, not validated product behaviour): in the reorganisation the administrator moved people into new regional teams in one go. The customers they worked with were looked after by their old teams and were never reassigned, so the moved reps cannot see them while colleagues in the old teams can. Nobody checked afterwards, and some reps email customer lists to keep working. A strong call is patient with a vague, anxious caller, finds the pattern in who is and is not affected, finds how the move was done, notices the data risk, reassures her without promising a time, and explains what her administrator should check.',
+    "Root cause (plausible, not validated product behaviour): the administrator moved people from their old owner teams to new teams. The missing accounts belong to the old owner teams; those teams supplied the moved reps' only Read access. The reps retain user-level Read for accounts they own, but have no broader role or sharing for the missing records. Nobody checked afterwards, and some reps email customer lists to keep working. A strong call is patient with a vague, anxious caller, finds the pattern in who is and is not affected, finds how the move was done, notices the data risk, reassures her without promising a time, and explains what her administrator should check.",
 } satisfies ScenarioInput;
 
 export default scenario;

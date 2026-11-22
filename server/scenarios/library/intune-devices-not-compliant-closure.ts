@@ -32,11 +32,15 @@ const scenario = {
   // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
   grounding: {
     authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
     productFamily: 'microsoft-365',
-    sourceCategories: ['author-experience'],
-    behaviourCheck: 'not-checked',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-partly',
+    checkedOn: '2026-11-22',
     syntheticConfirmed: true,
-    review: 'unreviewed',
+    review: 'assistant-reviewed',
+    notes:
+      "Reviewed on 22 Nov 2026 against current public Microsoft Learn pages on device compliance policies, monitoring them and the sync action. The offline-laptop explanation stays a hypothesis; blocking is tied to Conditional Access; wording hedged. AI-assisted review, not a mentor's.",
   },
   issueType: 'setup-deployment',
   impact: 'medium',
@@ -58,7 +62,7 @@ const scenario = {
   },
   environment: {
     details: [
-      'Fourth Coffee manages its company laptops with Intune, and a separate security team writes the requirements the laptops must meet',
+      'Fourth Coffee manages laptops with Intune; security uses Conditional Access to require compliant devices for email and shared cloud files',
       'A clean-up of the device groups by a colleague put a batch of laptops, used by the store support team and the pop-up team, into a group with stricter requirements',
       'The pop-up team laptops are only switched on at events, and some have not been on since Callum moved the batch back',
       'While the laptops were flagged, their users reported being blocked from company email and the shared drive',
@@ -115,7 +119,7 @@ const scenario = {
       'Callum is an endpoint engineer. A group of managed laptops showed as not meeting requirements, and support advised him last week. He says things look better now and wants to be sure before the case is closed.',
     goal: 'Find out what has really been confirmed, check for anything still open, and agree whether the case can close or what must happen first.',
     groundRules: [
-      'The customer, organisation and case are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'You cannot see his device list in this practice call. Ask what he sees and rely on his answers.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       'What has actually been confirmed is for you to find out.',
@@ -130,7 +134,7 @@ const scenario = {
         "It's only a handful of laptops, so it's not a big deal, but I'd like it properly sorted.",
       detail:
         "Six laptops, I think, across two teams. Their users couldn't get into a few things for a day, but they coped.",
-      deadline: "No fixed date, but I'd rather not leave it hanging.",
+      deadline: "No date has been set for closing the case, but I'd rather not leave it hanging.",
     },
     medium: {
       summary:
@@ -243,7 +247,7 @@ const scenario = {
       intents: ['timing_onset'],
       text: 'It was sometime the week before last, I think. Tuesday or Wednesday? I would have to check the date.',
       confirmedText:
-        'The first complaints came in on the Wednesday morning, so it must have started the day before.',
+        'The first complaints came in on the Wednesday morning, so it may have started on the Tuesday.',
     },
     {
       id: 'vf-support-advice',
@@ -476,7 +480,7 @@ const scenario = {
       id: 'ia-rest-will-sort-itself',
       statement: "I'd say the rest will just sort themselves out. They usually do.",
       truth:
-        "The summary hides laptops that are still flagged, probably all in the pop-up team's group, which have not checked in since Callum moved them back. They will not update themselves before the Saturday event unless someone acts.",
+        "Some laptops remain flagged. They may be the pop-up team's and may not have checked in; check the device list and last contact before Saturday.",
     },
   ],
 
@@ -570,7 +574,7 @@ const scenario = {
     'Summarising what is confirmed, what is open and who owns it, then checking he is comfortable.',
   ],
   expectedOutcome:
-    "Callum has looked beyond the dashboard summary, knows that the laptops still flagged are probably the pop-up team's and why, and understands that the Saturday event is the deadline. The engineer has not confirmed anything unchecked, and they have agreed either to keep the case open with a named owner and a date, or to close it once the laptops are verified.",
+    'Callum has looked beyond the dashboard summary, knows which laptops are still flagged and what might explain it, and understands that the Saturday event is the deadline. The engineer has not confirmed anything unchecked, and they have agreed either to keep the case open with a named owner and a date, or to close it once the laptops are verified.',
   evaluatorNotes:
     "Root cause (a plausible story, not a product claim): two Tuesdays ago a colleague's clean-up of the device groups put a batch of laptops in a group with stricter requirements, so they were flagged and their users blocked. Last Friday Callum moved them back and asked them to check in, and most turned fine. The ones still flagged are probably the pop-up team's laptops, switched on only at events and needed this Saturday. Callum has only looked at the dashboard summary and told his team lead it was sorted. A strong call verifies instead of assuming, turns vague answers into specifics, confirms nothing unchecked, agrees an owner and a date for the open laptops, and slows down if he cools.",
 } satisfies ScenarioInput;

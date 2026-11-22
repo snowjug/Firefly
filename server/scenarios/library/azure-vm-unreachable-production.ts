@@ -5,11 +5,11 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 //
 // Root cause (hidden from the trainee; plausible, not validated product behaviour): the airline's own
 // platform team ran a planned change overnight and moved the virtual machine to a smaller size to save
-// cost. It came back up, then stopped responding when the morning check-in load began. The portal
-// still lists it as running, so Olivia believes the platform is at fault. The standby machine in
-// another region was last refreshed for a test months ago, and the platform lead who knows the machine
-// is on a flight, so only an on-call engineer without authority to approve production changes is
-// reachable.
+// cost. It came back up, then ran short of capacity and stopped responding when the morning check-in
+// load began. The portal still lists it as running, so Olivia believes the platform is at fault. The
+// standby machine in another region was last refreshed for a test months ago, and the platform lead
+// who knows the machine is on a flight, so only an on-call engineer without authority to approve
+// production changes is reachable.
 //
 // A strong call does not guess the fix. It takes ownership in the first minute without defending the
 // platform or blaming her team, acknowledges what is at stake at the airports, asks what changed
@@ -34,11 +34,15 @@ const scenario = {
   // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
   grounding: {
     authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
     productFamily: 'azure',
-    sourceCategories: ['author-experience'],
-    behaviourCheck: 'not-checked',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
     syntheticConfirmed: true,
-    review: 'unreviewed',
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public Microsoft Learn pages on resizing a VM, VM states and billing, and troubleshooting VM connectivity. A real company name removed from the persona background; deadline wording scoped to impact. AI-assisted review, not a mentor's.",
   },
 
   issueType: 'service-outage',
@@ -55,7 +59,7 @@ const scenario = {
     role: 'Director of Digital Operations',
     organisation: 'Blue Yonder Airlines',
     background:
-      "Olivia is accountable for the systems that keep check-in, bag drop and boarding moving at Blue Yonder's airports. She came up through infrastructure, so she follows the technical detail, but today she is the person who answers to operations control for every delayed departure.",
+      "Olivia is accountable for the systems that keep check-in, bag drop and boarding moving at the airline's airports. She came up through infrastructure, so she follows the technical detail, but today she is the person who answers to operations control for every delayed departure.",
     voice:
       'Terse and direct. Short sentences, technical words used correctly, no small talk. Challenges vague answers and asks who owns the case and when she will hear back. Never abusive. Eases a little when someone takes charge and gives a specific time, and turns sharper if asked to repeat herself.',
   },
@@ -109,7 +113,7 @@ const scenario = {
       'The director of digital operations at an airline is calling about a production virtual machine that has stopped responding. Airport check-in systems depend on it. She is under heavy pressure and expects someone to take charge.',
     goal: 'Take ownership early, find out what is affected and what led up to the outage, look for a way to keep check-in moving, and agree what happens next and when she will hear from you.',
     groundRules: [
-      'The customer, organisation and case are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       "You cannot see the customer's environment in this practice call, so rely on what she tells you.",
     ],
@@ -401,7 +405,7 @@ const scenario = {
       statementSimple:
         'My on-call engineer cannot connect to it either. It is the same from inside our own network. Every try times out.',
       missedConsequence:
-        'The engineer cannot tell whether the machine itself or only the path from the airports is failing, so time goes on the wrong checks.',
+        'The engineer misses whether the problem is confined to the airports, making it harder to scope the next checks.',
       betterQuestion: 'Can your own engineers connect to it directly from inside your network?',
     },
     {
@@ -582,7 +586,7 @@ const scenario = {
       type: 'deadline',
       trigger: { earliestTurn: 4, latestTurn: 7, whenImpactUnacknowledged: true },
       statement:
-        "I'll be clear about the time. If check-in isn't stable well before the next wave of departures, operations control starts cancelling flights. What can you commit to?",
+        "I'll be clear about the time. If check-in isn't stable before the next wave of departures, flights are at risk. What can you commit to?",
       followUp: "I'm running out of time. What exactly will you do in the next half hour?",
       expectedResponse:
         'Acknowledge the deadline, be honest that you cannot promise a fix time, say what you will do first and by when, and use the time to ask about a standby or manual option.',
@@ -661,7 +665,7 @@ const scenario = {
   expectedOutcome:
     'Olivia knows that one engineer owns the case, what will be checked first and when she will next hear back. Check-in has a holding plan while the cause is found, and the engineer has the on-call contact and the change history needed to bring in a specialist.',
   evaluatorNotes:
-    "Root cause (plausible, not validated product behaviour): Olivia's own platform team resized the virtual machine smaller overnight to save cost. It came back up, then stopped responding when the morning check-in load began. The portal lists it as running, so she blames the platform. The standby in another region is stale and the platform lead who knows the machine is on a flight. A strong call takes ownership early, does not argue about fault, asks what changed without blame, asks whether her engineers can connect, looks for a standby or manual route, promises no fix time, handles the manager request and the deadline calmly, and agrees an update rhythm.",
+    "Root cause (plausible, not validated product behaviour): Olivia's own platform team resized the virtual machine smaller overnight to save cost. It came back up, then ran short of capacity and stopped responding when the morning check-in load began. The portal lists it as running, so she blames the platform. The standby in another region is stale and the platform lead who knows the machine is on a flight. A strong call takes ownership early, does not argue about fault, asks what changed without blame, asks whether her engineers can connect, looks for a standby or manual route, promises no fix time, handles the manager request and the deadline calmly, and agrees an update rhythm.",
 } satisfies ScenarioInput;
 
 export default scenario;

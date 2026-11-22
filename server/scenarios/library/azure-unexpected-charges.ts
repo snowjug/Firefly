@@ -6,10 +6,10 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 // Root cause (hidden from the trainee; plausible, not validated product behaviour): the analytics team
 // deployed a pilot with a group of large virtual machines in the middle of last month. The pilot
 // finished after about a week, but nobody switched the machines off, so they keep running and next
-// month's bill will be worse. Nobody set a budget alert, so the invoice was the first sign. The pilot
-// sits in the shared subscription, so its charges are mixed in with other workloads. On the second
-// contact Marek was promised a call back with a breakdown that never came, which is why he is
-// angrier than the money alone explains. He believes the bill is wrong.
+// month's charges may be higher. Nobody set a budget alert, so the invoice was the first sign. The
+// pilot sits in the shared subscription, so its charges are mixed in with other workloads. On the
+// second contact Marek was promised a call back with a breakdown that never came, which is why he
+// is angrier than the money alone explains. He believes the bill is wrong.
 //
 // A strong call does not guess a pricing answer or promise a credit. It acknowledges the third
 // contact and the broken promise, owns the case, reads the case notes instead of re-asking, asks which
@@ -34,11 +34,15 @@ const scenario = {
   // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
   grounding: {
     authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
     productFamily: 'azure',
-    sourceCategories: ['author-experience'],
-    behaviourCheck: 'not-checked',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
     syntheticConfirmed: true,
-    review: 'unreviewed',
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public Microsoft Learn pages on Cost Management, VM states and billing, and analysing unexpected charges. Billing timeline and earlier-contact wording made consistent; next-bill claim hedged. AI-assisted review, not a mentor's.",
   },
 
   issueType: 'billing-licence',
@@ -65,7 +69,7 @@ const scenario = {
       'Marek manages the cloud budget and the monthly invoices, not the technical side.',
       'Each team has an IT contact who looks after its own workloads.',
       'The analytics team deployed a new project last month.',
-      'Finance reviews the monthly Azure invoice in the first week of the following month.',
+      'Finance reviews the monthly Azure invoice later in the following month.',
     ],
   },
   affectedUsers: {
@@ -101,7 +105,7 @@ const scenario = {
     knownContext:
       'A team deployed a new project last month. The customer is a finance controller who sees invoices, not the technical details.',
     previousContact:
-      'Two earlier contacts did not explain the charge. The case notes show what he was told, so avoid asking him to repeat it.',
+      'Told charges follow usage; cost reports match invoice. A guide was sent, but no one reviewed the account.',
     environment:
       'Azure workloads run for several teams at Humongous Insurance. The customer manages budgets and invoices.',
   },
@@ -110,7 +114,7 @@ const scenario = {
       'A finance controller at an insurance company is calling about an Azure charge far above what he budgeted, after a team deployed a new project. He wants a clear explanation and an owner, and he has to account for the overspend.',
     goal: 'Find out what is behind the charge, take ownership, avoid promising what you cannot confirm, and agree what happens next and when he will hear from you.',
     groundRules: [
-      'The customer, organisation and case are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       "You cannot see the customer's account in this practice call, so rely on what he tells you.",
     ],
@@ -305,8 +309,7 @@ const scenario = {
         'deployed when',
       ],
       text: "Around the middle of last month, I think. Or maybe a bit later. I'd have to check the date.",
-      confirmedText:
-        'Their request was approved on the sixteenth, so the middle of the month, yes.',
+      confirmedText: 'Their IT contact says it went live on the sixteenth, yes.',
     },
     {
       id: 'vf-budget-basis',
@@ -491,8 +494,7 @@ const scenario = {
         'On my second contact I was promised a call back with a breakdown. Nobody called me.',
       missedConsequence:
         'The specific broken promise behind his anger stays hidden, so the apology stays generic and the engineer risks another call-back promise with no time attached.',
-      betterQuestion:
-        'What were you told on the earlier contacts, and did anyone agree to come back to you with something?',
+      betterQuestion: 'Did anyone promise a further update, and did it happen?',
     },
     {
       id: 'hf-increase-is-compute',
@@ -596,8 +598,8 @@ const scenario = {
       type: 'deadline',
       trigger: { earliestTurn: 4, latestTurn: 7, whenImpactUnacknowledged: true },
       statement:
-        "I should be clear about timing. I have a finance review coming up, and I can't walk in without an explanation. What can you commit to before then?",
-      followUp: "I'm running out of days. What exactly will you do before the review?",
+        'I should be clear about timing. I need an explanation I can take to finance. What can you commit to?',
+      followUp: 'What exactly will you do, and when will I hear back?',
       expectedResponse:
         'Acknowledge the pressure, be honest about what can and cannot be committed to, say what you will do first and by when, and agree a time for the next update.',
       minDifficulty: 'standard',
@@ -616,14 +618,14 @@ const scenario = {
     'Which parts of the bill have grown',
     'What the new project built and whether it is still needed',
     'How and when the charge was first noticed',
-    'What earlier contacts told him',
+    'Whether a further update was promised and delivered',
     'What he needs, and by when',
   ],
   successCriteria: [
     'Acknowledges the earlier contacts and what they did not deliver, without defending anyone.',
     'Takes ownership and says what happens next and when, instead of repeating general pricing advice.',
     'Asks which invoice lines have grown and whether what the new project built is still in use.',
-    'Finds out what he was told or promised before and how he first noticed the charge.',
+    'Finds whether a further update was promised and delivered, and how he first noticed the charge.',
     'Does not promise a refund, credit or outcome that cannot be confirmed.',
     'Answers the threat to move the workload with calm, specific commitments rather than defensiveness or discounts.',
   ],
@@ -653,13 +655,13 @@ const scenario = {
   goodBehaviours: [
     'Opening by acknowledging that this is the third contact and that nobody has yet explained the charge.',
     'Asking which invoice lines have grown and whether the project the team deployed is still in use.',
-    'Asking what was said or promised on the earlier contacts, then committing to something specific that can be kept.',
+    'Asking whether a further update was promised and delivered, then committing to something specific that can be kept.',
     'Offering to bring the project team into the next conversation, and agreeing a time for the next update.',
   ],
   expectedOutcome:
     'Marek leaves knowing which part of the bill has grown and why, who will bring the project team into the next step and when, and that no credit has been promised. He has a time for the next update and a way to be warned sooner next time.',
   evaluatorNotes:
-    "Root cause (plausible, not validated product behaviour): the analytics team deployed a pilot with a group of large virtual machines in the middle of last month. The pilot finished after about a week, but nobody switched the machines off, so they keep running and next month's bill will be worse. There was no budget alert, and the pilot sits in the shared subscription. On the second contact Marek was promised a call back that never came. A strong call acknowledges the third contact and the broken promise, owns the case, reads the notes instead of re-asking, asks which lines grew and whether the project is still in use, promises no credit, and gives a specific time for the next update.",
+    "Root cause (plausible, not validated product behaviour): the analytics team deployed a pilot with a group of large virtual machines in the middle of last month. The pilot finished after about a week, but nobody switched the machines off, so they keep running and next month's charges may be higher. There was no budget alert, and the pilot sits in the shared subscription. On the second contact Marek was promised a call back that never came. A strong call acknowledges the third contact and the broken promise, owns the case, reads the notes instead of re-asking, asks which lines grew and whether the project is still in use, promises no credit, and gives a specific time for the next update.",
 } satisfies ScenarioInput;
 
 export default scenario;

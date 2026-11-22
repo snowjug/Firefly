@@ -4,14 +4,15 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 // detail on the screen. No real key, code or password appears anywhere in this file, and none may
 // be added.
 //
-// Root cause (hidden from the trainee; plausible, and never confirmed on the call): after an
-// overnight update, during which the charger probably came loose, Hannah's work laptop stops on a
-// screen asking for a recovery key. She has never needed one and does not know where one would be
-// kept. She has tried her work password and her phone PIN and restarted twice, she has not rung the
-// IT help desk because she fears being blamed, and weeks of her analysis exist only on the laptop.
-// There is nothing technical to diagnose on this call. A strong call slows down, reassures honestly
-// without promising her files are safe, keeps anything sensitive off the call, finds what she sees,
-// tried and could lose, and agrees who she contacts, what she says and when the engineer checks in.
+// Story (hidden from the trainee; plausible, and never confirmed on the call): after an overnight
+// update, Hannah's work laptop stops on a screen asking for a recovery key. The charger may have
+// come loose, but its role is not confirmed. She has never needed a key and does not know where one
+// would be kept. She has tried her work password and her phone PIN and restarted twice, she has not
+// rung the IT help desk because she fears being blamed, and weeks of her analysis are not copied to
+// the shared drive. There is nothing technical to diagnose on this call. A strong call slows down,
+// reassures honestly without promising her files are safe, keeps anything sensitive off the call,
+// finds what she sees, tried and could lose, and agrees who she contacts, what she says and when
+// the engineer checks in.
 
 const scenario = {
   id: 'windows-bitlocker-recovery-prompt',
@@ -36,11 +37,15 @@ const scenario = {
   // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
   grounding: {
     authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
     productFamily: 'windows',
-    sourceCategories: ['author-experience'],
-    behaviourCheck: 'not-checked',
+    sourceCategories: ['microsoft-learn', 'microsoft-support'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
     syntheticConfirmed: true,
-    review: 'unreviewed',
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public pages on BitLocker recovery, its known issues and finding the recovery key. Key ID kept apart from the secret; reassurance limited to what she described; backup wording hedged. AI-assisted review, not a mentor's.",
   },
 
   issueType: 'sign-in-access',
@@ -119,7 +124,7 @@ const scenario = {
       'A research associate is calling because her work laptop stops on a screen asking for a recovery key after an update. She has never needed one and does not know where one would be kept. She is anxious, talkative and worried about losing her work.',
     goal: 'Slow the call down, reassure her honestly, find out what she can see and what is at stake, and agree safe next steps and when you will follow up.',
     groundRules: [
-      'The customer and organisation are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       'You cannot see her screen in this practice call, so rely on what Hannah describes.',
     ],
@@ -342,7 +347,7 @@ const scenario = {
     {
       id: 'hf-work-only-on-laptop',
       importance: 'critical',
-      label: 'Her analysis is only on the laptop',
+      label: 'Her recent analysis may not be backed up',
       statement:
         "The survey analysis I've been building for months is in a folder on the laptop. I haven't copied it to the shared drive for a few weeks, so I don't know what's backed up.",
       partialStatement: 'A lot of my work is on it, yes.',
@@ -366,7 +371,7 @@ const scenario = {
       ],
       hint: 'Most of my work is on this laptop.',
       statementTerse:
-        "My analysis is only in a folder on the laptop. I haven't copied it anywhere for weeks.",
+        "My analysis is in a folder on the laptop. I haven't copied it to the shared drive for weeks.",
       statementSimple:
         'My survey analysis is in a folder on the laptop. I did not copy it to the shared drive for some weeks.',
       missedConsequence:
@@ -403,7 +408,7 @@ const scenario = {
       missedConsequence:
         'Repeated attempts and restarts go unnoticed, so the engineer may repeat what she has already tried and does not get the chance to ask her to pause.',
       betterQuestion:
-        'What have you tried so far, including anything you typed into that screen and how many times you restarted?',
+        'Without sharing any password or code, what types of things have you tried, and how many times did you restart?',
     },
     {
       id: 'hf-screen-wording',
@@ -568,7 +573,7 @@ const scenario = {
         'Can you promise me my files are still there? I just need to hear that nothing is lost.',
       followUp: 'Please, just say it. Are my files safe?',
       expectedResponse:
-        'Do not promise that her files are safe or lost, because you cannot know. Be honest about what is known, reassure her about what you can (she has not done anything wrong, and there is a clear route to ask for the key), and say what happens next and when you will follow up.',
+        'Do not promise that her files are safe or lost, because you cannot know. Be honest about what is known, reassure her about what you can (nothing she has described suggests fault, and her IT help desk can advise on a route to the key), and say what happens next and when you will follow up.',
       minDifficulty: 'standard',
     },
     {
@@ -623,7 +628,7 @@ const scenario = {
   cbcfBehaviours: [],
   poorApproaches: [
     'Promising that her files are safe, or that the key will be found, when nobody can know yet.',
-    'Asking her to read out or type a password or key on the call, or to send one by message or email.',
+    'Asking her to read a password or key aloud on this call, or enter one in the chat or an email.',
     "Using terms such as 'encryption policy' or 'TPM' without explaining them.",
     'Telling her to keep trying passwords, or to restart again and again, until it works.',
     'Telling her to call IT and ending the call without a plan, a summary or a follow-up time.',
@@ -633,13 +638,13 @@ const scenario = {
     'Asking what the screen says in her own words, and what she has tried.',
     'Asking what on the laptop matters most and whether it is saved anywhere else.',
     'Saying plainly that nothing she has described suggests she did anything wrong, and what is and is not known yet.',
-    'Telling her not to read out any code or key to anyone except her IT help desk, and to leave the screen as it is.',
+    'Telling her to keep passwords and the recovery key off this call, and ask her verified IT help desk how to use the key ID.',
     'Agreeing who she will contact, what she will tell them and when the engineer will check in.',
   ],
   expectedOutcome:
-    'Hannah is calmer and knows what to do next: she has not done anything wrong, nobody can yet say what state her files are in, and she will contact her IT help desk with a short summary and keep any code to herself. The engineer owns the case and agrees a time to check in.',
+    'Hannah is calmer and knows what to do next: nothing she described suggests fault, nobody can yet say what state her files are in, and she will contact her IT help desk with a short summary and keep passwords and keys private. The engineer owns the case and agrees a time to check in.',
   evaluatorNotes:
-    'Root cause (plausible, not confirmed on the call): after an overnight update during which the charger probably came loose, the laptop stops on a screen asking for a recovery key. Hannah has never needed one and does not know where one would be kept. She has tried her work password and her phone PIN, has not rung the IT help desk because she fears blame, and has weeks of unsaved analysis on the laptop. A strong call is calm and plain: it finds what she sees, tried and could lose, keeps anything sensitive off the call, reassures honestly without promising her files are safe, and agrees who she contacts, what she says and when the engineer checks in.',
+    'After an overnight update, the laptop asks for a recovery key. The charger may have come loose, but its role is not confirmed. Hannah has never needed one and does not know where one would be kept. She has tried her work password and her phone PIN, has not rung the IT help desk because she fears blame, and has weeks of analysis on the laptop that is not copied to the shared drive. A strong call is calm and plain: it finds what she sees, tried and could lose, keeps anything sensitive off the call, reassures honestly without promising her files are safe, and agrees who she contacts, what she says and when the engineer checks in.',
 } satisfies ScenarioInput;
 
 export default scenario;

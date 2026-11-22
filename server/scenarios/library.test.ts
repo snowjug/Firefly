@@ -57,6 +57,53 @@ const copy = (patch: (s: ScenarioDefinition) => void): ScenarioDefinition => {
   return clone;
 };
 
+// On 22 November 2026 an AI assistant read every scenario against current public Microsoft pages and
+// revised the wording it could not stand behind. That was not a mentor's review, and the internal
+// supportability wiki was not available to it. These are the verdicts it reached, so that no
+// scenario's provenance record can claim more, or less, than that review found.
+const GROUNDING_REVIEW: Record<string, { check: string; sources: string[] }> = {
+  'teams-cannot-join-external-meetings': {
+    check: 'checked-partly',
+    sources: ['microsoft-learn', 'microsoft-support'],
+  },
+  'outlook-shared-mailbox-missing': {
+    check: 'checked-current',
+    sources: ['microsoft-learn', 'microsoft-support'],
+  },
+  'exchange-mail-delays-follow-up': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'defender-invoices-quarantined': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'sharepoint-site-access-escalated': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'onedrive-sync-closure': {
+    check: 'checked-current',
+    sources: ['microsoft-learn', 'microsoft-support'],
+  },
+  'm365-apps-excel-crashes-after-update': {
+    check: 'checked-partly',
+    sources: ['microsoft-support', 'microsoft-learn'],
+  },
+  'power-automate-approvals-stopped': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'entra-new-hires-blocked-sign-in': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'intune-devices-not-compliant-closure': {
+    check: 'checked-partly',
+    sources: ['microsoft-learn'],
+  },
+  'windows-11-slow-after-update': {
+    check: 'checked-partly',
+    sources: ['microsoft-support', 'microsoft-learn'],
+  },
+  'windows-bitlocker-recovery-prompt': {
+    check: 'checked-current',
+    sources: ['microsoft-learn', 'microsoft-support'],
+  },
+  'azure-deployment-fails-permissions': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'azure-unexpected-charges': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'azure-vm-unreachable-production': { check: 'checked-current', sources: ['microsoft-learn'] },
+  'dynamics-records-not-visible-after-role-change': {
+    check: 'checked-partly',
+    sources: ['microsoft-learn'],
+  },
+};
+
 describe('the library', () => {
   it('loads without any validation errors, with every scenario about a Microsoft product', () => {
     expect(loadScenarios().errors).toEqual([]);
@@ -103,6 +150,18 @@ describe('the library', () => {
     }
   });
 
+  it('tells the trainee that the customer and organisation are invented and that the product is real', () => {
+    for (const scenario of library) {
+      expect(scenario.brief.groundRules[0], scenario.id).toBe(
+        'The customer and organisation are fictional; the product is real.',
+      );
+      // The products are real Microsoft products, so no ground rule may call one fictional.
+      expect(scenario.brief.groundRules.join(' '), scenario.id).not.toMatch(
+        /product (?:is|are) fictional/i,
+      );
+    }
+  });
+
   it('gives every scenario the fact classes, the expectations and the empty CBCF list it needs', () => {
     for (const s of library) {
       expect(s.unknownFacts.length, `${s.id} unknown`).toBeGreaterThan(0);
@@ -136,6 +195,25 @@ describe('the library', () => {
   });
 });
 
+describe('the grounding review', () => {
+  it('records the assistant review of 22 November 2026 for every scenario it covered, and never claims a mentor', () => {
+    for (const [id, expected] of Object.entries(GROUNDING_REVIEW)) {
+      const scenario = library.find((s) => s.id === id);
+      expect(scenario, id).toBeDefined();
+      const { grounding } = scenario as ScenarioDefinition;
+      expect(grounding.authoredOn, id).toBe('2026-11-21');
+      expect(grounding.revisedOn, id).toBe('2026-11-22');
+      expect(grounding.checkedOn, id).toBe('2026-11-22');
+      expect(grounding.review, id).toBe('assistant-reviewed');
+      expect(grounding.behaviourCheck, id).toBe(expected.check);
+      expect([...grounding.sourceCategories].sort(), id).toEqual([...expected.sources].sort());
+      expect(grounding.syntheticConfirmed, id).toBe(true);
+      // The notes say whose review it was, so that nobody reads it as a mentor's.
+      expect(grounding.notes, id).toMatch(/AI-assisted review, not a mentor's\.$/);
+    }
+  });
+});
+
 describe('what a trainee can read before a call', () => {
   it('stays inside the word budgets of the screens that show it', () => {
     for (const s of library) {
@@ -164,6 +242,57 @@ describe('what a trainee can read before a call', () => {
           expect(sharedPhrase(wording, shown), `${s.id} ${fact.id}`).toBeNull();
         }
       }
+    }
+  });
+
+  it('presents no customer claim as fact and gives away no workaround in what is shown or said at the start', () => {
+    // Wording the review of 22 November 2026 found in the brief, the title or the opening impact lines.
+    const flagged = [
+      'sending requests by hand',
+      'emailing the commissioning editor',
+      'genuine supplier invoices',
+    ];
+    for (const s of library) {
+      const early = [
+        ...strings(toPublicScenario(s)),
+        ...strings(s.impactVariants),
+        ...strings(s.stageFrames),
+        s.openingCore,
+      ]
+        .join(' \n ')
+        .toLowerCase();
+      for (const phrase of flagged) expect(early, `${s.id}: ${phrase}`).not.toContain(phrase);
+    }
+  });
+
+  it('keeps the executive presentation out of every field that does not depend on the impact level', () => {
+    for (const s of library) {
+      const {
+        affectedUsers: _users,
+        impactVariants: _variants,
+        grounding: _grounding,
+        ...rest
+      } = s;
+      const neutral = {
+        ...rest,
+        publicBrief: { ...s.publicBrief, impact: undefined },
+        hiddenFacts: s.hiddenFacts.map(({ byImpact: _byImpact, ...fact }) => fact),
+      };
+      expect(strings(neutral).join(' \n ').toLowerCase(), s.id).not.toContain(
+        'executive presentation',
+      );
+    }
+  });
+
+  it('shows a trainee who is told to read the case record what it holds, because only the brief is on screen', () => {
+    const s = library.find(
+      (item) => item.id === 'azure-deployment-fails-permissions',
+    ) as ScenarioDefinition;
+    expect(s.brief.groundRules.join(' ')).toMatch(/read the case history/i);
+    const shown = toPublicScenario(s).publicBrief.previousContact ?? '';
+    // The error, what was tried and when it first failed: what the customer will not repeat.
+    for (const detail of ['not authorised', 'twice', 'credentials', 'admin', 'Thursday']) {
+      expect(shown, detail).toContain(detail);
     }
   });
 

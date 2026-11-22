@@ -2,7 +2,7 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 
 // Standard scenario (first contact). Everything here is fictional: people, organisation and case.
 //
-// Root cause (hidden from the trainee): the IT team's regular update went onto Rafael's laptop over
+// Case pattern (hidden from the trainee): the IT team's regular update went onto Rafael's laptop over
 // the weekend. Since then Excel closes within a minute whenever he presses the refresh button of a
 // reporting plug-in inside the large forecast workbook he shares with the team. Small files and new
 // blank workbooks are fine. Yesterday it closed before he had saved and he lost about two hours of
@@ -29,11 +29,15 @@ const scenario = {
   // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
   grounding: {
     authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
     productFamily: 'microsoft-365',
-    sourceCategories: ['author-experience'],
-    behaviourCheck: 'not-checked',
+    sourceCategories: ['microsoft-support', 'microsoft-learn'],
+    behaviourCheck: 'checked-partly',
+    checkedOn: '2026-11-22',
     syntheticConfirmed: true,
-    review: 'unreviewed',
+    review: 'assistant-reviewed',
+    notes:
+      "Reviewed on 22 Nov 2026 against current public pages on Excel closing or freezing, known issues and add-in troubleshooting. The update, workbook and refresh combination is not verified; cause and refresh-habit wording hedged. AI-assisted review, not a mentor's.",
   },
   issueType: 'feature-not-working',
   impact: 'medium',
@@ -108,7 +112,7 @@ const scenario = {
       'Rafael is a financial analyst at an importer. Excel has started closing by itself on his work laptop since a recent update. He is polite and calm at the start, and English is his second language.',
     goal: 'Find out what is happening, who is affected and what it is costing him, take ownership, and agree what happens next, using simple and clear words.',
     groundRules: [
-      'The customer, organisation and case are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'You cannot see his laptop in this practice call, so rely on what he tells you.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
     ],
@@ -252,7 +256,7 @@ const scenario = {
       id: 'uf-other-laptops',
       intents: ['affected_scope'],
       cues: ['other laptops', 'which laptops', 'who got the update', 'everyone got'],
-      text: 'I do not know which other laptops received the update. The IT team would know.',
+      text: 'I do not know who received the update across the company. The IT team would know.',
       whoKnows: 'the IT team',
     },
   ],
@@ -354,7 +358,7 @@ const scenario = {
       minDifficulty: 'standard',
       label: 'It closes when he refreshes with the reporting plug-in',
       statement:
-        'It closes when I press the refresh button of our reporting plug-in inside that workbook. I always press it after I open the file, so it closes within a minute.',
+        'It closes when I press the refresh button of our reporting plug-in inside that workbook. I usually press it after I open the file, so it can close within a minute.',
       revealWhen:
         'Asks what he is doing at the moment Excel closes, or whether it closes at a particular step or when he uses a particular tool.',
       intents: ['reproducibility'],
@@ -373,9 +377,9 @@ const scenario = {
         'button',
       ],
       statementTerse:
-        'When I press refresh in our reporting plug-in. I press it after opening, so within a minute.',
+        'When I press refresh in our reporting plug-in. I usually press it after opening, so it can close within a minute.',
       statementSimple:
-        'It closes when I press the refresh button of our reporting plug-in in that workbook. I press it after I open the file. So it closes within one minute.',
+        'It closes when I press the refresh button of our reporting plug-in in that workbook. I usually press it after I open the file. Then it can close within one minute.',
       missedConsequence:
         'The moment of failure, and the plug-in that is involved, stay unknown, so the next step is a guess and the case may be passed on without the detail others will need.',
       betterQuestion: 'What exactly are you doing in the moment before Excel closes?',
@@ -447,7 +451,7 @@ const scenario = {
       id: 'ia-whole-laptop',
       statement: 'I think the update damaged Excel on my whole laptop.',
       truth:
-        'Only one large workbook, used with a reporting plug-in, makes Excel close. Small files and new workbooks are fine, so the laptop as a whole is working.',
+        'Only one large workbook, used with a reporting plug-in, makes Excel close. Small files and new workbooks are fine, but the cause is not yet known.',
     },
   ],
 
@@ -533,7 +537,7 @@ const scenario = {
   expectedOutcome:
     'Rafael understands that the cause is not yet known, that it happens with one workbook and a reporting plug-in since the update, and that the engineer owns the case. He has a way to protect his work and keep his report moving, and a specific time when he will hear back. He ends the call calmer.',
   evaluatorNotes:
-    "Root cause: the IT team's weekend update restarted Rafael's laptop. Since then Excel closes within a minute whenever he presses the refresh button of a reporting plug-in in the large forecast workbook. Small files and new workbooks are fine, and a colleague whose laptop has not had the update can use the same file. He lost two hours of work yesterday, and the report is due on Friday morning. A strong call uses simple words and checks understanding, finds the one-workbook pattern and the refresh step, acknowledges the lost work and the deadline, does not guess the fix or promise Friday, and agrees how to protect his work and a specific time for the next contact.",
+    "Case pattern: the IT team's weekend update restarted Rafael's laptop. Since then Excel closes within a minute whenever he presses the refresh button of a reporting plug-in in the large forecast workbook. Small files and new workbooks are fine, and a colleague whose laptop has not had the update can use the same file. He lost two hours of work yesterday, and the report is due on Friday morning. A strong call uses simple words and checks understanding, finds the one-workbook pattern and the refresh step, acknowledges the lost work and the deadline, does not guess the fix or promise Friday, and agrees how to protect his work and a specific time for the next contact.",
 } satisfies ScenarioInput;
 
 export default scenario;

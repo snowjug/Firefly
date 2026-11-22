@@ -32,11 +32,15 @@ const scenario = {
   // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
   grounding: {
     authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
     productFamily: 'microsoft-365',
-    sourceCategories: ['author-experience'],
-    behaviourCheck: 'not-checked',
+    sourceCategories: ['microsoft-learn', 'microsoft-support'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
     syntheticConfirmed: true,
-    review: 'unreviewed',
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public pages on OneDrive sync stuck on processing changes, network use by the sync app and sync reports. The large batch is kept as a possible explanation; closure outcome made conditional. AI-assisted review, not a mentor's.",
   },
   issueType: 'data-missing',
   impact: 'low',
@@ -82,7 +86,7 @@ const scenario = {
   customerExpectation:
     'A clear answer on whether it is fixed, a short explanation she can follow, a chance to ask her own questions, and a polite close.',
   desiredOutcome:
-    'Ingrid has confirmed her files are updating, understands what happened in plain words, has no worries left open, and agrees to close the case.',
+    'Ingrid confirms her files, understands the likely story, and agrees how to track any remaining concerns before closure.',
   previousTroubleshooting: [
     'Restarted the laptop on Wednesday, which made no difference',
     'Emailed the month-end workbook to her manager while the files were not showing online',
@@ -116,7 +120,7 @@ const scenario = {
       'Ingrid is a finance assistant. Last week her work files stopped syncing between her laptop and her online folder, and an engineer helped her over the phone. She is friendly, chatty and not very technical.',
     goal: 'Confirm the problem is really resolved, explain what changed in plain words, check she has no remaining concerns, and close the case professionally.',
     groundRules: [
-      'The customer, organisation and case are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'You cannot see her laptop in this practice call. Ask what she sees and rely on what she tells you.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
     ],
@@ -498,7 +502,7 @@ const scenario = {
       id: 'ia-broke-it',
       statement: 'I think I might have broken it myself when I tidied up my folders last week.',
       truth:
-        'Tidying her folders did not break anything. Moving a very large batch of scans into the folder kept syncing busy for days, and the files caught up once the laptop was left switched on.',
+        'Tidying her folders is not known to have broken anything. Moving a very large batch of scans into the folder may have kept syncing busy for days, and the files caught up once the laptop was left switched on.',
     },
   ],
 
@@ -552,7 +556,7 @@ const scenario = {
     'Gives a short explanation of what changed in plain words, without jargon and without blaming her, and is honest about what is not known.',
     'Asks whether anything is still worrying her and finds the second copy of the workbook before closing.',
     'Does not promise it will never happen again, and agrees what she should do and who to contact if it does.',
-    'Summarises, checks she is comfortable, and closes the case politely.',
+    'Summarises, checks she is comfortable, and agrees whether the case can be closed.',
   ],
   coachingFocus: ['closing', 'clarity', 'scoping-discovery'],
   careExpectations: {
@@ -569,14 +573,14 @@ const scenario = {
       'Uses what she says about the big batch of scans and the emailed copy to explain the likely cause and the practical risk, without guessing beyond it.',
     ],
     empathetic: [
-      'Reassures her that nothing she did caused the problem, and acknowledges the worry about month-end.',
+      'Reassures her that she did nothing wrong, and acknowledges the worry about month-end.',
       'Stays patient with a chatty, non-technical customer and lets her finish before steering the call.',
     ],
   },
   cbcfBehaviours: [],
   poorApproaches: [
     'Closing the case as soon as she says it looks fine, without asking how she knows or whether anything is still bothering her.',
-    'Explaining the cause with technical terms, or suggesting that she caused it.',
+    'Explaining with technical terms, or blaming her for moving the files.',
     'Promising that the problem will never come back.',
     'Rushing her or cutting across her stories, which makes a chatty customer less likely to mention what worries her.',
     'Listing steps for her to check without saying why or confirming she can follow them.',
@@ -590,7 +594,7 @@ const scenario = {
     'Summarising and checking she is comfortable before closing.',
   ],
   expectedOutcome:
-    'Ingrid knows her files are updating because she has checked them beyond the icon, understands that a very large batch of files kept syncing busy and that nothing she did was wrong, has a plan for the two copies of the workbook, knows what to do if it happens again, and agrees to close the case.',
+    'Ingrid knows her files are updating because she has checked them beyond the icon, understands that the batch may have slowed syncing and that she did nothing wrong, has a plan for the two copies of the workbook, knows what to do if it happens again, and agrees whether the case can be closed.',
   evaluatorNotes:
     'Root cause (a plausible story, not a product claim): on the Monday Ingrid moved a year of scanned invoices into her work folder, syncing was busy with them for days, and her month-end workbook did not show up online until the laptop was left switched on, as an engineer advised on Thursday. Nothing she did was wrong. Still open: she emailed the workbook to her manager, who has edited that copy, and she has only checked the cloud icon on her own laptop. A strong call confirms the fix with evidence, explains in plain words without blame or guessing, finds the second copy, avoids promising it will not recur, and closes with a clear summary.',
 } satisfies ScenarioInput;

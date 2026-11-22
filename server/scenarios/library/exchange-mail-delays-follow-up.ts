@@ -4,7 +4,7 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 // case. Exchange Online is a real product, so the scenario describes only what the customer sees and
 // was told, never how mail flow works.
 //
-// Root cause in the story (hidden from the trainee): only mail to and from two outside companies,
+// Case context in the story (hidden from the trainee): only mail to and from two outside companies,
 // Elena's payroll provider and her main supplier, has been delayed for about a week. Adventure Works
 // changed nothing. The supplier says it moved to a new email security provider and the payroll
 // provider has not replied. Nothing on this call proves where the delay lies, and the engineer should
@@ -12,8 +12,8 @@ import type { ScenarioInput } from '#shared/domain/scenario.ts';
 // follow-up and escalated calls (stages). The examples fact is the one that depends on how many
 // people are affected, so it carries byImpact wordings for low and high.
 //
-// A strong call apologises for the silence without excuses, owns the case, finds the pattern, the
-// timing and the examples without making her start again, stays honest about what is unknown and
+// A strong call apologises for any missed update without excuses, owns the case, finds the pattern,
+// the timing and the examples without making her start again, stays honest about what is unknown and
 // agrees a first step, an owner and a time for the next update.
 
 const scenario = {
@@ -23,7 +23,7 @@ const scenario = {
   shortTitle: 'Email arriving late',
   listSummary: 'An IT service manager chases a case about late email to and from some recipients.',
   summary:
-    'Elena Vasquez runs the IT service desk at Adventure Works. Email to and from some recipients arrives late. She raised a case yesterday and has not had an update. Own the case, find out what she knows and agree what happens next and when she will hear from you.',
+    'Elena Vasquez runs the IT service desk at Adventure Works. Email to and from some recipients arrives late, and staff are asking for answers. Own the case, find out what she knows and agree what happens next and when she will hear from you.',
   tags: ['mail flow', 'follow-up', 'no update', 'ownership'],
   estimatedMinutes: 12,
 
@@ -32,11 +32,15 @@ const scenario = {
   // Internal provenance. It is never shown to trainees: see docs/scenario-authoring.md.
   grounding: {
     authoredOn: '2026-11-21',
+    revisedOn: '2026-11-22',
     productFamily: 'microsoft-365',
-    sourceCategories: ['author-experience'],
-    behaviourCheck: 'not-checked',
+    sourceCategories: ['microsoft-learn'],
+    behaviourCheck: 'checked-current',
+    checkedOn: '2026-11-22',
     syntheticConfirmed: true,
-    review: 'unreviewed',
+    review: 'assistant-reviewed',
+    notes:
+      "Checked on 22 Nov 2026 against current public Microsoft Learn pages on message trace and its FAQ. Terms are current; the supplier change is kept as a lead, and missed-update and low-impact wording made consistent across stages. AI-assisted review, not a mentor's.",
   },
   issueType: 'service-outage',
   impact: 'medium',
@@ -78,7 +82,7 @@ const scenario = {
   customerObjective:
     'Find out what is causing the delays, who is working on them, and when mail will be back to normal.',
   customerExpectation:
-    'A named engineer who already knows her case, apologises for the silence, says plainly what is known and not known, and commits to times for the next update.',
+    'A named engineer who already knows her case, apologises for any missed update, says plainly what is known and not known, and commits to times for the next update.',
   desiredOutcome:
     'Elena knows who owns the case, what will be checked and by when, what examples are needed from her, and what she can tell her users and managers in the meantime.',
   previousTroubleshooting: [
@@ -111,7 +115,7 @@ const scenario = {
       'An IT service manager is calling because email to and from some recipients arrives late. She wants someone who will own the case.',
     goal: 'Own the case, find out what she knows without making her start from scratch, and agree what happens next and when she will hear from you.',
     groundRules: [
-      'The customer, organisation and product are fictional.',
+      'The customer and organisation are fictional; the product is real.',
       'Ask questions to find out what you need; the customer will not volunteer everything.',
       'The case notes are thin in this practice call, so rely on what she tells you.',
     ],
@@ -121,7 +125,7 @@ const scenario = {
     "Email to and from some of our contacts is arriving late. It's not all of it, but it's enough that people are noticing.",
   impactVariants: {
     low: {
-      summary: "It's only a few people so far, but they're getting impatient.",
+      summary: "It's only one person so far, but she's getting impatient.",
       detail:
         "It's one of our procurement officers, who emails outside companies all day. Her replies are late, and she's started copying her manager into everything.",
       deadline:
@@ -275,7 +279,7 @@ const scenario = {
       label: 'Only two outside companies are affected',
       statement:
         "It's only mail with two outside companies, our payroll provider and our main supplier, in both directions. Internal mail is instant and everyone else's mail is fine.",
-      partialStatement: "It isn't all of our mail. It seems to be certain contacts.",
+      partialStatement: 'There does seem to be a pattern to the delays.',
       revealWhen:
         'Asks which recipients or senders are affected, whether it is internal or external mail, or what the delayed messages have in common.',
       intents: ['affected_scope', 'reproducibility'],
@@ -359,7 +363,7 @@ const scenario = {
         'Asks whether anything changed recently, on the customer side or at the other organisations involved.',
       intents: ['recent_changes'],
       statementTerse:
-        'We changed nothing. The supplier moved to a new email security provider a few weeks ago.',
+        'No changes that I know of. The supplier moved to a new email security provider a few weeks ago.',
       statementSimple:
         'We changed nothing that I know of. Our supplier told me they changed their email security provider a few weeks ago. The payroll provider has not replied.',
       missedConsequence:
@@ -497,10 +501,10 @@ const scenario = {
     'When it started',
     'What has changed recently',
     'What evidence she already has',
-    'What she was told yesterday',
+    'What she has been told so far',
   ],
   successCriteria: [
-    'Opens by acknowledging the missed update and takes responsibility without excuses or blaming a colleague.',
+    'Opens by acknowledging any missed update and takes responsibility without excuses or blaming a colleague.',
     'Asks for the case facts without making Elena repeat everything, and finds which recipients are affected.',
     'Establishes when the delays began, how long they last and what changed recently, including at the companies involved.',
     'Asks for example messages with sent and arrival times, so the next step is concrete.',
@@ -514,7 +518,7 @@ const scenario = {
       'Confirms the plan in order: what happens first, who does it and when she hears next.',
     ],
     accountable: [
-      'Acknowledges the missed call back, owns the case and does not blame an earlier contact or a colleague.',
+      'Acknowledges any missed call back, owns the case and does not blame an earlier contact or a colleague.',
       'Promises only what is in their control, such as their own actions and the time of the next update.',
     ],
     resourceful: [
@@ -528,22 +532,22 @@ const scenario = {
   cbcfBehaviours: [],
   poorApproaches: [
     'Asking her to explain everything again from the beginning, as if the case had never been raised.',
-    'Blaming the earlier handling, a colleague or "the system" for the missing update instead of owning it.',
+    'Blaming the earlier handling, a colleague or "the system" for any missing update instead of owning it.',
     'Promising that mail will be back to normal today, or saying it is "definitely" the other companies, without evidence.',
     'Asking only about Outlook on her laptop, when the pattern is about who the mail goes to and comes from.',
     'Ending with "we will look into it" and no named person or time.',
   ],
   goodBehaviours: [
-    'Apologising specifically for the missing update and the missed call back, then taking ownership in plain words.',
+    'Apologising specifically for any missing update or missed call back, then taking ownership in plain words.',
     'Asking which recipients are affected, when it began and how late the messages are.',
     'Asking what has changed recently and whether she has example messages with sent and arrival times.',
     'Staying honest about what is not yet known, and avoiding a promised fix time.',
     'Agreeing a plan with a named person, a first step and a time for the next update, then summarising it.',
   ],
   expectedOutcome:
-    'Elena knows who owns the case and has had an apology for the silence. The engineer has the pattern, the timing and the example messages, and has agreed what will be checked first, who will do it and when Elena will hear next. She has something concrete to tell her managers.',
+    'Elena knows who owns the case and has had an apology for any missed update. The engineer has the pattern, the timing and the example messages, and has agreed what will be checked first, who will do it and when Elena will hear next. She has something concrete to tell her managers.',
   evaluatorNotes:
-    'Root cause in the story: only mail to and from two outside companies, the payroll provider and the main supplier, has been delayed for about a week. Adventure Works changed nothing; the supplier says it moved to a new email security provider and the payroll provider has not answered. Elena was promised a call back yesterday and none came. Nothing on this call proves where the delay lies, and the engineer should not guess. A strong call apologises for the silence, owns the case, finds the pattern, the timing and the examples without making her start again, stays honest about what is unknown and agrees a first step, an owner and a time for the next update.',
+    'Case context in the story: only mail to and from two outside companies, the payroll provider and the main supplier, has been delayed for about a week. Adventure Works changed nothing; the supplier says it moved to a new email security provider and the payroll provider has not answered. On follow-up and escalated calls, Elena was promised a call back yesterday and none came. Nothing on this call proves where the delay lies, and the engineer should not guess. A strong call apologises for any missed update, owns the case, finds the pattern, the timing and the examples without making her start again, stays honest about what is unknown and agrees a first step, an owner and a time for the next update.',
 } satisfies ScenarioInput;
 
 export default scenario;
