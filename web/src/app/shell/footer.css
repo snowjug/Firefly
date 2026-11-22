@@ -24,6 +24,13 @@
   align-items: center;
   gap: var(--sp-2) var(--sp-8);
 }
+/* From a desktop up the pair ends at the container's edge even when it has to wrap beneath the text (a
+   wider font than the design's own can need the room), instead of starting at the left of its own row. */
+@media (min-width: 64em) {
+  .ff-footer__end {
+    margin-inline-start: auto;
+  }
+}
 .ff-footer__links {
   display: flex;
   flex-wrap: wrap;

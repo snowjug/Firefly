@@ -221,14 +221,13 @@
   outline-offset: 2px;
   box-shadow: 0 0 0 2px var(--focus-inner);
 }
+/* The chosen row is shown by its bar and its tint, never by a heavier weight: a bolder name is wider, so
+   in a wider font it could wrap and make the card taller exactly when a row is pointed at. */
 .lp-rp__skill {
   min-inline-size: 0;
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   color: var(--fg-1);
-}
-.lp-rp__row[data-active] .lp-rp__skill {
-  font-weight: var(--fw-semibold);
 }
 .lp-rp__at {
   /* The widest turn ("Turn 12") sets the column, so the levels of all six rows stand in one line. */
