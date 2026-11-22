@@ -16,10 +16,10 @@ The scores are practice signals from a simulated call. They are not an assessmen
 
 ## What it does
 
-1. **Choose a scenario.** Pick one of sixteen fictional Microsoft support cases from the carousel, narrowing it with the product rail or the difficulty filter. Set how hard the call should be and whether it is Guided practice or Assessment practice, then choose **Start configuration**.
+1. **Choose a scenario.** Pick one of thirty-two fictional Microsoft support cases from the carousel, narrowing it with the product rail or the difficulty filter. Set how hard the call should be and whether it is Guided practice or Assessment practice, then choose **Start configuration**.
 2. **Review the brief.** The case brief shows what you may read before the call, such as the issue, the impact and your objective. It never shows the facts the customer holds back. Choose a customer voice and try it.
 3. **Start a call.** Start a voice call or a text call. A voice call opens your microphone only after you press a button and your browser allows it.
-4. **Talk to the customer.** The customer greets you first and gives the reason for the call once you have greeted them. Speak, or type if you prefer. Typing always works. In Guided practice, short tips sit under the transcript.
+4. **Talk to the customer.** The customer greets you first and gives the reason for the call once you have greeted them. In a voice call you simply speak: the microphone stays open between turns, as it does on a phone call, a pause to think does not end your turn, and the customer replies once you have been quiet for a moment. **Done speaking** sends sooner, **Mute** or **Pause** closes the microphone, and a spoken call pauses itself after about ten minutes without sound. Switch **Hands-free** off in Voice settings to press **Talk** for each answer instead. You can type if you prefer, and typing always works. In Guided practice, short tips sit under the transcript.
 5. **End the call.** Choose **End call**, then **End and review**. In Guided practice the question is "Ready to close?" and four neutral checks come first (plan, owner, update time, the customer's agreement), under a line that says they are not a score. They never stop you ending.
 6. **Read the coaching report.** It opens with a summary and a call journey, scores six skills with the quotes behind each, shows the CARE review, follows the customer's mood through the call, reviews the facts you found and missed, and suggests better wording and what to practise next.
 
@@ -38,11 +38,12 @@ These pictures come from the running app in demo mode with demo speech (`node sc
 
 ## Features
 
-- Sixteen fictional Microsoft support scenarios across Microsoft 365, Windows, Azure and Dynamics 365.
+- Thirty-two fictional Microsoft support scenarios across Microsoft 365, Windows, Azure and Dynamics 365.
 - A scenario workspace: a product rail, a difficulty filter, a carousel of scenario cards (arrow keys, Home and End, a mouse drag or touch scrolling; it never moves by itself) and the chosen scenario's details and set-up below it. The address keeps your filters, your choice and your settings, so a link reopens the same view.
 - Settings for impact, the customer's starting state, proficiency, style, call stage, difficulty and curveballs (called complications in the set-up and unexpected turns in the report), and a practice mode. **Guided practice** (the default at Starter) adds a "During the call" strip of short tips, "Areas to explore" and a "Context found" count in the case panel, and a "Ready to close?" check when you end the call. **Assessment practice** (the default at Standard and Challenge) shows none of them. The tips are general advice chosen only from the call stage and how many messages you have sent, never from the scenario's hidden facts.
 - A customer who greets first and gives the reason once you have greeted them, remembers what was said and promised, can say "I don't know", and reveals a hidden fact only to a question that fits. The customer also says a clear owner and time back to you or takes it in with a few words, asks when a promise has no time, and answers "Is there anything else?" and a goodbye in a few words.
-- Voice with a text fallback. A voice step that fails never ends the call.
+- A spoken call that works like a call. Hands-free listening is the default: the microphone stays open on your turn until you mute, pause or end the call, and quiet never switches it off. Firefly decides when your turn is over (after a short quiet, or when you press **Done speaking**) so a pause inside a sentence does not split it, and the browser's recogniser restarts itself without you noticing. The screen shows a presence ring around the customer (connecting, listening, hearing you, working out a reply, speaking, held), live captions while either of you speaks, and a "Call ended" moment before your report. There is no Talk button to press in a hands-free call. Push to talk, typing and a text fallback remain, and a voice step that fails never ends the call.
+- Motion that explains a change of state: a page arriving, a dialog opening and closing, a choice sliding into place, the report settling in (its score counts up once, its chart is drawn once). It is built from a small set of duration and distance tokens, moves only transform and opacity, is switched off under the operating system's reduced-motion setting, and leaves nothing hidden on paper.
 - Four neutral synthetic voices, Voice A to Voice D, where the speech provider offers them, with a **Test voice** button.
 - A coaching report that opens with a summary and a call journey (each moment opens the exact turn), then six skills scored 1 to 5 in a score matrix with the quotes behind each (a score that no quote backs is shown as a "first look", with dashed segments and no rubric word), a CARE review in four tabs, the customer's mood through the call as a chart with a table, and a discovery review of the facts you found and missed. Its better wording shows your own words ("You said") and wording to try ("Try") one under the other, with the removed and added words marked. Every quote is checked against the transcript. The report prints on A4, black on white even when the app is dark, and has a layout for phones.
 - Light and dark themes, from the header toggle or the footer's Light, Dark and System choice. The choice is kept in this browser only (local storage, key `firefly.theme`) and is never sent anywhere. The footer says "Saved on this device" only when the browser kept it, and says so when storage is blocked. System follows the device.
@@ -51,25 +52,41 @@ These pictures come from the running app in demo mode with demo speech (`node sc
 
 ## Scenarios
 
-All people, companies and cases are invented, and the product in each case is real. A scenario says what a customer reports, not how the product behaves. Each one carries an internal record of how far its product wording was checked against public Microsoft documentation (Microsoft Learn and Microsoft Support pages). By those records, 11 of the 16 were checked against current pages and 5 only in part, and all 16 are marked as reviewed by an AI assistant; none is marked as reviewed by a mentor. The internal Microsoft support wiki was not available to this project, so nothing came from it. The records are never shown in the app.
+All people, companies and cases are invented, and the product in each case is real. A scenario says what a customer reports, not how the product behaves. Each one carries an internal record of how far its product wording was checked against public Microsoft documentation (Microsoft Learn and Microsoft Support pages). By those records, 21 of the 32 were checked against current pages and 11 only in part, and all 32 are marked as reviewed by an AI assistant; none is marked as reviewed by a mentor. The internal Microsoft support wiki was not available to this project, so nothing came from it. The records are never shown in the app.
 
 | Family        | Product                 | What the customer reports                                          | Stage         | Difficulty |
 | ------------- | ----------------------- | ------------------------------------------------------------------ | ------------- | ---------- |
 | Microsoft 365 | Outlook                 | Shared team mailbox missing from Outlook                           | First contact | Starter    |
 | Microsoft 365 | OneDrive for Business   | Closing a case on files that stopped syncing                       | Closure       | Starter    |
 | Microsoft 365 | Power Platform          | An approval process that used to run by itself has stopped         | Follow-up     | Starter    |
+| Microsoft 365 | Microsoft Teams         | Choppy audio on Teams calls                                        | First contact | Starter    |
+| Microsoft 365 | SharePoint Online       | Shared link will not open for the person it was sent to            | First contact | Starter    |
+| Microsoft 365 | OneDrive for Business   | Files show a small cloud icon beside their names                   | First contact | Starter    |
+| Microsoft 365 | Microsoft Entra ID      | Password reset is unavailable to a warehouse supervisor            | First contact | Starter    |
+| Microsoft 365 | Microsoft Intune        | Company Portal enrolment fails when setting up a device for work   | First contact | Starter    |
 | Microsoft 365 | Microsoft Teams         | Colleagues cannot join scheduled Teams meetings                    | First contact | Standard   |
 | Microsoft 365 | Exchange Online         | Email to and from some recipients arrives late                     | Follow-up     | Standard   |
 | Microsoft 365 | Microsoft 365 Apps      | Excel keeps closing since an update                                | First contact | Standard   |
 | Microsoft 365 | Microsoft Intune        | Closing a case on laptops that showed as not compliant             | Closure       | Standard   |
 | Microsoft 365 | Defender for Office 365 | Supplier invoices held in quarantine before a payment run          | First contact | Standard   |
+| Microsoft 365 | Microsoft Teams         | Teams meeting recording is missing                                 | Follow-up     | Standard   |
+| Microsoft 365 | Outlook                 | Outlook keeps asking for a password                                | First contact | Standard   |
+| Microsoft 365 | Outlook                 | Closing a case on a calendar she could not edit                    | Closure       | Standard   |
+| Microsoft 365 | Microsoft 365 Apps      | Word and Excel say a licence cannot be found                       | First contact | Standard   |
+| Microsoft 365 | Power Platform          | A shared app the team relies on shows a connection error           | Follow-up     | Standard   |
 | Microsoft 365 | SharePoint Online       | Programme team still blocked from their SharePoint site            | Escalated     | Challenge  |
 | Microsoft 365 | Microsoft Entra ID      | New starters blocked from signing in on day one                    | First contact | Challenge  |
+| Microsoft 365 | Exchange Online         | Email to a business partner keeps bouncing back                    | Follow-up     | Challenge  |
+| Microsoft 365 | Microsoft Entra ID      | Sales director cannot complete the extra sign-in check             | First contact | Challenge  |
+| Microsoft 365 | Defender for Office 365 | Supplier contract attachment held back                             | Escalated     | Challenge  |
+| Microsoft 365 | Microsoft 365 Apps      | Shared Word document creates copies and edits go missing           | Escalated     | Challenge  |
 | Windows       | Windows 11              | Laptop has felt slow since an update                               | First contact | Starter    |
+| Windows       | Windows 11              | Windows 11 laptop keeps dropping its Wi-Fi connection              | First contact | Starter    |
 | Windows       | Windows 11              | Work laptop asks for a recovery key after an update                | First contact | Standard   |
 | Azure         | Azure                   | Azure bill far above budget after a team deployed a new project    | Escalated     | Standard   |
 | Azure         | Azure                   | Production virtual machine unreachable, airport check-in affected  | First contact | Challenge  |
 | Azure         | Azure                   | Scripted deployment now fails for a service account                | Follow-up     | Challenge  |
+| Dynamics 365  | Dynamics 365            | Sales dashboard in Dynamics 365 is slow to load                    | First contact | Starter    |
 | Dynamics 365  | Dynamics 365            | Some sales staff can't see customer records after a reorganisation | First contact | Standard   |
 
 [docs/scenario-authoring.md](docs/scenario-authoring.md) explains how scenarios are written and checked, and what each value in the provenance record means. `npm run validate:scenarios` prints the records.
@@ -87,10 +104,10 @@ Details and limits are in [docs/care-cbcf-rubric.md](docs/care-cbcf-rubric.md).
 
 ## Voice and privacy
 
-- Your microphone opens only after you press a button and your browser allows it. A text call never opens it. A spoken call pauses by itself when its browser tab is hidden, and stays paused until you press **Resume**.
+- Your microphone opens only after you press a button and your browser allows it. A text call never opens it. In a hands-free spoken call it then stays open whenever it is your turn, whether or not you are speaking, and closes while the customer speaks, when you press **Mute** or **Pause**, when the call ends, and after about ten minutes without sound. A spoken call also pauses by itself when its browser tab is hidden, and stays paused until you press **Resume**.
 - Where speech goes depends on the speech provider:
   - **Azure AI Speech** (when configured): your recording is sent to the service to be turned into text, and each customer line is sent to it to be spoken.
-  - **The browser's own speech** (Edge or Chrome, when no server provider is set): the browser handles the audio. In Chromium that is usually the browser maker's online service.
+  - **The browser's own speech** (Edge or Chrome, when no server provider is set): the browser handles the audio. In Chromium that is usually the browser maker's online service, which hears the microphone for as long as Firefly is listening, quiet included.
   - **Demo speech:** the recording goes to the Firefly server, which does not understand it, and no further.
 - With a live model provider, the redacted conversation text and the facts the customer may share are sent to that provider. In demo mode nothing is sent to a model.
 - Firefly does not write audio to disk or to its database. A recording is held in memory only while it is being turned into text. If that fails in a way you can retry, the browser keeps it until you retry, type instead or end the call.
@@ -165,11 +182,11 @@ npm start       # serves the API and dist/web from one process
 ## Known limitations
 
 - **Live providers.** Gemini had one limited smoke check on 21 Nov 2026, and it was not repeated for the newest customer prompt (`customer-4`) or its guards, which have only met the local fake model. Azure OpenAI, the OpenAI-compatible endpoint and Azure AI Speech have not been run live. Everything else about them is tested against local fakes. See [Demo mode and live providers](#demo-mode-and-live-providers).
-- **No barge-in.** You cannot talk over the customer. Press **Stop customer audio**, then talk. [docs/voice-architecture.md](docs/voice-architecture.md) explains why.
-- **Speech is unverified with real speech.** Recognition and voices were tested with fakes and synthetic signals. Whether the customer's voice sounds like their mood has not been judged.
+- **No barge-in.** The microphone stays closed while the customer speaks, so you cannot talk over them: wait, or press **Stop customer audio**, then talk. [docs/voice-architecture.md](docs/voice-architecture.md) explains why.
+- **Speech is unverified with real speech.** Recognition, voices and hands-free listening were tested with fakes: a scripted recogniser and fake timers in unit tests, and the same scripted recogniser in a real Edge page. How a real Chrome or Edge recogniser behaves in continuous mode (how long its sessions live, what its results look like, how fast **Done speaking** gets the last words back) has not been checked, and no real speech was heard. Whether the customer's voice sounds like their mood has not been judged.
 - **Browsers and devices.** The interface was checked in Microsoft Edge, and the browser tests run in Chromium: Playwright's own Chromium in CI, or an installed Edge or Chrome chosen with `PW_CHANNEL`. Firefox, Safari and real touch hardware have not been tried. The phone tests use Playwright's Pixel 7 emulation.
 - **Accessibility.** Automated axe checks run in the browser tests, and a unit test checks the colour tokens' contrast in both themes. No screen reader or other assistive technology has been used to test Firefly.
-- **Scenarios are synthetic and only partly checked.** Product wording was checked against public Microsoft documentation, 11 scenarios against current pages and 5 in part. The records mark all 16 as reviewed by an AI assistant and none as reviewed by a mentor. No internal Microsoft material was used. See [Scenarios](#scenarios).
+- **Scenarios are synthetic and only partly checked.** Product wording was checked against public Microsoft documentation, 21 scenarios against current pages and 11 in part. The records mark all 32 as reviewed by an AI assistant and none as reviewed by a mentor. No internal Microsoft material was used. See [Scenarios](#scenarios).
 - **Demo mode is simpler.** The rules-based customer varies less than a live model.
 - **Scores are rules-based.** They read words, not tone, and they have not been compared with mentors' scores.
 - **English only.** Speech languages are en-GB, en-US, en-IE, en-AU and en-IN.

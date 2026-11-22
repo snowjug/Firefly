@@ -19,16 +19,18 @@ The probe and the timing tests give numbers that belong to one machine in one si
 
 `scripts/budgets.json` holds the limits and `scripts/check-budgets.mjs` enforces them on the production build. Sizes are gzip at its highest level, which is what a compressing host sends. The Node server itself does not compress. To read another build, set `FIREFLY_BUILD_DIR` (a folder, absolute or relative to the repository root). Raising a limit is a decision: say why in the commit.
 
-| Limit (gzip)                                               | Budget | One reading, 22 November 2026 |
+| Limit (gzip)                                               | Budget | One reading, 23 November 2026 |
 | ---------------------------------------------------------- | ------ | ----------------------------- |
-| First-load JavaScript (entry and the chunk loaded with it) | 114 kB | 112.5 kB                      |
-| First-load CSS                                             | 11 kB  | 9.7 kB                        |
-| Largest lazy JavaScript chunk                              | 38 kB  | 36.3 kB (the call page)       |
-| Largest CSS file                                           | 9 kB   | 8.2 kB (the entry stylesheet) |
+| First-load JavaScript (entry and the chunk loaded with it) | 114 kB | 112.9 kB                      |
+| First-load CSS                                             | 11 kB  | 10.1 kB                       |
+| Largest lazy JavaScript chunk                              | 40 kB  | 38.9 kB (the call page)       |
+| Largest CSS file                                           | 9 kB   | 8.6 kB (the entry stylesheet) |
 
-The readings come from running `scripts/check-budgets.mjs` on a production build of the working tree on 22 November 2026, so they move with every change. Each limit is the measured value plus roughly 1 to 2 kB, so growth shows up in review instead of being absorbed quietly.
+The readings come from running `scripts/check-budgets.mjs` on a production build of the working tree on 23 November 2026, so they move with every change. Each limit is the measured value plus roughly 1 to 2 kB, so growth shows up in review instead of being absorbed quietly.
 
 The limits were raised from 110, 8, 38 and 6 kB, which the previous interface passed at 109.3, 7.2, 30.3 and 5.8 kB. The rebuild added an authored dark theme (the token stylesheet, which every page downloads, went from 3.3 to 5.9 kB), a theme runtime and a sliding indicator in the header (both part of the first load), and richer call and report screens (the call chunk is 5.7 kB larger). These are the measured differences. No attempt was made to win the size back by trimming the dark theme.
+
+On 23 November 2026 the largest-lazy-chunk limit went from 38 to 40 kB, and no other limit moved. The call page's chunk grew from 36.3 to 38.9 kB: about 1 kB for hands-free listening (restartable recognition sessions, Firefly's own end-of-turn wait and the idle ticks) and about 1.5 kB for the screen of a call (the presence ring, the live captions and the call-ended moment). The motion work on the other pages added about 0.5 kB to the first-load JavaScript and 0.4 kB to the first-load CSS, which stay inside their limits. Its other additions sit in the lazy chunks of their own pages.
 
 Besides sizes, the check fails the build if it contains a source map, a font file, any page other than `index.html` (the component galleries and development pages never ship), or the string `ZodError` in any script (the web app must never ship zod). When the first load grows because the voice catalogue or the spoken-text sanitiser has become reachable from the entry, `web/src/features/voice/entry-weight.test.ts` names the chain of imports that leads to it.
 
