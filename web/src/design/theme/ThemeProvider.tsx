@@ -25,7 +25,8 @@ export interface ThemeValue {
   preference: ThemePreference;
   /** What is on the page now. */
   resolved: ResolvedTheme;
-  setPreference(next: ThemePreference): void;
+  /** Applies a choice. Says whether this browser kept it: storage can be blocked. */
+  setPreference(next: ThemePreference): boolean;
   /** Switches to the other theme as an explicit choice. */
   toggle(): void;
 }
@@ -68,13 +69,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyTheme(document.documentElement, resolved, preference);
   }, [resolved, preference]);
 
-  const setPreference = useCallback((next: ThemePreference) => {
+  const setPreference = useCallback((next: ThemePreference): boolean => {
+    // Stored first and outside the transition, which may run its callback a frame later: the answer
+    // ("kept?") has to be known now.
+    const kept = storePreference(next);
     const nextResolved = resolveTheme(next, systemPrefersDark());
     withThemeTransition(() => {
       applyTheme(document.documentElement, nextResolved, next);
-      storePreference(next);
       setPreferenceState(next);
     });
+    return kept;
   }, []);
 
   const toggle = useCallback(

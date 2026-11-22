@@ -229,6 +229,33 @@ describe('ThemeSelect', () => {
     expect(screen.getAllByRole('status')).toHaveLength(1);
   });
 
+  it('does not claim "Saved" when the browser blocks storage: it applies the choice and says it is not kept', async () => {
+    stubSystem(false);
+    const blocked = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage is blocked.', 'SecurityError');
+    });
+    try {
+      const user = userEvent.setup();
+      const { container } = render(
+        <AnnouncerProvider>
+          <ThemeProvider>
+            <ThemeSelect />
+          </ThemeProvider>
+        </AnnouncerProvider>,
+      );
+      await user.click(screen.getByRole('radio', { name: 'Dark' }));
+      expect(page().dataset.theme).toBe('dark');
+      expect(container.querySelector('.ff-theme-select__saved')).toHaveTextContent(
+        'Not saved: storage is blocked',
+      );
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Dark theme applied. This browser is not keeping it.',
+      );
+    } finally {
+      blocked.mockRestore();
+    }
+  });
+
   it('stores "System" as no choice and goes back to following the system', async () => {
     stubSystem(true);
     window.localStorage.setItem(THEME_STORAGE_KEY, 'light');

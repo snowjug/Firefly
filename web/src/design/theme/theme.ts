@@ -46,16 +46,21 @@ export function readStoredPreference(
   }
 }
 
-/** "System" is the default, so it is stored as the absence of a choice. */
+/**
+ * "System" is the default, so it is stored as the absence of a choice. Says whether the choice is now
+ * kept by this browser: false when storage is blocked or full, which only means it is not remembered.
+ */
 export function storePreference(
   preference: ThemePreference,
   storage: StorageLike | null = browserStorage(),
-): void {
+): boolean {
+  if (!storage) return false;
   try {
-    if (preference === 'system') storage?.removeItem(THEME_STORAGE_KEY);
-    else storage?.setItem(THEME_STORAGE_KEY, preference);
+    if (preference === 'system') storage.removeItem(THEME_STORAGE_KEY);
+    else storage.setItem(THEME_STORAGE_KEY, preference);
+    return true;
   } catch {
-    // A blocked or full store only means the choice is not remembered.
+    return false;
   }
 }
 

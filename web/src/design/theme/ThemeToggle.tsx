@@ -81,14 +81,15 @@ const CHOICE_NAMES: Record<ThemePreference, string> = {
 /**
  * The three-way choice for the footer: Light, Dark or System. A native radio group, so the arrow
  * keys move and select. Choosing confirms itself in words ("Saved on this device"), because the
- * choice is remembered here and nowhere else. Sighted people read the words beside the control; a
- * screen reader hears the same sentence once, through the page's single polite announcer, so there
- * is no second live region.
+ * choice is remembered here and nowhere else; when the browser blocks storage the words say it is
+ * not kept, instead of claiming it. Sighted people read the words beside the control; a screen reader
+ * hears the same sentence once, through the page's single polite announcer, so there is no second
+ * live region.
  */
 export function ThemeSelect({ className }: { className?: string }) {
   const theme = useOptionalTheme();
   const announce = useAnnouncer();
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<'kept' | 'not-kept' | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -98,11 +99,15 @@ export function ThemeSelect({ className }: { className?: string }) {
   );
   if (!theme) return null;
   const choose = (next: ThemePreference) => {
-    theme.setPreference(next);
-    announce(`${CHOICE_NAMES[next]} saved on this device.`);
-    setSaved(true);
+    const kept = theme.setPreference(next);
+    announce(
+      kept
+        ? `${CHOICE_NAMES[next]} saved on this device.`
+        : `${CHOICE_NAMES[next]} applied. This browser is not keeping it.`,
+    );
+    setSaved(kept ? 'kept' : 'not-kept');
     if (timer.current !== null) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setSaved(false), SAVED_MS);
+    timer.current = setTimeout(() => setSaved(null), SAVED_MS);
   };
   return (
     <div className={cx('ff-theme-select', className)}>
@@ -119,8 +124,8 @@ export function ThemeSelect({ className }: { className?: string }) {
         onChange={choose}
         className="ff-theme-select__group"
       />
-      <span className="ff-theme-select__saved" data-on={saved || undefined} aria-hidden="true">
-        Saved on this device
+      <span className="ff-theme-select__saved" data-on={saved ?? undefined} aria-hidden="true">
+        {saved === 'not-kept' ? 'Not saved: storage is blocked' : 'Saved on this device'}
       </span>
     </div>
   );

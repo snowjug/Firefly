@@ -74,6 +74,13 @@ describe('theme preference', () => {
     expect(readStoredPreference(null)).toBe('system');
   });
 
+  it('says whether a choice was kept: yes for a working store, no for blocked or missing storage', () => {
+    expect(storePreference('dark', memoryStorage())).toBe(true);
+    expect(storePreference('system', memoryStorage())).toBe(true);
+    expect(storePreference('dark', blockedStorage)).toBe(false);
+    expect(storePreference('dark', null)).toBe(false);
+  });
+
   it('asks the system without a window or a media query', () => {
     expect(systemPrefersDark(undefined)).toBe(false);
     expect(systemPrefersDark({} as Pick<Window, 'matchMedia'>)).toBe(false);
