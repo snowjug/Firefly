@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
+import { PRACTICE_MODE_LABELS } from '#shared/domain/vocab.ts';
 import { useAppSection } from '../../app/section.tsx';
+import { cx } from '../../design/cx.ts';
 import { Icon } from '../../design/icons.tsx';
 import { Button, LinkButton } from '../../design/primitives/Button.tsx';
 import { MessageBar } from '../../design/primitives/MessageBar.tsx';
+import { ProductIcon } from '../../design/primitives/ProductIcon.tsx';
 import { Skeleton } from '../../design/primitives/Skeleton.tsx';
 import { Tag } from '../../design/primitives/Badge.tsx';
+import { accentClass } from '../../design/product-accent.ts';
 import { api, errorMessage, isApiError } from '../../lib/api.ts';
 import { useApi, useDocumentTitle, useOnline } from '../../lib/hooks.ts';
 import { CaseRows } from './CaseRows.tsx';
@@ -17,6 +21,7 @@ import {
   type ConfigKey,
 } from './config-params.ts';
 import { useFirstUseNotice } from './first-use.ts';
+import { MODE_SENTENCE, productLine } from './labels.ts';
 import { describeReadiness } from './mic-readiness.ts';
 import { PrivacyNotice } from './PrivacyNotice.tsx';
 import { privacyDetails } from './privacy.ts';
@@ -27,6 +32,7 @@ import { useMicrophonePermission } from './use-mic-permission.ts';
 import { useSpeechSetup } from './use-speech-setup.ts';
 import { useStartCall, type StartInput } from './use-start-call.ts';
 import { useVoicePreview } from './use-voice-preview.ts';
+import { useTileTransition } from './view-transition.ts';
 import {
   defaultVoiceFor,
   offeredVoice,
@@ -46,7 +52,7 @@ const KEY_NAMES: Record<ConfigKey, string> = {
   style: 'Style',
   stage: 'Call stage',
   curveballs: 'Complications',
-  hints: 'Live hints',
+  hints: 'Practice mode',
   voice: 'Voice',
 };
 
@@ -110,6 +116,8 @@ export function CallBrief() {
   const editTo = useMemo(() => editPathFromSearch(id, search), [id, search]);
   useAppSection('Case brief', { backTo: editTo, backLabel: 'Scenarios' });
   useDocumentTitle(scenario ? `Case brief: ${scenario.title}` : 'Case brief');
+  // The product tile is the one on the scenario's details, carried over by a view transition.
+  const tile = useTileTransition(editTo);
 
   const read = useMemo(
     () => (scenario ? inspectConfig(search, scenario) : null),
@@ -183,6 +191,7 @@ export function CallBrief() {
   }
 
   const { setup, config, loading: speechLoading, error: speechError } = speech;
+  const practiceMode = settings?.mode ?? 'immersive';
   const speechState = setup
     ? setup.canSpeak
       ? 'voice'
@@ -209,8 +218,22 @@ export function CallBrief() {
   return (
     <div className="l-page brf-page">
       <header className="brf-head">
-        <h1 className="brf-title">Case brief</h1>
-        <p className="brf-subtitle">{scenario.title}</p>
+        <span
+          className={cx('brf-tile', accentClass(scenario.product.id))}
+          style={tile}
+          aria-hidden="true"
+        >
+          <ProductIcon product={scenario.product.id} size={24} />
+        </span>
+        <div className="brf-head__text">
+          <p className="brf-product">{productLine(scenario.product)}</p>
+          <h1 className="brf-title">Case brief</h1>
+          <p className="brf-subtitle">{scenario.title}</p>
+          <p className="brf-mode">
+            <strong>{PRACTICE_MODE_LABELS[practiceMode].label}.</strong>{' '}
+            {MODE_SENTENCE[practiceMode]}.
+          </p>
+        </div>
         <Tag size="small">Synthetic scenario</Tag>
       </header>
       {read.ignored.length > 0 ? (

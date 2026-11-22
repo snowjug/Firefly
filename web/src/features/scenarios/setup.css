@@ -1,0 +1,114 @@
+/* The setup controls inside the chosen scenario: the preset, and everything behind "Customise". */
+
+.scn-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+
+/* ---- The preset --------------------------------------------------------------------------------- */
+.scn-preset {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+.scn-preset__control {
+  flex: 1 1 auto;
+}
+.scn-preset .ff-segmented__legend {
+  margin-block-end: var(--sp-1);
+  color: var(--fg-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.scn-preset .ff-segmented__track {
+  display: flex;
+}
+.scn-note {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+
+/* ---- Customise ---------------------------------------------------------------------------------- */
+.scn-custom__head {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: var(--sp-2);
+}
+.scn-custom__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--sp-4) var(--sp-5);
+}
+.scn-custom .ff-segmented__track {
+  display: flex;
+}
+/* Four states with their icons do not fit side by side on a phone: two by two. The other segments
+   take the width their words need and share what is left, so a long word is never squeezed. */
+@media (max-width: 30em) {
+  .scn-custom .scn-cf__states.ff-segmented .ff-segmented__track {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .scn-custom .ff-segmented--segments.ff-segmented--fill .ff-segmented__item {
+    flex: 1 1 auto;
+  }
+}
+.scn-cf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1h);
+  min-inline-size: 0;
+}
+.scn-cf--full {
+  grid-column: 1 / -1;
+}
+.scn-cf__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.scn-cf__label {
+  color: var(--fg-1);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+  font-weight: var(--fw-semibold);
+}
+.scn-cf__changed {
+  margin-inline: var(--sp-2) 0;
+  color: var(--brand-fg-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  font-weight: var(--fw-semibold);
+}
+.scn-cf__help {
+  padding: var(--sp-2) var(--sp-3);
+  border-inline-start: 2px solid var(--stroke-1);
+  background: var(--bg-quiet);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-cf__defs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-block-start: var(--sp-2);
+}
+.scn-picks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-block-start: var(--sp-1);
+}
+.scn-picks__legend {
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.scn-picks__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}

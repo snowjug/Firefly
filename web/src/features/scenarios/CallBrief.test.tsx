@@ -114,6 +114,45 @@ describe('the support case', () => {
     expect(await valueOf('Objective')).toHaveTextContent(standard.publicBrief.objective);
   });
 
+  it('heads the page with the same product tile as the scenario\u2019s details, the product and the title', async () => {
+    renderApp(briefPath());
+    await valueOf('Customer');
+    const head = document.querySelector('.brf-head') as HTMLElement;
+    expect(head.querySelector('.brf-tile')).toHaveClass('ff-accent', 'ff-accent--purple');
+    expect(head.querySelector('.brf-tile')).toHaveAttribute('aria-hidden', 'true');
+    expect(head).toHaveTextContent('Microsoft Teams \u00b7 Meetings');
+    expect(within(head).getByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
+    expect(head).toHaveTextContent(standard.title);
+    expect(within(head).getByText('Synthetic scenario')).toBeVisible();
+  });
+
+  it('names the practice mode and says what it means on screen, by the preset or the choice made', async () => {
+    const mode = async (query: string) => {
+      const { unmount } = renderApp(briefPath(query));
+      await valueOf('Customer');
+      const text = document.querySelector('.brf-mode')?.textContent;
+      unmount();
+      return text;
+    };
+    // Standard is Assessment practice by default; Starter is Guided; either can be chosen on purpose.
+    expect(await mode('')).toBe('Assessment practice. No tips on screen.');
+    expect(await mode('?difficulty=starter')).toBe(
+      'Guided practice. Short tips appear during the call.',
+    );
+    expect(await mode('?difficulty=challenge&hints=on')).toBe(
+      'Guided practice. Short tips appear during the call.',
+    );
+    expect(await mode('?difficulty=starter&hints=off')).toBe(
+      'Assessment practice. No tips on screen.',
+    );
+  });
+
+  it('never says "live hints" anywhere', async () => {
+    renderApp(briefPath('?hints=on'));
+    await valueOf('Customer');
+    expect(document.body.textContent ?? '').not.toMatch(/live hints/i);
+  });
+
   it('says the impact for the level that was chosen, in the words written for that level', async () => {
     const { unmount } = renderApp(briefPath('?impact=high'));
     const high = await valueOf('Impact');
@@ -209,7 +248,7 @@ describe('the support case', () => {
   it('ignores settings it cannot use, and says so', async () => {
     renderApp(briefPath('?difficulty=extreme&hints=maybe&impact=low&voice=voice-z'));
     const note = await screen.findByText(/Some settings in this link could not be used/);
-    expect(note).toHaveTextContent('Difficulty, Live hints, Voice');
+    expect(note).toHaveTextContent('Difficulty, Practice mode, Voice');
     expect(await valueOf('Impact')).toHaveTextContent('Low');
   });
 

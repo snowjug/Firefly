@@ -114,3 +114,6 @@ export { ACCENTS, PRODUCT_ACCENT, accentClass, type AccentId } from './product-a
 
 // Interaction hooks: card tilt, mouse drag and swipe, in-view activation, the call-preview clock.
 export * from './interaction/index.ts';
+
+// The scenario carousel (a horizontal product gallery).
+export * from './carousel/index.ts';

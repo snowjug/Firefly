@@ -6,14 +6,16 @@ import { wordCount } from '#shared/domain/scenario.ts';
 import {
   CURVEBALL_LABELS,
   IMPACT_LABELS,
-  PRODUCT_FAMILY_LABELS,
+  PRACTICE_MODE_LABELS,
   STYLE_LABELS,
 } from '#shared/domain/vocab.ts';
+import { stubMedia } from '../../design/interaction/test-utils.ts';
 import { api } from '../../lib/api.ts';
 import type * as ApiModule from '../../lib/api.ts';
 import { detectFeatures, type VoiceFeatures } from '../voice/support.ts';
 import type * as SupportModule from '../voice/support.ts';
 import { sortScenarios } from './catalogue.ts';
+import { cardTitle } from './labels.ts';
 import {
   AZURE_SPEECH,
   SAMPLE,
@@ -26,7 +28,6 @@ import {
   networkError,
   renderApp,
   stubOnline,
-  stubViewport,
   type RenderOptions,
 } from './testing/harness.tsx';
 import { defaultVoiceFor, voiceLabel } from './voice-choice.ts';
@@ -69,66 +70,77 @@ afterEach(() => {
   vi.mocked(api.scenarios).mockReset();
 });
 
-const list = () => screen.findByRole('group', { name: 'Scenarios' });
-const row = async (title: string) => within(await list()).getByRole('radio', { name: title });
-const rows = async () => within(await list()).getAllByRole('radio');
+const gallery = () => screen.findByRole('region', { name: 'Scenarios' });
+const cards = async () => within(await gallery()).getAllByRole('radio');
+const card = async (scenario: PublicScenarioDTO) =>
+  within(await gallery()).getByRole('radio', { name: cardTitle(scenario) });
+const rail = () => screen.getByRole('group', { name: 'Product' });
+const chip = (name: string | RegExp) => within(rail()).getByRole('radio', { name });
 const control = (name: string | RegExp) => screen.getByRole('group', { name });
 const choose = (group: HTMLElement, name: string | RegExp) =>
   userEvent.click(within(group).getByRole('radio', { name }));
-const review = () => screen.getByRole('link', { name: 'Review brief' });
+const start = () => screen.getByRole('link', { name: 'Start configuration' });
+const detailFor = (scenario: PublicScenarioDTO) =>
+  screen.findByRole('region', { name: scenario.title });
 const openCustomise = async () => {
   const button = await screen.findByRole('button', { name: /^Customise/ });
   if (button.getAttribute('aria-expanded') !== 'true') await userEvent.click(button);
 };
 const count = (text: string) => expect(screen.getByText(text)).toBeInTheDocument();
+const announced = () =>
+  [...document.querySelectorAll('.visually-hidden[role="status"]')].map(
+    (element) => element.textContent,
+  );
 
-/** What a row says besides its title: the text its description points at. */
-function described(radio: HTMLElement): string[] {
+/** What a card says besides its title: the text its description points at. */
+function described(radio: HTMLElement): string {
   return (radio.getAttribute('aria-describedby') ?? '')
     .split(' ')
-    .map((id) => document.getElementById(id)?.textContent ?? '');
+    .map((id) => document.getElementById(id)?.textContent ?? '')
+    .join(' | ');
 }
 
-describe('the scenario list on a wide screen', () => {
-  beforeEach(() => stubViewport(true));
-
-  it('lists every scenario as a row, by product, with its product, title, short line and difficulty', async () => {
+describe('the carousel of scenarios', () => {
+  it('shows every scenario as a card in one standard list, by product, each saying what it is', async () => {
     renderApp('/scenarios');
     expect(await screen.findByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
-    const radios = await rows();
+    const radios = await cards();
     expect(radios).toHaveLength(all.length);
     expect(radios.map((radio) => radio.getAttribute('value'))).toEqual(sorted.map((s) => s.id));
 
     const teams = scenarioById(SAMPLE.standard);
-    const [meta, summary] = described(await row(teams.title));
-    expect(meta).toContain('Microsoft Teams \u00b7 Meetings');
-    expect(meta).toContain('Standard');
-    expect(summary).toBe(teams.listSummary);
-    // Rows, not cards: no heading and no button inside a row.
-    expect(within(await list()).queryAllByRole('heading')).toEqual([]);
-    expect(within(await list()).queryAllByRole('button')).toEqual([]);
+    const text = described(await card(teams));
+    expect(text).toContain('Teams');
+    expect(text).toContain('Medium impact \u00b7 Frustrated \u00b7 First contact');
+    expect(text).toContain('8\u201312 min');
+    expect(text).toContain('Standard');
+    // A semantic list, one item to a card, with no heading and no second control inside any of them.
+    const list = within(await gallery()).getByRole('list');
+    expect(within(list).getAllByRole('listitem')).toHaveLength(all.length);
+    expect(within(list).queryAllByRole('heading')).toEqual([]);
+    expect(within(list).queryAllByRole('button')).toEqual([]);
   });
 
-  it('keeps every list description to 18 words, the summary to 60 and each filter label to 3', async () => {
+  it('tells each card its place in the set, and shows the chosen one\u2019s place as a count', async () => {
     renderApp('/scenarios');
-    for (const radio of await rows()) {
-      expect(wordCount(described(radio)[1] ?? '')).toBeLessThanOrEqual(18);
+    const items = within(await gallery()).getAllByRole('listitem');
+    expect(items[0]).toHaveAttribute('aria-posinset', '1');
+    expect(items[0]).toHaveAttribute('aria-setsize', String(all.length));
+    expect(items[15]).toHaveAttribute('aria-posinset', '16');
+    expect(await screen.findByText(`1 of ${all.length}`)).toBeVisible();
+  });
+
+  it('keeps every card title to six words', async () => {
+    renderApp('/scenarios');
+    for (const radio of await cards()) {
+      const title = document.getElementById(radio.getAttribute('aria-labelledby') as string);
+      expect(wordCount(title?.textContent ?? '')).toBeLessThanOrEqual(6);
     }
-    const selected = screen.getByRole('region', { name: first.title });
-    expect(
-      wordCount(within(selected).getByText(first.summary).textContent ?? ''),
-    ).toBeLessThanOrEqual(60);
-    for (const name of ['Product', 'Issue type', 'Difficulty']) {
-      expect(wordCount(name)).toBeLessThanOrEqual(3);
-    }
-    expect(screen.getByRole('combobox', { name: 'Product' })).toBeVisible();
-    expect(screen.getByRole('combobox', { name: 'Issue type' })).toBeVisible();
-    expect(control('Difficulty')).toBeVisible();
   });
 
   it('selects the first scenario when the address names none, and writes that in the address', async () => {
     const app = renderApp('/scenarios');
-    expect(await row(first.title)).toBeChecked();
+    expect(await card(first)).toBeChecked();
     await waitFor(() => expect(app.query().get('scenario')).toBe(first.id));
     expect(await screen.findByRole('heading', { level: 2, name: first.title })).toBeVisible();
     expect(app.router.state.historyAction).toBe('REPLACE');
@@ -137,142 +149,190 @@ describe('the scenario list on a wide screen', () => {
   it('moves the choice with the arrow keys and keeps the details in step', async () => {
     const user = userEvent.setup();
     const app = renderApp('/scenarios');
-    (await row(first.title)).focus();
-    await user.keyboard('{ArrowDown}');
+    (await card(first)).focus();
+    await user.keyboard('{ArrowRight}');
 
-    expect(await row(second.title)).toBeChecked();
+    expect(await card(second)).toBeChecked();
     expect(await screen.findByRole('heading', { level: 2, name: second.title })).toBeVisible();
     await waitFor(() => expect(app.query().get('scenario')).toBe(second.id));
-    expect(await row(second.title)).toHaveFocus();
+    expect(await card(second)).toHaveFocus();
+    expect(await screen.findByText(`2 of ${all.length}`)).toBeVisible();
   });
 
-  it('puts the moving indicator by the chosen row and hides it when none is chosen', async () => {
+  it('says once, politely, that the details changed, and not when the page first chooses', async () => {
     const user = userEvent.setup();
     renderApp('/scenarios');
-    const group = await list();
-    const strip = group.closest('.scn-list') as HTMLElement;
-    await waitFor(() => expect(strip.style.getPropertyValue('--scn-ind-o')).toBe('1'));
-    expect(strip.querySelector('.scn-ind')).toHaveAttribute('aria-hidden', 'true');
-    expect(strip.querySelector('[data-selected]')?.querySelector('input')).toBeChecked();
-
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
-    await waitFor(() => expect(strip.querySelectorAll('[data-selected]')).toHaveLength(1));
+    await card(first);
+    expect(announced().join(' ')).not.toContain('Showing details');
+    await user.click(await card(second));
+    await waitFor(() => expect(announced()).toContain(`Showing details for ${cardTitle(second)}.`));
   });
 
   it('fades the details in when another scenario is chosen', async () => {
     const user = userEvent.setup();
     renderApp('/scenarios');
     const before = (await screen.findByRole('heading', { level: 2, name: first.title })).closest(
-      '.scn-fade',
+      '.scn-detail__main',
     );
     expect(before).not.toBeNull();
-    (await row(first.title)).focus();
-    await user.keyboard('{ArrowDown}');
+    await user.click(await card(second));
     const heading = await screen.findByRole('heading', { level: 2, name: second.title });
-    expect(heading.closest('.scn-fade')).not.toBe(before);
+    expect(heading.closest('.scn-detail__main')).not.toBe(before);
   });
 
   it('gives every control a name, so nothing is read as "edit text" or "button"', async () => {
     renderApp('/scenarios');
-    await list();
-    for (const box of screen.getAllByRole('combobox')) expect(box).toHaveAccessibleName();
+    await gallery();
     for (const radio of screen.getAllByRole('radio')) expect(radio).toHaveAccessibleName();
     for (const button of screen.getAllByRole('button')) expect(button).toHaveAccessibleName();
+    for (const link of screen.getAllByRole('link')) expect(link).toHaveAccessibleName();
+  });
+
+  it('has the previous and next buttons, with the first page showing', async () => {
+    renderApp('/scenarios');
+    await gallery();
+    expect(screen.getByRole('button', { name: 'Previous scenarios' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Next scenarios' })).toBeInTheDocument();
   });
 });
 
-describe('the filters and their counts', () => {
-  beforeEach(() => stubViewport(true));
-
-  it('group the products by family, each with how many scenarios it has', async () => {
+describe('the product rail', () => {
+  it('lists All and every product that has scenarios, each with its count, with Power Platform last', async () => {
     renderApp('/scenarios');
-    await list();
-    const product = screen.getByRole('combobox', { name: 'Product' });
-    const groups = within(product).getAllByRole('group');
-    expect(groups.map((group) => group.getAttribute('label'))).toEqual([
-      PRODUCT_FAMILY_LABELS['microsoft-365'],
-      PRODUCT_FAMILY_LABELS.windows,
-      PRODUCT_FAMILY_LABELS.azure,
-      PRODUCT_FAMILY_LABELS['dynamics-365'],
+    await gallery();
+    const names = within(rail())
+      .getAllByRole('radio')
+      .map((radio) => radio.closest('label')?.querySelector('.scn-chip__label')?.textContent);
+    expect(names).toEqual([
+      'All',
+      'Teams',
+      'Outlook',
+      'Exchange',
+      'SharePoint',
+      'OneDrive',
+      'Microsoft 365 Apps',
+      'Entra ID',
+      'Intune',
+      'Defender',
+      'Windows',
+      'Azure',
+      'Dynamics 365',
+      'Power Platform',
     ]);
-    expect(within(product).getByRole('option', { name: 'All products' })).toBeInTheDocument();
-    expect(
-      within(product).getByRole('option', { name: 'Microsoft Teams (2)' }),
-    ).toBeInTheDocument();
-    expect(within(product).getByRole('option', { name: 'Azure (2)' })).toBeInTheDocument();
+    expect(chip('All, 16 scenarios')).toBeChecked();
+    expect(chip('Teams, 2 scenarios')).toBeInTheDocument();
+    expect(chip('Azure, 2 scenarios')).toBeInTheDocument();
+    expect(chip('Outlook, 1 scenario')).toBeInTheDocument();
   });
 
-  it('narrow the list, say so in the count, and write the choice in the address', async () => {
+  it('narrows the carousel, says so in the count, and writes the choice in the address', async () => {
     const user = userEvent.setup();
     const app = renderApp('/scenarios');
-    await list();
+    await gallery();
     count('16 scenarios');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
-    expect(await rows()).toHaveLength(2);
+    await user.click(chip(/^Teams/));
+    await waitFor(async () => expect(await cards()).toHaveLength(2));
     count('2 of 16 scenarios');
     expect(app.query().get('f_product')).toBe('teams');
     expect(app.router.state.historyAction).toBe('REPLACE');
+    expect(chip(/^Teams/)).toBeChecked();
   });
 
-  it('update every other count when one filter changes, and put an empty choice out of reach', async () => {
+  it('moves with the arrow keys, Home and End, and the carousel follows', async () => {
     const user = userEvent.setup();
-    renderApp('/scenarios');
-    await list();
-    const difficulty = control('Difficulty');
-    expect(within(difficulty).getByRole('radio', { name: 'All, 16 scenarios' })).toBeChecked();
-    expect(within(difficulty).getByRole('radio', { name: 'Starter, 5 scenarios' })).toBeVisible();
-
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
-    expect(within(difficulty).getByRole('radio', { name: 'All, 2 scenarios' })).toBeChecked();
-    expect(within(difficulty).getByRole('radio', { name: 'Starter, 0 scenarios' })).toBeDisabled();
-    expect(within(difficulty).getByRole('radio', { name: 'Challenge, 1 scenario' })).toBeEnabled();
-    const issue = screen.getByRole('combobox', { name: 'Issue type' });
-    expect(within(issue).getByRole('option', { name: /^How-to question \(0\)/ })).toBeDisabled();
-    expect(within(issue).getByRole('option', { name: /^Data missing \(1\)/ })).toBeEnabled();
+    const app = renderApp('/scenarios');
+    await gallery();
+    chip(/^All/).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(chip(/^Teams/)).toBeChecked();
+    await waitFor(() => expect(app.query().get('f_product')).toBe('teams'));
+    await user.keyboard('{End}');
+    expect(chip(/^Power Platform/)).toBeChecked();
+    await waitFor(async () => expect(await cards()).toHaveLength(1));
+    await user.keyboard('{Home}');
+    expect(chip(/^All/)).toBeChecked();
+    await waitFor(() => expect(app.query().get('f_product')).toBeNull());
   });
 
-  it('filter by difficulty with the segmented control', async () => {
+  it('updates its counts when the difficulty changes, and puts a product with none out of reach', async () => {
+    renderApp('/scenarios');
+    await gallery();
+    await choose(control('Difficulty'), /^Starter/);
+    expect(chip('All, 5 scenarios')).toBeChecked();
+    expect(chip('Teams, 0 scenarios')).toBeDisabled();
+    expect(chip('Outlook, 1 scenario')).toBeEnabled();
+  });
+
+  it('keeps a chosen product reachable even when the difficulty leaves it nothing', async () => {
+    renderApp('/scenarios?f_product=teams&f_difficulty=starter');
+    expect(await screen.findByRole('heading', { name: 'No scenarios match' })).toBeVisible();
+    expect(chip(/^Teams/)).toBeChecked();
+    expect(chip(/^Teams/)).toBeEnabled();
+  });
+
+  it('restores the product from the address, and scrolls the chosen chip into view', async () => {
+    renderApp('/scenarios?f_product=azure');
+    await gallery();
+    expect(chip(/^Azure/)).toBeChecked();
+    expect(await cards()).toHaveLength(2);
+  });
+});
+
+describe('the difficulty filter and "Clear filters"', () => {
+  it('filters by difficulty with the segmented control, and writes it as f_difficulty', async () => {
     const app = renderApp('/scenarios');
-    await list();
+    await gallery();
     await choose(control('Difficulty'), 'Challenge, 4 scenarios');
-    expect(await rows()).toHaveLength(4);
+    await waitFor(async () => expect(await cards()).toHaveLength(4));
     expect(app.query().get('f_difficulty')).toBe('challenge');
     expect(app.query().get('difficulty')).toBeNull();
     await choose(control('Difficulty'), /^All/);
-    expect(await rows()).toHaveLength(all.length);
+    await waitFor(async () => expect(await cards()).toHaveLength(all.length));
   });
 
-  it('show "Clear filters" only while something is filtered, and clear everything and move focus', async () => {
+  it('counts each difficulty against the product chosen, and puts an empty one out of reach', async () => {
+    const user = userEvent.setup();
+    renderApp('/scenarios');
+    await gallery();
+    const difficulty = control('Difficulty');
+    expect(within(difficulty).getByRole('radio', { name: 'All, 16 scenarios' })).toBeChecked();
+    expect(within(difficulty).getByRole('radio', { name: 'Starter, 5 scenarios' })).toBeVisible();
+    await user.click(chip(/^Teams/));
+    expect(within(difficulty).getByRole('radio', { name: 'All, 2 scenarios' })).toBeChecked();
+    expect(within(difficulty).getByRole('radio', { name: 'Starter, 0 scenarios' })).toBeDisabled();
+    expect(within(difficulty).getByRole('radio', { name: 'Challenge, 1 scenario' })).toBeEnabled();
+  });
+
+  it('shows "Clear filters" only while something is filtered, clears everything and moves focus to All', async () => {
     const user = userEvent.setup();
     const app = renderApp('/scenarios');
-    await list();
+    await gallery();
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'azure');
-    await user.selectOptions(
-      screen.getByRole('combobox', { name: 'Issue type' }),
-      'billing-licence',
-    );
+    await user.click(chip(/^Azure/));
+    await choose(control('Difficulty'), /^Standard/);
     await user.click(await screen.findByRole('button', { name: 'Clear filters' }));
 
-    expect(await rows()).toHaveLength(all.length);
+    await waitFor(async () => expect(await cards()).toHaveLength(all.length));
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Product' })).toHaveValue('');
-    expect(screen.getByRole('combobox', { name: 'Product' })).toHaveFocus();
+    expect(chip(/^All/)).toBeChecked();
+    expect(chip(/^All/)).toHaveFocus();
     expect(app.query().get('f_product')).toBeNull();
-    expect(app.query().get('f_issue')).toBeNull();
+    expect(app.query().get('f_difficulty')).toBeNull();
   });
 
-  it('show a choice at once, without waiting for the address to catch up', async () => {
+  it('shows a choice at once, without waiting for the address to catch up', async () => {
     const app = renderApp('/scenarios', { slowNavigation: 80 });
-    await list();
-    const product = screen.getByRole('combobox', { name: 'Product' });
-    fireEvent.change(product, { target: { value: 'azure' } });
-    expect(product).toHaveValue('azure');
+    await gallery();
+    fireEvent.click(chip(/^Azure/));
+    expect(chip(/^Azure/)).toBeChecked();
     await waitFor(() => expect(app.query().get('f_product')).toBe('azure'));
-    expect(product).toHaveValue('azure');
+    expect(chip(/^Azure/)).toBeChecked();
   });
 
-  it('say when nothing matches and offer a way out, and leave the details empty', async () => {
+  it('says when nothing matches and offers a way out, and leaves the details empty', async () => {
     const user = userEvent.setup();
     renderApp('/scenarios?f_product=teams&f_difficulty=starter');
     expect(await screen.findByRole('heading', { name: 'No scenarios match' })).toBeVisible();
@@ -280,35 +340,57 @@ describe('the filters and their counts', () => {
     expect(screen.getByText('No scenario selected')).toBeInTheDocument();
     const clear = screen.getAllByRole('button', { name: 'Clear filters' });
     await user.click(clear[clear.length - 1] as HTMLElement);
-    expect(await rows()).toHaveLength(all.length);
+    await waitFor(async () => expect(await cards()).toHaveLength(all.length));
   });
 
-  it('select another scenario when the chosen one is filtered out, and tidy the address', async () => {
+  it('selects another scenario when the chosen one is filtered out, and tidies the address', async () => {
     const app = renderApp('/scenarios');
-    await list();
+    await gallery();
     await choose(control('Difficulty'), 'Challenge, 4 scenarios');
     const challenge = all.filter((s) => s.difficulty === 'challenge').map((s) => s.id);
     await waitFor(() => expect(challenge).toContain(app.query().get('scenario')));
-    expect(await within(await list()).findAllByRole('radio', { checked: true })).toHaveLength(1);
+    expect(await within(await gallery()).findAllByRole('radio', { checked: true })).toHaveLength(1);
   });
 
-  it('announce the count politely', async () => {
+  it('keeps the chosen scenario when a filter still shows it', async () => {
+    const user = userEvent.setup();
+    const teams = scenarioById(SAMPLE.standard);
+    const app = renderApp(`/scenarios?scenario=${teams.id}`);
+    expect(await card(teams)).toBeChecked();
+    await user.click(chip(/^Teams/));
+    await waitFor(async () => expect(await cards()).toHaveLength(2));
+    expect(await card(teams)).toBeChecked();
+    expect(app.query().get('scenario')).toBe(teams.id);
+    expect(await screen.findByText(/^1 of 2$|^2 of 2$/)).toBeVisible();
+  });
+
+  it('announces the count politely', async () => {
     renderApp('/scenarios');
-    await list();
+    await gallery();
     const status = screen.getByText('16 scenarios').closest('[role="status"]');
     expect(status).toHaveAttribute('aria-live', 'polite');
+  });
+
+  it('opens an older link that names an issue type, with the product and difficulty in it, and tidies it', async () => {
+    const app = renderApp(
+      '/scenarios?f_product=azure&f_issue=billing-licence&f_difficulty=starter',
+    );
+    expect(await within(await gallery()).findAllByRole('radio')).toHaveLength(1);
+    expect(chip(/^Azure/)).toBeChecked();
+    await waitFor(() => expect(app.query().get('f_issue')).toBeNull());
+    expect(app.query().get('f_product')).toBe('azure');
+    expect(app.query().get('f_difficulty')).toBe('starter');
   });
 });
 
 describe('loading, failure and retry', () => {
-  beforeEach(() => stubViewport(true));
-
-  it('shows placeholders while the scenarios load', async () => {
+  it('shows placeholders while the scenarios load, in the shape of the page', async () => {
     vi.mocked(api.scenarios).mockReturnValue(new Promise(() => undefined));
     renderApp('/scenarios');
     expect(await screen.findByText('Loading scenarios')).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Scenarios' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: 'Product' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Scenarios' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Product' })).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.scn-card--skeleton').length).toBeGreaterThan(0);
   });
 
   it('says what happened, and tries again', async () => {
@@ -319,7 +401,7 @@ describe('loading, failure and retry', () => {
     expect(alert).toHaveTextContent('Scenarios could not be loaded');
     expect(alert).toHaveTextContent("Can't reach Firefly right now.");
     await user.click(within(alert).getByRole('button', { name: 'Try again' }));
-    expect(await row(first.title)).toBeInTheDocument();
+    expect(await card(first)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -336,20 +418,21 @@ describe('loading, failure and retry', () => {
     renderApp('/scenarios');
     expect(await screen.findByRole('heading', { name: 'No scenarios available' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Try again' }));
-    expect(await row(first.title)).toBeInTheDocument();
+    expect(await card(first)).toBeInTheDocument();
   });
 });
 
 describe('the address', () => {
-  beforeEach(() => stubViewport(true));
-
-  it('restores the filters, the scenario and every setting', async () => {
+  it('restores the filters, the scenario, the practice mode and every setting', async () => {
     renderApp(
       `/scenarios?f_product=teams&scenario=${SAMPLE.challenge}&impact=low&temperature=anxious&proficiency=novice&style=vague&stage=closure&curveballs=deadline&hints=on&difficulty=starter&voice=voice-d`,
     );
-    expect(await row(scenarioById(SAMPLE.challenge).title)).toBeChecked();
-    expect(screen.getByRole('combobox', { name: 'Product' })).toHaveValue('teams');
+    expect(await card(scenarioById(SAMPLE.challenge))).toBeChecked();
+    expect(chip(/^Teams/)).toBeChecked();
     expect(within(control('Preset')).getByRole('radio', { name: 'Starter' })).toBeChecked();
+    expect(
+      within(control('Practice mode')).getByRole('radio', { name: 'Guided practice' }),
+    ).toBeChecked();
 
     await openCustomise();
     expect(within(control(/^Impact/)).getByRole('radio', { name: 'Low' })).toBeChecked();
@@ -362,20 +445,28 @@ describe('the address', () => {
     expect(screen.getByRole('combobox', { name: 'Customer voice' })).toHaveValue('voice-d');
     expect(within(control(/^Complications/)).getByRole('radio', { name: 'Choose' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: CURVEBALL_LABELS.deadline.label })).toBeChecked();
-    expect(screen.getByRole('switch', { name: /Live hints/ })).toBeChecked();
   });
 
   it('ignores values it cannot use and tidies the address', async () => {
     const app = renderApp('/scenarios?scenario=nope&difficulty=extreme&f_product=notes&utm=1');
-    expect(await row(first.title)).toBeChecked();
+    expect(await card(first)).toBeChecked();
     await waitFor(() => expect(app.where()).toBe(`/scenarios?scenario=${first.id}`));
+  });
+
+  it('opens a deep link to one scenario with that scenario chosen, in view and described below', async () => {
+    const target = scenarioById(SAMPLE.closure);
+    const app = renderApp(`/scenarios?scenario=${target.id}`);
+    expect(await card(target)).toBeChecked();
+    expect(await detailFor(target)).toBeVisible();
+    expect(app.query().get('scenario')).toBe(target.id);
+    expect(start()).toHaveAttribute('href', `/scenarios/${target.id}/brief`);
   });
 
   it('says so once when the address names a scenario that has gone', async () => {
     const user = userEvent.setup();
     renderApp('/scenarios?scenario=locked-out-after-password-reset');
     const notice = await screen.findByText(/That scenario is no longer in the library/);
-    expect(await row(first.title)).toBeChecked();
+    expect(await card(first)).toBeChecked();
     await user.click(
       within(notice.closest('[role="status"]') as HTMLElement).getByRole('button', {
         name: 'Dismiss',
@@ -387,18 +478,19 @@ describe('the address', () => {
   it('only ever replaces the address, so Back leaves the workspace', async () => {
     const user = userEvent.setup();
     const app = renderApp('/scenarios');
-    await list();
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
+    await gallery();
+    await user.click(chip(/^Teams/));
     await choose(control('Preset'), 'Challenge');
+    await user.click(await card(scenarioById(SAMPLE.challenge)));
     expect(app.router.state.historyAction).toBe('REPLACE');
-    expect(app.query().get('difficulty')).toBe('challenge');
+    await waitFor(() => expect(app.query().get('scenario')).toBe(SAMPLE.challenge));
   });
 
   it('does not carry one scenario\u2019s changes to another', async () => {
     const user = userEvent.setup();
     const app = renderApp(`/scenarios?scenario=${SAMPLE.standard}&difficulty=challenge&hints=on`);
-    expect(await row(scenarioById(SAMPLE.standard).title)).toBeChecked();
-    await user.click(await row(scenarioById(SAMPLE.starter).title));
+    expect(await card(scenarioById(SAMPLE.standard))).toBeChecked();
+    await user.click(await card(scenarioById(SAMPLE.starter)));
     await waitFor(() => expect(app.query().get('scenario')).toBe(SAMPLE.starter));
     expect(app.query().get('difficulty')).toBeNull();
     expect(app.query().get('hints')).toBeNull();
@@ -407,42 +499,65 @@ describe('the address', () => {
 });
 
 describe('the chosen scenario', () => {
-  beforeEach(() => stubViewport(true));
   const open = async (id: string, options?: RenderOptions) => {
     const app = renderApp(`/scenarios?scenario=${id}`, options);
     await screen.findByRole('heading', { level: 2, name: scenarioById(id).title });
     return app;
   };
 
-  it('shows the product, impact, call stage, style, duration and a short description', async () => {
+  it('is one section below the carousel, headed by its product mark, product and title', async () => {
     await open(SAMPLE.challenge);
     const scenario = scenarioById(SAMPLE.challenge);
-    const pane = screen.getByRole('region', { name: scenario.title });
+    const pane = await detailFor(scenario);
     expect(within(pane).getByText('Microsoft Teams \u00b7 Calling')).toBeVisible();
-    expect(within(pane).getByText(scenario.summary)).toBeVisible();
+    expect(pane.querySelector('.scn-detail__tile')).toHaveClass('ff-accent--purple');
+    expect(pane.querySelector('.scn-detail__tile')).toHaveAttribute('aria-hidden', 'true');
+    // It follows the carousel in the page, so choosing a card changes what is just below it.
+    const region = await gallery();
+    expect(region.compareDocumentPosition(pane) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('says the issue, the impact, the customer, the state, the stage, the difficulty, the time and the focus', async () => {
+    await open(SAMPLE.challenge);
+    const scenario = scenarioById(SAMPLE.challenge);
+    const pane = await detailFor(scenario);
     const fact = (term: string) =>
-      within(pane).getByText(term, { selector: 'dt' }).nextElementSibling;
-    expect(fact('Impact')).toHaveTextContent(`High \u00b7 ${scenario.publicBrief.impact.high}`);
-    expect(fact('Call stage')).toHaveTextContent('Escalated case');
-    expect(fact('Style')).toHaveTextContent(`${STYLE_LABELS.demanding.label}, expert user`);
-    expect(fact('Duration')).toHaveTextContent('About 12 min');
-    expect(within(pane).getByRole('link', { name: 'Review brief' })).toBeVisible();
+      within(pane).getByText(term, { selector: 'dt' }).nextElementSibling as HTMLElement;
+    expect(fact('Issue')).toHaveTextContent(scenario.publicBrief.issue);
+    expect(fact('Business impact')).toHaveTextContent(
+      `High \u00b7 ${scenario.publicBrief.impact.high}`,
+    );
+    expect(fact('Customer')).toHaveTextContent('Kenji Watanabe');
+    expect(fact('Customer')).toHaveTextContent('Head of sales operations, Woodgrove Bank');
+    expect(fact('Customer')).toHaveTextContent('Synthetic customer');
+    expect(fact('Customer state')).toHaveTextContent('Angry');
+    expect(fact('Call stage')).toHaveTextContent('Escalated');
+    expect(fact('Call stage')).not.toHaveTextContent('Escalated case');
+    expect(fact('Difficulty')).toHaveTextContent('Challenge');
+    expect(fact('Estimated duration')).toHaveTextContent('10\u201314 min');
+    expect(fact('Coaching focus')).toHaveTextContent('Scoping & Discovery');
+  });
+
+  it('leaves out the long summary: the details are the facts a person scans', async () => {
+    await open(SAMPLE.challenge);
+    const scenario = scenarioById(SAMPLE.challenge);
+    const pane = await detailFor(scenario);
+    expect(pane).not.toHaveTextContent(scenario.summary);
+    expect(pane).not.toHaveTextContent(scenario.listSummary);
   });
 
   it('sits under the page\u2019s own heading, with its sections one level further down', async () => {
     await open(SAMPLE.challenge);
     expect(screen.getByRole('heading', { level: 1, name: 'Scenarios' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 3, name: 'Starting state' })).toBeVisible();
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('button', { name: /^Customise/ }).closest('h3')).not.toBeNull();
   });
 
   it('shows the customer as the call will start, and moves it when the preset changes', async () => {
     await open(SAMPLE.standard);
-    const pane = screen.getByRole('region', { name: scenarioById(SAMPLE.standard).title });
-    const state = within(pane).getByRole('heading', { name: 'Starting state' })
-      .parentElement as HTMLElement;
-    expect(within(state).getByText('Priya Nair')).toBeVisible();
-    expect(within(state).getByText('Synthetic customer')).toBeVisible();
+    const pane = await detailFor(scenarioById(SAMPLE.standard));
+    const state = within(pane).getByText('Customer state', { selector: 'dt' })
+      .nextElementSibling as HTMLElement;
     expect(within(state).getByText('Frustrated')).toBeVisible();
     const level = (name: string) =>
       within(state).getByText(name, { selector: 'dt' }).nextElementSibling;
@@ -451,18 +566,20 @@ describe('the chosen scenario', () => {
     await choose(control('Preset'), 'Challenge');
     expect(level('Patience')).toHaveTextContent('Low');
     expect(level('Trust')).toHaveTextContent('Low');
+    expect(
+      within(pane).getByText('Difficulty', { selector: 'dt' }).nextElementSibling,
+    ).toHaveTextContent('Challenge');
     await choose(control('Preset'), 'Starter');
     expect(level('Patience')).toHaveTextContent('High');
   });
 
-  it('moves the customer when the starting state changes, and the facts when the impact does', async () => {
+  it('moves the state when the starting state changes, and the impact when the impact does', async () => {
     await open(SAMPLE.standard);
     await openCustomise();
     await choose(control(/^Starting state/), 'Calm');
     const scenario = scenarioById(SAMPLE.standard);
-    expect(
-      within(screen.getByRole('region', { name: scenario.title })).getAllByText('Calm').length,
-    ).toBeGreaterThan(0);
+    const pane = await detailFor(scenario);
+    expect(within(pane).getAllByText('Calm').length).toBeGreaterThan(0);
     await choose(control(/^Impact/), 'High');
     expect(screen.getByText(scenario.publicBrief.impact.high, { exact: false })).toBeVisible();
   });
@@ -478,7 +595,7 @@ describe('the chosen scenario', () => {
     expect(within(preset).getByRole('radio', { name: 'Standard' })).toBeChecked();
   });
 
-  it('puts the setup, the preview and the link in step with every control, and the link in the address', async () => {
+  it('puts the primary action, "Start configuration", at the end of the details, with the setup in its link', async () => {
     const app = await open(SAMPLE.standard);
     await openCustomise();
     await choose(control('Preset'), 'Challenge');
@@ -492,23 +609,119 @@ describe('the chosen scenario', () => {
     );
 
     await waitFor(() =>
-      expect(review()).toHaveAttribute(
+      expect(start()).toHaveAttribute(
         'href',
         `/scenarios/${SAMPLE.standard}/brief?difficulty=challenge&impact=high&temperature=anxious&proficiency=novice&style=vague&stage=escalated`,
       ),
     );
     expect(app.query().get('stage')).toBe('escalated');
-    expect(review()).toBeVisible();
+    expect(start()).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Review brief' })).not.toBeInTheDocument();
   });
 
   it('keeps the link plain while nothing has been changed', async () => {
     await open(SAMPLE.standard);
-    expect(review()).toHaveAttribute('href', `/scenarios/${SAMPLE.standard}/brief`);
+    expect(start()).toHaveAttribute('href', `/scenarios/${SAMPLE.standard}/brief`);
+  });
+
+  it('goes to the case brief when it is pressed, and the page there is the brief', async () => {
+    const user = userEvent.setup();
+    const app = await open(SAMPLE.standard);
+    await user.click(start());
+    await waitFor(() => expect(app.where()).toBe(`/scenarios/${SAMPLE.standard}/brief`));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Case brief' })).toBeVisible();
+  });
+
+  it('asks for a view transition only while the person allows motion', async () => {
+    const user = userEvent.setup();
+    const app = await open(SAMPLE.standard);
+    const seen: unknown[] = [];
+    app.router.subscribe((_state, options) => seen.push(options.viewTransitionOpts));
+    await user.click(start());
+    await waitFor(() => expect(app.where()).toContain('/brief'));
+    expect(seen.some((options) => options !== undefined)).toBe(true);
+    cleanup();
+
+    stubMedia({ '(prefers-reduced-motion: reduce)': true });
+    const reduced = await open(SAMPLE.standard);
+    const seenReduced: unknown[] = [];
+    reduced.router.subscribe((_state, options) => seenReduced.push(options.viewTransitionOpts));
+    await user.click(start());
+    await waitFor(() => expect(reduced.where()).toContain('/brief'));
+    expect(seenReduced.filter((options) => options !== undefined)).toEqual([]);
+  });
+});
+
+describe('the practice mode', () => {
+  const open = async (id: string) => {
+    const app = renderApp(`/scenarios?scenario=${id}`);
+    await screen.findByRole('heading', { level: 2, name: scenarioById(id).title });
+    return app;
+  };
+  const modes = () => control('Practice mode');
+
+  it('is Guided practice or Assessment practice, each with its own one-line description', async () => {
+    await open(SAMPLE.standard);
+    const radios = within(modes()).getAllByRole('radio');
+    expect(radios.map((radio) => radio.getAttribute('value'))).toEqual(['guided', 'immersive']);
+    expect(within(modes()).getByRole('radio', { name: 'Guided practice' })).toBeInTheDocument();
+    expect(within(modes()).getByRole('radio', { name: 'Assessment practice' })).toBeInTheDocument();
+    expect(screen.getByText(PRACTICE_MODE_LABELS.guided.description)).toBeVisible();
+    expect(screen.getByText(PRACTICE_MODE_LABELS.immersive.description)).toBeVisible();
+  });
+
+  it('never says "Live hints" anywhere on the page', async () => {
+    await open(SAMPLE.standard);
+    await openCustomise();
+    expect(document.body.textContent ?? '').not.toMatch(/live hints/i);
+  });
+
+  it('defaults to Guided for Starter and Assessment for Standard and Challenge, following the preset', async () => {
+    await open(SAMPLE.standard);
+    const mode = () =>
+      within(modes())
+        .getAllByRole('radio')
+        .find((radio) => (radio as HTMLInputElement).checked)
+        ?.getAttribute('value');
+    expect(mode()).toBe('immersive');
+    await choose(control('Preset'), 'Starter');
+    expect(mode()).toBe('guided');
+    await choose(control('Preset'), 'Challenge');
+    expect(mode()).toBe('immersive');
+  });
+
+  it('says when a preset changed the mode, politely', async () => {
+    await open(SAMPLE.standard);
+    await choose(control('Preset'), 'Starter');
+    await waitFor(() => expect(announced()).toContain('Practice mode is now Guided practice.'));
+  });
+
+  it('keeps a mode chosen on purpose, in the address and in the Start configuration link', async () => {
+    const user = userEvent.setup();
+    const app = await open(SAMPLE.challenge);
+    // A Challenge call has no tips unless Guided practice is chosen on purpose.
+    expect(within(modes()).getByRole('radio', { name: 'Assessment practice' })).toBeChecked();
+    await user.click(within(modes()).getByRole('radio', { name: 'Guided practice' }));
+    await waitFor(() => expect(app.query().get('hints')).toBe('on'));
+    expect(start().getAttribute('href')).toContain('hints=on');
+    // Choosing what the preset gives anyway leaves nothing in the address.
+    await user.click(within(modes()).getByRole('radio', { name: 'Assessment practice' }));
+    await waitFor(() => expect(app.query().get('hints')).toBeNull());
+  });
+
+  it('is named in the summary beside the way on', async () => {
+    await open(SAMPLE.standard);
+    expect(document.querySelector('.scn-detail__summary-line')).toHaveTextContent(
+      'Standard \u00b7 Medium impact \u00b7 Frustrated \u00b7 Assessment practice',
+    );
+    await choose(control('Preset'), 'Starter');
+    expect(document.querySelector('.scn-detail__summary-line')).toHaveTextContent(
+      'Starter \u00b7 Medium impact \u00b7 Frustrated \u00b7 Guided practice',
+    );
   });
 });
 
 describe('the setup behind "Customise"', () => {
-  beforeEach(() => stubViewport(true));
   const open = async (id: string, options?: RenderOptions) => {
     const app = renderApp(`/scenarios?scenario=${id}`, options);
     await screen.findByRole('heading', { level: 2, name: scenarioById(id).title });
@@ -524,6 +737,18 @@ describe('the setup behind "Customise"', () => {
     expect(button).toHaveAttribute('aria-expanded', 'true');
     expect(within(control(/^Impact/)).getByRole('radio', { name: 'Medium' })).toBeChecked();
     expect(screen.queryByText('Changed')).not.toBeInTheDocument();
+  });
+
+  it('stays open or closed as another scenario is chosen', async () => {
+    const user = userEvent.setup();
+    await open(SAMPLE.standard);
+    await openCustomise();
+    await user.click(await card(scenarioById(SAMPLE.starter)));
+    await screen.findByRole('heading', { level: 2, name: scenarioById(SAMPLE.starter).title });
+    expect(screen.getByRole('button', { name: /^Customise/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
   });
 
   it('keeps its help out of the page until it is asked for, one setting at a time', async () => {
@@ -569,6 +794,23 @@ describe('the setup behind "Customise"', () => {
     expect(await screen.findByText('Settings reset to the scenario defaults.')).toBeInTheDocument();
   });
 
+  it('does not count the preset or the practice mode, which are not behind it', async () => {
+    await open(SAMPLE.standard);
+    await choose(control('Preset'), 'Challenge');
+    await userEvent.click(
+      within(control('Practice mode')).getByRole('radio', { name: 'Guided practice' }),
+    );
+    expect(
+      within(screen.getByRole('button', { name: /^Customise/ })).queryByText(/changed/),
+    ).not.toBeInTheDocument();
+    // ...but Reset puts them back too, once the setup is open.
+    await openCustomise();
+    const reset = screen.getByRole('button', { name: 'Reset to scenario defaults' });
+    expect(reset).not.toHaveAttribute('aria-disabled');
+    await userEvent.click(reset);
+    expect(within(control('Preset')).getByRole('radio', { name: 'Standard' })).toBeChecked();
+  });
+
   it('starts with the scenario\u2019s own voice, and a chosen one goes in the address', async () => {
     const app = await open(SAMPLE.standard);
     await openCustomise();
@@ -611,21 +853,6 @@ describe('the setup behind "Customise"', () => {
     await openCustomise();
     await screen.findByRole('group', { name: /^Impact/ });
     expect(screen.queryByRole('combobox', { name: 'Customer voice' })).not.toBeInTheDocument();
-  });
-
-  it('turns live hints on for Starter and off otherwise, until they are set', async () => {
-    const user = userEvent.setup();
-    await open(SAMPLE.standard);
-    await openCustomise();
-    const hints = () => screen.getByRole('switch', { name: /Live hints/ });
-    expect(hints()).not.toBeChecked();
-    await choose(control('Preset'), 'Starter');
-    expect(hints()).toBeChecked();
-    await choose(control('Preset'), 'Challenge');
-    expect(hints()).not.toBeChecked();
-    await user.click(hints());
-    expect(hints()).toBeChecked();
-    expect(review().getAttribute('href')).toContain('hints=on');
   });
 
   describe('complications', () => {
@@ -717,113 +944,29 @@ describe('the setup behind "Customise"', () => {
   });
 });
 
-describe('on a narrow screen', () => {
-  beforeEach(() => stubViewport(false));
-
-  it('shows the list as links, with the filters in a region that opens', async () => {
-    const user = userEvent.setup();
-    renderApp('/scenarios');
-    const links = within(await screen.findByRole('list', { name: 'Scenarios' })).getAllByRole(
-      'link',
-    );
-    expect(links).toHaveLength(all.length);
-    expect(links[0]).toHaveTextContent(first.title);
-    expect(screen.queryByRole('region', { name: first.title })).not.toBeInTheDocument();
-
-    const toggle = screen.getByRole('button', { name: 'Filters' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('combobox', { name: 'Product' })).not.toBeInTheDocument();
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Product' }), 'teams');
-    expect(screen.getByRole('button', { name: 'Filters (1)' })).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('list', { name: 'Scenarios' })).getAllByRole('link'),
-    ).toHaveLength(2);
-  });
-
-  it('opens the details when a row is pressed, one step on from the list, with focus on the title', async () => {
-    const user = userEvent.setup();
-    const app = renderApp('/scenarios');
-    await user.click(await screen.findByRole('link', { name: second.title }));
-
-    const title = await screen.findByRole('heading', { level: 1, name: second.title });
-    await waitFor(() => expect(title).toHaveFocus());
-    expect(app.query().get('scenario')).toBe(second.id);
-    expect(app.router.state.historyAction).toBe('PUSH');
-    expect(screen.getByRole('link', { name: 'Review brief' })).toBeVisible();
-    expect(screen.queryByRole('list', { name: 'Scenarios' })).not.toBeInTheDocument();
-  });
-
-  it('returns to the list with the Back button of the browser, and with the one in the page', async () => {
-    const user = userEvent.setup();
-    const app = renderApp('/scenarios');
-    await user.click(await screen.findByRole('link', { name: second.title }));
-    await screen.findByRole('heading', { level: 1, name: second.title });
-
-    await user.click(screen.getByRole('button', { name: 'Scenarios' }));
-    const back = await screen.findByRole('link', { name: second.title });
-    expect(app.router.state.historyAction).toBe('POP');
-    expect(app.query().get('scenario')).toBeNull();
-    await waitFor(() => expect(back).toHaveFocus());
-
-    await user.click(back);
-    await screen.findByRole('heading', { level: 1, name: second.title });
-    await app.router.navigate(-1);
-    expect(await screen.findByRole('list', { name: 'Scenarios' })).toBeVisible();
-  });
-
-  it('moves between the links with the arrow keys, Home and End', async () => {
-    const user = userEvent.setup();
-    renderApp('/scenarios');
-    const links = within(await screen.findByRole('list', { name: 'Scenarios' })).getAllByRole(
-      'link',
-    );
-    links[0]?.focus();
-    await user.keyboard('{ArrowDown}');
-    expect(links[1]).toHaveFocus();
-    await user.keyboard('{End}');
-    expect(links[links.length - 1]).toHaveFocus();
-    await user.keyboard('{ArrowUp}');
-    expect(links[links.length - 2]).toHaveFocus();
-    await user.keyboard('{Home}');
-    expect(links[0]).toHaveFocus();
-  });
-
-  it('starts with the details open when the address names a scenario, and the page\u2019s Back replaces it', async () => {
-    const user = userEvent.setup();
-    const app = renderApp(`/scenarios?scenario=${SAMPLE.challenge}&difficulty=starter`);
-    await screen.findByRole('heading', { level: 1, name: scenarioById(SAMPLE.challenge).title });
-    expect(within(control('Preset')).getByRole('radio', { name: 'Starter' })).toBeChecked();
-    await user.click(screen.getByRole('button', { name: 'Scenarios' }));
-    expect(await screen.findByRole('list', { name: 'Scenarios' })).toBeVisible();
-    expect(app.query().get('scenario')).toBeNull();
-    expect(app.router.state.historyAction).toBe('REPLACE');
-  });
-
-  it('keeps the filters in the address when the details open', async () => {
-    const user = userEvent.setup();
-    const app = renderApp('/scenarios?f_product=teams');
-    await user.click(await screen.findByRole('link', { name: /Meeting recordings/ }));
-    await screen.findByRole('heading', { level: 1 });
-    expect(app.query().get('f_product')).toBe('teams');
-  });
-
-  it('has one heading for the page when the details are open: the scenario\u2019s title, as the page\u2019s own', async () => {
-    const { title } = scenarioById(SAMPLE.challenge);
+describe('one page at every width', () => {
+  it('has no second screen and no Back button: the carousel, the rail and the details are all there', async () => {
+    stubMedia({ '(max-width: 47.99em)': true });
     renderApp(`/scenarios?scenario=${SAMPLE.challenge}`);
-    await screen.findByRole('heading', { level: 1, name: title });
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.queryByRole('heading', { level: 2, name: title })).not.toBeInTheDocument();
-    // The sections under it are one level down, so the order of headings has no gap.
-    expect(screen.getByRole('heading', { level: 2, name: 'Starting state' })).toBeVisible();
-    expect(screen.getByRole('button', { name: /^Customise/ }).closest('h2')).not.toBeNull();
+    await detailFor(scenarioById(SAMPLE.challenge));
+    expect(await gallery()).toBeVisible();
+    expect(rail()).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Scenarios' })).not.toBeInTheDocument();
+    expect(start()).toBeVisible();
+    // Choosing a card changes the details in place: the address is replaced, never pushed.
+  });
+
+  it('leaves a link with a scenario on the page as one entry, so Back leaves the workspace', async () => {
+    const user = userEvent.setup();
+    const app = renderApp(`/scenarios?scenario=${SAMPLE.challenge}`);
+    await detailFor(scenarioById(SAMPLE.challenge));
+    await user.click(await card(scenarioById(SAMPLE.starter)));
+    await waitFor(() => expect(app.query().get('scenario')).toBe(SAMPLE.starter));
+    expect(app.router.state.historyAction).toBe('REPLACE');
   });
 });
 
 describe('a server that does not send every field yet', () => {
-  beforeEach(() => stubViewport(true));
-
   it('offers no complications to choose from, but still Off and the default', async () => {
     const stale = publicScenarios().map(
       ({ curveballOptions: _omitted, ...rest }) => rest,
@@ -836,5 +979,16 @@ describe('a server that does not send every field yet', () => {
     expect(within(modes).getByRole('radio', { name: 'Off' })).toBeVisible();
     expect(within(modes).getByRole('radio', { name: 'Default' })).toBeChecked();
     expect(within(modes).queryByRole('radio', { name: 'Choose' })).not.toBeInTheDocument();
+  });
+
+  it('shows the full title on a card when there is no short one', async () => {
+    const stale = publicScenarios().map(
+      ({ shortTitle: _omitted, ...rest }) => rest,
+    ) as unknown as PublicScenarioDTO[];
+    vi.mocked(api.scenarios).mockResolvedValue(stale);
+    renderApp('/scenarios');
+    expect(
+      await within(await gallery()).findByRole('radio', { name: first.title }),
+    ).toBeInTheDocument();
   });
 });

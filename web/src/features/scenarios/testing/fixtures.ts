@@ -26,6 +26,8 @@ import {
 interface Seed {
   id: string;
   title: string;
+  /** The card title: two to six words. */
+  short: string;
   product: ProductId;
   area: string;
   difficulty: Difficulty;
@@ -54,6 +56,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'teams-recordings-missing',
     title: 'Meeting recordings missing after a policy change',
+    short: 'Meeting recordings missing',
     product: 'teams',
     area: 'Meetings',
     difficulty: 'standard',
@@ -85,6 +88,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'teams-calls-break-up',
     title: 'Calls break up on the sales floor',
+    short: 'Calls break up',
     product: 'teams',
     area: 'Calling',
     difficulty: 'challenge',
@@ -115,6 +119,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'outlook-shared-mailbox-send',
     title: 'Cannot send from the shared mailbox',
+    short: 'Cannot send from shared mailbox',
     product: 'outlook',
     area: 'Shared mailboxes',
     difficulty: 'starter',
@@ -144,6 +149,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'exchange-partner-mail-delay',
     title: 'Mail to a partner organisation is delayed',
+    short: 'Partner mail is delayed',
     product: 'exchange-online',
     area: 'Mail flow',
     difficulty: 'standard',
@@ -174,6 +180,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'sharepoint-guests-denied',
     title: 'External guests cannot open a shared site',
+    short: 'Guests cannot open site',
     product: 'sharepoint-online',
     area: 'Sites',
     difficulty: 'standard',
@@ -205,6 +212,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'onedrive-empty-folders-new-laptop',
     title: 'Files stuck syncing after a laptop swap',
+    short: 'Files stuck syncing',
     product: 'onedrive-business',
     area: 'Sync',
     difficulty: 'starter',
@@ -234,6 +242,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'excel-protect-workbook-howto',
     title: 'How to share a protected workbook safely',
+    short: 'Share a protected workbook',
     product: 'm365-apps',
     area: 'Excel',
     difficulty: 'starter',
@@ -262,6 +271,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'entra-mfa-prompts-repeat',
     title: 'Staff are prompted for MFA again and again',
+    short: 'Repeated MFA prompts',
     product: 'entra-id',
     area: 'Authentication',
     difficulty: 'challenge',
@@ -293,6 +303,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'entra-contractor-cannot-sign-in',
     title: 'New contractor cannot sign in on day one',
+    short: 'Contractor cannot sign in',
     product: 'entra-id',
     area: 'Sign-in',
     difficulty: 'starter',
@@ -322,6 +333,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'intune-laptops-stall-enrolment',
     title: 'New laptops stall during enrolment',
+    short: 'Laptops stall during enrolment',
     product: 'intune',
     area: 'Enrolment',
     difficulty: 'standard',
@@ -352,6 +364,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'defender-invoices-quarantined',
     title: 'Supplier invoices keep landing in quarantine',
+    short: 'Invoices keep being quarantined',
     product: 'defender-office-365',
     area: 'Anti-spam',
     difficulty: 'standard',
@@ -381,6 +394,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'power-automate-approval-stopped',
     title: 'An approval flow stopped running on Tuesday',
+    short: 'Approval flow stopped',
     product: 'power-platform',
     area: 'Power Automate',
     difficulty: 'challenge',
@@ -411,6 +425,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'windows-update-fails-forty-laptops',
     title: 'A feature update fails on forty laptops',
+    short: 'Update fails on forty laptops',
     product: 'windows-11',
     area: 'Updates',
     difficulty: 'challenge',
@@ -441,6 +456,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'azure-vm-backups-failing',
     title: 'Overnight VM backups keep failing',
+    short: 'VM backups keep failing',
     product: 'azure',
     area: 'Backup',
     difficulty: 'standard',
@@ -472,6 +488,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'azure-trial-unexpected-charge',
     title: 'An unexpected charge after a free trial',
+    short: 'Unexpected charge after trial',
     product: 'azure',
     area: 'Billing',
     difficulty: 'starter',
@@ -500,6 +517,7 @@ const SEEDS: readonly Seed[] = [
   {
     id: 'dynamics-dashboard-confirm-fix',
     title: 'Sales dashboard shows no opportunities',
+    short: 'Dashboard shows no opportunities',
     product: 'dynamics-365',
     area: 'Sales',
     difficulty: 'standard',
@@ -543,6 +561,7 @@ function toScenario(seed: Seed, index: number): PublicScenarioDTO {
     id: seed.id,
     version: 1,
     title: seed.title,
+    shortTitle: seed.short,
     listSummary: seed.list,
     summary: seed.summary,
     tags: [info.name, seed.area],

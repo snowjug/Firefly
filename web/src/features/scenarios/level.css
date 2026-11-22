@@ -1,0 +1,43 @@
+/* The difficulty: three bars filled to the level, always with its name beside them. */
+
+.scn-level {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-1h);
+  color: var(--fg-2);
+  font-weight: var(--fw-semibold);
+}
+.scn-level__bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  block-size: 0.75rem;
+}
+.scn-level__bars > span {
+  inline-size: 3px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.28;
+}
+.scn-level__bars > span:nth-child(1) {
+  block-size: 0.25rem;
+}
+.scn-level__bars > span:nth-child(2) {
+  block-size: 0.5rem;
+}
+.scn-level__bars > span:nth-child(3) {
+  block-size: 0.75rem;
+}
+.scn-level__bars[data-steps='1'] > span:nth-child(-n + 1),
+.scn-level__bars[data-steps='2'] > span:nth-child(-n + 2),
+.scn-level__bars[data-steps='3'] > span {
+  opacity: 1;
+}
+
+@media (forced-colors: active) {
+  .scn-level__bars > span {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+}

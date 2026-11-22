@@ -13,8 +13,32 @@
 .brf-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-1) var(--sp-3);
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+}
+/* The same product tile as the scenario's details: the view transition carries one onto the other. */
+.brf-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 3rem;
+  block-size: 3rem;
+  border: var(--stroke-w) solid var(--accent-border);
+  border-radius: var(--r-xl);
+  background: var(--accent-bg);
+  color: var(--accent-fg);
+}
+.brf-head__text {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-direction: column;
+  gap: var(--sp-0h);
+  min-inline-size: 0;
+}
+.brf-product {
+  color: var(--fg-3);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
 }
 .brf-title {
   font-family: var(--font-display);
@@ -23,11 +47,19 @@
   font-weight: var(--fw-semibold);
 }
 .brf-subtitle {
-  flex: 1 1 14rem;
   min-inline-size: 0;
   color: var(--fg-2);
   font-size: var(--fs-subtitle2);
   line-height: var(--lh-subtitle2);
+}
+.brf-mode {
+  margin-block-start: var(--sp-1);
+  color: var(--fg-2);
+  font-size: var(--fs-compact);
+  line-height: var(--lh-compact);
+}
+.brf-mode strong {
+  color: var(--fg-1);
 }
 .brf-layout {
   display: grid;
@@ -67,19 +99,19 @@
   animation: brf-in var(--dur-normal) var(--ease-decelerate) both;
 }
 .brf-row:nth-child(2) {
-  animation-delay: 40ms;
+  animation-delay: var(--dur-stagger);
 }
 .brf-row:nth-child(3) {
-  animation-delay: 80ms;
+  animation-delay: calc(var(--dur-stagger) * 2);
 }
 .brf-row:nth-child(4) {
-  animation-delay: 120ms;
+  animation-delay: calc(var(--dur-stagger) * 3);
 }
 .brf-row:nth-child(5) {
-  animation-delay: 160ms;
+  animation-delay: calc(var(--dur-stagger) * 4);
 }
 .brf-row:nth-child(6) {
-  animation-delay: 200ms;
+  animation-delay: calc(var(--dur-stagger) * 5);
   border-block-end: 0;
 }
 @keyframes brf-in {
@@ -225,19 +257,19 @@
   opacity: 1;
 }
 .brf-wave[data-active] > span {
-  animation: brf-wave 900ms var(--ease-easy) infinite;
+  animation: brf-wave var(--dur-wave) var(--ease-easy) infinite;
 }
 .brf-wave[data-active] > span:nth-child(2) {
-  animation-delay: -300ms;
+  animation-delay: calc(var(--dur-wave) * -0.33);
 }
 .brf-wave[data-active] > span:nth-child(3) {
-  animation-delay: -600ms;
+  animation-delay: calc(var(--dur-wave) * -0.66);
 }
 .brf-wave[data-active] > span:nth-child(4) {
-  animation-delay: -150ms;
+  animation-delay: calc(var(--dur-wave) * -0.16);
 }
 .brf-wave[data-active] > span:nth-child(5) {
-  animation-delay: -450ms;
+  animation-delay: calc(var(--dur-wave) * -0.5);
 }
 @keyframes brf-wave {
   0%,
@@ -365,7 +397,7 @@ ul.brf-details {
   background: var(--voice-trainee);
   transform: scaleX(var(--level, 0));
   transform-origin: left center;
-  transition: transform 60ms linear;
+  transition: transform var(--dur-instant) linear;
 }
 /* Pointing at (or tabbing to) the Start button lights up what it will use. */
 .brf-side:has(.brf-start:is(:hover, :focus-visible)) .brf-ready {

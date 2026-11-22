@@ -5,8 +5,11 @@ import {
   IMPACT_LABELS,
   START_TEMPERATURE_LABELS,
   type BusinessImpact,
+  type CallStage,
   type CurveballType,
   type Difficulty,
+  type PracticeMode,
+  type ProductId,
   type StartTemperature,
 } from '#shared/domain/vocab.ts';
 
@@ -70,3 +73,70 @@ export function curveballChoices(scenario: {
 export function productLine(product: PublicScenarioDTO['product']): string {
   return [product.name, product.area].filter(Boolean).join(' \u00b7 ');
 }
+
+/** The product as the carousel and the product rail say it: one short name. */
+export const PRODUCT_SHORT: Record<ProductId, string> = {
+  teams: 'Teams',
+  outlook: 'Outlook',
+  'exchange-online': 'Exchange',
+  'sharepoint-online': 'SharePoint',
+  'onedrive-business': 'OneDrive',
+  'm365-apps': 'Microsoft 365 Apps',
+  'entra-id': 'Entra ID',
+  intune: 'Intune',
+  'defender-office-365': 'Defender',
+  'power-platform': 'Power Platform',
+  'windows-11': 'Windows',
+  azure: 'Azure',
+  'dynamics-365': 'Dynamics 365',
+};
+
+/**
+ * The order of the product rail: the order the brief lists the products in. Power Platform is not in
+ * that list, but a scenario exists for it, so it comes last rather than being unreachable.
+ */
+export const RAIL_ORDER: readonly ProductId[] = [
+  'teams',
+  'outlook',
+  'exchange-online',
+  'sharepoint-online',
+  'onedrive-business',
+  'm365-apps',
+  'entra-id',
+  'intune',
+  'defender-office-365',
+  'windows-11',
+  'azure',
+  'dynamics-365',
+  'power-platform',
+];
+
+/** The call stage in a word or two, for a metadata line. */
+export const STAGE_SHORT: Record<CallStage, string> = {
+  'first-contact': 'First contact',
+  'follow-up': 'Follow-up',
+  escalated: 'Escalated',
+  closure: 'Closure',
+};
+
+/** "High impact · Anxious · Follow-up": what a scenario starts as, in three short phrases. */
+export function metaLine(
+  scenario: Pick<PublicScenarioDTO, 'impact' | 'startingTemperature' | 'callStage'>,
+): string {
+  return [
+    `${impactLabel(scenario.impact)} impact`,
+    moodLabel(scenario.startingTemperature),
+    STAGE_SHORT[scenario.callStage],
+  ].join(' \u00b7 ');
+}
+
+/** The title for a card: the short one, or the full title when a server has not sent one. */
+export function cardTitle(scenario: Pick<PublicScenarioDTO, 'title' | 'shortTitle'>): string {
+  return scenario.shortTitle?.trim() ? scenario.shortTitle : scenario.title;
+}
+
+/** What a practice mode means on screen, in one plain sentence (without its full stop). */
+export const MODE_SENTENCE: Record<PracticeMode, string> = {
+  guided: 'Short tips appear during the call',
+  immersive: 'No tips on screen',
+};
